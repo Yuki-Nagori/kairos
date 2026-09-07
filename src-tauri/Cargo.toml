@@ -12,7 +12,11 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+bytemuck = "1"
 kairos-core = { path = "../src-crates/kairos-core" }
 serde = { version = "1", features = ["derive"] }
 tauri.workspace = true
+pollster = "0.4"
 tauri-plugin-dialog = "2"
+wgpu = "24"
+

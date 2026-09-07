@@ -27,6 +27,7 @@ pub fn run() {
             commands::mold::check_mold_network,
             commands::process::check_process,
             commands::solver::probe_openfoam,
+            commands::gpu::probe_gpu,
             commands::solver::generate_openfoam_case,
             commands::jobs::submit_job,
             commands::jobs::cancel_job,
