@@ -8,6 +8,7 @@ Kairos：注塑成型 CAE 仿真软件，功能对标 Autodesk Moldflow（复刻
 | ----------------------------------------------------------------- | -------------------------------------------------- |
 | 分层规则、IPC/错误契约、长任务与进度回传模式、新增领域模块 recipe | [ai-docs/ARCHITECTURE.md](ai-docs/ARCHITECTURE.md) |
 | 项目推进到哪了、每个阶段的时间与决策                              | [ai-docs/timeline.md](ai-docs/timeline.md)         |
+| 未来路线图、任务拆解（做新功能前必读）                            | [ai-docs/tasks/README.md](ai-docs/tasks/README.md) |
 | 面向人的项目简介、环境要求、快速开始、常用命令                    | [README.md](README.md)                             |
 
 ## 不可违反的约定（速查）
