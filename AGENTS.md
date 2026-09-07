@@ -22,5 +22,6 @@ Kairos：注塑成型 CAE 仿真软件，功能对标 Autodesk Moldflow（复刻
 - **锁文件**：根 `Cargo.lock` 与 `bun.lock` 必须提交、保持同步（整个工作区只有根目录这一份 Cargo.lock）。
 - **提交前门禁**：仓库根 `bun run verify`（typecheck + clippy -D warnings + format + test + knip，前端与 Rust 全量），通过才算完成。
 - **时间线**：每完成一个阶段，先提交代码，再在 [ai-docs/timeline.md](ai-docs/timeline.md) 末尾追加一行（时间 + 阶段 + 内容），**一条对应一个 commit**；时间线改动随下一个提交入库。
+- **里程碑评审**：每个里程碑结束强制执行 [T21 整体评审与优化](ai-docs/tasks/T21-milestone-review.md)（架构 / 性能 / 质量 / 文档 / 安全八项清单），发现按「立即修 / 回流任务 / 接受并记录」闭环，未通过不得开启下一里程碑。
 
 详细理由与代码模板见 [ai-docs/ARCHITECTURE.md](ai-docs/ARCHITECTURE.md)。
