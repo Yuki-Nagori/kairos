@@ -6,6 +6,17 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(commands::geometry::GeometryStore::default())
         .manage(commands::jobs::JobScheduler::default())
+        .setup(|_app| {
+            // macOS 原生全屏会强制隐藏标题栏，与「工具栏可见」冲突：macOS 停留在
+            // 配置的 maximized；Windows / Linux 无此问题，按需求进入全屏。
+            #[cfg(not(target_os = "macos"))]
+            {
+                if let Some(window) = _app.get_webview_window("main") {
+                    let _ = window.set_fullscreen(true);
+                }
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             commands::system::system_info,
             commands::project::create_project,
