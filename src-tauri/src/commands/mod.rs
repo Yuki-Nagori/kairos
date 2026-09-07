@@ -5,4 +5,5 @@ pub mod material;
 pub mod mold;
 pub mod process;
 pub mod project;
+pub mod solver;
 pub mod system;

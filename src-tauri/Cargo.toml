@@ -13,5 +13,6 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 kairos-core = { path = "../src-crates/kairos-core" }
+serde = { version = "1", features = ["derive"] }
 tauri.workspace = true
 tauri-plugin-dialog = "2"

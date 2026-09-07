@@ -3,6 +3,7 @@
 pub mod geometry;
 pub mod material;
 pub mod meshing;
+pub mod openfoam;
 pub mod process;
 pub mod project;
 pub mod runners;
