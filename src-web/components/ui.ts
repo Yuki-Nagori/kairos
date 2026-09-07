@@ -1,13 +1,31 @@
-/** 共享的 DOM 构建辅助，统一 Tailwind 样式基调。 */
+/** 共享 DOM 构建辅助：设计 tokens 集中在 theme.ts（T16）。 */
+import { PANEL_STATE_PREFIX, tokens } from "../theme";
 
-export function card(title: string): { root: HTMLElement; body: HTMLElement } {
+export function card(
+  title: string,
+  options?: { collapsible?: boolean },
+): { root: HTMLElement; body: HTMLElement } {
   const root = document.createElement("section");
-  root.className = "rounded-2xl border border-zinc-800 bg-zinc-900 shadow-xl";
+  root.className = tokens.panel;
   const heading = document.createElement("h2");
-  heading.className = "border-b border-zinc-800 px-6 py-4 text-base font-semibold";
+  heading.className = tokens.panelHeader;
   heading.textContent = title;
   const body = document.createElement("div");
-  body.className = "space-y-4 px-6 py-5";
+  body.className = tokens.panelBody;
+
+  if (options?.collapsible === true) {
+    const storageKey = `${PANEL_STATE_PREFIX}${title}`;
+    const collapsed = localStorage.getItem(storageKey) === "1";
+    body.classList.toggle("hidden", collapsed);
+    heading.textContent = `${collapsed ? "▸" : "▾"} ${title}`;
+    heading.addEventListener("click", () => {
+      const nowCollapsed = !body.classList.contains("hidden");
+      body.classList.toggle("hidden", nowCollapsed);
+      heading.textContent = `${nowCollapsed ? "▸" : "▾"} ${title}`;
+      localStorage.setItem(storageKey, nowCollapsed ? "1" : "0");
+    });
+  }
+
   root.append(heading, body);
   return { root, body };
 }
@@ -27,7 +45,7 @@ export function button(
   element.type = "button";
   element.textContent = label;
   element.className = [
-    "rounded-lg px-4 py-2 text-sm font-medium transition-colors",
+    "rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
     variant === "primary"
       ? "bg-emerald-500 text-emerald-950 hover:bg-emerald-400"
       : variant === "danger"
@@ -41,7 +59,6 @@ export function textInput(placeholder: string): HTMLInputElement {
   const element = document.createElement("input");
   element.type = "text";
   element.placeholder = placeholder;
-  element.className =
-    "rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none";
+  element.className = tokens.input;
   return element;
 }
