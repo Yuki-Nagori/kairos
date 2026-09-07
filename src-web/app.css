@@ -1,6 +1,4 @@
 @import "tailwindcss";
-@import "./theme/dark.css";
-@import "./theme/light.css";
 
 @theme {
   --font-sans:

@@ -24,6 +24,9 @@ if (!root) {
 // CAE 三列工作台：左（工程与研究）/ 中（流程与视口）/ 右（模具与工艺作业），底部结果。
 root.className = "flex h-screen flex-col overflow-hidden bg-zinc-950 text-zinc-100";
 
+// 先恢复主题再创建组件，标题栏的初始主题图标才能与持久化偏好一致。
+initTheme();
+
 const header = createAppHeader();
 header.className = "border-b border-zinc-800 bg-zinc-900 px-5 py-3";
 
@@ -78,6 +81,5 @@ window.addEventListener("keydown", (event) => {
 
 root.append(header, workspace, resultsSection, bottomBar);
 
-initTheme();
 // bootstrap 内部已自行处理失败（setError），无需 await。
 void bootstrap();
