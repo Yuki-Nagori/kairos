@@ -4,16 +4,10 @@ import { appStore } from "../state";
 
 const STATUS_BASE_CLASS = "min-h-5 text-sm";
 
-// 三端均使用系统窗口按钮；macOS 的交通灯悬浮在窗口左上角（titleBarStyle: Overlay），需预留点击区。
-const IS_MAC = navigator.platform.toLowerCase().includes("mac");
-
 /** 应用标题栏：品牌信息 + 主题切换 + 版本/IPC 状态 + 全局的忙碌与错误展示。 */
 export function createAppHeader(): HTMLElement {
   const root = document.createElement("header");
-  root.className = `flex items-center gap-4 border-b border-zinc-800 bg-zinc-900 py-3 pr-5 ${
-    IS_MAC ? "pl-20" : "pl-5"
-  }`;
-  root.setAttribute("data-tauri-drag-region", "");
+  root.className = "flex items-center gap-4 border-b border-zinc-800 bg-zinc-900 px-5 py-3";
 
   const title = document.createElement("h1");
   title.className = "text-lg font-semibold tracking-tight";
@@ -25,7 +19,6 @@ export function createAppHeader(): HTMLElement {
 
   const spacer = document.createElement("span");
   spacer.className = "flex-1";
-  spacer.setAttribute("data-tauri-drag-region", "");
 
   const status = document.createElement("span");
   status.className = STATUS_BASE_CLASS;
