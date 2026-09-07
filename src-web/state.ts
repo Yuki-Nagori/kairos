@@ -40,6 +40,7 @@ import type {
   MeshingReport,
   Project,
   RecentProject,
+  AnalysisStage,
   RunnerKind,
   Study,
   SystemInfo,
@@ -569,7 +570,7 @@ export function assignMaterial(materialId: string): void {
 }
 
 /** 端到端提交：case 生成 → 作业入队（前置检查见 T11 流水线面板）。 */
-export async function submitPipeline(cores: number): Promise<void> {
+export async function submitPipeline(cores: number, stage: AnalysisStage): Promise<void> {
   const state = appStore.get();
   const geometry = state.geometries[0] ?? null;
   const study = state.project?.studies.find((s) => s.id === state.activeStudyId) ?? null;
@@ -605,7 +606,7 @@ export async function submitPipeline(cores: number): Promise<void> {
       caseDir,
       material,
       process: study.process,
-      stage: "fill",
+      stage,
       cores,
     });
     await submitJobAction(caseDir, cores);

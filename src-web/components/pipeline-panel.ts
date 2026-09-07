@@ -1,4 +1,5 @@
 import { appStore, submitPipeline } from "../state";
+import type { AnalysisStage } from "../types";
 import { allPrerequisitesDone, evaluatePipeline } from "../lib/pipeline";
 import { button, card, hint, textInput } from "./ui";
 
@@ -17,11 +18,24 @@ export function createPipelinePanel(): HTMLElement {
   coresInput.className += " w-20";
   coresInput.title = "并行核数";
   const coresLabel = hint("核数");
+  const stageSelect = document.createElement("select");
+  stageSelect.className =
+    "rounded-lg border border-zinc-700 bg-zinc-950 px-2 py-2 text-xs text-zinc-300";
+  for (const [value, label] of [
+    ["fill", "填充"],
+    ["fill_pack", "填充 + 保压"],
+    ["fill_pack_cool", "填充 + 保压 + 冷却"],
+  ] as Array<[string, string]>) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = label;
+    stageSelect.append(option);
+  }
   const submitButton = button("提交求解作业", "primary");
-  submitRow.append(coresLabel, coresInput, submitButton);
+  submitRow.append(stageSelect, coresLabel, coresInput, submitButton);
 
   submitButton.addEventListener("click", () => {
-    void submitPipeline(Number(coresInput.value) || 2);
+    void submitPipeline(Number(coresInput.value) || 2, stageSelect.value as AnalysisStage);
   });
 
   function render(): void {

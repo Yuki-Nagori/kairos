@@ -176,6 +176,17 @@ pub fn write_case_files(
     )?;
     write(&constant.join("polyMesh").join(".keep"), "")?;
 
+    // 阶段化字典：保压曲线（FillPack 起）与冷却参数（FillPackCool）。
+    match stage {
+        AnalysisStage::Fill => {}
+        AnalysisStage::FillPack | AnalysisStage::FillPackCool => {
+            write(&constant.join("packingDict"), &packing_dict(process))?;
+        }
+    }
+    if matches!(stage, AnalysisStage::FillPackCool) {
+        write(&constant.join("coolingDict"), &cooling_dict(process))?;
+    }
+
     let zero_gradient = |field: &str, dims: &str, value: &str| {
         format!(
             "FoamFile\n{{\n    version 2.0;\n    format ascii;\n    class \"volScalarField\";\n    object {field};\n}}\ndimensions [{dims}];\ninternalField uniform {value};\nboundaryField\n{{\n    walls\n    {{\n        type zeroGradient;\n    }}\n}}\n"
@@ -254,6 +265,65 @@ fn transport_dict(material: &Material) -> String {
         t.b4s,
         t.b5
     )
+}
+
+/// 保压阶段字典：压力-时间曲线逐行展开。
+fn packing_dict(process: &ProcessSettings) -> String {
+    let mut curve = String::new();
+    for (time_s, pressure_mpa) in &process.packing_pressure_mpa_curve {
+        curve.push_str(&format!("    ({time_s:.4} {pressure_mpa:.4})\n"));
+    }
+    format!(
+        "FoamFile\n{{\n    version 2.0;\n    format ascii;\n    class \"dictionary\";\n    object packingDict;\n}}\npackingTime     {:.4};\npackingPressureCurve\n(\n{curve});\n",
+        process.packing_time_s
+    )
+}
+
+/// 冷却阶段字典：介质温度与冷却时间。
+fn cooling_dict(process: &ProcessSettings) -> String {
+    format!(
+        "FoamFile\n{{\n    version 2.0;\n    format ascii;\n    class \"dictionary\";\n    object coolingDict;\n}}\ncoolingTime     {:.4};\ncoolantTemp     {:.4};\n",
+        process.cooling_time_s, process.coolant_temp_c
+    )
+}
+
+/// 各分析阶段预期产出的结果场目录（供 T13 结果模型与后处理面板消费）。
+/// 阶段递进时场集合单调增长：fill ⊂ fill_pack ⊂ fill_pack_cool。
+const FILL_FIELDS: &[&str] = &[
+    "pressure",
+    "temperature",
+    "flow_front",
+    "velocity",
+    "shear_rate",
+];
+const FILL_PACK_FIELDS: &[&str] = &[
+    FILL_FIELDS[0],
+    FILL_FIELDS[1],
+    FILL_FIELDS[2],
+    FILL_FIELDS[3],
+    FILL_FIELDS[4],
+    "density",
+    "specific_volume",
+];
+const FILL_PACK_COOL_FIELDS: &[&str] = &[
+    FILL_PACK_FIELDS[0],
+    FILL_PACK_FIELDS[1],
+    FILL_PACK_FIELDS[2],
+    FILL_PACK_FIELDS[3],
+    FILL_PACK_FIELDS[4],
+    FILL_PACK_FIELDS[5],
+    FILL_PACK_FIELDS[6],
+    "frozen_layer_fraction",
+    "mold_temperature",
+    "heat_flux",
+];
+
+pub fn expected_fields(stage: &AnalysisStage) -> &'static [&'static str] {
+    match stage {
+        AnalysisStage::Fill => FILL_FIELDS,
+        AnalysisStage::FillPack => FILL_PACK_FIELDS,
+        AnalysisStage::FillPackCool => FILL_PACK_COOL_FIELDS,
+    }
 }
 
 const FV_SCHEMES: &str = "FoamFile\n{\n    version 2.0;\n    format ascii;\n    class \"dictionary\";\n    object fvSchemes;\n}\nddtSchemes { default Euler; }\ngradSchemes { default Gauss linear; }\ndivSchemes { default none; div(phi,U) Gauss linearUpwind grad(U); div(phi,T) Gauss limitedLinear 1; }\nlaplacianSchemes { default Gauss linear corrected; }\ninterpolationSchemes { default linear; }\nsnGradSchemes { default corrected; }\n";
@@ -342,6 +412,44 @@ mod tests {
         let control = fs::read_to_string(case.join("system/controlDict")).unwrap();
         assert!(control.contains("endTime         2.000000"));
         fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn stage_dicts_written_progressively() {
+        let dir = std::env::temp_dir().join(format!("kairos-t12-{}", std::process::id()));
+        let mesh = two_tet_mesh();
+        let material = crate::services::material::builtin_materials().unwrap()[0].clone();
+        let process = process();
+        for (stage, packing, cooling) in [
+            (AnalysisStage::Fill, false, false),
+            (AnalysisStage::FillPack, true, false),
+            (AnalysisStage::FillPackCool, true, true),
+        ] {
+            let case = dir.join(format!("{stage:?}"));
+            generate_case(&case, &mesh, &material, &process, &stage, 4).unwrap();
+            assert_eq!(
+                case.join("constant/packingDict").exists(),
+                packing,
+                "{stage:?} packingDict"
+            );
+            assert_eq!(
+                case.join("constant/coolingDict").exists(),
+                cooling,
+                "{stage:?} coolingDict"
+            );
+        }
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn expected_fields_grow_with_stages() {
+        use crate::models::solver::AnalysisStage;
+        let fill = expected_fields(&AnalysisStage::Fill);
+        let pack = expected_fields(&AnalysisStage::FillPack);
+        let cool = expected_fields(&AnalysisStage::FillPackCool);
+        assert!(fill.iter().all(|f| pack.contains(f)));
+        assert!(pack.iter().all(|f| cool.contains(f)));
+        assert!(cool.contains(&"mold_temperature"));
     }
 
     #[test]

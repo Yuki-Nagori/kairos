@@ -83,6 +83,13 @@ impl fmt::Display for KairosError {
 
 impl std::error::Error for KairosError {}
 
+/// 文件 / 系统错误自动归入 Io 类别，调用处可直接 `?` 传播。
+impl From<std::io::Error> for KairosError {
+    fn from(error: std::io::Error) -> Self {
+        Self::new(ErrorKind::Io, error.to_string())
+    }
+}
+
 /// IPC 错误契约：Tauri 命令的 `Err` 必须实现 Serialize（官方要求），
 /// 这里稳定为 `{ code, message }` 两字段结构。
 impl Serialize for KairosError {
