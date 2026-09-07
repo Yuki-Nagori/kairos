@@ -146,3 +146,19 @@ export interface CoolingChannel {
   end: [number, number, number];
   inletTempC: number;
 }
+/** 对应 `kairos-core::models::jobs::JobStatus`。 */
+export type JobStatus = "queued" | "running" | "done" | "failed" | "cancelled";
+
+/** 对应 `kairos-core::models::jobs::Job`。 */
+export interface Job {
+  id: string;
+  studyId: string | null;
+  caseDir: string;
+  cores: number;
+  status: JobStatus;
+  createdMs: number;
+  startedMs: number | null;
+  finishedMs: number | null;
+  lastTimeS: number | null;
+  message: string | null;
+}

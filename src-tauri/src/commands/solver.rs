@@ -1,11 +1,8 @@
-//! 求解器命令：环境探测、case 生成与子进程运行（GPL 隔离：仅子进程 + 文件交换）。
+//! 求解器命令：环境探测与 OpenFOAM case 生成（GPL 隔离：仅子进程 + 文件交换）。
+//! 作业的启动 / 取消 / 列表由 T10 的调度器（commands::jobs）负责。
 //! 见 ai-docs/decisions/openfoam-gpl-compliance.md。
 
-use std::collections::HashMap;
-use std::io::{BufRead, BufReader};
-use std::process::{Child, Command, Stdio};
-use std::sync::{Arc, Mutex};
-use std::thread;
+use std::process::Command;
 
 use kairos_core::error::{KairosError, Result};
 use kairos_core::models::material::Material;
@@ -13,16 +10,10 @@ use kairos_core::models::mesh::VolumeMesh;
 use kairos_core::models::process::ProcessSettings;
 use kairos_core::models::solver::AnalysisStage;
 use kairos_core::services::openfoam;
-use kairos_core::services::project::new_id;
 use serde::Serialize;
 use tauri::State;
-use tauri::ipc::Channel;
 
 use crate::commands::geometry::GeometryStore;
-
-/// 运行中的求解进程表（run_id → bash 子进程），供取消命令终止。
-#[derive(Default)]
-pub struct SolverRuns(pub Arc<Mutex<HashMap<String, Child>>>);
 
 /// OpenFOAM 环境探测结果。
 #[derive(Debug, Clone, Serialize)]
@@ -90,71 +81,4 @@ pub fn generate_openfoam_case(
         cores,
     )?;
     Ok(case_dir)
-}
-
-fn spawn_run_script(case_dir: &str) -> Result<Child> {
-    let script = format!("cd '{case_dir}' && decomposePar -force && openInjMoldSim -parallel");
-    let mut command = Command::new("bash");
-    command
-        .arg("-lc")
-        .arg(&script)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    // unix 下让 bash 成为独立进程组长：取消时可整组终止，避免孤儿求解进程。
-    #[cfg(unix)]
-    {
-        use std::os::unix::process::CommandExt;
-        command.process_group(0);
-    }
-    command
-        .spawn()
-        .map_err(|e| KairosError::io(format!("启动求解进程失败：{e}")))
-}
-
-/// 启动求解：立即返回 run_id，stdout 进度经 Channel 流式回传（含 __TIME__ 前缀的时间步行）。
-#[tauri::command]
-pub fn start_openfoam_run(
-    runs: State<'_, SolverRuns>,
-    case_dir: String,
-    progress: Channel<String>,
-) -> Result<String> {
-    let run_id = new_id("run");
-    let mut child = spawn_run_script(&case_dir)?;
-    let stdout = child.stdout.take();
-    runs.0.lock().unwrap().insert(run_id.clone(), child);
-
-    let runs_map = Arc::clone(&runs.0);
-    let run_id_for_thread = run_id.clone();
-    thread::spawn(move || {
-        if let Some(stdout) = stdout {
-            let reader = BufReader::new(stdout);
-            for line in reader.lines().map_while(std::result::Result::ok) {
-                if let Some(time_s) = openfoam::parse_time_line(&line) {
-                    let _ = progress.send(format!("__TIME__{time_s}"));
-                }
-                let _ = progress.send(line);
-            }
-        }
-        runs_map.lock().unwrap().remove(&run_id_for_thread);
-    });
-
-    Ok(run_id)
-}
-
-/// 取消运行中的求解：unix 下整组终止（bash 以独立进程组启动），并回收子进程。
-#[tauri::command]
-pub fn cancel_openfoam_run(runs: State<'_, SolverRuns>, run_id: String) -> Result<()> {
-    let child = runs.0.lock().unwrap().remove(&run_id);
-    if let Some(mut child) = child {
-        let pid = child.id();
-        #[cfg(unix)]
-        {
-            let _ = Command::new("kill")
-                .args(["-9", &format!("-{pid}")])
-                .status();
-        }
-        let _ = child.kill();
-        let _ = child.wait();
-    }
-    Ok(())
 }

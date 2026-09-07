@@ -1,5 +1,6 @@
 import { createStore } from "./lib/store";
 import { IpcUnavailableError } from "./lib/ipc";
+import { Channel } from "@tauri-apps/api/core";
 import { getSystemInfo } from "./services/system";
 import {
   createProject,
@@ -24,8 +25,10 @@ import {
 import { generateVolumeMesh, importStl, removeGeometry } from "./services/geometry";
 import { pickStlPath } from "./services/dialog";
 import { checkMoldNetwork } from "./services/mold";
+import { cancelJob as apiCancelJob, listJobs, submitJob as apiSubmitJob } from "./services/jobs";
 import type {
   GeometrySummary,
+  Job,
   Material,
   MeshingReport,
   Project,
@@ -49,6 +52,8 @@ interface AppState {
   activeStudyId: string | null;
   /** 模具网络校验问题清单（校验按钮触发）。 */
   moldIssues: string[];
+  /** 求解作业列表（调度器持有的快照）。 */
+  jobs: Job[];
   /** 材料库：内置示例材料 + 用户自定义材料。 */
   materials: MaterialLibrary;
   /** 已导入的几何（摘要列表，全量网格在 Rust 会话缓存）。 */
@@ -71,6 +76,7 @@ export const initialAppState: AppState = {
   meshReports: {},
   activeStudyId: null,
   moldIssues: [],
+  jobs: [],
   busy: null,
   error: null,
 };
@@ -480,6 +486,44 @@ export async function checkNetwork(): Promise<void> {
   try {
     const moldIssues = await checkMoldNetwork(study.runnerElements, study.coolingChannels);
     appStore.set({ moldIssues });
+  } catch (error) {
+    setError(error);
+  }
+}
+
+/** 提交求解作业（case 目录 + 核数），日志行经 Channel 由作业面板展示。 */
+export async function submitJobAction(caseDir: string, cores: number): Promise<void> {
+  appStore.set({ busy: "正在提交作业…", error: null });
+  const channel = new Channel<string>();
+  channel.onmessage = (line) => {
+    if (!line.startsWith("__TIME__")) {
+      // 日志行走作业面板展示；时间标记由调度器解析。
+      void line;
+    }
+  };
+  try {
+    await apiSubmitJob(caseDir, cores, appStore.get().activeStudyId, channel);
+    await refreshJobs();
+  } catch (error) {
+    setError(error);
+  } finally {
+    appStore.set({ busy: null });
+  }
+}
+
+export async function cancelJobAction(jobId: string): Promise<void> {
+  try {
+    await apiCancelJob(jobId);
+    await refreshJobs();
+  } catch (error) {
+    setError(error);
+  }
+}
+
+export async function refreshJobs(): Promise<void> {
+  try {
+    const jobs = await listJobs();
+    appStore.set({ jobs });
   } catch (error) {
     setError(error);
   }

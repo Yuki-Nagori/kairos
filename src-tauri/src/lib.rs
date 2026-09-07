@@ -5,7 +5,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(commands::geometry::GeometryStore::default())
-        .manage(commands::solver::SolverRuns::default())
+        .manage(commands::jobs::JobScheduler::default())
         .invoke_handler(tauri::generate_handler![
             commands::system::system_info,
             commands::project::create_project,
@@ -19,14 +19,15 @@ pub fn run() {
             commands::material::delete_custom_material,
             commands::material::export_materials_to_file,
             commands::geometry::import_stl,
+            commands::geometry::remove_geometry,
             commands::geometry::generate_volume_mesh,
             commands::mold::check_mold_network,
+            commands::process::check_process,
             commands::solver::probe_openfoam,
             commands::solver::generate_openfoam_case,
-            commands::solver::start_openfoam_run,
-            commands::solver::cancel_openfoam_run,
-            commands::process::check_process,
-            commands::geometry::remove_geometry,
+            commands::jobs::submit_job,
+            commands::jobs::cancel_job,
+            commands::jobs::list_jobs,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
