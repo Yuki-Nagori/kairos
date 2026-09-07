@@ -10,7 +10,9 @@
 | 21:45              | 前端工作台壳子       | 标题栏状态优先级（error > busy > info）、工作区三占位、IPC 网关（`CommandError` 归一化）与 `select` 切片订阅                                                                                        |
 | 21:50              | AI 文档体系          | 根 `AGENTS.md`（文档路由 + 铁律速查）+ `ai-docs/`（ARCHITECTURE 权威文档、时间线）                                                                                                                  |
 | 22:00              | README 与收尾        | README 定稿为「介绍 + 使用说明」；定位明确为注塑成型仿真（对标 Moldflow，复刻功能不碰代码/数据）；运行时冒烟通过，初始历史完成                                                                      |
-| 22:25              | 路线图规划           | 求解器选型确认：openInjMoldSim（OpenFOAM 7，GPL-3.0，填充/保压/冷却，3D 网格路线）；任务拆解 T01–T18 入库 `ai-docs/tasks/`（总览 + 里程碑 M0–M5），性能预算与 GPL 隔离为全局红线                    | verify            |
-| 22:45              | 需求扩展             | 新增 GPU 辅助计算要求：统一 wgpu 路线覆盖 NVIDIA / AMD / Intel / Apple 四厂商；新增任务 T19（GPU 基础设施）、T20（GPU 加速后处理算子），性能预算与架构红线同步更新                                  | verify            |
-| 22:55              | 流程补强             | 整体优化与 review 固化为计划的一部分：新增循环任务 T21（里程碑评审与整体优化，八项清单），任务完成自查与里程碑评审规则写入全局原则与 AGENTS                                                         | verify            |
-| 23:05              | T01 性能预算         | `ai-docs/perf-budget.md` 六项预算；基准套件上线：前端 tinybench（store 热路径，40–95 ns）、Rust criterion（IPC DTO 序列化 ~86 ns），基线已回填；vitest 5 已移除内置 bench，故前端基准直用 tinybench | verify + 基准运行 |
+| 22:25              | 路线图规划           | 求解器选型确认：openInjMoldSim（OpenFOAM 7，GPL-3.0，填充/保压/冷却，3D 网格路线）；任务拆解 T01–T18 入库 `ai-docs/tasks/`（总览 + 里程碑 M0–M5），性能预算与 GPL 隔离为全局红线                    | verify                        |
+| 22:45              | 需求扩展             | 新增 GPU 辅助计算要求：统一 wgpu 路线覆盖 NVIDIA / AMD / Intel / Apple 四厂商；新增任务 T19（GPU 基础设施）、T20（GPU 加速后处理算子），性能预算与架构红线同步更新                                  | verify                        |
+| 22:55              | 流程补强             | 整体优化与 review 固化为计划的一部分：新增循环任务 T21（里程碑评审与整体优化，八项清单），任务完成自查与里程碑评审规则写入全局原则与 AGENTS                                                         | verify                        |
+| 23:05              | T01 性能预算         | `ai-docs/perf-budget.md` 六项预算；基准套件上线：前端 tinybench（store 热路径，40–95 ns）、Rust criterion（IPC DTO 序列化 ~86 ns），基线已回填；vitest 5 已移除内置 bench，故前端基准直用 tinybench | verify + 基准运行             |
+| 23:15              | T02 CI/CD            | GitHub Actions：前端门禁、双平台 Rust 门禁、主干双平台桌面包构建、基准报告（只记录不卡点）；.gitattributes 统一 LF 防 Windows 检出破坏格式门禁                                                      | CI 配置就绪（首次推送后生效） |
+| 23:20              | T21 M0 评审          | 八项清单通过：1 项立即修（ARCHITECTURE 补 perf-budget 引用）已修复，3 项接受并记录（CSP、错误链、cargo audit，均带重评触发条件）；M0 关闭，可开启 M1                                                | verify 全绿                   |
