@@ -50,7 +50,9 @@ fn now_ms() -> u64 {
 }
 
 fn spawn_run_script(case_dir: &str) -> Result<Child> {
-    let script = format!("cd '{case_dir}' && decomposePar -force && openInjMoldSim -parallel");
+    // 单引号内的 shell 转义：' → '\''（防路径注入）。
+    let safe_dir = case_dir.replace('\'', "'\\''");
+    let script = format!("cd '{safe_dir}' && decomposePar -force && openInjMoldSim -parallel");
     let mut command = Command::new("bash");
     command
         .arg("-lc")
