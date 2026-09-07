@@ -40,6 +40,7 @@ bun run dev           # Vite 开发服务器（http://localhost:1420）
 | `bun run format:rust` / `format:rust:check`     | rustfmt 格式化 / 校验                                                |
 | `bun run test` / `test:watch` / `test:coverage` | Vitest 单测                                                          |
 | `bun run test:rust`                             | Rust 单测（`cargo test`）                                            |
+| `bun run bench` / `cargo bench`                 | 性能基准（预算见 `ai-docs/perf-budget.md`）                          |
 | `bun run knip`                                  | 检测未使用的文件、导出、依赖                                         |
 | `bun run verify`                                | 一键全量门禁：前端 + Rust 的 typecheck → lint → format → test → knip |
 

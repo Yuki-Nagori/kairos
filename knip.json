@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/knip/schema.json",
-  "entry": ["index.html", "src-web/**/*.test.ts"],
+  "entry": ["index.html", "src-web/**/*.test.ts", "src-web/lib/bench/*.ts"],
   "project": ["src-web/**/*.ts"],
   "ignoreDependencies": ["tailwindcss"]
 }
