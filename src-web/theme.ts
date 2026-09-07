@@ -7,7 +7,7 @@
  */
 
 /** 可用主题名列表（自动从 theme/*.css 文件名提取，按字母排序）。 */
-export const THEMES: readonly string[] = Object.keys(
+const THEMES: readonly string[] = Object.keys(
   import.meta.glob("./theme/*.css", { eager: true, query: "?raw", import: "default" }),
 )
   .map((path) => path.replace("./theme/", "").replace(".css", ""))
@@ -35,7 +35,7 @@ export function getActiveTheme(): string {
   return document.documentElement.dataset.theme ?? THEMES[0] ?? "dark";
 }
 
-export function setTheme(name: string): void {
+function setTheme(name: string): void {
   apply(name);
   localStorage.setItem(STORAGE_KEY, name);
 }
