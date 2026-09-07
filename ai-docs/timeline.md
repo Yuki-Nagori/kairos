@@ -60,3 +60,4 @@
 - **07:50** fix: 恢复三端标准系统标题栏，macOS 不再 Overlay 隐藏
 - **07:5x** feat: 头部左上角加入品牌图标
 - **07:5x** feat: Tauri 窗口默认全屏启动
+- **08:0x** feat: 沙漏图标统一三端 bundle 图标；macOS 最大化、Win/Linux 全屏启动
