@@ -1,0 +1,37 @@
+//! IPC 契约测试：锁定前端（`src-web/types.ts`、`src-web/lib/ipc.ts`）与 Rust serde 结构
+//! 之间的序列化形状。这些测试失败意味着前端联调会爆错，而不是上线后才发现。
+
+use kairos_core::error::{ErrorKind, KairosError};
+use kairos_core::models::system::SystemInfo;
+use kairos_core::services::system;
+use serde_json::json;
+
+/// SystemInfo 的形状：camelCase 字段，前端 `src-web/types.ts` 的 SystemInfo 与之对应。
+#[test]
+fn system_info_serializes_with_camel_case() {
+    let info: SystemInfo = system::system_info("kairos", "0.1.0");
+    let json = serde_json::to_value(&info).unwrap();
+    assert_eq!(
+        json,
+        json!({
+            "name": "kairos",
+            "version": "0.1.0",
+            "os": std::env::consts::OS,
+        })
+    );
+}
+
+/// 错误契约：`{ code, message }` 两字段，前端 CommandError 按 code 分类。
+#[test]
+fn error_serializes_to_code_message_contract() {
+    let error = KairosError::new(ErrorKind::Validation, "参数超出量程");
+    let json = serde_json::to_value(&error).unwrap();
+    assert_eq!(
+        json,
+        json!({ "code": "validation", "message": "参数超出量程" })
+    );
+
+    let solver_error = KairosError::solver("迭代不收敛");
+    let json = serde_json::to_value(&solver_error).unwrap();
+    assert_eq!(json["code"], "solver");
+}
