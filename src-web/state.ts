@@ -34,8 +34,13 @@ import { listResultTimes, loadResultField } from "./services/results";
 import { pickStlPath } from "./services/dialog";
 import { toCsv } from "./lib/chart";
 import { checkMoldNetwork } from "./services/mold";
+import {
+  listRuntimeDependencies,
+  openDependencyPage as apiOpenDependencyPage,
+} from "./services/dependencies";
 import { cancelJob as apiCancelJob, listJobs, submitJob as apiSubmitJob } from "./services/jobs";
 import type {
+  DependencyStatus,
   ResultCatalog,
   ScalarField,
   GeometrySummary,
@@ -66,6 +71,8 @@ interface AppState {
   moldIssues: string[];
   /** 求解作业列表（调度器持有的快照）。 */
   jobs: Job[];
+  /** 运行时依赖状态（许可分级 + 就绪探测）。 */
+  dependencies: DependencyStatus[];
   /** 探针列表（节点序号）。 */
   probes: Probe[];
   /** 材料库：内置示例材料 + 用户自定义材料。 */
@@ -97,6 +104,7 @@ export const initialAppState: AppState = {
   activeStudyId: null,
   moldIssues: [],
   jobs: [],
+  dependencies: [],
   probes: [],
   busy: null,
   error: null,
@@ -703,4 +711,23 @@ export function exportFieldCsv(): void {
   anchor.download = `${loadedField.field}-${loadedField.timeDir}.csv`;
   anchor.click();
   URL.revokeObjectURL(url);
+}
+
+/** 刷新运行时依赖就绪状态（探测 blockMesh / openInjMoldSim / gmsh）。 */
+export async function refreshDependencies(): Promise<void> {
+  try {
+    const dependencies = await listRuntimeDependencies();
+    appStore.set({ dependencies });
+  } catch (error) {
+    setError(error);
+  }
+}
+
+/** 引导安装：打开组件官方页。 */
+export async function openDependencyPageAction(pageUrl: string): Promise<void> {
+  try {
+    await apiOpenDependencyPage(pageUrl);
+  } catch (error) {
+    setError(error);
+  }
 }

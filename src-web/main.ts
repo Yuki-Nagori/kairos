@@ -1,6 +1,7 @@
 import "./app.css";
 import { createAppHeader } from "./components/app-header";
 import { createGeometryPanel } from "./components/geometry-panel";
+import { createDependenciesPanel } from "./components/dependencies-panel";
 import { createJobsPanel } from "./components/jobs-panel";
 import { createMaterialsPanel } from "./components/materials-panel";
 import { createMoldPanel } from "./components/mold-panel";
@@ -35,7 +36,13 @@ centerColumn.append(createPipelinePanel(), createViewportPanel(), createXyChartP
 
 const rightColumn = document.createElement("div");
 rightColumn.className = "flex w-[340px] shrink-0 flex-col gap-3 overflow-y-auto p-3";
-rightColumn.append(createMoldPanel(), createProcessPanel(), createReportPanel(), createJobsPanel());
+rightColumn.append(
+  createMoldPanel(),
+  createProcessPanel(),
+  createDependenciesPanel(),
+  createReportPanel(),
+  createJobsPanel(),
+);
 
 const workspace = document.createElement("main");
 workspace.className =

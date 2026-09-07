@@ -187,3 +187,22 @@ export interface ScalarField {
   isMagnitude: boolean;
   complete: boolean;
 }
+/** 对应 `kairos-core::models::dependencies::LicenseKind`。 */
+export type LicenseKind = "mit" | "gpl";
+
+/** 对应 `kairos-core::models::dependencies::InstallStrategy`。 */
+export type InstallStrategy = "direct_download" | "guided_install";
+
+/** 依赖状态视图（目录项 + 就绪探测）。 */
+export interface DependencyStatus {
+  id: string;
+  name: string;
+  license: string;
+  licenseKind: LicenseKind;
+  strategy: InstallStrategy;
+  pageUrl: string;
+  required: boolean;
+  checkCommand: string;
+  hint: string;
+  ready: boolean;
+}

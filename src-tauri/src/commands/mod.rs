@@ -1,5 +1,6 @@
 //! Tauri 命令层：按领域拆模块，`lib.rs` 的 `generate_handler![]` 是注册唯一入口。
 
+pub mod dependencies;
 pub mod geometry;
 pub mod gpu;
 pub mod gpu_ops;

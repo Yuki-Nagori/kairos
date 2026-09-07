@@ -32,6 +32,8 @@ pub fn run() {
             commands::jobs::submit_job,
             commands::jobs::cancel_job,
             commands::jobs::list_jobs,
+            commands::dependencies::list_runtime_dependencies,
+            commands::dependencies::open_dependency_page,
             commands::results::list_result_times,
             commands::results::load_result_field,
         ])
