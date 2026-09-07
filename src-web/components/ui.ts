@@ -18,3 +18,30 @@ export function hint(text: string): HTMLParagraphElement {
   element.textContent = text;
   return element;
 }
+
+export function button(
+  label: string,
+  variant: "primary" | "ghost" | "danger" = "ghost",
+): HTMLButtonElement {
+  const element = document.createElement("button");
+  element.type = "button";
+  element.textContent = label;
+  element.className = [
+    "rounded-lg px-4 py-2 text-sm font-medium transition-colors",
+    variant === "primary"
+      ? "bg-emerald-500 text-emerald-950 hover:bg-emerald-400"
+      : variant === "danger"
+        ? "border border-zinc-700 text-zinc-400 hover:border-red-500 hover:text-red-400"
+        : "border border-zinc-700 text-zinc-200 hover:border-emerald-500 hover:text-emerald-400",
+  ].join(" ");
+  return element;
+}
+
+export function textInput(placeholder: string): HTMLInputElement {
+  const element = document.createElement("input");
+  element.type = "text";
+  element.placeholder = placeholder;
+  element.className =
+    "rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none";
+  return element;
+}

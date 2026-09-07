@@ -6,6 +6,8 @@ use kairos_core::models::system::SystemInfo;
 use kairos_core::services::system;
 use serde_json::json;
 
+use kairos_core::models::project::{Project, Study};
+
 /// SystemInfo 的形状：camelCase 字段，前端 `src-web/types.ts` 的 SystemInfo 与之对应。
 #[test]
 fn system_info_serializes_with_camel_case() {
@@ -34,4 +36,20 @@ fn error_serializes_to_code_message_contract() {
     let solver_error = KairosError::solver("迭代不收敛");
     let json = serde_json::to_value(&solver_error).unwrap();
     assert_eq!(json["code"], "solver");
+}
+
+/// Project 的形状：camelCase + schemaVersion，前端 `src-web/types.ts` 与之对应。
+#[test]
+fn project_serializes_with_camel_case() {
+    let mut project = Project::new("p-1".into(), "演示项目".into(), 1000);
+    project.studies.push(Study {
+        id: "s-1".into(),
+        name: "填充分析".into(),
+        created_ms: 1001,
+    });
+    let json = serde_json::to_value(&project).unwrap();
+    assert_eq!(json["schemaVersion"], 1);
+    assert_eq!(json["name"], "演示项目");
+    assert_eq!(json["studies"][0]["name"], "填充分析");
+    assert_eq!(json["studies"][0]["createdMs"], 1001);
 }
