@@ -9,6 +9,11 @@ export function createAppHeader(): HTMLElement {
   const root = document.createElement("header");
   root.className = "flex items-center gap-4 border-b border-zinc-800 bg-zinc-900 px-5 py-3";
 
+  const logo = document.createElement("img");
+  logo.src = "/icon.svg";
+  logo.alt = "Kairos";
+  logo.className = "h-7 w-7 shrink-0";
+
   const title = document.createElement("h1");
   title.className = "text-lg font-semibold tracking-tight";
   title.textContent = "Kairos";
@@ -66,6 +71,6 @@ export function createAppHeader(): HTMLElement {
   });
 
   syncThemeIcon();
-  root.append(title, subtitle, themeButton, status);
+  root.append(logo, title, subtitle, themeButton, status);
   return root;
 }
