@@ -1,0 +1,16 @@
+[package]
+name = "kairos"
+description = "Kairos — CAE 仿真软件"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+name = "kairos_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+kairos-core = { path = "../src-crates/kairos-core" }
+tauri.workspace = true
