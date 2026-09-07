@@ -14,55 +14,61 @@ pub fn parse_msh_v2(content: &str) -> Result<VolumeMesh> {
     while let Some(line) = lines.next() {
         match line.trim() {
             "$Nodes" => {
-                let count_line = lines.next().ok_or_else(|| parse_err("$Nodes 后缺少数量行"))?;
+                let count_line = lines
+                    .next()
+                    .ok_or_else(|| parse_err("$Nodes 后缺少数量行"))?;
                 let count: usize = count_line
                     .trim()
                     .parse()
                     .map_err(|_| parse_err("节点数量行无法解析"))?;
                 for _ in 0..count {
-                    let node_line = lines
-                        .next()
-                        .ok_or_else(|| parse_err("节点行数量不足"))?;
+                    let node_line = lines.next().ok_or_else(|| parse_err("节点行数量不足"))?;
                     let tokens: Vec<&str> = node_line.split_whitespace().collect();
                     if tokens.len() < 4 {
                         return Err(parse_err("节点行格式错误"));
                     }
                     nodes.push([
-                        tokens[1].parse().map_err(|_| parse_err("节点坐标无法解析"))?,
-                        tokens[2].parse().map_err(|_| parse_err("节点坐标无法解析"))?,
-                        tokens[3].parse().map_err(|_| parse_err("节点坐标无法解析"))?,
+                        tokens[1]
+                            .parse()
+                            .map_err(|_| parse_err("节点坐标无法解析"))?,
+                        tokens[2]
+                            .parse()
+                            .map_err(|_| parse_err("节点坐标无法解析"))?,
+                        tokens[3]
+                            .parse()
+                            .map_err(|_| parse_err("节点坐标无法解析"))?,
                     ]);
                 }
             }
             "$Elements" => {
-                let count_line = lines.next().ok_or_else(|| parse_err("$Elements 后缺少数量行"))?;
+                let count_line = lines
+                    .next()
+                    .ok_or_else(|| parse_err("$Elements 后缺少数量行"))?;
                 let count: usize = count_line
                     .trim()
                     .parse()
                     .map_err(|_| parse_err("单元数量行无法解析"))?;
                 for _ in 0..count {
-                    let element_line = lines
-                        .next()
-                        .ok_or_else(|| parse_err("单元行数量不足"))?;
+                    let element_line = lines.next().ok_or_else(|| parse_err("单元行数量不足"))?;
                     let tokens: Vec<&str> = element_line.split_whitespace().collect();
                     let element_type: usize = match tokens[1].parse() {
                         Ok(value) => value,
                         Err(_) => continue,
                     };
-                    match element_type {
-                        4 => {
-                            // elm-number type n-tags tags... n0 n1 n2 n3（末 4 个为节点，1-based）
-                            if tokens.len() < 7 {
-                                return Err(parse_err("四面体单元行字段不足"));
-                            }
-                            let last = tokens.len();
-                            let ids: Vec<usize> = tokens[last - 4..last]
-                                .iter()
-                                .map(|t| t.parse::<usize>().map_err(|_| parse_err("节点索引无法解析")))
-                                .collect::<std::result::Result<_, _>>()?;
-                            tets.push([ids[0] - 1, ids[1] - 1, ids[2] - 1, ids[3] - 1]);
+                    if element_type == 4 {
+                        // elm-number type n-tags tags... n0 n1 n2 n3（末 4 个为节点，1-based）
+                        if tokens.len() < 7 {
+                            return Err(parse_err("四面体单元行字段不足"));
                         }
-                        _ => {} // 高阶 / 点 / 面单元：原型仅消费 type 4
+                        let last = tokens.len();
+                        let ids: Vec<usize> = tokens[last - 4..last]
+                            .iter()
+                            .map(|t| {
+                                t.parse::<usize>()
+                                    .map_err(|_| parse_err("节点索引无法解析"))
+                            })
+                            .collect::<std::result::Result<_, _>>()?;
+                        tets.push([ids[0] - 1, ids[1] - 1, ids[2] - 1, ids[3] - 1]);
                     }
                 }
             }
@@ -203,6 +209,9 @@ $EndElements
     #[test]
     fn rejects_malformed() {
         assert!(parse_msh_v2("garbage").is_err());
-        assert!(parse_msh_v2("$MeshFormat\n2.2 0 8\n$EndMeshFormat\n$Nodes\n2\n1 0 0\n$EndNodes\n").is_err());
+        assert!(
+            parse_msh_v2("$MeshFormat\n2.2 0 8\n$EndMeshFormat\n$Nodes\n2\n1 0 0\n$EndNodes\n")
+                .is_err()
+        );
     }
 }

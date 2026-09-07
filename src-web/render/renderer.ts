@@ -93,6 +93,7 @@ void main() {
 export class ViewportRenderer {
   private program: WebGLProgram;
   private vao: WebGLVertexArrayObject | null = null;
+  private valueBuffer: WebGLBuffer | null = null;
   private indexCount = 0;
   private indexType = 0;
 
@@ -177,8 +178,8 @@ export class ViewportRenderer {
     gl.enableVertexAttribArray(1);
     gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 0, 0);
 
-    const valueBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, valueBuffer);
+    this.valueBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.valueBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, perFaceValues(mesh), gl.STATIC_DRAW);
     gl.enableVertexAttribArray(2);
     gl.vertexAttribPointer(2, 1, gl.FLOAT, false, 0, 0);
@@ -199,6 +200,16 @@ export class ViewportRenderer {
     this.valueMin = min;
     this.valueMax = max;
     this.useField = 1;
+  }
+
+  /** 热更新每面值（长度 = 面数）：时间步动画逐帧更新，不重建网格缓冲。 */
+  setFaceValues(perFaceValues: Float32Array): void {
+    const gl = this.gl;
+    if (this.valueBuffer === null || this.indexCount === 0) {
+      return;
+    }
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.valueBuffer);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, perFaceValues);
   }
 
   /** 关闭云图着色。 */
