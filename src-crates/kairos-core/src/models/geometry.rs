@@ -40,6 +40,9 @@ pub struct TriangleMesh {
     pub triangles: Vec<Triangle>,
 }
 
+/// 单个面（quad）的四个顶点。
+type Quad = ([f64; 3], [f64; 3], [f64; 3], [f64; 3]);
+
 impl TriangleMesh {
     pub fn triangle_count(&self) -> usize {
         self.triangles.len()
@@ -89,6 +92,37 @@ impl TriangleMesh {
                 dot / 6.0
             })
             .sum()
+    }
+
+    /// 内置样例：边长 `size` 的立方体（12 三角形，封闭且外向一致绕向）。
+    /// 用于首次使用引导与端到端冒烟测试，无需外部 STL 文件。
+    /// 面表经脚本验证：18 条边全部一正一反、有符号体积 = size³。
+    pub fn sample_box(size: f64) -> TriangleMesh {
+        let s = size;
+        let mut triangles = Vec::new();
+        let faces: [Quad; 6] = [
+            ([0.0, 0.0, s], [s, 0.0, s], [s, s, s], [0.0, s, s]),
+            ([0.0, s, 0.0], [s, s, 0.0], [s, 0.0, 0.0], [0.0, 0.0, 0.0]),
+            ([s, 0.0, s], [s, 0.0, 0.0], [s, s, 0.0], [s, s, s]),
+            ([0.0, 0.0, 0.0], [0.0, 0.0, s], [0.0, s, s], [0.0, s, 0.0]),
+            ([0.0, s, 0.0], [0.0, s, s], [s, s, s], [s, s, 0.0]),
+            ([0.0, 0.0, 0.0], [s, 0.0, 0.0], [s, 0.0, s], [0.0, 0.0, s]),
+        ];
+        for (p0, p1, p2, p3) in faces {
+            triangles.push(Triangle {
+                a: p0,
+                b: p1,
+                c: p2,
+                normal: [0.0; 3],
+            });
+            triangles.push(Triangle {
+                a: p0,
+                b: p2,
+                c: p3,
+                normal: [0.0; 3],
+            });
+        }
+        TriangleMesh { triangles }
     }
 }
 

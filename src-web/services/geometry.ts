@@ -14,3 +14,8 @@ export function removeGeometry(geometryId: string): Promise<void> {
 export function generateVolumeMesh(geometryId: string, targetSize: number): Promise<MeshingReport> {
   return invokeCommand("generate_volume_mesh", { geometryId, targetSize });
 }
+
+/** 导入内置样例立方体（首次使用引导）。 */
+export function importSampleBox(size: number): Promise<GeometrySummary> {
+  return invokeCommand("import_sample_box", { size });
+}

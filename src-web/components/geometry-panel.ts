@@ -1,4 +1,10 @@
-import { appStore, generateMesh, importGeometry, removeGeometryById } from "../state";
+import {
+  appStore,
+  generateMesh,
+  importGeometry,
+  importSampleGeometry,
+  removeGeometryById,
+} from "../state";
 import type { MeshingReport } from "../types";
 import { button, card, hint, textInput } from "./ui";
 
@@ -9,12 +15,14 @@ export function createGeometryPanel(): HTMLElement {
   const actions = document.createElement("div");
   actions.className = "flex flex-wrap items-center gap-2";
   const importButton = button("导入 STL", "primary");
-  actions.append(importButton);
+  const sampleButton = button("导入样例");
+  actions.append(importButton, sampleButton);
 
   const listBox = document.createElement("div");
   listBox.className = "space-y-2";
 
   importButton.addEventListener("click", () => void importGeometry());
+  sampleButton.addEventListener("click", () => void importSampleGeometry(10));
 
   function issueText(issues: {
     degenerate: number;

@@ -67,3 +67,20 @@ pub fn remove_geometry(store: State<'_, GeometryStore>, geometry_id: String) -> 
     store.0.lock().unwrap().remove(&geometry_id);
     Ok(())
 }
+
+/// 导入内置样例立方体（首次使用引导 / 端到端冒烟），无需外部 STL 文件。
+#[tauri::command]
+pub fn import_sample_box(store: State<'_, GeometryStore>, size: f64) -> Result<GeometrySummary> {
+    let mesh = TriangleMesh::sample_box(size);
+    let geometry_id = new_id("geom");
+    let summary = geometry_service::summarize(geometry_id.clone(), "样例立方体.stl".into(), &mesh);
+    store.0.lock().unwrap().insert(
+        geometry_id,
+        MeshSession {
+            mesh,
+            file_name: "样例立方体.stl".into(),
+            volume: None,
+        },
+    );
+    Ok(summary)
+}

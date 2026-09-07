@@ -415,6 +415,15 @@ mod tests {
     }
 
     #[test]
+    fn sample_box_is_watertight_and_volume_matches() {
+        let mesh = TriangleMesh::sample_box(10.0);
+        let issues = crate::services::geometry::check_mesh(&mesh);
+        assert!(issues.is_clean(), "样例立方体应封闭一致：{issues:?}");
+        assert!((mesh.signed_volume() - 1000.0).abs() < 1e-9);
+        assert!((mesh.surface_area() - 600.0).abs() < 1e-9);
+    }
+
+    #[test]
     fn summarize_fills_report() {
         let mesh = TriangleMesh {
             triangles: unit_cube(),

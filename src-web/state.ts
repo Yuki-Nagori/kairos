@@ -4,6 +4,7 @@ import { Channel } from "@tauri-apps/api/core";
 import { getSystemInfo } from "./services/system";
 import {
   createProject,
+  defaultCaseDir,
   listRecentProjects,
   loadProjectFile,
   saveProjectFile,
@@ -22,7 +23,13 @@ import {
   listCustomMaterials,
   upsertCustomMaterial,
 } from "./services/materials";
-import { generateVolumeMesh, importStl, removeGeometry } from "./services/geometry";
+import {
+  generateVolumeMesh,
+  importSampleBox,
+  importStl,
+  removeGeometry,
+} from "./services/geometry";
+import { generateOpenfoamCase } from "./services/solver";
 import { pickStlPath } from "./services/dialog";
 import { checkMoldNetwork } from "./services/mold";
 import { cancelJob as apiCancelJob, listJobs, submitJob as apiSubmitJob } from "./services/jobs";
@@ -222,6 +229,7 @@ export function addStudy(name: string): void {
     runnerElements: [],
     coolingChannels: [],
     process: null,
+    materialId: null,
   };
   const updated: Project = {
     ...project,
@@ -526,5 +534,84 @@ export async function refreshJobs(): Promise<void> {
     appStore.set({ jobs });
   } catch (error) {
     setError(error);
+  }
+}
+
+/** 导入内置样例立方体（首次使用引导）。 */
+export async function importSampleGeometry(size = 10): Promise<void> {
+  appStore.set({ busy: "正在导入样例…", error: null });
+  try {
+    const summary = await importSampleBox(size);
+    appStore.set({ geometries: [...appStore.get().geometries, summary] });
+  } catch (error) {
+    setError(error);
+  } finally {
+    appStore.set({ busy: null });
+  }
+}
+
+/** 把材料登记到活跃研究。 */
+export function assignMaterial(materialId: string): void {
+  const { project, activeStudyId, materials } = appStore.get();
+  if (!project || !activeStudyId) {
+    setError("请先创建或选择一个研究。");
+    return;
+  }
+  const exists = [...materials.builtin, ...materials.custom].some((m) => m.id === materialId);
+  if (!exists) {
+    setError("材料不存在。");
+    return;
+  }
+  const studies = project.studies.map((study) =>
+    study.id === activeStudyId ? { ...study, materialId } : study,
+  );
+  appStore.set({ project: { ...project, studies, updatedMs: Date.now() } });
+}
+
+/** 端到端提交：case 生成 → 作业入队（前置检查见 T11 流水线面板）。 */
+export async function submitPipeline(cores: number): Promise<void> {
+  const state = appStore.get();
+  const geometry = state.geometries[0] ?? null;
+  const study = state.project?.studies.find((s) => s.id === state.activeStudyId) ?? null;
+  const material = study?.materialId
+    ? ([...state.materials.builtin, ...state.materials.custom].find(
+        (m) => m.id === study.materialId,
+      ) ?? null)
+    : null;
+  const meshed = geometry !== null && state.meshReports[geometry.geometryId] !== undefined;
+
+  if (geometry === null) {
+    setError("请先导入几何。");
+    return;
+  }
+  if (!meshed) {
+    setError("请先生成体积网格。");
+    return;
+  }
+  if (material === null) {
+    setError("请先在研究上登记材料。");
+    return;
+  }
+  if (study?.process == null) {
+    setError("请先设置工艺并应用到研究。");
+    return;
+  }
+
+  appStore.set({ busy: "正在准备求解…", error: null });
+  try {
+    const caseDir = await defaultCaseDir(study.id);
+    await generateOpenfoamCase({
+      geometryId: geometry.geometryId,
+      caseDir,
+      material,
+      process: study.process,
+      stage: "fill",
+      cores,
+    });
+    await submitJobAction(caseDir, cores);
+  } catch (error) {
+    setError(error);
+  } finally {
+    appStore.set({ busy: null });
   }
 }

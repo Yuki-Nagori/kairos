@@ -4,6 +4,7 @@ import {
   importMaterials,
   exportMaterials,
   copyMaterialToCustom,
+  assignMaterial,
 } from "../state";
 import type { Material } from "../types";
 import { button, card, hint } from "./ui";
@@ -20,7 +21,13 @@ export function createMaterialsPanel(): HTMLElement {
   const exportButton = button("导出自定义");
   const copyButton = button("复制为自定义");
   const deleteButton = button("删除", "danger");
-  actions.append(importButton, exportButton, copyButton, deleteButton);
+  const useButton = button("用于当前研究");
+  actions.append(importButton, exportButton, copyButton, useButton, deleteButton);
+  useButton.addEventListener("click", () => {
+    if (selectedId) {
+      assignMaterial(selectedId);
+    }
+  });
 
   const listBox = document.createElement("div");
   listBox.className = "flex gap-4";

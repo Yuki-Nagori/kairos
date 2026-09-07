@@ -1,3 +1,4 @@
+import { probeOpenfoam } from "../services/solver";
 import { appStore, cancelJobAction, refreshJobs, submitJobAction } from "../state";
 import type { Job } from "../types";
 import { button, card, hint, textInput } from "./ui";
@@ -33,6 +34,12 @@ export function createJobsPanel(): HTMLElement {
   const submitButton = button("提交作业", "primary");
   const refreshButton = button("刷新");
   form.append(caseDirInput, coresInput, submitButton, refreshButton);
+
+  const envHint = hint("正在探测 OpenFOAM 环境…");
+  void probeOpenfoam().then((check) => {
+    envHint.textContent = check.hint;
+    envHint.className = check.openfoam && check.solver ? "text-emerald-400" : "text-amber-400";
+  });
 
   const listBox = document.createElement("div");
   listBox.className = "space-y-2";
@@ -87,7 +94,7 @@ export function createJobsPanel(): HTMLElement {
     }
   }
 
-  body.append(form, listBox);
+  body.append(envHint, form, listBox);
   render();
   appStore.subscribe(render);
   return root;

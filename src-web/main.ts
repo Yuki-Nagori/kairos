@@ -3,6 +3,7 @@ import { createAppHeader } from "./components/app-header";
 import { createGeometryPanel } from "./components/geometry-panel";
 import { createMoldPanel } from "./components/mold-panel";
 import { createJobsPanel } from "./components/jobs-panel";
+import { createPipelinePanel } from "./components/pipeline-panel";
 import { createMaterialsPanel } from "./components/materials-panel";
 import { createProcessPanel } from "./components/process-panel";
 import { createProjectBar } from "./components/project-bar";
@@ -24,6 +25,7 @@ root.append(
   createMaterialsPanel(),
   createMoldPanel(),
   createProcessPanel(),
+  createPipelinePanel(),
   createJobsPanel(),
   createWorkspace(),
 );

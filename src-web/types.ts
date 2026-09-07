@@ -25,6 +25,7 @@ export interface Study {
   runnerElements: RunnerElement[];
   coolingChannels: CoolingChannel[];
   process: ProcessSettings | null;
+  materialId: string | null;
 }
 
 /** 对应 `kairos-core::models::process::ProcessSettings`。 */
@@ -162,3 +163,5 @@ export interface Job {
   lastTimeS: number | null;
   message: string | null;
 }
+/** 对应 `kairos-core::models::solver::AnalysisStage`。 */
+export type AnalysisStage = "fill" | "fill_pack" | "fill_pack_cool";

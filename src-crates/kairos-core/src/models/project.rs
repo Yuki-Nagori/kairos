@@ -8,7 +8,8 @@ use crate::models::runners::{CoolingChannel, RunnerElement};
 /// 当前工程文件 schema 版本：不兼容变更时递增，并在 `services::project::parse` 补迁移。
 /// v1→v2：Study 新增流道 / 浇口与冷却水路字段（serde default 迁移，旧文件补空集合）。
 /// v2→v3：Study 新增工艺设置（Option，serde default 迁移为 None）。
-pub const SCHEMA_VERSION: u32 = 3;
+/// v3→v4：Study 新增材料引用 material_id（Option，serde default 迁移为 None）。
+pub const SCHEMA_VERSION: u32 = 4;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -45,6 +46,9 @@ pub struct Study {
     /// 成型工艺设置（v3 新增，未设置时为 None）。
     #[serde(default)]
     pub process: Option<ProcessSettings>,
+    /// 选用的材料 id（v4 新增，未设置时为 None）。
+    #[serde(default)]
+    pub material_id: Option<String>,
 }
 
 impl Project {
@@ -75,6 +79,7 @@ impl Project {
             runner_elements: Vec::new(),
             cooling_channels: Vec::new(),
             process: None,
+            material_id: None,
         };
         self.studies.push(study.clone());
         self.updated_ms = now_ms;

@@ -53,9 +53,10 @@ fn project_serializes_with_camel_case() {
         runner_elements: Vec::new(),
         cooling_channels: Vec::new(),
         process: None,
+        material_id: None,
     });
     let json = serde_json::to_value(&project).unwrap();
-    assert_eq!(json["schemaVersion"], 3);
+    assert_eq!(json["schemaVersion"], 4);
     assert!(json["studies"][0]["process"].is_null());
     assert_eq!(json["name"], "演示项目");
     assert_eq!(json["studies"][0]["name"], "填充分析");
