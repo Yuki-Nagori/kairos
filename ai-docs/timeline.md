@@ -61,3 +61,4 @@
 - **07:5x** feat: 头部左上角加入品牌图标
 - **07:5x** feat: Tauri 窗口默认全屏启动
 - **08:0x** feat: 沙漏图标统一三端 bundle 图标；macOS 最大化、Win/Linux 全屏启动
+- **08:0x** fix: 清理界面 emoji 与装饰性符号
