@@ -24,6 +24,20 @@ export interface Study {
   createdMs: number;
   runnerElements: RunnerElement[];
   coolingChannels: CoolingChannel[];
+  process: ProcessSettings | null;
+}
+
+/** 对应 `kairos-core::models::process::ProcessSettings`。 */
+export interface ProcessSettings {
+  meltTempC: number;
+  moldTempC: number;
+  ejectionTempC: number;
+  injectionTimeS: number;
+  vpSwitchVolumePercent: number;
+  packingPressureMpaCurve: [number, number][];
+  packingTimeS: number;
+  coolingTimeS: number;
+  coolantTempC: number;
 }
 
 /** 对应 `kairos-core::models::project::RecentProject`（最近打开的工程）。 */

@@ -16,6 +16,7 @@ const project: Project = {
       createdMs: 2,
       runnerElements: [],
       coolingChannels: [],
+      process: null,
     },
   ],
 };

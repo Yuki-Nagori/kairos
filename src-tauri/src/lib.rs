@@ -20,6 +20,7 @@ pub fn run() {
             commands::geometry::import_stl,
             commands::geometry::generate_volume_mesh,
             commands::mold::check_mold_network,
+            commands::process::check_process,
             commands::geometry::remove_geometry,
         ])
         .run(tauri::generate_context!())

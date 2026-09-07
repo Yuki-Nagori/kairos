@@ -215,6 +215,7 @@ export function addStudy(name: string): void {
     createdMs: Date.now(),
     runnerElements: [],
     coolingChannels: [],
+    process: null,
   };
   const updated: Project = {
     ...project,

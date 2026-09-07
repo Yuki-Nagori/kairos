@@ -66,7 +66,7 @@ pub fn serialize(project: &Project) -> Result<String> {
 }
 
 /// 解析工程文件内容；高于当前版本的 schema 明确拒绝，旧版本逐级迁移。
-/// v1 → v2：Study 的新增集合字段由 `serde(default)` 补空，仅升级版本号。
+/// v1 → v2：Study 新增集合字段；v2 → v3：Study 新增 process（均为 `serde(default)` 补默认）。
 pub fn parse(content: &str) -> Result<Project> {
     let mut project: Project = serde_json::from_str(content)
         .map_err(|e| KairosError::validation(format!("工程文件无法解析：{e}")))?;
@@ -206,6 +206,7 @@ mod tests {
         assert_eq!(project.schema_version, SCHEMA_VERSION);
         assert_eq!(project.studies[0].runner_elements.len(), 0);
         assert_eq!(project.studies[0].cooling_channels.len(), 0);
+        assert!(project.studies[0].process.is_none());
     }
 
     #[test]
