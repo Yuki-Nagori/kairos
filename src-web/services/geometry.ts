@@ -19,3 +19,14 @@ export function generateVolumeMesh(geometryId: string, targetSize: number): Prom
 export function importSampleBox(size: number): Promise<GeometrySummary> {
   return invokeCommand("import_sample_box", { size });
 }
+
+interface RenderMeshData {
+  positions: number[];
+  indices: number[];
+  faceCells: number[];
+}
+
+/** 导出视口渲染网格（体积边界面或 STL 表面）。 */
+export function getRenderMesh(geometryId: string): Promise<RenderMeshData> {
+  return invokeCommand("get_render_mesh", { geometryId });
+}
