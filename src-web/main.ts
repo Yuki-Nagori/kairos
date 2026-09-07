@@ -6,6 +6,7 @@ import { createJobsPanel } from "./components/jobs-panel";
 import { createPipelinePanel } from "./components/pipeline-panel";
 import { createMaterialsPanel } from "./components/materials-panel";
 import { createProcessPanel } from "./components/process-panel";
+import { createXyChartPanel } from "./components/xy-chart-panel";
 import { createResultsPanel } from "./components/results-panel";
 import { createProjectBar } from "./components/project-bar";
 import { createViewportPanel } from "./components/viewport-panel";
@@ -27,6 +28,7 @@ root.append(
   createMaterialsPanel(),
   createMoldPanel(),
   createProcessPanel(),
+  createXyChartPanel(),
   createPipelinePanel(),
   createJobsPanel(),
   createResultsPanel(),
