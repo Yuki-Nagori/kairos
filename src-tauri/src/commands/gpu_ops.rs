@@ -143,8 +143,10 @@ pub fn vector_magnitude_gpu(vectors: &[[f32; 3]]) -> Result<Vec<f32>, KairosErro
 
     let mapped = slice.get_mapped_range();
     let result: Vec<f32> = mapped
-        .chunks_exact(4)
-        .map(|chunk| f32::from_le_bytes(chunk.try_into().expect("4 字节")))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|chunk| f32::from_le_bytes(*chunk))
         .collect();
     drop(mapped);
     Ok(result)

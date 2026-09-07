@@ -181,10 +181,17 @@ pub fn cancel_job(scheduler: State<'_, JobScheduler>, job_id: String) -> Result<
     let child = scheduler.lock().children.remove(&job_id);
     if let Some(mut child) = child {
         let pid = child.id();
+        // unix：进程组整杀；windows：taskkill 树杀（含 decomposePar/solver 子进程）。
         #[cfg(unix)]
         {
             let _ = Command::new("kill")
                 .args(["-9", &format!("-{pid}")])
+                .status();
+        }
+        #[cfg(windows)]
+        {
+            let _ = Command::new("taskkill")
+                .args(["/PID", &pid.to_string(), "/T", "/F"])
                 .status();
         }
         let _ = child.kill();
