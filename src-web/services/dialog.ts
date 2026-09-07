@@ -32,3 +32,11 @@ export async function pickExportJsonPath(defaultName: string): Promise<string | 
   });
   return path ?? null;
 }
+
+const STL_FILTER = { name: "STL 模型", extensions: ["stl"] };
+
+/** 选择要导入的 STL 文件，取消返回 null。 */
+export async function pickStlPath(): Promise<string | null> {
+  const selection = await open({ multiple: false, filters: [STL_FILTER] });
+  return typeof selection === "string" ? selection : null;
+}

@@ -6,9 +6,10 @@ use kairos_core::models::system::SystemInfo;
 use kairos_core::services::system;
 use serde_json::json;
 
+use kairos_core::models::geometry::{Triangle, TriangleMesh};
 use kairos_core::models::material::Material;
 use kairos_core::models::project::{Project, Study};
-use kairos_core::services::material;
+use kairos_core::services::{geometry, material};
 
 /// SystemInfo 的形状：camelCase 字段，前端 `src-web/types.ts` 的 SystemInfo 与之对应。
 #[test]
@@ -67,4 +68,24 @@ fn material_serializes_with_camel_case() {
     assert_eq!(json["specificHeat"][0], json!([300.0, 1900.0]));
     assert_eq!(json["mechanics"]["elasticModulus"], 1.5e9);
     assert!(json["dataNote"].is_string());
+}
+
+/// GeometrySummary 的形状：摘要字段 camelCase，issues 子对象对应前端 MeshIssues。
+#[test]
+fn geometry_summary_serializes_with_camel_case() {
+    let triangles = vec![Triangle {
+        a: [0.0, 0.0, 0.0],
+        b: [1.0, 0.0, 0.0],
+        c: [0.0, 1.0, 0.0],
+        normal: [0.0, 0.0, 1.0],
+    }];
+    let mesh = TriangleMesh { triangles };
+    let summary = geometry::summarize("g-1".into(), "demo.stl".into(), &mesh);
+    let json = serde_json::to_value(&summary).unwrap();
+    assert_eq!(json["geometryId"], "g-1");
+    assert_eq!(json["fileName"], "demo.stl");
+    assert_eq!(json["triangleCount"], 1);
+    assert_eq!(json["suggestedUnit"], "mm");
+    assert_eq!(json["issues"]["degenerate"], 0);
+    assert_eq!(json["issues"]["openEdges"], 3);
 }

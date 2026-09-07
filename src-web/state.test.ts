@@ -12,6 +12,10 @@ vi.mock("./services/project", () => ({
   loadProjectFile: vi.fn(),
   saveProjectFile: vi.fn(),
 }));
+vi.mock("./services/geometry", () => ({
+  importStl: vi.fn(),
+  removeGeometry: vi.fn(),
+}));
 vi.mock("./services/materials", () => ({
   listBuiltinMaterials: vi.fn(),
   listCustomMaterials: vi.fn(),

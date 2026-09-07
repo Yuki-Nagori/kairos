@@ -75,3 +75,22 @@ export interface Material {
   mechanics: Mechanics | null;
   dataNote: string;
 }
+/** 对应 `kairos-core::models::geometry::MeshIssues`。 */
+export interface MeshIssues {
+  degenerate: number;
+  openEdges: number;
+  nonManifoldEdges: number;
+  normalInconsistentEdges: number;
+}
+
+/** 对应 `kairos-core::models::geometry::GeometrySummary`（全量网格留在 Rust 会话缓存）。 */
+export interface GeometrySummary {
+  geometryId: string;
+  fileName: string;
+  triangleCount: number;
+  size: [number, number, number];
+  surfaceArea: number;
+  signedVolume: number;
+  suggestedUnit: string;
+  issues: MeshIssues;
+}

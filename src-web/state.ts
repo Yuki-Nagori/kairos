@@ -21,7 +21,9 @@ import {
   listCustomMaterials,
   upsertCustomMaterial,
 } from "./services/materials";
-import type { Material, Project, RecentProject, Study, SystemInfo } from "./types";
+import { importStl, removeGeometry } from "./services/geometry";
+import { pickStlPath } from "./services/dialog";
+import type { GeometrySummary, Material, Project, RecentProject, Study, SystemInfo } from "./types";
 
 /** 全局应用状态：组件经 select/subscribe 订阅，只能通过本文件的动作函数修改。 */
 interface AppState {
@@ -35,6 +37,8 @@ interface AppState {
   recents: RecentProject[];
   /** 材料库：内置示例材料 + 用户自定义材料。 */
   materials: MaterialLibrary;
+  /** 已导入的几何（摘要列表，全量网格在 Rust 会话缓存）。 */
+  geometries: GeometrySummary[];
   /** 进行中的异步操作提示文案，标题栏展示；null 表示空闲。 */
   busy: string | null;
   /** 最近一次错误；info 为环境提示（浏览器预览，自动消失），否则是真实失败。 */
@@ -47,6 +51,7 @@ export const initialAppState: AppState = {
   projectPath: null,
   recents: [],
   materials: { builtin: [], custom: [] },
+  geometries: [],
   busy: null,
   error: null,
 };
@@ -320,4 +325,33 @@ export async function copyMaterialToCustom(id: string): Promise<void> {
       : `自定义副本。${source.dataNote}`,
   };
   await upsertMaterial(copy);
+}
+
+/** 导入 STL：弹出文件对话框，解析检查后入列表。 */
+export async function importGeometry(): Promise<void> {
+  const path = await pickStlPath();
+  if (!path) {
+    return;
+  }
+  appStore.set({ busy: "正在导入几何…", error: null });
+  try {
+    const summary = await importStl(path);
+    appStore.set({ geometries: [...appStore.get().geometries, summary] });
+  } catch (error) {
+    setError(error);
+  } finally {
+    appStore.set({ busy: null });
+  }
+}
+
+/** 从列表与会话缓存移除几何。 */
+export async function removeGeometryById(geometryId: string): Promise<void> {
+  try {
+    await removeGeometry(geometryId);
+    appStore.set({
+      geometries: appStore.get().geometries.filter((g) => g.geometryId !== geometryId),
+    });
+  } catch (error) {
+    setError(error);
+  }
 }
