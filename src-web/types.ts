@@ -165,3 +165,25 @@ export interface Job {
 }
 /** 对应 `kairos-core::models::solver::AnalysisStage`。 */
 export type AnalysisStage = "fill" | "fill_pack" | "fill_pack_cool";
+/** 对应 `kairos-core::models::results::TimeStepMeta`。 */
+export interface TimeStepMeta {
+  dirName: string;
+  timeS: number;
+  fields: string[];
+}
+
+/** 对应 `kairos-core::models::results::ResultCatalog`。 */
+export interface ResultCatalog {
+  caseDir: string;
+  times: TimeStepMeta[];
+}
+
+/** 对应 `kairos-core::models::results::ScalarField`。 */
+export interface ScalarField {
+  field: string;
+  timeDir: string;
+  timeS: number;
+  values: number[];
+  isMagnitude: boolean;
+  complete: boolean;
+}

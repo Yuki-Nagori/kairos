@@ -30,10 +30,13 @@ import {
   removeGeometry,
 } from "./services/geometry";
 import { generateOpenfoamCase } from "./services/solver";
+import { listResultTimes, loadResultField } from "./services/results";
 import { pickStlPath } from "./services/dialog";
 import { checkMoldNetwork } from "./services/mold";
 import { cancelJob as apiCancelJob, listJobs, submitJob as apiSubmitJob } from "./services/jobs";
 import type {
+  ResultCatalog,
+  ScalarField,
   GeometrySummary,
   Job,
   Material,
@@ -68,6 +71,10 @@ interface AppState {
   geometries: GeometrySummary[];
   /** 每个几何的体积网格报告（key = geometryId）。 */
   meshReports: Record<string, MeshingReport>;
+  /** 结果目录清单（扫描后填充）。 */
+  resultCatalog: ResultCatalog | null;
+  /** 最近加载的场（视口/图表展示用）。 */
+  loadedField: ScalarField | null;
   /** 进行中的异步操作提示文案，标题栏展示；null 表示空闲。 */
   busy: string | null;
   /** 最近一次错误；info 为环境提示（浏览器预览，自动消失），否则是真实失败。 */
@@ -82,6 +89,8 @@ export const initialAppState: AppState = {
   materials: { builtin: [], custom: [] },
   geometries: [],
   meshReports: {},
+  resultCatalog: null,
+  loadedField: null,
   activeStudyId: null,
   moldIssues: [],
   jobs: [],
@@ -610,6 +619,32 @@ export async function submitPipeline(cores: number, stage: AnalysisStage): Promi
       cores,
     });
     await submitJobAction(caseDir, cores);
+  } catch (error) {
+    setError(error);
+  } finally {
+    appStore.set({ busy: null });
+  }
+}
+
+/** 扫描 case 结果目录（时间步 + 场清单）。 */
+export async function loadResultsCatalog(caseDir: string): Promise<void> {
+  appStore.set({ busy: "正在扫描结果…", error: null });
+  try {
+    const catalog = await listResultTimes(caseDir);
+    appStore.set({ resultCatalog: catalog });
+  } catch (error) {
+    setError(error);
+  } finally {
+    appStore.set({ busy: null });
+  }
+}
+
+/** 加载指定时间步的场数据（供视口与图表）。 */
+export async function loadField(caseDir: string, timeDir: string, field: string): Promise<void> {
+  appStore.set({ busy: "正在加载场数据…", error: null });
+  try {
+    const loadedField = await loadResultField(caseDir, timeDir, field);
+    appStore.set({ loadedField });
   } catch (error) {
     setError(error);
   } finally {

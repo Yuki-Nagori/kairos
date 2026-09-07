@@ -6,6 +6,7 @@ import { createJobsPanel } from "./components/jobs-panel";
 import { createPipelinePanel } from "./components/pipeline-panel";
 import { createMaterialsPanel } from "./components/materials-panel";
 import { createProcessPanel } from "./components/process-panel";
+import { createResultsPanel } from "./components/results-panel";
 import { createProjectBar } from "./components/project-bar";
 import { createWorkspace } from "./components/workspace";
 import { bootstrap } from "./state";
@@ -27,6 +28,7 @@ root.append(
   createProcessPanel(),
   createPipelinePanel(),
   createJobsPanel(),
+  createResultsPanel(),
   createWorkspace(),
 );
 

@@ -10,6 +10,7 @@ use kairos_core::models::geometry::{Triangle, TriangleMesh};
 use kairos_core::models::material::Material;
 use kairos_core::models::mesh::{MeshQuality, MeshingReport};
 use kairos_core::models::project::{Project, Study};
+use kairos_core::models::results::{ResultCatalog, ScalarField, TimeStepMeta};
 use kairos_core::services::{geometry, material};
 
 /// SystemInfo 的形状：camelCase 字段，前端 `src-web/types.ts` 的 SystemInfo 与之对应。
@@ -118,4 +119,38 @@ fn meshing_report_serializes_with_camel_case() {
     assert_eq!(json["totalVolume"], 1.0);
     assert_eq!(json["quality"]["minEdgeRatio"], 1.0);
     assert_eq!(json["quality"]["minVolume"], 0.01);
+}
+
+/// 结果模型形状：时间步与标量场（complete 标记不完整结果）。
+#[test]
+fn result_models_serialize_with_camel_case() {
+    let meta = TimeStepMeta {
+        dir_name: "0.5".into(),
+        time_s: 0.5,
+        fields: vec!["T".into(), "U".into()],
+    };
+    let json = serde_json::to_value(&meta).unwrap();
+    assert_eq!(json["dirName"], "0.5");
+    assert_eq!(json["timeS"], 0.5);
+    assert_eq!(json["fields"], serde_json::json!(["T", "U"]));
+
+    let field = ScalarField {
+        field: "T".into(),
+        time_dir: "0.5".into(),
+        time_s: 0.5,
+        values: vec![300.0],
+        is_magnitude: false,
+        complete: true,
+    };
+    let json = serde_json::to_value(&field).unwrap();
+    assert_eq!(json["timeDir"], "0.5");
+    assert_eq!(json["isMagnitude"], false);
+    assert_eq!(json["complete"], true);
+
+    let catalog = ResultCatalog {
+        case_dir: "/c".into(),
+        times: vec![meta],
+    };
+    let json = serde_json::to_value(&catalog).unwrap();
+    assert_eq!(json["caseDir"], "/c");
 }
