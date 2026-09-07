@@ -29,6 +29,13 @@
 | T19 | [T19-gpu-infrastructure-done.md](T19-gpu-infrastructure-done.md)     | GPU 计算基础设施       |
 | T20 | [T20-gpu-postprocessing-done.md](T20-gpu-postprocessing-done.md)     | GPU 加速后处理算子     |
 
+## M4/M5 补充任务
+
+| ID | 文件 | 任务 | 状态 |
+| --- | --- | --- | --- |
+| T26 | [T26-cae-workbench-ui.md](T26-cae-workbench-ui.md) | UI 重构为 Moldflow 风格专业 CAE 工作台 | 待开工 |
+| T27 | [T27-component-download.md](T27-component-download.md) | 应用内组件下载 | ✅ |
+
 ## 下一阶段任务（待开工）
 
 | ID  | 文件                                                   | 任务                            | 依赖     |
