@@ -1,4 +1,6 @@
 @import "tailwindcss";
+@import "./theme/dark.css";
+@import "./theme/light.css";
 
 @theme {
   --font-sans:
@@ -7,5 +9,8 @@
 }
 
 body {
-  @apply bg-zinc-950 font-sans text-zinc-100 antialiased;
+  background-color: var(--c-bg-base);
+  color: var(--c-text-primary);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
 }

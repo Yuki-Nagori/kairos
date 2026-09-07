@@ -1,29 +1,43 @@
+import { toggleTheme } from "../theme";
 import { select } from "../lib/store";
 import { appStore } from "../state";
 
 const STATUS_BASE_CLASS = "min-h-5 text-sm";
 
-/** 应用标题栏：品牌信息 + 版本/IPC 状态 + 全局的忙碌与错误展示。 */
+/** 应用标题栏：品牌信息 + 主题切换 + 版本/IPC 状态 + 全局的忙碌与错误展示。 */
 export function createAppHeader(): HTMLElement {
   const root = document.createElement("header");
-  root.className = "space-y-1";
+  root.className = "flex items-center gap-4 px-5 py-3 border-b border-zinc-800";
 
   const title = document.createElement("h1");
-  title.className = "text-2xl font-semibold tracking-tight";
+  title.className = "text-lg font-semibold tracking-tight";
   title.textContent = "Kairos";
-  const subtitle = document.createElement("p");
-  subtitle.className = "text-sm text-zinc-400";
-  subtitle.textContent = "CAE 仿真软件 · 框架搭建中";
 
-  const status = document.createElement("p");
+  const subtitle = document.createElement("span");
+  subtitle.className = "text-xs text-zinc-500";
+  subtitle.textContent = "CAE 仿真 · 框架搭建中";
+
+  const spacer = document.createElement("span");
+  spacer.className = "flex-1";
+
+  const status = document.createElement("span");
   status.className = STATUS_BASE_CLASS;
 
-  // 错误 → 忙碌 → 版本信息，三类状态互斥展示；select 只在对应切片变化时触发。
+  const themeButton = document.createElement("button");
+  themeButton.type = "button";
+  themeButton.className =
+    "rounded-lg border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-emerald-500 hover:text-emerald-300 transition-colors";
+
+  function syncThemeIcon(): void {
+    const theme = document.documentElement.dataset.theme;
+    themeButton.textContent = theme === "light" ? "\u263d" : "\u2600";
+    themeButton.title = theme === "light" ? "切换到深色主题" : "切换到浅色主题";
+  }
+
   function renderStatus(): void {
     const state = appStore.get();
     if (state.error) {
       status.textContent = state.error.message;
-      // info 级是环境提示（浏览器预览），中性色；只有真实失败才用红色
       status.className = state.error.info
         ? `${STATUS_BASE_CLASS} text-zinc-400`
         : `${STATUS_BASE_CLASS} text-red-400`;
@@ -31,17 +45,24 @@ export function createAppHeader(): HTMLElement {
       status.textContent = state.busy;
       status.className = `${STATUS_BASE_CLASS} text-amber-300`;
     } else if (state.info) {
-      status.textContent = `v${state.info.version} · ${state.info.os} · IPC 正常`;
+      status.textContent = `v${state.info.version} \u00b7 ${state.info.os} \u00b7 IPC \u6b63\u5e38`;
       status.className = `${STATUS_BASE_CLASS} text-zinc-500`;
     } else {
       status.textContent = "";
       status.className = STATUS_BASE_CLASS;
     }
   }
-  select(appStore, (state) => state.error, renderStatus);
-  select(appStore, (state) => state.busy, renderStatus);
-  select(appStore, (state) => state.info, renderStatus);
 
-  root.append(title, subtitle, status);
+  select(appStore, (s) => s.error, renderStatus);
+  select(appStore, (s) => s.busy, renderStatus);
+  select(appStore, (s) => s.info, renderStatus);
+
+  themeButton.addEventListener("click", () => {
+    toggleTheme();
+    syncThemeIcon();
+  });
+
+  syncThemeIcon();
+  root.append(title, subtitle, themeButton, status);
   return root;
 }

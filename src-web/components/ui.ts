@@ -1,27 +1,27 @@
-/** 共享 DOM 构建辅助：设计 tokens 集中在 theme.ts（T16）。 */
-import { PANEL_STATE_PREFIX, tokens } from "../theme";
+/** 共享 DOM 构建辅助：样式集中此处，通过 CSS 变量支持主题切换。 */
 
 export function card(
   title: string,
   options?: { collapsible?: boolean },
 ): { root: HTMLElement; body: HTMLElement } {
   const root = document.createElement("section");
-  root.className = tokens.panel;
+  root.className = "rounded-2xl border border-zinc-800 bg-zinc-900 shadow-xl";
   const heading = document.createElement("h2");
-  heading.className = tokens.panelHeader;
+  heading.className =
+    "border-b border-zinc-800 px-5 py-3 text-sm font-semibold text-zinc-100 cursor-pointer select-none";
   heading.textContent = title;
   const body = document.createElement("div");
-  body.className = tokens.panelBody;
+  body.className = "space-y-3 px-5 py-4";
 
   if (options?.collapsible === true) {
-    const storageKey = `${PANEL_STATE_PREFIX}${title}`;
+    const storageKey = `kairos-panel:${title}`;
     const collapsed = localStorage.getItem(storageKey) === "1";
     body.classList.toggle("hidden", collapsed);
-    heading.textContent = `${collapsed ? "▸" : "▾"} ${title}`;
+    heading.textContent = `${collapsed ? "\u25b8" : "\u25be"} ${title}`;
     heading.addEventListener("click", () => {
       const nowCollapsed = !body.classList.contains("hidden");
       body.classList.toggle("hidden", nowCollapsed);
-      heading.textContent = `${nowCollapsed ? "▸" : "▾"} ${title}`;
+      heading.textContent = `${nowCollapsed ? "\u25b8" : "\u25be"} ${title}`;
       localStorage.setItem(storageKey, nowCollapsed ? "1" : "0");
     });
   }
@@ -59,6 +59,7 @@ export function textInput(placeholder: string): HTMLInputElement {
   const element = document.createElement("input");
   element.type = "text";
   element.placeholder = placeholder;
-  element.className = tokens.input;
+  element.className =
+    "rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none";
   return element;
 }

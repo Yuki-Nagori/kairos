@@ -1,0 +1,34 @@
+/* dark.css — 默认主题（深色）：Tailwind zinc 色板的深色值 */
+
+:root,
+[data-theme="dark"] {
+  --color-zinc-50: #fafafa;
+  --color-zinc-100: #f4f4f5;
+  --color-zinc-200: #e4e4e7;
+  --color-zinc-300: #d4d4d8;
+  --color-zinc-400: #a1a1aa;
+  --color-zinc-500: #71717a;
+  --color-zinc-600: #52525b;
+  --color-zinc-700: #3f3f46;
+  --color-zinc-800: #27272a;
+  --color-zinc-900: #18181b;
+  --color-zinc-950: #09090b;
+
+  /* 语义色 */
+  --c-bg-base: #09090b;
+  --c-bg-panel: #18181b;
+  --c-bg-input: #09090b;
+  --c-text-primary: #fafafa;
+  --c-text-secondary: #a1a1aa;
+  --c-text-muted: #71717a;
+  --c-border-panel: #27272a;
+  --c-border-input: #3f3f46;
+  --c-accent: #34d399;
+  --c-ok: #34d399;
+  --c-warn: #fbbf24;
+  --c-err: #f87171;
+  --c-grid: #27272a;
+  --c-viewport-bg: #0c1218;
+
+  color-scheme: dark;
+}
