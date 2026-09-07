@@ -1,13 +1,13 @@
 import "./app.css";
 import { createAppHeader } from "./components/app-header";
-import { createGeometryPanel } from "./components/geometry-panel";
 import { createDependenciesPanel } from "./components/dependencies-panel";
+import { createGeometryPanel } from "./components/geometry-panel";
 import { createJobsPanel } from "./components/jobs-panel";
 import { createMaterialsPanel } from "./components/materials-panel";
 import { createMoldPanel } from "./components/mold-panel";
-import { createProjectBar } from "./components/project-bar";
 import { createPipelinePanel } from "./components/pipeline-panel";
 import { createProcessPanel } from "./components/process-panel";
+import { createProjectTree } from "./components/project-tree";
 import { createReportPanel } from "./components/report-panel";
 import { createResultsPanel } from "./components/results-panel";
 import { createViewportPanel } from "./components/viewport-panel";
@@ -28,7 +28,7 @@ header.className = "border-b border-zinc-800 bg-zinc-900 px-5 py-3";
 
 const leftColumn = document.createElement("div");
 leftColumn.className = "flex w-[320px] shrink-0 flex-col gap-3 overflow-y-auto p-3";
-leftColumn.append(createProjectBar(), createMaterialsPanel(), createGeometryPanel());
+leftColumn.append(createProjectTree(), createMaterialsPanel(), createGeometryPanel());
 
 const centerColumn = document.createElement("div");
 centerColumn.className = "flex min-w-0 flex-1 flex-col gap-3 overflow-y-auto p-3";
