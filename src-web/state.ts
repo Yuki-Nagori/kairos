@@ -7,8 +7,21 @@ import {
   loadProjectFile,
   saveProjectFile,
 } from "./services/project";
-import { pickOpenProjectPath, pickSaveProjectPath } from "./services/dialog";
-import type { Project, RecentProject, Study, SystemInfo } from "./types";
+import {
+  pickExportJsonPath,
+  pickOpenJsonPath,
+  pickOpenProjectPath,
+  pickSaveProjectPath,
+} from "./services/dialog";
+import {
+  deleteCustomMaterial,
+  exportMaterialsToFile,
+  importCustomMaterials,
+  listBuiltinMaterials,
+  listCustomMaterials,
+  upsertCustomMaterial,
+} from "./services/materials";
+import type { Material, Project, RecentProject, Study, SystemInfo } from "./types";
 
 /** 全局应用状态：组件经 select/subscribe 订阅，只能通过本文件的动作函数修改。 */
 interface AppState {
@@ -20,6 +33,8 @@ interface AppState {
   projectPath: string | null;
   /** 最近打开的工程（跨会话，来自应用数据目录）。 */
   recents: RecentProject[];
+  /** 材料库：内置示例材料 + 用户自定义材料。 */
+  materials: MaterialLibrary;
   /** 进行中的异步操作提示文案，标题栏展示；null 表示空闲。 */
   busy: string | null;
   /** 最近一次错误；info 为环境提示（浏览器预览，自动消失），否则是真实失败。 */
@@ -31,6 +46,7 @@ export const initialAppState: AppState = {
   project: null,
   projectPath: null,
   recents: [],
+  materials: { builtin: [], custom: [] },
   busy: null,
   error: null,
 };
@@ -64,7 +80,11 @@ export function setError(error: unknown): void {
 /** 启动时拉取应用信息与最近项目，顺带验证 IPC 链路是否通畅。 */
 export async function bootstrap(): Promise<void> {
   try {
-    const [info, recents] = await Promise.all([getSystemInfo(), listRecentProjects()]);
+    const [info, recents] = await Promise.all([
+      getSystemInfo(),
+      listRecentProjects(),
+      loadMaterials(),
+    ]);
     appStore.set({ info, recents });
   } catch (error) {
     setError(error);
@@ -200,4 +220,104 @@ async function refreshRecents(): Promise<void> {
   } catch (error) {
     setError(error);
   }
+}
+/** 材料库切片：内置 + 自定义（详情见 T04）。 */
+interface MaterialLibrary {
+  builtin: Material[];
+  custom: Material[];
+}
+
+async function loadMaterials(): Promise<void> {
+  const [builtin, custom] = await Promise.all([listBuiltinMaterials(), listCustomMaterials()]);
+  appStore.set({ materials: { builtin, custom } });
+}
+
+/** 从 JSON 文件导入自定义材料。 */
+async function importMaterialsFromPath(path: string): Promise<void> {
+  appStore.set({ busy: "正在导入材料…", error: null });
+  try {
+    const custom = await importCustomMaterials(path);
+    appStore.set({ materials: { ...appStore.get().materials, custom } });
+  } catch (error) {
+    setError(error);
+  } finally {
+    appStore.set({ busy: null });
+  }
+}
+
+/** 弹出对话框导入材料。 */
+export async function importMaterials(): Promise<void> {
+  const path = await pickOpenJsonPath();
+  if (path) {
+    await importMaterialsFromPath(path);
+  }
+}
+
+/** 新增或更新一个自定义材料。 */
+async function upsertMaterial(material: Material): Promise<void> {
+  appStore.set({ busy: "正在保存材料…", error: null });
+  try {
+    const custom = await upsertCustomMaterial(material);
+    appStore.set({ materials: { ...appStore.get().materials, custom } });
+  } catch (error) {
+    setError(error);
+  } finally {
+    appStore.set({ busy: null });
+  }
+}
+
+export async function deleteMaterial(id: string): Promise<void> {
+  appStore.set({ busy: "正在删除材料…", error: null });
+  try {
+    const custom = await deleteCustomMaterial(id);
+    appStore.set({ materials: { ...appStore.get().materials, custom } });
+  } catch (error) {
+    setError(error);
+  } finally {
+    appStore.set({ busy: null });
+  }
+}
+
+/** 导出全部自定义材料到指定路径。 */
+async function exportCustomMaterials(path: string): Promise<void> {
+  const { materials } = appStore.get();
+  if (materials.custom.length === 0) {
+    setError("没有可导出的自定义材料。");
+    return;
+  }
+  appStore.set({ busy: "正在导出材料…", error: null });
+  try {
+    await exportMaterialsToFile(path, materials.custom);
+  } catch (error) {
+    setError(error);
+  } finally {
+    appStore.set({ busy: null });
+  }
+}
+
+/** 弹出对话框导出自定义材料。 */
+export async function exportMaterials(): Promise<void> {
+  const path = await pickExportJsonPath("kairos-custom-materials");
+  if (path) {
+    await exportCustomMaterials(path);
+  }
+}
+
+/** 复制任一材料为自定义材料（新 id + 「副本」后缀）。 */
+export async function copyMaterialToCustom(id: string): Promise<void> {
+  const { materials } = appStore.get();
+  const source = [...materials.builtin, ...materials.custom].find((m) => m.id === id);
+  if (!source) {
+    setError("未找到要复制的材料。");
+    return;
+  }
+  const copy: Material = {
+    ...source,
+    id: `custom-${Date.now()}`,
+    name: `${source.name}-副本`,
+    dataNote: source.dataNote.startsWith("自定义")
+      ? source.dataNote
+      : `自定义副本。${source.dataNote}`,
+  };
+  await upsertMaterial(copy);
 }

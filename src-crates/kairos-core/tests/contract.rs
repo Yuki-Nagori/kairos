@@ -6,7 +6,9 @@ use kairos_core::models::system::SystemInfo;
 use kairos_core::services::system;
 use serde_json::json;
 
+use kairos_core::models::material::Material;
 use kairos_core::models::project::{Project, Study};
+use kairos_core::services::material;
 
 /// SystemInfo 的形状：camelCase 字段，前端 `src-web/types.ts` 的 SystemInfo 与之对应。
 #[test]
@@ -52,4 +54,17 @@ fn project_serializes_with_camel_case() {
     assert_eq!(json["name"], "演示项目");
     assert_eq!(json["studies"][0]["name"], "填充分析");
     assert_eq!(json["studies"][0]["createdMs"], 1001);
+}
+
+/// Material 的形状：camelCase 参数组，前端 `src-web/types.ts` 与之对应。
+#[test]
+fn material_serializes_with_camel_case() {
+    let material: Material = material::builtin_materials().unwrap().remove(0);
+    let json = serde_json::to_value(&material).unwrap();
+    assert_eq!(json["family"], "PP");
+    assert_eq!(json["rheology"]["tauStar"], 2.0e4);
+    assert_eq!(json["pvt"]["b1m"], 1.28e-3);
+    assert_eq!(json["specificHeat"][0], json!([300.0, 1900.0]));
+    assert_eq!(json["mechanics"]["elasticModulus"], 1.5e9);
+    assert!(json["dataNote"].is_string());
 }

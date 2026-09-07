@@ -30,3 +30,48 @@ export interface RecentProject {
   name: string;
   lastOpenedMs: number;
 }
+/** 对应 `kairos-core::models::material::CrossWlf`。 */
+export interface CrossWlf {
+  n: number;
+  tauStar: number;
+  d1: number;
+  d2: number;
+  d3: number;
+  a1: number;
+  a2: number;
+}
+
+/** 对应 `kairos-core::models::material::Tait`。 */
+export interface Tait {
+  b1m: number;
+  b1s: number;
+  b2m: number;
+  b2s: number;
+  b3: number;
+  b4m: number;
+  b4s: number;
+  b5: number;
+}
+
+/** 温度相关的性质表 [温度 K, 值]。 */
+export type PropertyTable = [number, number][];
+
+/** 对应 `kairos-core::models::material::Mechanics`。 */
+export interface Mechanics {
+  elasticModulus: number;
+  poissonRatio: number;
+}
+
+/** 对应 `kairos-core::models::material::Material`。 */
+export interface Material {
+  id: string;
+  name: string;
+  manufacturer: string;
+  family: string;
+  rheology: CrossWlf;
+  pvt: Tait;
+  specificHeat: PropertyTable;
+  conductivity: PropertyTable;
+  mechanics: Mechanics | null;
+  dataNote: string;
+}

@@ -1,5 +1,6 @@
 import "./app.css";
 import { createAppHeader } from "./components/app-header";
+import { createMaterialsPanel } from "./components/materials-panel";
 import { createProjectBar } from "./components/project-bar";
 import { createWorkspace } from "./components/workspace";
 import { bootstrap } from "./state";
@@ -12,7 +13,7 @@ if (!root) {
 
 root.className = "mx-auto flex min-h-screen max-w-6xl flex-col gap-6 px-6 py-8";
 
-root.append(createAppHeader(), createProjectBar(), createWorkspace());
+root.append(createAppHeader(), createProjectBar(), createMaterialsPanel(), createWorkspace());
 
 // bootstrap 内部已自行处理失败（setError），无需 await。
 void bootstrap();
