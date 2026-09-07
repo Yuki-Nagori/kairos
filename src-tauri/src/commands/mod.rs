@@ -2,5 +2,6 @@
 
 pub mod geometry;
 pub mod material;
+pub mod mold;
 pub mod project;
 pub mod system;

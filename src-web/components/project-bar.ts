@@ -8,6 +8,7 @@ import {
   removeStudy,
   saveProject,
   saveProjectAs,
+  selectStudy,
 } from "../state";
 
 /** 项目栏：当前工程与研究的生命周期操作（新建/打开/保存/研究管理/最近项目）。 */
@@ -100,17 +101,25 @@ export function createProjectBar(): HTMLElement {
       if (project.studies.length === 0) {
         studiesBox.append(hint("还没有研究，添加一个开始分析。"));
       }
+      const { activeStudyId } = appStore.get();
       for (const study of project.studies) {
-        const chip = document.createElement("span");
-        chip.className =
-          "flex items-center gap-1 rounded-full border border-emerald-500/60 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-300";
+        const active = study.id === activeStudyId;
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = active
+          ? "flex items-center gap-1 rounded-full border border-emerald-500 bg-emerald-500/20 px-3 py-1 text-xs text-emerald-200"
+          : "flex items-center gap-1 rounded-full border border-zinc-600 px-3 py-1 text-xs text-zinc-300 hover:border-emerald-500";
         chip.textContent = study.name;
-        const remove = document.createElement("button");
-        remove.type = "button";
+        chip.title = active ? "当前研究" : "点击切换到该研究";
+        chip.addEventListener("click", () => selectStudy(study.id));
+        const remove = document.createElement("span");
         remove.textContent = "✕";
         remove.title = `删除研究 ${study.name}`;
         remove.className = "text-emerald-400/70 hover:text-red-400";
-        remove.addEventListener("click", () => removeStudy(study.id));
+        remove.addEventListener("click", (event) => {
+          event.stopPropagation();
+          removeStudy(study.id);
+        });
         chip.append(remove);
         studiesBox.append(chip);
       }

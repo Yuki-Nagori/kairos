@@ -19,6 +19,7 @@ pub fn run() {
             commands::material::export_materials_to_file,
             commands::geometry::import_stl,
             commands::geometry::generate_volume_mesh,
+            commands::mold::check_mold_network,
             commands::geometry::remove_geometry,
         ])
         .run(tauri::generate_context!())

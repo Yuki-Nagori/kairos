@@ -65,9 +65,10 @@ pub fn serialize(project: &Project) -> Result<String> {
         .map_err(|e| KairosError::internal(format!("工程序列化失败：{e}")))
 }
 
-/// 解析工程文件内容；高于当前版本的 schema 明确拒绝，旧版本在此补迁移链。
+/// 解析工程文件内容；高于当前版本的 schema 明确拒绝，旧版本逐级迁移。
+/// v1 → v2：Study 的新增集合字段由 `serde(default)` 补空，仅升级版本号。
 pub fn parse(content: &str) -> Result<Project> {
-    let project: Project = serde_json::from_str(content)
+    let mut project: Project = serde_json::from_str(content)
         .map_err(|e| KairosError::validation(format!("工程文件无法解析：{e}")))?;
     match project.schema_version.cmp(&SCHEMA_VERSION) {
         std::cmp::Ordering::Equal => Ok(project),
@@ -75,10 +76,12 @@ pub fn parse(content: &str) -> Result<Project> {
             "工程文件版本过新（{} > {SCHEMA_VERSION}），请升级 Kairos。",
             project.schema_version
         ))),
-        std::cmp::Ordering::Less => Err(KairosError::internal(format!(
-            "工程文件版本 {} 缺少迁移实现。",
-            project.schema_version
-        ))),
+        std::cmp::Ordering::Less => {
+            // v1 → v2 的字段补空已由 serde(default) 完成；未来新版本在此追加迁移步骤。
+            project.schema_version = SCHEMA_VERSION;
+            validate(&project)?;
+            Ok(project)
+        }
     }
 }
 
@@ -194,6 +197,15 @@ mod tests {
         assert_eq!(error.kind(), crate::error::ErrorKind::Validation);
 
         assert!(parse("not json").is_err());
+    }
+
+    #[test]
+    fn v1_project_migrates_to_current_schema() {
+        let v1 = r#"{"schemaVersion":1,"id":"p-1","name":"旧工程","createdMs":1,"updatedMs":1,"studies":[{"id":"s-1","name":"填充","createdMs":2}]}"#;
+        let project = parse(v1).unwrap();
+        assert_eq!(project.schema_version, SCHEMA_VERSION);
+        assert_eq!(project.studies[0].runner_elements.len(), 0);
+        assert_eq!(project.studies[0].cooling_channels.len(), 0);
     }
 
     #[test]

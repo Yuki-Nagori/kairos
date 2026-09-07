@@ -50,9 +50,11 @@ fn project_serializes_with_camel_case() {
         id: "s-1".into(),
         name: "填充分析".into(),
         created_ms: 1001,
+        runner_elements: Vec::new(),
+        cooling_channels: Vec::new(),
     });
     let json = serde_json::to_value(&project).unwrap();
-    assert_eq!(json["schemaVersion"], 1);
+    assert_eq!(json["schemaVersion"], 2);
     assert_eq!(json["name"], "演示项目");
     assert_eq!(json["studies"][0]["name"], "填充分析");
     assert_eq!(json["studies"][0]["createdMs"], 1001);

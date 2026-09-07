@@ -2,8 +2,11 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::models::runners::{CoolingChannel, RunnerElement};
+
 /// 当前工程文件 schema 版本：不兼容变更时递增，并在 `services::project::parse` 补迁移。
-pub const SCHEMA_VERSION: u32 = 1;
+/// v1→v2：Study 新增流道 / 浇口与冷却水路字段（serde default 迁移，旧文件补空集合）。
+pub const SCHEMA_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -31,6 +34,12 @@ pub struct Study {
     pub id: String,
     pub name: String,
     pub created_ms: u64,
+    /// 流道 / 浇口单元（v2 新增，旧版本文件迁移为空集合）。
+    #[serde(default)]
+    pub runner_elements: Vec<RunnerElement>,
+    /// 冷却水路单元（v2 新增，旧版本文件迁移为空集合）。
+    #[serde(default)]
+    pub cooling_channels: Vec<CoolingChannel>,
 }
 
 impl Project {
@@ -58,6 +67,8 @@ impl Project {
             id,
             name: name.to_string(),
             created_ms: now_ms,
+            runner_elements: Vec::new(),
+            cooling_channels: Vec::new(),
         };
         self.studies.push(study.clone());
         self.updated_ms = now_ms;

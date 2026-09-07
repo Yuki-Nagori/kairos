@@ -9,7 +9,15 @@ const project: Project = {
   name: "演示项目",
   createdMs: 1,
   updatedMs: 1,
-  studies: [{ id: "s-1", name: "填充分析", createdMs: 2 }],
+  studies: [
+    {
+      id: "s-1",
+      name: "填充分析",
+      createdMs: 2,
+      runnerElements: [],
+      coolingChannels: [],
+    },
+  ],
 };
 
 describe("createProjectBar", () => {
@@ -36,10 +44,9 @@ describe("createProjectBar", () => {
     expect(bar.textContent).toContain("演示项目");
     expect(bar.textContent).toContain("填充分析");
 
-    const remove = [...bar.querySelectorAll("button")].find((button) =>
-      button.title.startsWith("删除研究"),
-    );
-    remove?.click();
+    const remove = bar.querySelector('span[title^="删除研究"]');
+    expect(remove).not.toBeNull();
+    (remove as HTMLElement).click();
     expect(appStore.get().project?.studies).toHaveLength(0);
   });
 });

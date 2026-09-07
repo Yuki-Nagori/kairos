@@ -22,6 +22,8 @@ export interface Study {
   id: string;
   name: string;
   createdMs: number;
+  runnerElements: RunnerElement[];
+  coolingChannels: CoolingChannel[];
 }
 
 /** 对应 `kairos-core::models::project::RecentProject`（最近打开的工程）。 */
@@ -109,4 +111,24 @@ export interface MeshingReport {
   surfaceFaceCount: number;
   totalVolume: number;
   quality: MeshQuality;
+}
+/** 对应 `kairos-core::models::runners::RunnerKind`。 */
+export type RunnerKind = "gate" | "runner";
+
+/** 对应 `kairos-core::models::runners::RunnerElement`。 */
+export interface RunnerElement {
+  id: string;
+  kind: RunnerKind;
+  diameterMm: number;
+  start: [number, number, number];
+  end: [number, number, number];
+}
+
+/** 对应 `kairos-core::models::runners::CoolingChannel`。 */
+export interface CoolingChannel {
+  id: string;
+  diameterMm: number;
+  start: [number, number, number];
+  end: [number, number, number];
+  inletTempC: number;
 }

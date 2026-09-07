@@ -23,12 +23,14 @@ import {
 } from "./services/materials";
 import { generateVolumeMesh, importStl, removeGeometry } from "./services/geometry";
 import { pickStlPath } from "./services/dialog";
+import { checkMoldNetwork } from "./services/mold";
 import type {
   GeometrySummary,
   Material,
   MeshingReport,
   Project,
   RecentProject,
+  RunnerKind,
   Study,
   SystemInfo,
 } from "./types";
@@ -43,6 +45,10 @@ interface AppState {
   projectPath: string | null;
   /** 最近打开的工程（跨会话，来自应用数据目录）。 */
   recents: RecentProject[];
+  /** 当前活跃研究（浇口 / 水路 / 工艺编辑的目标）。 */
+  activeStudyId: string | null;
+  /** 模具网络校验问题清单（校验按钮触发）。 */
+  moldIssues: string[];
   /** 材料库：内置示例材料 + 用户自定义材料。 */
   materials: MaterialLibrary;
   /** 已导入的几何（摘要列表，全量网格在 Rust 会话缓存）。 */
@@ -63,6 +69,8 @@ export const initialAppState: AppState = {
   materials: { builtin: [], custom: [] },
   geometries: [],
   meshReports: {},
+  activeStudyId: null,
+  moldIssues: [],
   busy: null,
   error: null,
 };
@@ -205,13 +213,15 @@ export function addStudy(name: string): void {
     id: `study-${Date.now()}-${++studySeq}`,
     name: trimmed,
     createdMs: Date.now(),
+    runnerElements: [],
+    coolingChannels: [],
   };
   const updated: Project = {
     ...project,
     studies: [...project.studies, study],
     updatedMs: Date.now(),
   };
-  appStore.set({ project: updated });
+  appStore.set({ project: updated, activeStudyId: study.id });
 }
 
 export function removeStudy(studyId: string): void {
@@ -383,5 +393,93 @@ export async function generateMesh(geometryId: string, targetSize: number): Prom
     setError(error);
   } finally {
     appStore.set({ busy: null });
+  }
+}
+
+/** 选择活跃研究；传 null 取消选择。 */
+export function selectStudy(studyId: string | null): void {
+  appStore.set({ activeStudyId: studyId, moldIssues: [] });
+}
+
+function activeStudy(): Study | null {
+  const { project, activeStudyId } = appStore.get();
+  return project?.studies.find((study) => study.id === activeStudyId) ?? null;
+}
+
+function updateActiveStudy(mutate: (study: Study) => void): void {
+  const { project, activeStudyId } = appStore.get();
+  const study = project?.studies.find((s) => s.id === activeStudyId);
+  if (!project || !study) {
+    setError("请先选择一个研究。");
+    return;
+  }
+  mutate(study);
+  appStore.set({
+    project: { ...project, updatedMs: Date.now() },
+  });
+}
+
+let elementSeq = 0;
+
+/** 添加流道 / 浇口单元到活跃研究。 */
+export function addRunnerElement(
+  kind: RunnerKind,
+  diameterMm: number,
+  start: [number, number, number],
+  end: [number, number, number],
+): void {
+  updateActiveStudy((study) => {
+    study.runnerElements.push({
+      id: `re-${Date.now()}-${++elementSeq}`,
+      kind,
+      diameterMm,
+      start,
+      end,
+    });
+  });
+}
+
+export function removeRunnerElement(id: string): void {
+  updateActiveStudy((study) => {
+    study.runnerElements = study.runnerElements.filter((element) => element.id !== id);
+  });
+}
+
+/** 添加冷却水路单元到活跃研究。 */
+export function addCoolingChannel(
+  diameterMm: number,
+  start: [number, number, number],
+  end: [number, number, number],
+  inletTempC: number,
+): void {
+  updateActiveStudy((study) => {
+    study.coolingChannels.push({
+      id: `cc-${Date.now()}-${++elementSeq}`,
+      diameterMm,
+      start,
+      end,
+      inletTempC,
+    });
+  });
+}
+
+export function removeCoolingChannel(id: string): void {
+  updateActiveStudy((study) => {
+    study.coolingChannels = study.coolingChannels.filter((channel) => channel.id !== id);
+  });
+}
+
+/** 调用 core 校验模具网络，问题清单入状态。 */
+export async function checkNetwork(): Promise<void> {
+  const study = activeStudy();
+  if (!study) {
+    setError("请先选择一个研究。");
+    return;
+  }
+  try {
+    const moldIssues = await checkMoldNetwork(study.runnerElements, study.coolingChannels);
+    appStore.set({ moldIssues });
+  } catch (error) {
+    setError(error);
   }
 }
