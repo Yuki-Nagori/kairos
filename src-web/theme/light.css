@@ -1,33 +1,34 @@
-/* light.css — 浅色主题：Tailwind zinc 色板的浅色覆盖 */
+/* light.css — 浅色主题：反转 zinc 明暗端，让既有 zinc-* 工具类在浅色下保持可读 */
 
 [data-theme="light"] {
-  --color-zinc-50: #f8fafc;
-  --color-zinc-100: #f0f4f8;
-  --color-zinc-200: #e2e8f0;
-  --color-zinc-300: #cbd5e1;
-  --color-zinc-400: #94a3b8;
-  --color-zinc-500: #64748b;
-  --color-zinc-600: #475569;
-  --color-zinc-700: #334155;
-  --color-zinc-800: #1e293b;
-  --color-zinc-900: #0f172a;
-  --color-zinc-950: #060b14;
+  /* zinc 色阶反转：组件里的 zinc-950（页面底）变浅、zinc-100（主文字）变深 */
+  --color-zinc-50: #09090b;
+  --color-zinc-100: #18181b;
+  --color-zinc-200: #27272a;
+  --color-zinc-300: #3f3f46;
+  --color-zinc-400: #52525b;
+  --color-zinc-500: #71717a;
+  --color-zinc-600: #a1a1aa;
+  --color-zinc-700: #d4d4d8;
+  --color-zinc-800: #e4e4e7;
+  --color-zinc-900: #ffffff;
+  --color-zinc-950: #f4f4f5;
 
   /* 语义色 */
-  --c-bg-base: #f8fafc;
+  --c-bg-base: #f4f4f5;
   --c-bg-panel: #ffffff;
   --c-bg-input: #ffffff;
-  --c-text-primary: #0f172a;
-  --c-text-secondary: #475569;
-  --c-text-muted: #94a3b8;
-  --c-border-panel: #e2e8f0;
-  --c-border-input: #cbd5e1;
+  --c-text-primary: #18181b;
+  --c-text-secondary: #52525b;
+  --c-text-muted: #71717a;
+  --c-border-panel: #e4e4e7;
+  --c-border-input: #d4d4d8;
   --c-accent: #059669;
   --c-ok: #059669;
   --c-warn: #d97706;
   --c-err: #dc2626;
-  --c-grid: #e2e8f0;
-  --c-viewport-bg: #f0f4f8;
+  --c-grid: #e4e4e7;
+  --c-viewport-bg: #f4f4f5;
 
   color-scheme: light;
 }

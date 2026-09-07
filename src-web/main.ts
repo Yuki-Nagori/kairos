@@ -28,7 +28,6 @@ root.className = "flex h-screen flex-col overflow-hidden bg-zinc-950 text-zinc-1
 initTheme();
 
 const header = createAppHeader();
-header.className = "border-b border-zinc-800 bg-zinc-900 px-5 py-3";
 
 const leftColumn = document.createElement("div");
 leftColumn.className = "flex w-[320px] shrink-0 flex-col gap-3 overflow-y-auto p-3";

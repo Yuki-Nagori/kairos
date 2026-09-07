@@ -10,7 +10,7 @@ const IS_MAC = navigator.platform.toLowerCase().includes("mac");
 /** 应用标题栏：品牌信息 + 主题切换 + 版本/IPC 状态 + 全局的忙碌与错误展示。 */
 export function createAppHeader(): HTMLElement {
   const root = document.createElement("header");
-  root.className = `flex items-center gap-4 border-b border-zinc-800 py-3 pr-5 ${
+  root.className = `flex items-center gap-4 border-b border-zinc-800 bg-zinc-900 py-3 pr-5 ${
     IS_MAC ? "pl-20" : "pl-5"
   }`;
   root.setAttribute("data-tauri-drag-region", "");
