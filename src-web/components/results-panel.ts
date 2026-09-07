@@ -87,7 +87,7 @@ export function createResultsPanel(): HTMLElement {
       complete.className = loadedField.complete
         ? "text-xs text-emerald-400"
         : "text-xs text-amber-400";
-      complete.textContent = loadedField.complete ? "结果完整 ✓" : "⚠ 不完整结果（求解中途取消）";
+      complete.textContent = loadedField.complete ? "结果完整" : "结果不完整（求解中途取消）";
       statsBox.append(line, complete);
     }
   }

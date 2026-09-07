@@ -77,7 +77,7 @@ export function createGeometryPanel(): HTMLElement {
         geometry.issues.normalInconsistentEdges === 0;
       const issues = hint(issueText(geometry.issues));
       issues.className = clean ? "text-emerald-400" : "text-amber-400";
-      issues.textContent = clean ? "网格健康" : `⚠ ${issueText(geometry.issues)}`;
+      issues.textContent = clean ? "网格健康" : issueText(geometry.issues);
 
       const remove = button("移除", "danger");
       remove.disabled = working;

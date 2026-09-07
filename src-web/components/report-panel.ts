@@ -59,7 +59,7 @@ export function createReportPanel(): HTMLElement {
     anchor.download = `kairos-report-${study.id}.html`;
     anchor.click();
     URL.revokeObjectURL(url);
-    status.textContent = "报告已生成并下载 ✓";
+    status.textContent = "报告已生成并下载";
   });
 
   body.append(generateButton, status);

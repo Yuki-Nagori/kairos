@@ -63,7 +63,7 @@ export function createDependenciesPanel(): HTMLElement {
 
       const ready = document.createElement("span");
       ready.className = dep.ready ? "text-emerald-400" : "text-red-400";
-      ready.textContent = dep.ready ? "就绪 ✓" : "未就绪";
+      ready.textContent = dep.ready ? "就绪" : "未就绪";
 
       const requiredTag = document.createElement("span");
       requiredTag.className = "text-zinc-600";

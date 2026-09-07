@@ -7,7 +7,7 @@ export function createProjectTree(): HTMLElement {
 
   const header = document.createElement("div");
   header.className = "tree-header";
-  header.textContent = "📁 工程浏览器";
+  header.textContent = "工程浏览器";
 
   const tree = document.createElement("div");
   tree.className = "tree-body";
@@ -16,7 +16,7 @@ export function createProjectTree(): HTMLElement {
     const s = appStore.get();
     tree.replaceChildren();
 
-    tree.append(group("📦 项目"));
+    tree.append(group("项目"));
     if (s.project) {
       tree.append(leaf(s.project.name));
     } else {
@@ -24,21 +24,21 @@ export function createProjectTree(): HTMLElement {
     }
 
     if (s.geometries.length > 0) {
-      tree.append(group("▣ 几何"));
+      tree.append(group("几何"));
       for (const geo of s.geometries) {
         tree.append(leaf(`${geo.fileName} (${geo.triangleCount} 面)`));
       }
     }
 
     if (s.jobs.length > 0) {
-      tree.append(group("⚙ 求解作业"));
+      tree.append(group("求解作业"));
       for (const job of s.jobs) {
         tree.append(leaf(`${job.id}: ${job.status}`));
       }
     }
 
     if (s.dependencies.length > 0) {
-      tree.append(group("🔗 运行时依赖"));
+      tree.append(group("运行时依赖"));
       for (const dep of s.dependencies) {
         tree.append(leaf(`${dep.name}: ${dep.ready ? "就绪" : "未就绪"}`));
       }

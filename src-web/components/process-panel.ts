@@ -138,7 +138,7 @@ export function createProcessPanel(): HTMLElement {
         study.id === activeStudyId ? { ...study, process: settings } : study,
       );
       appStore.set({ project: { ...project, studies, updatedMs: Date.now() } });
-      issuesBox.append(hint("已应用到当前研究 ✓"));
+      issuesBox.append(hint("已应用到当前研究"));
     });
   });
 
