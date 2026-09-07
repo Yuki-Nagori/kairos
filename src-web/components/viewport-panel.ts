@@ -2,6 +2,7 @@ import { appStore } from "../state";
 import type { ScalarField } from "../types";
 import { ViewportRenderer } from "../render/renderer";
 import { detectRenderCapabilityInBrowser } from "../render/capability";
+import { registerSnapshot } from "../render/snapshot";
 import { getRenderMesh } from "../services/geometry";
 import { button, card, hint } from "./ui";
 
@@ -14,6 +15,7 @@ export function createViewportPanel(): HTMLElement {
   canvas.className = "w-full rounded-lg bg-zinc-950";
   canvas.width = 960;
   canvas.height = 540;
+  registerSnapshot("viewport", canvas);
   canvas.style.touchAction = "none";
 
   const controls = document.createElement("div");

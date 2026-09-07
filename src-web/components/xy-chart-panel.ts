@@ -1,6 +1,7 @@
 import { appStore, addProbe, removeProbe, exportFieldCsv } from "../state";
 import type { ScalarField } from "../types";
 import { drawLineChart } from "../lib/chart";
+import { registerSnapshot } from "../render/snapshot";
 import { button, card, hint, textInput } from "./ui";
 
 /** XY 图表面板：场分布曲线（节点序号 → 值）+ 探针管理 + CSV 导出。 */
@@ -11,6 +12,7 @@ export function createXyChartPanel(): HTMLElement {
   canvas.width = 720;
   canvas.height = 260;
   canvas.className = "w-full rounded-lg bg-zinc-950";
+  registerSnapshot("xy-chart", canvas);
 
   const probeForm = document.createElement("div");
   probeForm.className = "flex flex-wrap items-center gap-2";

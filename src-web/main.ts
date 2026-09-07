@@ -7,6 +7,7 @@ import { createMoldPanel } from "./components/mold-panel";
 import { createProjectBar } from "./components/project-bar";
 import { createPipelinePanel } from "./components/pipeline-panel";
 import { createProcessPanel } from "./components/process-panel";
+import { createReportPanel } from "./components/report-panel";
 import { createResultsPanel } from "./components/results-panel";
 import { createViewportPanel } from "./components/viewport-panel";
 import { createXyChartPanel } from "./components/xy-chart-panel";
@@ -34,7 +35,7 @@ centerColumn.append(createPipelinePanel(), createViewportPanel(), createXyChartP
 
 const rightColumn = document.createElement("div");
 rightColumn.className = "flex w-[340px] shrink-0 flex-col gap-3 overflow-y-auto p-3";
-rightColumn.append(createMoldPanel(), createProcessPanel(), createJobsPanel());
+rightColumn.append(createMoldPanel(), createProcessPanel(), createReportPanel(), createJobsPanel());
 
 const workspace = document.createElement("main");
 workspace.className =
