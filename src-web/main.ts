@@ -12,6 +12,7 @@ import { createReportPanel } from "./components/report-panel";
 import { createResultsPanel } from "./components/results-panel";
 import { createViewportPanel } from "./components/viewport-panel";
 import { createXyChartPanel } from "./components/xy-chart-panel";
+import { initTheme } from "./theme";
 import { bootstrap, newProject, openProject, saveProject } from "./state";
 
 const root = document.querySelector<HTMLDivElement>("#app");
@@ -77,5 +78,6 @@ window.addEventListener("keydown", (event) => {
 
 root.append(header, workspace, resultsSection, bottomBar);
 
+initTheme();
 // bootstrap 内部已自行处理失败（setError），无需 await。
 void bootstrap();

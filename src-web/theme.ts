@@ -1,6 +1,6 @@
 /** 主题管理器：深色 / 浅色切换 + localStorage 持久化。 */
 
-export type Theme = "dark" | "light";
+type Theme = "dark" | "light";
 
 const STORAGE_KEY = "kairos-theme";
 
