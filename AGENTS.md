@@ -18,6 +18,7 @@ Kairos：注塑成型 CAE 仿真软件，功能对标 Autodesk Moldflow（复刻
 - **错误契约**：命令一律返回 `Result<T, KairosError>`，跨 IPC 序列化为 `{ code, message }`；`code ∈ validation / not_found / io / solver / internal`。前端按 `code` 分支，禁止文本匹配 message。
 - **DTO 双端镜像**：Rust `models/` ↔ `src-web/types.ts`，任何改动必须同步两处并让契约测试（`src-crates/kairos-core/tests/contract.rs`）通过。
 - **线程模型**：同步 Tauri 命令跑在主线程，重计算必须异步 / 另起线程；进度回传用 `tauri::ipc::Channel`；大体积数据用 `tauri::ipc::Response`。
+- **GPU 计算**：统一经 wgpu 抽象层覆盖 NVIDIA / AMD / Intel / Apple（Vulkan/DX12/Metal），禁止引入 CUDA 等单厂商 SDK；无 GPU 环境必须自动回退 CPU（T19/T20）。
 - **锁文件**：根 `Cargo.lock` 与 `bun.lock` 必须提交、保持同步（整个工作区只有根目录这一份 Cargo.lock）。
 - **提交前门禁**：仓库根 `bun run verify`（typecheck + clippy -D warnings + format + test + knip，前端与 Rust 全量），通过才算完成。
 - **时间线**：每完成一个阶段，先提交代码，再在 [ai-docs/timeline.md](ai-docs/timeline.md) 末尾追加一行（时间 + 阶段 + 内容），**一条对应一个 commit**；时间线改动随下一个提交入库。

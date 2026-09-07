@@ -11,3 +11,4 @@
 | 21:50              | AI 文档体系          | 根 `AGENTS.md`（文档路由 + 铁律速查）+ `ai-docs/`（ARCHITECTURE 权威文档、时间线）                                                                                               |
 | 22:00              | README 与收尾        | README 定稿为「介绍 + 使用说明」；定位明确为注塑成型仿真（对标 Moldflow，复刻功能不碰代码/数据）；运行时冒烟通过，初始历史完成                                                   |
 | 22:25              | 路线图规划           | 求解器选型确认：openInjMoldSim（OpenFOAM 7，GPL-3.0，填充/保压/冷却，3D 网格路线）；任务拆解 T01–T18 入库 `ai-docs/tasks/`（总览 + 里程碑 M0–M5），性能预算与 GPL 隔离为全局红线 | verify |
+| 22:45              | 需求扩展             | 新增 GPU 辅助计算要求：统一 wgpu 路线覆盖 NVIDIA / AMD / Intel / Apple 四厂商；新增任务 T19（GPU 基础设施）、T20（GPU 加速后处理算子），性能预算与架构红线同步更新               | verify |
