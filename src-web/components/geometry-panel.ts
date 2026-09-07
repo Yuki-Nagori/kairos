@@ -1,7 +1,8 @@
-import { appStore, importGeometry, removeGeometryById } from "../state";
-import { button, card, hint } from "./ui";
+import { appStore, generateMesh, importGeometry, removeGeometryById } from "../state";
+import type { MeshingReport } from "../types";
+import { button, card, hint, textInput } from "./ui";
 
-/** 几何面板：STL 导入、健康检查结果与已导入几何列表。 */
+/** 几何面板：STL 导入、健康检查、体积网格生成与已导入几何列表。 */
 export function createGeometryPanel(): HTMLElement {
   const { root, body } = card("几何");
 
@@ -38,7 +39,7 @@ export function createGeometryPanel(): HTMLElement {
   }
 
   function render(): void {
-    const { geometries, busy } = appStore.get();
+    const { geometries, busy, meshReports } = appStore.get();
     const working = busy !== null;
     importButton.disabled = working;
 
@@ -77,6 +78,27 @@ export function createGeometryPanel(): HTMLElement {
       });
 
       row.append(name, stats, issues, remove);
+
+      // 网格生成区：目标尺寸输入 + 生成按钮 + 报告
+      const meshRow = document.createElement("div");
+      meshRow.className = "flex w-full flex-wrap items-center gap-2 border-t border-zinc-800 pt-2";
+
+      const sizeInput = textInput("目标尺寸");
+      sizeInput.type = "number";
+      sizeInput.step = "any";
+      sizeInput.min = "0";
+      sizeInput.value = (Math.max(...geometry.size) / 20).toPrecision(3);
+      sizeInput.className += " w-28";
+      const generateButton = button("生成体积网格");
+      generateButton.disabled = working;
+      const reportLine = hint(reportText(meshReports[geometry.geometryId]));
+
+      generateButton.addEventListener("click", () => {
+        void generateMesh(geometry.geometryId, Number(sizeInput.value));
+      });
+
+      meshRow.append(sizeInput, generateButton, reportLine);
+      row.append(meshRow);
       listBox.append(row);
     }
   }
@@ -85,4 +107,11 @@ export function createGeometryPanel(): HTMLElement {
   render();
   appStore.subscribe(render);
   return root;
+}
+
+function reportText(report: MeshingReport | undefined): string {
+  if (!report) {
+    return "划分体积网格供求解使用。";
+  }
+  return `节点 ${report.nodeCount} · 四面体 ${report.elementCount} · 表面 ${report.surfaceFaceCount} · 体积 ${report.totalVolume.toFixed(3)} · 质量比 min ${report.quality.minEdgeRatio.toFixed(2)} / avg ${report.quality.avgEdgeRatio.toFixed(2)} / max ${report.quality.maxEdgeRatio.toFixed(2)}`;
 }

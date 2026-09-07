@@ -21,9 +21,17 @@ import {
   listCustomMaterials,
   upsertCustomMaterial,
 } from "./services/materials";
-import { importStl, removeGeometry } from "./services/geometry";
+import { generateVolumeMesh, importStl, removeGeometry } from "./services/geometry";
 import { pickStlPath } from "./services/dialog";
-import type { GeometrySummary, Material, Project, RecentProject, Study, SystemInfo } from "./types";
+import type {
+  GeometrySummary,
+  Material,
+  MeshingReport,
+  Project,
+  RecentProject,
+  Study,
+  SystemInfo,
+} from "./types";
 
 /** 全局应用状态：组件经 select/subscribe 订阅，只能通过本文件的动作函数修改。 */
 interface AppState {
@@ -39,6 +47,8 @@ interface AppState {
   materials: MaterialLibrary;
   /** 已导入的几何（摘要列表，全量网格在 Rust 会话缓存）。 */
   geometries: GeometrySummary[];
+  /** 每个几何的体积网格报告（key = geometryId）。 */
+  meshReports: Record<string, MeshingReport>;
   /** 进行中的异步操作提示文案，标题栏展示；null 表示空闲。 */
   busy: string | null;
   /** 最近一次错误；info 为环境提示（浏览器预览，自动消失），否则是真实失败。 */
@@ -52,6 +62,7 @@ export const initialAppState: AppState = {
   recents: [],
   materials: { builtin: [], custom: [] },
   geometries: [],
+  meshReports: {},
   busy: null,
   error: null,
 };
@@ -353,5 +364,24 @@ export async function removeGeometryById(geometryId: string): Promise<void> {
     });
   } catch (error) {
     setError(error);
+  }
+}
+
+/** 为几何生成 3D 体积网格（体素 + 5-四面体保形分解）。 */
+export async function generateMesh(geometryId: string, targetSize: number): Promise<void> {
+  if (!(targetSize > 0)) {
+    setError("目标网格尺寸必须为正数。");
+    return;
+  }
+  appStore.set({ busy: "正在生成网格…", error: null });
+  try {
+    const report = await generateVolumeMesh(geometryId, targetSize);
+    appStore.set({
+      meshReports: { ...appStore.get().meshReports, [geometryId]: report },
+    });
+  } catch (error) {
+    setError(error);
+  } finally {
+    appStore.set({ busy: null });
   }
 }

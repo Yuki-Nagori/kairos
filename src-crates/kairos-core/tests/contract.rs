@@ -8,6 +8,7 @@ use serde_json::json;
 
 use kairos_core::models::geometry::{Triangle, TriangleMesh};
 use kairos_core::models::material::Material;
+use kairos_core::models::mesh::{MeshQuality, MeshingReport};
 use kairos_core::models::project::{Project, Study};
 use kairos_core::services::{geometry, material};
 
@@ -88,4 +89,28 @@ fn geometry_summary_serializes_with_camel_case() {
     assert_eq!(json["suggestedUnit"], "mm");
     assert_eq!(json["issues"]["degenerate"], 0);
     assert_eq!(json["issues"]["openEdges"], 3);
+}
+
+/// MeshingReport 的形状：统计字段 camelCase，前端网格面板与之对应。
+#[test]
+fn meshing_report_serializes_with_camel_case() {
+    let report = MeshingReport {
+        node_count: 27,
+        element_count: 40,
+        surface_face_count: 48,
+        total_volume: 1.0,
+        quality: MeshQuality {
+            min_edge_ratio: 1.0,
+            avg_edge_ratio: 1.3,
+            max_edge_ratio: 1.73,
+            min_volume: 0.01,
+        },
+    };
+    let json = serde_json::to_value(&report).unwrap();
+    assert_eq!(json["nodeCount"], 27);
+    assert_eq!(json["elementCount"], 40);
+    assert_eq!(json["surfaceFaceCount"], 48);
+    assert_eq!(json["totalVolume"], 1.0);
+    assert_eq!(json["quality"]["minEdgeRatio"], 1.0);
+    assert_eq!(json["quality"]["minVolume"], 0.01);
 }

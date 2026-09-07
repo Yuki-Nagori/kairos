@@ -94,3 +94,19 @@ export interface GeometrySummary {
   suggestedUnit: string;
   issues: MeshIssues;
 }
+/** 对应 `kairos-core::models::mesh::MeshQuality`。 */
+export interface MeshQuality {
+  minEdgeRatio: number;
+  avgEdgeRatio: number;
+  maxEdgeRatio: number;
+  minVolume: number;
+}
+
+/** 对应 `kairos-core::models::mesh::MeshingReport`。 */
+export interface MeshingReport {
+  nodeCount: number;
+  elementCount: number;
+  surfaceFaceCount: number;
+  totalVolume: number;
+  quality: MeshQuality;
+}

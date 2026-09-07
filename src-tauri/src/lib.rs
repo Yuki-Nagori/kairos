@@ -18,6 +18,7 @@ pub fn run() {
             commands::material::delete_custom_material,
             commands::material::export_materials_to_file,
             commands::geometry::import_stl,
+            commands::geometry::generate_volume_mesh,
             commands::geometry::remove_geometry,
         ])
         .run(tauri::generate_context!())
