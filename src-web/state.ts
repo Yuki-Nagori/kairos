@@ -38,9 +38,11 @@ import {
   listRuntimeDependencies,
   openDependencyPage as apiOpenDependencyPage,
 } from "./services/dependencies";
+import { downloadComponentFile } from "./services/downloads";
 import { cancelJob as apiCancelJob, listJobs, submitJob as apiSubmitJob } from "./services/jobs";
 import type {
   DependencyStatus,
+  SavedDownload,
   ResultCatalog,
   ScalarField,
   GeometrySummary,
@@ -73,6 +75,10 @@ interface AppState {
   jobs: Job[];
   /** 运行时依赖状态（许可分级 + 就绪探测）。 */
   dependencies: DependencyStatus[];
+  /** 组件下载进度（百分比，key = 依赖 id）。 */
+  downloadProgress: Record<string, number>;
+  /** 组件下载完成后的落盘信息（key = 依赖 id）。 */
+  savedDownloads: Record<string, SavedDownload>;
   /** 探针列表（节点序号）。 */
   probes: Probe[];
   /** 材料库：内置示例材料 + 用户自定义材料。 */
@@ -105,6 +111,8 @@ export const initialAppState: AppState = {
   moldIssues: [],
   jobs: [],
   dependencies: [],
+  downloadProgress: {},
+  savedDownloads: {},
   probes: [],
   busy: null,
   error: null,
@@ -729,5 +737,24 @@ export async function openDependencyPageAction(pageUrl: string): Promise<void> {
     await apiOpenDependencyPage(pageUrl);
   } catch (error) {
     setError(error);
+  }
+}
+
+/** 应用内下载：MIT 组件点击直接下载；进度经 downloadProgress 反馈到面板。 */
+export async function downloadComponent(componentId: string, url: string): Promise<void> {
+  appStore.set({ busy: "正在下载…", error: null });
+  try {
+    const saved = await downloadComponentFile(url, (percent) => {
+      appStore.set({
+        downloadProgress: { ...appStore.get().downloadProgress, [componentId]: percent },
+      });
+    });
+    appStore.set({
+      savedDownloads: { ...appStore.get().savedDownloads, [componentId]: saved },
+    });
+  } catch (error) {
+    setError(error);
+  } finally {
+    appStore.set({ busy: null });
   }
 }

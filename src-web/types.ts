@@ -193,6 +193,20 @@ export type LicenseKind = "mit" | "gpl";
 /** 对应 `kairos-core::models::dependencies::InstallStrategy`。 */
 export type InstallStrategy = "direct_download" | "guided_install";
 
+/** 对应 `kairos-core::models::dependencies::DownloadSpec`（按平台的下载地址）。 */
+export interface DownloadSpec {
+  macos: string;
+  windows: string;
+  linux: string;
+}
+
+/** 下载完成后的落盘信息。 */
+export interface SavedDownload {
+  path: string;
+  fileName: string;
+  sizeBytes: number;
+}
+
 /** 依赖状态视图（目录项 + 就绪探测）。 */
 export interface DependencyStatus {
   id: string;
@@ -204,5 +218,6 @@ export interface DependencyStatus {
   required: boolean;
   checkCommand: string;
   hint: string;
+  download: DownloadSpec | null;
   ready: boolean;
 }

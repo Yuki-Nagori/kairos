@@ -22,6 +22,7 @@ pub fn catalog() -> Vec<RuntimeDependency> {
             required: true,
             check_command: "blockMesh".into(),
             hint: "命令 blockMesh 可用即视为就绪。".into(),
+            download: None,
         },
         RuntimeDependency {
             id: "openinjmoldsim".into(),
@@ -33,17 +34,23 @@ pub fn catalog() -> Vec<RuntimeDependency> {
             required: true,
             check_command: "openInjMoldSim".into(),
             hint: "命令 openInjMoldSim 可用即视为就绪（./Allwmake 编译后加入 PATH）。".into(),
+            download: None,
         },
         RuntimeDependency {
             id: "gmsh".into(),
             name: "Gmsh 网格引擎".into(),
             license: "GPL-2.0-or-later".into(),
             license_kind: LicenseKind::Gpl,
-            strategy: InstallStrategy::GuidedInstall,
+            strategy: InstallStrategy::DirectDownload,
             page_url: "https://gmsh.info/#Download".into(),
             required: false,
             check_command: "gmsh".into(),
             hint: "T22 Delaunay 网格升级路线（条件触发，可选）。".into(),
+            download: Some(crate::models::dependencies::DownloadSpec {
+                macos: "https://gmsh.info/bin/macOSX/gmsh-4.12.2-MacOSX-sdk.tgz".into(),
+                windows: "https://gmsh.info/bin/Windows/gmsh-4.12.2-Windows64.zip".into(),
+                linux: "https://gmsh.info/bin/Linux/gmsh-4.12.2-Linux64-sdk.tgz".into(),
+            }),
         },
     ]
 }
@@ -64,10 +71,11 @@ mod tests {
     }
 
     #[test]
-    fn gmsh_is_optional() {
+    fn gmsh_is_optional_with_direct_download() {
         let catalog = catalog();
         let gmsh = catalog.iter().find(|d| d.id == "gmsh").unwrap();
         assert!(!gmsh.required);
+        assert!(gmsh.download.is_some(), "Gmsh 应提供应用内直接下载地址");
     }
 
     #[test]

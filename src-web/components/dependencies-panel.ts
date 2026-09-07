@@ -1,4 +1,10 @@
-import { appStore, openDependencyPageAction, refreshDependencies } from "../state";
+import {
+  appStore,
+  downloadComponent,
+  openDependencyPageAction,
+  refreshDependencies,
+} from "../state";
+import { openDownloadsDir } from "../services/downloads";
 import { button, card, hint } from "./ui";
 
 const LICENSE_BADGE: Record<string, { label: string; className: string }> = {
@@ -9,21 +15,29 @@ const LICENSE_BADGE: Record<string, { label: string; className: string }> = {
   gpl: { label: "GPL · 引导安装", className: "border-amber-500/60 bg-amber-500/10 text-amber-300" },
 };
 
-/** 运行时依赖面板：许可分级、就绪状态与官方页引导（MIT 可直接下载，GPL 引导安装）。 */
+/** 运行时依赖面板：许可分级、就绪状态、应用内下载与官方页引导。 */
 export function createDependenciesPanel(): HTMLElement {
   const { root, body } = card("运行时依赖");
 
   const refreshButton = button("重新探测");
+  const openDirButton = button("打开下载目录");
   const listBox = document.createElement("div");
   listBox.className = "space-y-2";
-  body.append(refreshButton, listBox);
+  const dirLine = hint("下载目录：探测中…");
+  body.append(refreshButton, openDirButton, dirLine, listBox);
 
   refreshButton.addEventListener("click", () => void refreshDependencies());
+  openDirButton.addEventListener("click", () => void openDownloadsDir());
+
+  void import("../services/downloads").then(async (m) => {
+    dirLine.textContent = `下载目录：${await m.getDownloadsDir()}`;
+  });
 
   function render(): void {
-    const { dependencies, busy } = appStore.get();
+    const { dependencies, busy, downloadProgress, savedDownloads } = appStore.get();
     const working = busy !== null;
     refreshButton.disabled = working;
+    openDirButton.disabled = working;
 
     listBox.replaceChildren();
     if (dependencies.length === 0) {
@@ -60,8 +74,40 @@ export function createDependenciesPanel(): HTMLElement {
         void openDependencyPageAction(dep.pageUrl);
       });
 
+      // 有应用内下载地址的组件：提供「下载」按钮（用户点击触发，官方源 + 许可展示）。
+      let downloadButton: HTMLButtonElement | null = null;
+      if (dep.download !== null) {
+        const os = appStore.get().info?.os ?? "linux";
+        const downloadUrl =
+          os === "macos"
+            ? dep.download.macos
+            : os === "windows"
+              ? dep.download.windows
+              : dep.download.linux;
+        downloadButton = button("下载", "primary");
+        downloadButton.title = `下载（${dep.license}）`;
+        downloadButton.addEventListener("click", () => {
+          void downloadComponent(dep.id, downloadUrl);
+        });
+      }
+
       row.append(name, badge, ready, requiredTag, openButton);
+      if (downloadButton !== null) {
+        row.append(downloadButton);
+      }
       listBox.append(row);
+
+      const progress = downloadProgress[dep.id];
+      if (progress !== undefined) {
+        const progressLine = hint(`下载中：${progress}%`);
+        listBox.append(progressLine);
+      }
+
+      const saved = savedDownloads[dep.id];
+      if (saved !== undefined) {
+        const savedLine = hint(`已保存：${saved.path}`);
+        listBox.append(savedLine);
+      }
 
       if (!dep.ready && dep.required) {
         const hintLine = hint(dep.hint);

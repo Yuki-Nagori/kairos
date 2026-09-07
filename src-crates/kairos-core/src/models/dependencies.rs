@@ -22,6 +22,15 @@ pub enum InstallStrategy {
     GuidedInstall,
 }
 
+/// 组件安装包的按平台下载地址（缺失平台 = 无预编译包，走引导安装）。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DownloadSpec {
+    pub macos: String,
+    pub windows: String,
+    pub linux: String,
+}
+
 /// 运行时依赖目录项。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -39,4 +48,7 @@ pub struct RuntimeDependency {
     /// 就绪判定所依赖的命令名。
     pub check_command: String,
     pub hint: String,
+    /// 应用内直接下载地址（MIT 组件）；GPL 组件为 None（引导安装）。
+    #[serde(default)]
+    pub download: Option<DownloadSpec>,
 }

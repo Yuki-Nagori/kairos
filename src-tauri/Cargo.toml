@@ -18,5 +18,6 @@ serde = { version = "1", features = ["derive"] }
 tauri.workspace = true
 pollster = "0.4"
 tauri-plugin-dialog = "2"
+ureq = "2"
 wgpu = "24"
 
