@@ -1,0 +1,6 @@
+{
+  "$schema": "./node_modules/knip/schema.json",
+  "entry": ["index.html", "src-web/**/*.test.ts"],
+  "project": ["src-web/**/*.ts"],
+  "ignoreDependencies": ["tailwindcss"]
+}

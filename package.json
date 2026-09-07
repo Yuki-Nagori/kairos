@@ -1,0 +1,48 @@
+{
+  "name": "kairos",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "bun run typecheck && vite build",
+    "preview": "vite preview",
+    "prepare": "husky",
+    "tauri": "tauri",
+    "typecheck": "tsc --noEmit",
+    "typecheck:rust": "cargo check --workspace",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "lint:rust": "cargo clippy --workspace --all-targets -- -D warnings",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "format:rust": "cargo fmt --all",
+    "format:rust:check": "cargo fmt --all --check",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:rust": "cargo test --workspace",
+    "knip": "knip",
+    "verify": "bun run typecheck && bun run typecheck:rust && bun run lint && bun run lint:rust && bun run format:check && bun run format:rust:check && bun run test && bun run test:rust && bun run knip"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9",
+    "@tailwindcss/vite": "^4",
+    "@tauri-apps/cli": "^2",
+    "@vitest/coverage-v8": "^5.0.0",
+    "eslint": "^9",
+    "eslint-config-prettier": "^10",
+    "happy-dom": "^20.14.0",
+    "husky": "^9.1.7",
+    "knip": "^5",
+    "prettier": "^3",
+    "tailwindcss": "^4",
+    "typescript": "^5",
+    "typescript-eslint": "^8",
+    "vite": "^7",
+    "vitest": "^5.0.0"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2"
+  }
+}
