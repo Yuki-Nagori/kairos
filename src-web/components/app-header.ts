@@ -1,4 +1,4 @@
-import { toggleTheme } from "../theme";
+import { cycleTheme, getActiveTheme } from "../theme";
 import { select } from "../lib/store";
 import { appStore } from "../state";
 
@@ -29,9 +29,12 @@ export function createAppHeader(): HTMLElement {
     "rounded-lg border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-emerald-500 hover:text-emerald-300 transition-colors";
 
   function syncThemeIcon(): void {
-    const theme = document.documentElement.dataset.theme;
+    const theme = getActiveTheme();
     themeButton.textContent = theme === "light" ? "\u263d" : "\u2600";
-    themeButton.title = theme === "light" ? "切换到深色主题" : "切换到浅色主题";
+    themeButton.title =
+      theme === "light"
+        ? "\u5207\u6362\u5230\u6d45\u8272\u4e3b\u9898"
+        : "\u5207\u6362\u5230\u6df1\u8272\u4e3b\u9898";
   }
 
   function renderStatus(): void {
@@ -58,7 +61,7 @@ export function createAppHeader(): HTMLElement {
   select(appStore, (s) => s.info, renderStatus);
 
   themeButton.addEventListener("click", () => {
-    toggleTheme();
+    cycleTheme();
     syncThemeIcon();
   });
 

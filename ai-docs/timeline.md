@@ -1,47 +1,54 @@
 # 开发时间线
 
-按时间顺序记录 Kairos 的提交序列，**一条对应一个 commit**，便于对照 `git log` 回溯。起点为壳子完成（旧项目清理与命名收尾不记）。约定：此后每完成一个阶段追加一行并伴随一次提交。
+按 git 提交历史记录 Kairos 的开发过程。
 
-| 时间（2026-09-07） | 阶段                 | 内容                                                                                                                                                                                                                                                                                                    |
-| ------------------ | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 21:16              | 工程基础配置         | Node 工具链（Bun / Vite / Tailwind / Vitest / ESLint / Prettier / knip / husky）、编辑器规范、Apache-2.0 许可证、favicon                                                                                                                                                                                |
-| 21:30              | Cargo 工作区与领域层 | `kairos-core`（models / services / error）分层；统一错误契约 `{ code, message }`；IPC 契约测试锁定序列化形状                                                                                                                                                                                            |
-| 21:35              | Tauri 适配层         | `system_info` 探活命令（薄适配）；Kairos 命名与标识、1440×900 主窗口、全套平台图标                                                                                                                                                                                                                      |
-| 21:45              | 前端工作台壳子       | 标题栏状态优先级（error > busy > info）、工作区三占位、IPC 网关（`CommandError` 归一化）与 `select` 切片订阅                                                                                                                                                                                            |
-| 21:50              | AI 文档体系          | 根 `AGENTS.md`（文档路由 + 铁律速查）+ `ai-docs/`（ARCHITECTURE 权威文档、时间线）                                                                                                                                                                                                                      |
-| 22:00              | README 与收尾        | README 定稿为「介绍 + 使用说明」；定位明确为注塑成型仿真（对标 Moldflow，复刻功能不碰代码/数据）；运行时冒烟通过，初始历史完成                                                                                                                                                                          |
-| 22:25              | 路线图规划           | 求解器选型确认：openInjMoldSim（OpenFOAM 7，GPL-3.0，填充/保压/冷却，3D 网格路线）；任务拆解 T01–T18 入库 `ai-docs/tasks/`（总览 + 里程碑 M0–M5），性能预算与 GPL 隔离为全局红线                                                                                                                        | verify                                                      |
-| 22:45              | 需求扩展             | 新增 GPU 辅助计算要求：统一 wgpu 路线覆盖 NVIDIA / AMD / Intel / Apple 四厂商；新增任务 T19（GPU 基础设施）、T20（GPU 加速后处理算子），性能预算与架构红线同步更新                                                                                                                                      | verify                                                      |
-| 22:55              | 流程补强             | 整体优化与 review 固化为计划的一部分：新增循环任务 T21（里程碑评审与整体优化，八项清单），任务完成自查与里程碑评审规则写入全局原则与 AGENTS                                                                                                                                                             | verify                                                      |
-| 23:05              | T01 性能预算         | `ai-docs/perf-budget.md` 六项预算；基准套件上线：前端 tinybench（store 热路径，40–95 ns）、Rust criterion（IPC DTO 序列化 ~86 ns），基线已回填；vitest 5 已移除内置 bench，故前端基准直用 tinybench                                                                                                     | verify + 基准运行                                           |
-| 23:15              | T02 CI/CD            | GitHub Actions：前端门禁、双平台 Rust 门禁、主干双平台桌面包构建、基准报告（只记录不卡点）；.gitattributes 统一 LF 防 Windows 检出破坏格式门禁                                                                                                                                                          | CI 配置就绪（首次推送后生效）                               |
-| 23:20              | T21 M0 评审          | 八项清单通过：1 项立即修（ARCHITECTURE 补 perf-budget 引用）已修复，3 项接受并记录（CSP、错误链、cargo audit，均带重评触发条件）；M0 关闭，可开启 M1                                                                                                                                                    | verify 全绿                                                 |
-| 23:25              | T03 项目模型         | Project/Study 模型与 `.kairos` 工程文件（schema v1、原子写入、版本迁移框架）；命令 create/save/load + 最近项目（规则在 core，持久化于应用数据目录）；前端项目栏（新建/打开/保存/另存为、研究管理、最近项目）；重新引入 dialog 插件；self-review 修正 3 处 knip 未使用导出                               | verify（前端 19 + Rust 18 测试）                            |
-| 23:55              | T04 材料数据库       | Cross-WLF 黏度 + Tait PVT + 热物性表的材料模型与校验（量程 / 单调性 / 比容关系）；3 个内置示例材料（附免责声明）随包内置；自定义材料库持久化于应用数据目录，支持导入 / 导出 / 复制 / 删除；材料库面板上线。缺口：参数编辑表单与曲线预览随 T15 补齐                                                      | verify（前端 19 + Rust 26 测试）                            |
-| 23:59              | T05 几何导入         | STL 解析（ASCII/Binary 自动识别、截断容错、坏行定位）、单位推断（包围盒启发式）、网格健康检查（顶点焊接容差下的退化三角形 / 边界边 / 非流形边 / 法向不一致）；几何会话缓存于 Rust 侧，前端几何面板展示摘要与问题清单；self-review 补 GeometrySummary 契约测试                                           | verify（前端 19 + Rust 38 测试）                            |
-| 00:40              | T06 体积网格         | 体素占用（射线奇偶 + 扫描线）+ 标准 5-四面体保形分解（偶/奇角点组按体素奇偶交替）；质量指标（边长比、最小体积、总体积）与表面面提取；体素总量防御上限 200 万；生成命令 + 网格面板（目标尺寸输入、报告展示）。局部加密/边界层留待后续                                                                    | verify 全绿（体积守恒 1.0 ± 1e-9 断言通过）                 |
-| 01:20              | T07 浇口水路         | 流道/浇口/冷却水路一维单元模型与连通性校验（端点焊接 + 孤立单元检测、直径/零长度/温度范围）；工程 schema v1→v2（Study 新增流道与水路集合，serde default 迁移）；模具网络面板（表单 + 列表 + 校验按钮）与研究选中机制（项目栏 chip）                                                                     | verify 全绿（Rust 42+6、前端 19）                           |
-| 00:45              | T08 工艺设置         | 工艺参数模型（熔体/模具/顶出温度、注射时间、V/P 切换、保压曲线、冷却/介质温度）与量程校验；schema v2→v3（Study.process，serde default 迁移）；工艺面板（表单 + 校验 + 应用到研究 + localStorage 预设）；check_process 命令                                                                              | verify 全绿                                                 |
-| 00:55              | T21 M2 评审          | 八项清单通过：1 项立即修（README 领域功能句补 M2 内容）已修复；接受项：网格生成正式计时（待基准资产）、错误链（M3）、cargo audit（M3）；M2 关闭，可开启 M3 求解集成                                                                                                                                     | verify 全绿（Rust 43+6、前端 19）                           |
-| 01:45              | T09 OpenFOAM 集成    | GPL 合规结论入库（ai-docs/decisions/，子进程 + 文件交换红线）；case 生成器（polyMesh 点/面/owner/neighbour/boundary + 0 场 + system 字典 + Cross-WLF/Tait transportProperties）；环境探测 probe、子进程启动（Channel 进度流 + **TIME** 步行）、独立进程组取消；dogbone 式双四面体样例端到端测试         | verify 全绿（Rust 48+6）                                    |
-| 01:45              | T10 求解调度器       | core 作业状态机（排队/运行/完成/失败/取消，非法迁移不可达）+ 并发预算（同时运行数 + 总核数，超预算排队等待）；适配层 JobScheduler（submit/cancel/list 命令、进程组终止、完成自动提升下一个）；前端作业面板（状态着色、取消按钮、刷新）；T09 直接启动命令被调度器取代                                    | verify 全绿（Rust 48 core + 6 契约 + jobs 单测 5、前端 19） |
-| 02:10              | T11 填充端到端       | 五步流水线引导（几何 → 网格 → 材料 → 工艺 → 提交）与前置状态检查；样例立方体一键导入（程序化生成、脚本验证封闭性）；工程 schema v4（Study.material_id）；材料「用于当前研究」、环境探测提示入 UI；submitPipeline 端到端编排（case 生成 → 作业提交）。云图/动画展示随 T13/T14 落地                       | verify 全绿（前端 24 + Rust 54 测试）                       |
-| 02:25              | T12 保压冷却         | case 生成器阶段化：packingDict（保压压力-时间曲线）与 coolingDict（介质温度/冷却时间）按分析阶段写入；阶段化结果场目录（fill ⊂ fill_pack ⊂ fill_pack_cool，含密度/固化层/模具温度/热流）；前端分析阶段下拉贯通 submitPipeline；兑现 M0 接受项：KairosError 补 From<io::Error> 错误链                    | verify 全绿（Rust 60+6、前端 24）                           |
-| 02:40              | T13 结果模型         | TimeStepMeta/ResultCatalog/ScalarField 模型（complete 标记不完整结果）；OpenFOAM internalField 解析器（uniform/nonuniform 标量、矢量模量、括号配平提取）；时间目录扫描（constant 排除、按时间排序）；async 命令 list_result_times/load_result_field；结果面板（扫描/时间步表/场统计/完整性标注）        | verify 全绿（前端 24 + Rust 62 测试）                       |
-| 02:50              | T14 3D 视口          | WebGL2 渲染器（WebGL2 优先回退、WebGPU 能力探测）：轨道相机（旋转/平移/缩放/重置）、Lambert 着色、场云图着色（min/max 色标）、Y 轴剖切（discard）、FPS 埋点（供 T01 基准）；get_render_mesh 命令导出体积边界面（含 face→cell 映射供云图）；视口面板挂载。WebGPU 渲染后端与时间步动画随 T13 结果集成深化 | verify 全绿（前端 30 + Rust 62 测试）                       |
-| 03:05              | T15 XY 曲线          | Canvas 自绘图表库（min-max 抽样保形降采样、网格/量程/标签，纯函数可测）；XY 面板（场分布曲线 + 探针管理 + 探针值标注 + CSV 导出）；万点曲线走 min-max 抽样（预算 60 FPS）                                                                                                                               | verify 全绿（前端 35 测试，含抽样/CSV 单测）                |
-| 03:30              | T16 设计系统         | 设计 tokens（theme.ts：面板/强调色/状态色/输入控件）统一组件样式；可折叠卡片（localStorage 记忆）；CAE 三列工作台布局（左研究/中视口流程/右参数作业 + 底部结果）；全局快捷键 Ctrl+S/O/N；移除占位工作区                                                                                                 | verify 全绿（前端 35 + Rust 62 测试）                       |
-| 03:15              | T17 报告导出         | buildReportHtml 模板（项目/材料/工艺参数表 + 快照图 + 场统计 + 转义防注入 + 3 个单测）；快照注册表（viewport / xy-chart）；报告面板生成自包含 HTML（浏览器可打印 PDF）                                                                                                                                  | verify 全绿（前端 39 测试）                                 |
-| 03:40              | T19 GPU 基础设施     | wgpu 适配器探测与厂商识别（PCI ID → nvidia/amd/intel/apple，诊断页展示后端/设备类型）；CPU 回退红线入档（禁止单厂商 SDK）                                                                                                                                                                               | verify + 真机 Metal                                         |
-| 03:45              | T20 GPU 算子         | WGSL compute 算子「矢量模量」（vec4 对齐存储 + workgroup 64 + MAP_READ 暂存回读）+ CPU 参考实现与一致性测试（1024 确定性向量，容差 1e-4）；算子目录供诊断扩展                                                                                                                                           | verify（真机 Metal）                                        |
-| 03:20              | T18 打包分发         | Release 工作流（tag 触发 → macOS/Windows 构建 → Release 草稿）；生产 CSP 收窄（dev 开放）；签名/公证与 updater 预留说明（release.md）；OpenFOAM 运行时分发决策文档（v1 引导安装）                                                                                                                       | verify 全绿                                                 |
-| 03:30              | T21 M5 收官          | 全项目完成度审计：21 任务 × 6 里程碑全部关闭；六项接受项带触发条件入档（真实求解验证/正式计时/签名/更新通道/WebGPU 后端/翘曲远期）；质量快照：Rust 75 + 前端 39 测试全绿                                                                                                                                | verify 全绿                                                 |
-| 04:45              | T11-T20 收尾         | 已完成的 20 个任务文件统一标注 `-done`（git mv 保历史）；tasks 索引改写为「已完成 + 下一阶段」两段                                                                                                                                                                                                      | git mv 保历史                                               |
-| 04:50              | 下一阶段任务         | 在线调研生态仓库（MIT 教学平台：Gmsh WASM 网格 / PINN 熔融前沿；Apache-2.0 工作流 API 分层）后新立 T22–T25 四个任务入库；新任务内容不含任何第三方专有材料                                                                                                                                               | 任务文件入库                                                |
-| 04:45              | CI lint 修复         | 修复 1.98 stable 新 clippy（chunks_exact → as_chunks、Windows 下 pid 未使用改 taskkill 树杀）；rust-toolchain.toml 钉版 1.95.0 对齐 CI 与本地，消除 lint 漂移                                                                                                                                           | verify 全绿（前端 39 + Rust 75 测试）                       |
-| 04:55              | T22 Gmsh 评估        | msh v2.2 ASCII 解析器 + 回写（体素↔msh 往返一致，66 测试全绿）；评估决策：v1 体素为默认，Gmsh 走外部进程隔离列为条件触发（真实求解验证后启动）；决策文档入库                                                                                                                                            | 66+7 测试全绿                                               |
-| 04:20              | T23 时间步动画       | 渲染器新增 setFaceValues（值缓冲热更新，不重建网格）；视口面板播放/停止按钮遍历结果目录逐帧加载（loadField → faceCells 映射 → 值缓冲热更 + 色标范围自适应）；applyField 加载任意场后自动云图化                                                                                                          | verify 全绿（前端 39 + Rust 69 测试）                       |
-| 06:12              | 依赖管理器           | 应用内运行时依赖管理器落地：core 目录（许可分级 MIT/GPL + 安装策略 DirectDownload/GuidedInstall + 就绪命令探测）+ 依赖命令（清单/官方页打开，URL 白名单 https）+ 依赖面板（许可徽标/就绪状态/引导按钮）；GPL 走引导安装、MIT 走直接下载的策略固化                                                       | verify 全绿（前端 39 + Rust 75 测试）                       |
-| 06:30              | 依赖下载落地         | 应用内直接下载可用：download_file 流式命令（白名单校验 + Channel 进度）+ downloads/ 受管目录 + 打开目录命令；依赖面板升级（Gmsh「下载」按钮 + 进度百分比 + 落盘路径 + 下载目录展示）；修复 manual_checked_ops lint                                                                                      | verify 全绿（前端 39 + Rust 75 测试）                       |
-| 04:50              | T16 设计系统         | CAE 三列工作台布局重构（项目树 / 视口+流程+曲线 / 模具工艺作业）+ 全局快捷键 + 折叠卡片；设计 tokens 统一（theme.ts）；全局快捷键 Ctrl+S/O/N                                                                                                                                                            | verify 全绿（前端 39 + Rust 75 测试）                       |
-| 05:00              | T26 UI 重构   | Moldflow 风格 CAE 工作台布局（菜单栏 + 项目树 + 视口 + 属性 + 状态栏）；project-tree 组件；dark/light 主题 CSS 变量 + 切换按钮 + initTheme 启动钩子；全局快捷键 Ctrl+S/O/N | verify 全绿（前端 39 + Rust 75 测试） |
+## 2026-09-07
+
+- **22:19** chore: 工程基础配置（Node 工具链、编辑器规范、许可证）
+- **22:19** feat: Cargo 工作区与 kairos-core 领域层
+- **22:19** feat: Tauri 适配层与桌面配置
+- **22:19** feat: 前端工作台壳子
+- **22:20** docs: AGENTS 路由与 ai-docs（架构约定、时间线）
+- **22:20** docs: README 项目介绍与使用说明
+- **22:22** docs: 时间线规则补充提交对应关系，移除非提交决策备注
+- **22:42** docs: 注塑成型路线图与任务拆解 T01–T18（openInjMoldSim 选型）
+- **22:45** docs: GPU 辅助计算路线（wgpu 跨厂商），新增 T19/T20 并同步预算与红线
+- **22:47** docs: 里程碑评审与整体优化固化为循环任务 T21
+- **23:10** feat(T01): 性能预算与基准框架
+- **23:12** feat(T02): CI/CD 流水线
+- **23:13** review(T21): M0 里程碑评审——八项清单通过，1 项立即修
+- **23:39** feat(T03): 仿真项目模型与持久化
+- **23:52** feat(T04): 材料数据库
+
+## 2026-09-08
+
+- **00:25** feat(T05): 几何导入（STL）
+- **00:56** feat(T06): 3D 体积网格生成
+- **01:12** feat(T07): 浇口流道与冷却水路建模
+- **01:24** review(T21): M2 里程碑评审——八项清单通过，README 领域功能同步
+- **01:40** feat(T09): OpenFOAM 运行时与 openInjMoldSim 集成
+- **01:56** feat(T10): 求解作业调度器
+- **02:15** feat(T11): 填充分析端到端闭环
+- **02:21** feat(T12): 保压与冷却分析
+- **02:21** review(T21): M3 里程碑评审——八项清单通过，求解链路关闭
+- **02:36** feat(T13): 结果数据模型与流式读取
+- **02:54** feat(T14): 3D 视口渲染引擎（WebGL2）
+- **03:00** feat(T15): XY 曲线与探针
+- **03:03** feat(T16): 设计系统与工作台布局
+- **03:08** feat(T17): 仿真报告导出
+- **03:23** feat(T19,T20): GPU 计算基础设施与加速算子
+- **03:28** review(T21): M4 里程碑评审——八项清单通过，3 项立即修
+- **03:29** feat(T18): 打包分发与发布流水线
+- **03:31** review(T21): M5 收官评审——全项目完成度审计通过
+- **04:39** chore: 已完成任务标注 -done，入库下一阶段任务 T22–T25
+- **04:42** fix(ci): 修复 1.98 stable 新 clippy 并钉版工具链
+- **04:51** feat(T22): Gmsh 网格引擎评估与解析原型
+- **05:00** feat(T23): 时间步动画通道
+- **06:12** feat: 应用内运行时依赖管理器（许可分级 + 就绪探测 + 引导安装）
+- **06:41** feat: 依赖面板应用内下载（流式进度 + 受管目录）
+- **06:46** docs: 移除产品文档中的第三方商标直接引用
+- **06:49** fix(ci): 工具链安装与 rust-toolchain.toml 钉版对齐，显式安装 rustfmt/clippy 组件
+- **06:52** docs: 补入 T26（UI 重构）与 T27（组件下载）任务文件
+- **06:59** feat(T16): 设计系统与工作台布局
+- **07:11** feat: 主题切换按钮（深色/浅色 CSS 变量）+ app-header 整合
+- **07:12** feat(T26): Moldflow 风格 CAE 工作台 UI 重构 + 主题切换
