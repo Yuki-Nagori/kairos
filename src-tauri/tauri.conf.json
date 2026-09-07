@@ -19,7 +19,8 @@
         "minWidth": 1080,
         "minHeight": 720,
         "center": true,
-        "maximized": true
+        "maximized": true,
+        "fullscreen": true
       }
     ],
     "security": {
