@@ -1,7 +1,7 @@
 import { probeOpenfoam } from "../../services/solver";
 import { appStore, cancelJobAction, refreshJobs, submitJobAction } from "../../state";
 import type { Job } from "../../types";
-import { button, card, hint, numberInput, textInput } from "../ui";
+import { button, card, hint, numberInput, statusDot, textInput } from "../ui";
 
 const STATUS_LABEL: Record<Job["status"], string> = {
   queued: "排队中",
@@ -71,7 +71,8 @@ export function createJobsPanel(): HTMLElement {
       id.textContent = job.id;
 
       const status = document.createElement("span");
-      status.className = STATUS_CLASS[job.status];
+      status.className = `flex items-center gap-1.5 ${STATUS_CLASS[job.status]}`;
+      status.append(statusDot(STATUS_CLASS[job.status].replace("text-", "bg-")));
       status.textContent = STATUS_LABEL[job.status];
 
       const dir = document.createElement("span");

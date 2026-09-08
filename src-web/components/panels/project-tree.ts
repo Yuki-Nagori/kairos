@@ -6,7 +6,8 @@ export function createProjectTree(): HTMLElement {
   panel.className = "project-tree";
 
   const header = document.createElement("div");
-  header.className = "tree-header";
+  header.className =
+    "flex items-center gap-2 rounded-md px-2 py-1 text-xs font-semibold text-zinc-200";
   header.textContent = "工程浏览器";
 
   const tree = document.createElement("div");
@@ -47,14 +48,16 @@ export function createProjectTree(): HTMLElement {
 
   function group(title: string): HTMLElement {
     const el = document.createElement("div");
-    el.className = "tree-group";
+    el.className =
+      "flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-semibold text-zinc-400";
     el.textContent = title;
     return el;
   }
 
   function leaf(label: string): HTMLElement {
     const el = document.createElement("div");
-    el.className = "tree-leaf";
+    el.className =
+      "ml-3 flex items-center gap-1.5 rounded-md border-l border-zinc-800 py-1 pl-3 pr-2 text-xs text-zinc-300 transition-colors hover:bg-zinc-800/50";
     el.textContent = label;
     return el;
   }

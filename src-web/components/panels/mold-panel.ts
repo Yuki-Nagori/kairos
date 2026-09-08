@@ -7,19 +7,33 @@ import {
   removeRunnerElement,
 } from "../../state";
 import type { CoolingChannel, RunnerElement, RunnerKind } from "../../types";
-import { button, card, dropdown, hint, numberInput } from "../ui";
+import { button, card, dropdown, hint, numberInput, sectionLabel } from "../ui";
 
-function numInput(value: number): HTMLInputElement {
-  const input = numberInput(String(value), "w-20");
+function numInput(value: number, extraClass = "w-20"): HTMLInputElement {
+  const input = numberInput(String(value), extraClass);
   input.step = "any";
   return input;
 }
 
-function sectionTitle(text: string): HTMLParagraphElement {
-  const title = document.createElement("p");
-  title.className = "text-xs font-semibold text-zinc-400";
-  title.textContent = text;
-  return title;
+/** 带起/终标记与 XYZ 轴标签的坐标输入组；输入按顺序收集进传入数组。 */
+function coordGroup(kind: string, sink: HTMLInputElement[]): HTMLDivElement {
+  const group = document.createElement("div");
+  group.className =
+    "flex items-center gap-0.5 rounded-md border border-zinc-800 bg-zinc-950/60 px-1.5 py-1";
+  const tag = document.createElement("span");
+  tag.className = "mr-0.5 text-[9px] font-semibold text-zinc-500";
+  tag.textContent = kind;
+  group.append(tag);
+  for (const axis of ["X", "Y", "Z"]) {
+    const chip = document.createElement("span");
+    chip.className = "w-2.5 text-center text-[9px] font-medium text-zinc-600";
+    chip.textContent = axis;
+    const input = numInput(0, "w-12 px-1 py-0.5 text-[11px]");
+    input.title = `${kind} ${axis}`;
+    sink.push(input);
+    group.append(chip, input);
+  }
+  return group;
 }
 
 /** 模具网络面板：流道 / 浇口 + 冷却水路的编辑、列表与连通性校验（作用于活跃研究）。 */
@@ -28,7 +42,7 @@ export function createMoldPanel(): HTMLElement {
 
   // —— 流道 / 浇口表单 ——
   const runnerForm = document.createElement("div");
-  runnerForm.className = "flex flex-wrap items-center gap-1";
+  runnerForm.className = "flex flex-wrap items-center gap-1.5";
   const kindSelect = dropdown();
   for (const [value, label] of [
     ["runner", "流道"],
@@ -42,14 +56,7 @@ export function createMoldPanel(): HTMLElement {
   const diameterInput = numInput(6);
   diameterInput.title = "直径 mm";
   const coords: HTMLInputElement[] = [];
-  for (let index = 0; index < 6; index += 1) {
-    const input = numInput(0);
-    input.title =
-      index < 3 ? `起点 ${["x", "y", "z"][index]}` : `终点 ${["x", "y", "z"][index - 3]}`;
-    coords.push(input);
-    runnerForm.append(input);
-  }
-  runnerForm.prepend(kindSelect, diameterInput);
+  runnerForm.append(kindSelect, diameterInput, coordGroup("起", coords), coordGroup("终", coords));
   const addRunnerButton = button("添加单元");
 
   const runnerList = document.createElement("div");
@@ -57,18 +64,15 @@ export function createMoldPanel(): HTMLElement {
 
   // —— 冷却水路表单 ——
   const channelForm = document.createElement("div");
-  channelForm.className = "flex flex-wrap items-center gap-1";
+  channelForm.className = "flex flex-wrap items-center gap-1.5";
   const channelDiameter = numInput(8);
   channelDiameter.title = "直径 mm";
   const channelInputs: HTMLInputElement[] = [];
-  for (let index = 0; index < 6; index += 1) {
-    const input = numInput(index < 3 ? index : index === 5 ? 5 : 0);
-    input.title =
-      index < 3 ? `起点 ${["x", "y", "z"][index]}` : `终点 ${["x", "y", "z"][index - 3]}`;
-    channelInputs.push(input);
-    channelForm.append(input);
-  }
-  channelForm.prepend(channelDiameter);
+  channelForm.append(
+    channelDiameter,
+    coordGroup("起", channelInputs),
+    coordGroup("终", channelInputs),
+  );
   const inletTemp = numInput(25);
   inletTemp.title = "入口温度 °C";
   channelForm.append(inletTemp);
@@ -107,7 +111,8 @@ export function createMoldPanel(): HTMLElement {
 
   function elementRow(label: string, onRemove: () => void): HTMLElement {
     const row = document.createElement("div");
-    row.className = "flex items-center justify-between rounded border border-zinc-800 px-2 py-1";
+    row.className =
+      "flex items-center justify-between gap-2 rounded-lg border border-zinc-800 bg-zinc-950/50 px-2.5 py-1.5 text-xs";
     const labelElement = document.createElement("span");
     labelElement.className = "text-zinc-300";
     labelElement.textContent = label;
@@ -178,10 +183,10 @@ export function createMoldPanel(): HTMLElement {
   }
 
   body.append(
-    sectionTitle("流道 / 浇口（起点 xyz → 终点 xyz，mm）"),
+    sectionLabel("流道 / 浇口（起点 xyz → 终点 xyz，mm）"),
     runnerForm,
     runnerList,
-    sectionTitle("冷却水路（起点 xyz → 终点 xyz，mm；入口温度 °C）"),
+    sectionLabel("冷却水路（起点 xyz → 终点 xyz，mm；入口温度 °C）"),
     channelForm,
     channelList,
     checkButton,

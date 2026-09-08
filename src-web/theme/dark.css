@@ -1,34 +1,35 @@
-/* dark.css — 默认主题（深色）：Tailwind zinc 色板的深色值 */
+/* dark.css — 默认主题（深色）：海军蓝调专业 CAE 色板（对标 ui.html 设计稿） */
 
 :root,
 [data-theme="dark"] {
-  --color-zinc-50: #fafafa;
-  --color-zinc-100: #f4f4f5;
-  --color-zinc-200: #e4e4e7;
-  --color-zinc-300: #d4d4d8;
-  --color-zinc-400: #a1a1aa;
-  --color-zinc-500: #71717a;
-  --color-zinc-600: #52525b;
-  --color-zinc-700: #3f3f46;
-  --color-zinc-800: #27272a;
-  --color-zinc-900: #18181b;
-  --color-zinc-950: #09090b;
+  --color-zinc-50: #f6f8fa;
+  --color-zinc-100: #e9edf3;
+  --color-zinc-200: #d3dae4;
+  --color-zinc-300: #b6c0cf;
+  --color-zinc-400: #8b98ab;
+  --color-zinc-500: #6e7b91;
+  --color-zinc-600: #55627a;
+  --color-zinc-700: #3d4a63;
+  --color-zinc-800: #263042;
+  --color-zinc-900: #161d2b;
+  --color-zinc-950: #0c111b;
 
   /* 语义色 */
-  --c-bg-base: #09090b;
-  --c-bg-panel: #18181b;
-  --c-bg-input: #09090b;
-  --c-text-primary: #fafafa;
-  --c-text-secondary: #a1a1aa;
-  --c-text-muted: #71717a;
-  --c-border-panel: #27272a;
-  --c-border-input: #3f3f46;
+  --c-bg-base: #0a0e16;
+  --c-bg-panel: #10151f;
+  --c-bg-panel-header: #131926;
+  --c-bg-input: #0a0e16;
+  --c-text-primary: #e9edf3;
+  --c-text-secondary: #8b98ab;
+  --c-text-muted: #6e7b91;
+  --c-border-panel: #1c2432;
+  --c-border-input: #2c3850;
   --c-accent: #34d399;
   --c-ok: #34d399;
   --c-warn: #fbbf24;
   --c-err: #f87171;
-  --c-grid: #27272a;
-  --c-viewport-bg: #0c1218;
+  --c-grid: #263042;
+  --c-viewport-bg: #0d1420;
 
   color-scheme: dark;
 }

@@ -47,26 +47,39 @@ export function createPipelinePanel(): HTMLElement {
     const allDone = allPrerequisitesDone(steps);
 
     stepsBox.replaceChildren();
-    for (const step of steps) {
+    steps.forEach((step, index) => {
       const item = document.createElement("li");
-      item.className = "flex items-start gap-2 text-xs";
+      item.className = "relative flex gap-3 pb-3 last:pb-0";
+
+      // 竖直连接线（最后一项不画）
+      if (index < steps.length - 1) {
+        const rail = document.createElement("span");
+        rail.className = "absolute left-[7px] top-5 bottom-0 w-px bg-zinc-800";
+        item.append(rail);
+      }
+
       const mark = document.createElement("span");
-      mark.className = step.done ? "text-emerald-400" : "text-zinc-500";
-      mark.textContent = step.done ? "✓" : "○";
+      mark.className = `relative z-10 mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border text-[9px] font-semibold ${
+        step.done
+          ? "border-emerald-500 bg-emerald-500/15 text-emerald-400"
+          : "border-zinc-700 bg-zinc-950 text-zinc-500"
+      }`;
+      mark.textContent = step.done ? "✓" : String(index + 1);
+
       const box = document.createElement("div");
       const label = document.createElement("p");
-      label.className = step.done ? "text-zinc-400 line-through" : "text-zinc-200";
+      label.className = `text-xs leading-5 ${step.done ? "text-zinc-500 line-through" : "text-zinc-200"}`;
       label.textContent = step.label;
       box.append(label);
       if (!step.done && step.hint) {
         const hintLine = document.createElement("p");
-        hintLine.className = "text-zinc-500";
+        hintLine.className = "text-[11px] text-zinc-500";
         hintLine.textContent = step.hint;
         box.append(hintLine);
       }
       item.append(mark, box);
       stepsBox.append(item);
-    }
+    });
 
     submitButton.disabled = !allDone || appStore.get().busy !== null;
   }

@@ -5,7 +5,7 @@ import {
   refreshDependencies,
 } from "../../state";
 import { openDownloadsDir } from "../../services/downloads";
-import { button, card, hint } from "../ui";
+import { button, card, hint, progressBar } from "../ui";
 
 /** 徽标：许可定颜色（合规口径），安装策略定文案——两者正交（Gmsh = GPL + 官方直链）。 */
 const LICENSE_CLASS: Record<string, string> = {
@@ -57,7 +57,7 @@ export function createDependenciesPanel(): HTMLElement {
       name.textContent = dep.name;
 
       const badge = document.createElement("span");
-      badge.className = `rounded-full border px-2 py-0.5 ${
+      badge.className = `inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] ${
         LICENSE_CLASS[dep.licenseKind] ?? "border-zinc-700 text-zinc-400"
       }`;
       badge.textContent = STRATEGY_LABEL[dep.strategy] ?? dep.license;
@@ -100,8 +100,13 @@ export function createDependenciesPanel(): HTMLElement {
 
       const progress = downloadProgress[dep.id];
       if (progress !== undefined) {
-        const progressLine = hint(`下载中：${progress}%`);
-        listBox.append(progressLine);
+        const progressWrap = document.createElement("div");
+        progressWrap.className = "flex items-center gap-2 pl-3";
+        progressWrap.append(progressBar(progress));
+        const progressLine = hint(`${progress}%`);
+        progressLine.className = "w-9 text-[10px] tabular-nums text-zinc-400";
+        progressWrap.append(progressLine);
+        listBox.append(progressWrap);
       }
 
       const saved = savedDownloads[dep.id];

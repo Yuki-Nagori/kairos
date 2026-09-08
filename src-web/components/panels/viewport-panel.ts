@@ -11,12 +11,20 @@ export function createViewportPanel(): HTMLElement {
   const { root, body } = card("3D 视口");
 
   const note = hint("正在探测渲染能力…");
+  const canvasWrap = document.createElement("div");
+  canvasWrap.className = "relative";
   const canvas = document.createElement("canvas");
   canvas.className = "w-full rounded-lg bg-zinc-950";
   canvas.width = 960;
   canvas.height = 540;
   registerSnapshot("viewport", canvas);
   canvas.style.touchAction = "none";
+  // 空态提示：载入网格前视口不应是一片空白
+  const emptyHint = document.createElement("p");
+  emptyHint.className =
+    "pointer-events-none absolute inset-0 flex items-center justify-center text-xs text-zinc-600";
+  emptyHint.textContent = "导入几何并生成网格后，点击「载入网格到视口」查看 3D 模型";
+  canvasWrap.append(canvas, emptyHint);
 
   const controls = document.createElement("div");
   controls.className = "flex flex-wrap items-center gap-2";
@@ -112,6 +120,7 @@ export function createViewportPanel(): HTMLElement {
         indices: renderMesh.indices,
         faceCells: renderMesh.faceCells,
       });
+      emptyHint.classList.add("hidden");
       loadMeshButton.disabled = false;
     });
   });
@@ -143,7 +152,7 @@ export function createViewportPanel(): HTMLElement {
     applyField(appStore.get().loadedField);
   }
 
-  body.append(note, canvas, controls);
+  body.append(note, canvasWrap, controls);
   void detectRenderCapabilityInBrowser().then((capability) => {
     if (capability.backend === "webgpu") {
       note.textContent = `${capability.note}（视口渲染当前使用 WebGL2 后端）`;
