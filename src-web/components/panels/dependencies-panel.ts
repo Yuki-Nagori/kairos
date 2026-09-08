@@ -129,14 +129,21 @@ export function createDependenciesPanel(): HTMLElement {
       const downloaded = downloadedFiles[dep.id];
       if (downloaded !== undefined) {
         const sizeMb = (downloaded.sizeBytes / 1024 / 1024).toFixed(1);
-        const doneLine = hint(`已下载 ${downloaded.fileName}（${sizeMb} MB）`);
+        const tail = downloaded.extractDir !== null ? `，已解压` : "";
+        const doneLine = hint(`已下载 ${downloaded.fileName}（${sizeMb} MB${tail}）`);
         doneLine.className = "text-xs text-emerald-400";
         listBox.append(doneLine);
+        if (downloaded.extractDir !== null) {
+          const dirLine = hint(`解压目录：${downloaded.extractDir}`);
+          listBox.append(dirLine);
+        }
       }
 
       const saved = savedDownloads[dep.id];
       if (saved !== undefined) {
-        const savedLine = hint(`已保存：${saved.path}`);
+        const savedLine = hint(
+          saved.extractDir !== null ? `已解压：${saved.extractDir}` : `已保存：${saved.path}`,
+        );
         listBox.append(savedLine);
       }
 

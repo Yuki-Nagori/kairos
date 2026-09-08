@@ -30,6 +30,8 @@ pub struct SavedDownload {
     pub path: String,
     pub file_name: String,
     pub size_bytes: u64,
+    /// 压缩包自动解压后的目录（非压缩包为 None）。
+    pub extract_dir: Option<String>,
 }
 
 pub fn downloads_dir(app: &AppHandle) -> Result<PathBuf> {
@@ -64,11 +66,30 @@ pub async fn download_file(
     progress: Channel<u64>,
 ) -> Result<SavedDownload> {
     ensure_allowed(&url)?;
-    // 取 URL 末段做文件名：剥离 query/hash，拒绝空段与相对路径段，防目录跳跃。
+    // 文件名规则：URL 末段是分支名形态（master.tar.gz / master 等，codeload
+    // 直链的典型样子，落盘完全没法用）时改用「组件 id + 扩展名」；
+    // 其余保留官方原始文件名。仍剥离 query/hash 并拒绝相对路径段。
     let last_segment = url.rsplit('/').next().unwrap_or_default();
     let stem = last_segment.split(['?', '#']).next().unwrap_or_default();
-    let file_name = if stem.is_empty() || stem == "." || stem == ".." {
-        "download.bin".to_string()
+    let branch_like = stem.is_empty()
+        || stem == "."
+        || stem == ".."
+        || stem.starts_with("master")
+        || stem.starts_with("main")
+        || !stem.contains('.');
+    let file_name = if branch_like {
+        let ext = if let Some(dot) = stem.rfind('.') {
+            &stem[dot..]
+        } else if url.contains(".tar.gz") || url.contains("/tar.gz/") {
+            ".tar.gz"
+        } else if url.contains(".tgz") {
+            ".tgz"
+        } else if url.contains(".zip") || url.contains("/zip/") {
+            ".zip"
+        } else {
+            ""
+        };
+        format!("{component_id}{ext}")
     } else {
         stem.to_string()
     };
@@ -112,10 +133,13 @@ pub async fn download_file(
         }
         file.flush()?;
         drop(file);
+        // 压缩包自动解压到组件子目录（downloads/<组件 id>/）。
+        let extract_dir = extract_if_archive(&dir, &component_id, &dest, &file_name)?;
         let saved = SavedDownload {
             path: dest.to_string_lossy().to_string(),
             file_name: file_name.clone(),
             size_bytes: downloaded,
+            extract_dir: extract_dir.map(|p| p.to_string_lossy().to_string()),
         };
         register_in_manifest(&dir, &component_id, &saved)?;
         Ok(saved)
@@ -133,6 +157,7 @@ pub struct ManifestEntry {
     pub file_name: String,
     pub size_bytes: u64,
     pub downloaded_at_ms: u64,
+    pub extract_dir: Option<String>,
 }
 
 fn manifest_path(dir: &Path) -> PathBuf {
@@ -155,6 +180,7 @@ fn register_in_manifest(dir: &Path, component_id: &str, saved: &SavedDownload) -
             file_name: saved.file_name.clone(),
             size_bytes: saved.size_bytes,
             downloaded_at_ms: now_ms(),
+            extract_dir: saved.extract_dir.clone(),
         },
     );
     let json = serde_json::to_string_pretty(&manifest)
@@ -170,6 +196,64 @@ fn register_in_manifest(dir: &Path, component_id: &str, saved: &SavedDownload) -
 pub fn list_downloads(app: AppHandle) -> Result<DownloadManifest> {
     let dir = downloads_dir(&app)?;
     Ok(read_manifest(&dir))
+}
+
+/// 压缩包则解压到 downloads/<组件 id>/；非压缩包返回 None。
+fn extract_if_archive(
+    dir: &Path,
+    component_id: &str,
+    archive: &Path,
+    file_name: &str,
+) -> Result<Option<PathBuf>> {
+    let lower = file_name.to_lowercase();
+    let is_archive =
+        lower.ends_with(".zip") || lower.ends_with(".tar.gz") || lower.ends_with(".tgz");
+    if !is_archive {
+        return Ok(None);
+    }
+    let dest = dir.join(component_id);
+    extract_archive(archive, &dest)?;
+    Ok(Some(dest))
+}
+
+/// 调系统 tar/unzip 解压（不引入 Rust 侧压缩依赖；zip 在 Linux 用 unzip，
+/// macOS / Windows 的 tar 是 bsdtar，可直接解 zip）。
+fn extract_archive(archive: &Path, dest: &Path) -> Result<()> {
+    if dest.exists() {
+        fs::remove_dir_all(dest)?;
+    }
+    fs::create_dir_all(dest)?;
+    let name = archive
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or_default()
+        .to_lowercase();
+    let is_zip = name.ends_with(".zip");
+    let mut command = Command::new(if is_zip && cfg!(target_os = "linux") {
+        "unzip"
+    } else {
+        "tar"
+    });
+    if is_zip {
+        command.arg("-o").arg(archive);
+        command.arg(if cfg!(target_os = "linux") {
+            "-d"
+        } else {
+            "-C"
+        });
+    } else {
+        command.arg("-xzf").arg(archive).arg("-C");
+    }
+    command.arg(dest);
+    let status = command
+        .status()
+        .map_err(|e| KairosError::io(format!("解压启动失败：{e}")))?;
+    if !status.success() {
+        return Err(KairosError::io(
+            "压缩包解压失败（原始文件已保留，可手动解压）",
+        ));
+    }
+    Ok(())
 }
 
 fn now_ms() -> u64 {
@@ -230,6 +314,7 @@ mod tests {
             path: dir.join("a.tgz").to_string_lossy().to_string(),
             file_name: "a.tgz".into(),
             size_bytes: 123,
+            extract_dir: None,
         };
         register_in_manifest(&dir, "gmsh", &saved).unwrap();
         register_in_manifest(&dir, "openfoam", &saved).unwrap();
@@ -242,6 +327,39 @@ mod tests {
         // 同组件重复下载：upsert 不产生重复条目
         register_in_manifest(&dir, "gmsh", &saved).unwrap();
         assert_eq!(read_manifest(&dir).len(), 2);
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn extract_archive_roundtrip() {
+        let dir = std::env::temp_dir().join(format!("kairos-extract-test-{}", std::process::id()));
+        let src = dir.join("src");
+        fs::create_dir_all(&src).unwrap();
+        fs::write(src.join("hello.txt"), "kairos").unwrap();
+
+        // 用系统 tar 制作 gzip 包（三平台自带）
+        let archive = dir.join("pkg.tar.gz");
+        let status = Command::new("tar")
+            .arg("-czf")
+            .arg(&archive)
+            .arg("-C")
+            .arg(&src)
+            .arg("hello.txt")
+            .status()
+            .unwrap();
+        assert!(status.success());
+
+        let dest = dir.join("out");
+        extract_archive(&archive, &dest).unwrap();
+        assert_eq!(
+            fs::read_to_string(dest.join("hello.txt")).unwrap(),
+            "kairos"
+        );
+
+        // 重复解压：先清空再解，不残留不报错
+        extract_archive(&archive, &dest).unwrap();
+        assert!(dest.join("hello.txt").exists());
 
         fs::remove_dir_all(&dir).unwrap();
     }

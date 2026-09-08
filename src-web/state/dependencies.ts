@@ -75,5 +75,6 @@ function toEntry(saved: SavedDownload): DownloadedEntry {
     fileName: saved.fileName,
     sizeBytes: saved.sizeBytes,
     downloadedAtMs: Date.now(),
+    extractDir: saved.extractDir,
   };
 }

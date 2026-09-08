@@ -200,11 +200,12 @@ export interface DownloadSpec {
   linux: string;
 }
 
-/** 下载完成后的落盘信息。 */
+/** 下载完成后的落盘信息（压缩包自动解压后 extractDir 指向组件目录）。 */
 export interface SavedDownload {
   path: string;
   fileName: string;
   sizeBytes: number;
+  extractDir: string | null;
 }
 
 /** 跨会话的下载清单条目（manifest.json，key = 组件 id）。 */
@@ -212,6 +213,7 @@ export interface DownloadedEntry {
   fileName: string;
   sizeBytes: number;
   downloadedAtMs: number;
+  extractDir: string | null;
 }
 
 /** 依赖状态视图（目录项 + 就绪探测）。 */

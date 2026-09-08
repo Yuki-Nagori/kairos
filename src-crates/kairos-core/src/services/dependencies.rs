@@ -34,9 +34,11 @@ pub fn catalog() -> Vec<RuntimeDependency> {
             page_url: "https://openfoam.org/download/".into(),
             required: true,
             check_command: "blockMesh".into(),
-            hint: "官方源码包（约 100MB）：解压后按 openfoam.org 编译安装；Ubuntu 亦可用 apt（openfoam.org/download/7-ubuntu）。就绪判定：blockMesh。".into(),
+            hint:
+                "源码包（自动解压）：解压进 OpenFOAM 环境后 ./Allwmake 编译，产物加入 PATH 即就绪。"
+                    .into(),
             download: source_download(
-                "https://codeload.github.com/OpenFOAM/OpenFOAM-7/tar.gz/refs/heads/master",
+                "https://github.com/OpenFOAM/OpenFOAM-7/archive/refs/heads/master.tar.gz",
             ),
         },
         RuntimeDependency {
@@ -48,9 +50,11 @@ pub fn catalog() -> Vec<RuntimeDependency> {
             page_url: "https://github.com/krebeljk/openInjMoldSim".into(),
             required: true,
             check_command: "openInjMoldSim".into(),
-            hint: "源码包：解压进 OpenFOAM 环境后 ./Allwmake 编译，产物加入 PATH 即就绪。".into(),
+            hint:
+                "源码包（自动解压）：解压进 OpenFOAM 环境后 ./Allwmake 编译，产物加入 PATH 即就绪。"
+                    .into(),
             download: source_download(
-                "https://codeload.github.com/krebeljk/openInjMoldSim/zip/refs/heads/master",
+                "https://github.com/krebeljk/openInjMoldSim/archive/refs/heads/master.zip",
             ),
         },
         RuntimeDependency {
