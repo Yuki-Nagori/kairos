@@ -49,17 +49,17 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file \
             libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf
-      - name: 同步版本号（tag → 三处清单）
+      - name: 同步版本号（tag → Cargo.toml 单一事实源）
         shell: bash
         env:
           RELEASE_TAG: ${{ inputs.tag }}
         run: |
-          # 去掉 v 前缀，同步 package.json / tauri.conf.json / Cargo.toml；
+          # 版本只有根 Cargo.toml 一处：两个成员 crate 用 version.workspace = true，
+          # tauri.conf.json 缺省 version 时回退 CARGO_PKG_VERSION，package.json 不存版本。
           # Cargo.lock 里工作区成员的版本由 cargo build 自动改写。
           VERSION="${RELEASE_TAG#v}"
-          sed -i.bak 's/"version": "[^"]*"/"version": "'"${VERSION}"'"/' package.json src-tauri/tauri.conf.json
           sed -i.bak 's/^version = "[^"]*"/version = "'"${VERSION}"'"/' Cargo.toml
-          rm -f package.json.bak src-tauri/tauri.conf.json.bak Cargo.toml.bak
+          rm -f Cargo.toml.bak
           echo "版本已同步为 ${VERSION}"
       - uses: Swatinem/rust-cache@v2
       - run: bun install --frozen-lockfile

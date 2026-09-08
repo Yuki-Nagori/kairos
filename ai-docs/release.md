@@ -2,9 +2,16 @@
 
 ## 版本与标签
 
+版本号**只有一处事实源**：根 `Cargo.toml` 的 `[workspace.package] version`。派生关系：
+
+- 两个成员 crate（`src-tauri` / `kairos-core`）用 `version.workspace = true` 继承；
+- `tauri.conf.json` 缺省 `version`，tauri-codegen 回退 `CARGO_PKG_VERSION`；
+- `package.json` 不存版本（前端私有包，运行时版本来自 Rust `system_info`）。
+
+发布动作：
+
 1. 到 GitHub Actions 页手动运行 Release 工作流，填入发布标签（如 `v0.x.0`）——
-   工作流自动把该版本同步到 `package.json` / `src-tauri/tauri.conf.json` / 根
-   `Cargo.toml`（Cargo.lock 由构建自动改写），无需手动改版本号；
+   工作流自动把该版本写入 `Cargo.toml`（Cargo.lock 由构建自动改写）；
 2. 标签会在本次构建的提交上自动创建，无需本地打标签推送。
 
 ## CI 流水线
