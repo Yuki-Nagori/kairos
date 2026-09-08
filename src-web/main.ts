@@ -1,18 +1,18 @@
 import "./app.css";
 import { listen } from "@tauri-apps/api/event";
 import { createAppHeader } from "./components/app-header";
-import { createDependenciesPanel } from "./components/dependencies-panel";
-import { createGeometryPanel } from "./components/geometry-panel";
-import { createJobsPanel } from "./components/jobs-panel";
-import { createMaterialsPanel } from "./components/materials-panel";
-import { createMoldPanel } from "./components/mold-panel";
-import { createPipelinePanel } from "./components/pipeline-panel";
-import { createProcessPanel } from "./components/process-panel";
-import { createProjectTree } from "./components/project-tree";
-import { createReportPanel } from "./components/report-panel";
-import { createResultsPanel } from "./components/results-panel";
-import { createViewportPanel } from "./components/viewport-panel";
-import { createXyChartPanel } from "./components/xy-chart-panel";
+import { createDependenciesPanel } from "./components/panels/dependencies-panel";
+import { createGeometryPanel } from "./components/panels/geometry-panel";
+import { createJobsPanel } from "./components/panels/jobs-panel";
+import { createMaterialsPanel } from "./components/panels/materials-panel";
+import { createMoldPanel } from "./components/panels/mold-panel";
+import { createPipelinePanel } from "./components/panels/pipeline-panel";
+import { createProcessPanel } from "./components/panels/process-panel";
+import { createProjectTree } from "./components/panels/project-tree";
+import { createReportPanel } from "./components/panels/report-panel";
+import { createResultsPanel } from "./components/panels/results-panel";
+import { createViewportPanel } from "./components/panels/viewport-panel";
+import { createXyChartPanel } from "./components/panels/xy-chart-panel";
 import { initTheme, cycleTheme } from "./theme";
 import {
   bootstrap,

@@ -1,5 +1,5 @@
-import { appStore, loadField, loadResultsCatalog } from "../state";
-import { button, card, hint, textInput } from "./ui";
+import { appStore, loadField, loadResultsCatalog } from "../../state";
+import { button, card, hint, textInput } from "../ui";
 /** 结果面板：扫描 case 结果目录、查看时间步与场统计（完整视口见 T14）。 */
 export function createResultsPanel(): HTMLElement {
   const { root, body } = card("结果");

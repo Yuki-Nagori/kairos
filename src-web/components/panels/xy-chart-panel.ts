@@ -1,9 +1,9 @@
-import { appStore, addProbe, removeProbe, exportFieldCsv } from "../state";
-import type { ScalarField } from "../types";
-import { drawLineChart } from "../lib/chart";
-import { THEME_CHANGED_EVENT } from "../theme";
-import { registerSnapshot } from "../render/snapshot";
-import { button, card, hint, textInput } from "./ui";
+import { appStore, addProbe, removeProbe, exportFieldCsv } from "../../state";
+import type { ScalarField } from "../../types";
+import { drawLineChart } from "../../lib/chart";
+import { THEME_CHANGED_EVENT } from "../../theme";
+import { registerSnapshot } from "../../render/snapshot";
+import { button, card, hint, textInput } from "../ui";
 
 /** XY 图表面板：场分布曲线（节点序号 → 值）+ 探针管理 + CSV 导出。 */
 export function createXyChartPanel(): HTMLElement {

@@ -1,7 +1,7 @@
-import { appStore } from "../state";
-import type { ProcessSettings } from "../types";
-import { checkProcess } from "../services/process";
-import { button, card, dropdown, hint, numberInput, textInput } from "./ui";
+import { appStore } from "../../state";
+import type { ProcessSettings } from "../../types";
+import { checkProcess } from "../../services/process";
+import { button, card, dropdown, hint, numberInput, textInput } from "../ui";
 
 const PRESETS_KEY = "kairos-process-presets";
 

@@ -5,9 +5,9 @@ import {
   checkNetwork,
   removeCoolingChannel,
   removeRunnerElement,
-} from "../state";
-import type { CoolingChannel, RunnerElement, RunnerKind } from "../types";
-import { button, card, dropdown, hint, numberInput } from "./ui";
+} from "../../state";
+import type { CoolingChannel, RunnerElement, RunnerKind } from "../../types";
+import { button, card, dropdown, hint, numberInput } from "../ui";
 
 function numInput(value: number): HTMLInputElement {
   const input = numberInput(String(value), "w-20");

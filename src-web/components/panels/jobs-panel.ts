@@ -1,7 +1,7 @@
-import { probeOpenfoam } from "../services/solver";
-import { appStore, cancelJobAction, refreshJobs, submitJobAction } from "../state";
-import type { Job } from "../types";
-import { button, card, hint, numberInput, textInput } from "./ui";
+import { probeOpenfoam } from "../../services/solver";
+import { appStore, cancelJobAction, refreshJobs, submitJobAction } from "../../state";
+import type { Job } from "../../types";
+import { button, card, hint, numberInput, textInput } from "../ui";
 
 const STATUS_LABEL: Record<Job["status"], string> = {
   queued: "排队中",

@@ -1,4 +1,4 @@
-import { appStore } from "../state";
+import { appStore } from "../../state";
 
 /** 项目树面板：层级展示工程 / 研究 / 几何 / 网格 / 材料 / 工艺 / 结果。 */
 export function createProjectTree(): HTMLElement {

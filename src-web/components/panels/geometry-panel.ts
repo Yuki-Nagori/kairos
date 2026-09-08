@@ -4,9 +4,9 @@ import {
   importGeometry,
   importSampleGeometry,
   removeGeometryById,
-} from "../state";
-import type { MeshingReport } from "../types";
-import { button, card, hint, numberInput } from "./ui";
+} from "../../state";
+import type { MeshingReport } from "../../types";
+import { button, card, hint, numberInput } from "../ui";
 
 /** 几何面板：STL 导入、健康检查、体积网格生成与已导入几何列表。 */
 export function createGeometryPanel(): HTMLElement {

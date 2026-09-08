@@ -5,9 +5,9 @@ import {
   exportMaterials,
   copyMaterialToCustom,
   assignMaterial,
-} from "../state";
-import type { Material } from "../types";
-import { button, card, hint } from "./ui";
+} from "../../state";
+import type { Material } from "../../types";
+import { button, card, hint } from "../ui";
 
 /** 材料库面板：内置示例材料 + 自定义材料的浏览、详情、导入导出与复制。 */
 export function createMaterialsPanel(): HTMLElement {

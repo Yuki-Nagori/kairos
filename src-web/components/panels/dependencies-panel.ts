@@ -3,9 +3,9 @@ import {
   downloadComponent,
   openDependencyPageAction,
   refreshDependencies,
-} from "../state";
-import { openDownloadsDir } from "../services/downloads";
-import { button, card, hint } from "./ui";
+} from "../../state";
+import { openDownloadsDir } from "../../services/downloads";
+import { button, card, hint } from "../ui";
 
 /** 徽标：许可定颜色（合规口径），安装策略定文案——两者正交（Gmsh = GPL + 官方直链）。 */
 const LICENSE_CLASS: Record<string, string> = {
@@ -32,7 +32,7 @@ export function createDependenciesPanel(): HTMLElement {
   refreshButton.addEventListener("click", () => void refreshDependencies());
   openDirButton.addEventListener("click", () => void openDownloadsDir());
 
-  void import("../services/downloads").then(async (m) => {
+  void import("../../services/downloads").then(async (m) => {
     dirLine.textContent = `下载目录：${await m.getDownloadsDir()}`;
   });
 

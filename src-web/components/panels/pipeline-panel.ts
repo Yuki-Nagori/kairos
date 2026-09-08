@@ -1,7 +1,7 @@
-import { appStore, submitPipeline } from "../state";
-import type { AnalysisStage } from "../types";
-import { allPrerequisitesDone, evaluatePipeline } from "../lib/pipeline";
-import { button, card, dropdown, hint, numberInput } from "./ui";
+import { appStore, submitPipeline } from "../../state";
+import type { AnalysisStage } from "../../types";
+import { allPrerequisitesDone, evaluatePipeline } from "../../lib/pipeline";
+import { button, card, dropdown, hint, numberInput } from "../ui";
 
 /** 流水线引导面板：五步闭环的状态检查与下一步指引（T11）。 */
 export function createPipelinePanel(): HTMLElement {

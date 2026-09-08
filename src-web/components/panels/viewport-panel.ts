@@ -1,10 +1,10 @@
-import { appStore, loadField } from "../state";
-import type { ScalarField } from "../types";
-import { ViewportRenderer } from "../render/renderer";
-import { detectRenderCapabilityInBrowser } from "../render/capability";
-import { registerSnapshot } from "../render/snapshot";
-import { getRenderMesh } from "../services/geometry";
-import { button, card, hint } from "./ui";
+import { appStore, loadField } from "../../state";
+import type { ScalarField } from "../../types";
+import { ViewportRenderer } from "../../render/renderer";
+import { detectRenderCapabilityInBrowser } from "../../render/capability";
+import { registerSnapshot } from "../../render/snapshot";
+import { getRenderMesh } from "../../services/geometry";
+import { button, card, hint } from "../ui";
 
 /** 3D 视口面板：WebGL2 渲染器 + 云图/剖切/时间步动画控制（WebGPU 探测提示）。 */
 export function createViewportPanel(): HTMLElement {

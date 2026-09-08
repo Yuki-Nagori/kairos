@@ -6,22 +6,8 @@ use serde::Serialize;
 use kairos_core::error::KairosError;
 use wgpu::util::DeviceExt;
 
-const VECTOR_MAGNITUDE_SHADER: &str = r#"
-struct Vectors {
-    data: array<vec4<f32>>,
-}
-@group(0) @binding(0) var<storage, read> input: Vectors;
-@group(0) @binding(1) var<storage, read_write> output: array<f32>;
-
-@compute @workgroup_size(64)
-fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
-    let index = gid.x;
-    if (index >= arrayLength(&input.data)) {
-        return;
-    }
-    output[index] = length(input.data[index].xyz);
-}
-"#;
+// 着色器源码外置在 src-tauri/shaders/（编译期 include_str! 内联），算子目录化铺路。
+const VECTOR_MAGNITUDE_SHADER: &str = include_str!("../../shaders/vector_magnitude.wgsl");
 
 const WORKGROUP_SIZE: usize = 64;
 

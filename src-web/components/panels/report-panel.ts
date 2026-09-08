@@ -1,7 +1,7 @@
-import { appStore } from "../state";
-import { buildReportHtml } from "../lib/report";
-import { getSnapshotDataUrl } from "../render/snapshot";
-import { button, card } from "./ui";
+import { appStore } from "../../state";
+import { buildReportHtml } from "../../lib/report";
+import { getSnapshotDataUrl } from "../../render/snapshot";
+import { button, card } from "../ui";
 
 /** 报告面板：汇总项目/材料/工艺/结果快照，生成自包含 HTML 报告（浏览器可打印 PDF）。 */
 export function createReportPanel(): HTMLElement {
