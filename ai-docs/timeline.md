@@ -70,3 +70,4 @@
 - **08:2x** fix: 网格流水线 async 化（review F4/F5/F6 兑现）
 - **08:3x** fix(ci): release 流水线工具链钉版与交叉产物收集（F7/F8 兑现）
 - **08:3x** ci: macOS 仅 arm64，补 Ubuntu 构建/门禁/产物
+- **08:3x** ci: Release 改手动触发并自动同步版本号
