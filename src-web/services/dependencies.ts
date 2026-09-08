@@ -6,7 +6,7 @@ export function listRuntimeDependencies(): Promise<DependencyStatus[]> {
   return invokeCommand("list_runtime_dependencies");
 }
 
-/** 打开组件的官方下载 / 编译页（GPL 走引导安装）。 */
+/** 打开组件的官方下载 / 编译指引页。 */
 export function openDependencyPage(pageUrl: string): Promise<void> {
   return invokeCommand("open_dependency_page", { pageUrl });
 }

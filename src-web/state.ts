@@ -726,7 +726,7 @@ export async function refreshDependencies(): Promise<void> {
   }
 }
 
-/** 引导安装：打开组件官方页。 */
+/** 打开组件官方页（下载 / 编译指引）。 */
 export async function openDependencyPageAction(pageUrl: string): Promise<void> {
   try {
     await apiOpenDependencyPage(pageUrl);
@@ -735,7 +735,7 @@ export async function openDependencyPageAction(pageUrl: string): Promise<void> {
   }
 }
 
-/** 应用内下载：MIT 组件点击直接下载；进度经 downloadProgress 反馈到面板。 */
+/** 应用内下载：把官方单文件直链取回受管目录；进度经 downloadProgress 反馈到面板。 */
 export async function downloadComponent(componentId: string, url: string): Promise<void> {
   appStore.set({ busy: "正在下载…", error: null });
   try {
