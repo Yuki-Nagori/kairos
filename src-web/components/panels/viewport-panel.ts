@@ -3,6 +3,7 @@ import type { ScalarField } from "../../types";
 import { ViewportRenderer } from "../../render/renderer";
 import { detectRenderCapabilityInBrowser } from "../../render/capability";
 import { registerSnapshot } from "../../render/snapshot";
+import { minMax } from "../../lib/stats";
 import { getRenderMesh } from "../../services/geometry";
 import { button, card, hint } from "../ui";
 
@@ -148,8 +149,7 @@ export function createViewportPanel(): HTMLElement {
       }
       renderer.setFaceValues(perFace);
     }
-    const min = Math.min(...field.values);
-    const max = Math.max(...field.values);
+    const { min, max } = minMax(field.values);
     renderer.setFieldRange(min, max);
   }
   function onStateChange(): void {

@@ -1,5 +1,6 @@
 import { appStore, loadField, loadResultsCatalog } from "../../state";
 import { button, card, hint, textInput } from "../ui";
+import { minMax } from "../../lib/stats";
 /** 结果面板：扫描 case 结果目录、查看时间步与场统计（完整视口见 T14）。 */
 export function createResultsPanel(): HTMLElement {
   const { root, body } = card("结果");
@@ -76,8 +77,8 @@ export function createResultsPanel(): HTMLElement {
     statsBox.replaceChildren();
     if (loadedField) {
       const values = loadedField.values;
-      const min = values.length > 0 ? Math.min(...values) : Number.NaN;
-      const max = values.length > 0 ? Math.max(...values) : Number.NaN;
+      const { min, max } =
+        values.length > 0 ? minMax(values) : { min: Number.NaN, max: Number.NaN };
       const line = document.createElement("p");
       line.className = "text-xs text-zinc-400";
       line.textContent = `已加载 ${loadedField.field} @ ${loadedField.timeDir}${loadedField.isMagnitude ? "（模量）" : ""}：${values.length} 个值，min ${min.toFixed(3)} / max ${max.toFixed(3)}`;

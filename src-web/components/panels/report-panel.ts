@@ -1,5 +1,6 @@
 import { appStore } from "../../state";
 import { buildReportHtml } from "../../lib/report";
+import { minMax } from "../../lib/stats";
 import { getSnapshotDataUrl } from "../../render/snapshot";
 import { button, card } from "../ui";
 
@@ -39,10 +40,11 @@ export function createReportPanel(): HTMLElement {
     if (chart !== null) {
       snapshots.push({ title: "XY 曲线", dataUrl: chart });
     }
-    const fieldStats =
-      loadedField !== null && loadedField.values.length > 0
-        ? `${loadedField.field} @ ${loadedField.timeDir}s：${loadedField.values.length} 个值，min ${Math.min(...loadedField.values).toFixed(3)} / max ${Math.max(...loadedField.values).toFixed(3)}${loadedField.complete ? "" : "（不完整）"}`
-        : null;
+    let fieldStats: string | null = null;
+    if (loadedField !== null && loadedField.values.length > 0) {
+      const { min, max } = minMax(loadedField.values);
+      fieldStats = `${loadedField.field} @ ${loadedField.timeDir}s：${loadedField.values.length} 个值，min ${min.toFixed(3)} / max ${max.toFixed(3)}${loadedField.complete ? "" : "（不完整）"}`;
+    }
     const html = buildReportHtml({
       projectName: project.name,
       studyName: study.name,
