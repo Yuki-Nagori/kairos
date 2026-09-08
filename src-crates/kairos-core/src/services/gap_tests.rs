@@ -1,7 +1,6 @@
-//! 覆盖率缺口补测（集中覆盖各服务此前未触达的校验分支、错误路径与边界情况）。
-//! 作为 crate 内单元测试，纳入 lib 覆盖率统计。
 //! 覆盖率缺口补测（T28 后的 100% 门槛任务）：集中覆盖各服务此前未触达的
-//! 校验分支、错误路径与边界情况。全部通过公开 API 驱动，不依赖私有实现。
+//! 校验分支、错误路径与边界情况。全部通过公开 API 驱动，不依赖私有实现；
+//! 作为 crate 内单元测试纳入 lib 覆盖率统计。
 
 use crate::error::{ErrorKind, KairosError};
 use crate::models::geometry::{Triangle, TriangleMesh};
