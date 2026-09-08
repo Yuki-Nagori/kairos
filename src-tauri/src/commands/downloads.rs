@@ -106,6 +106,12 @@ pub async fn download_file(
     tauri::async_runtime::spawn_blocking(move || {
         let dir = downloads_dir(&app)?;
         fs::create_dir_all(&dir)?;
+        // 组件顺序约束：求解器源码依赖 OpenFOAM 的环境提供编译基建。
+        if component_id == "openinjmoldsim" && !read_manifest(&dir).contains_key("openfoam") {
+            return Err(KairosError::validation(
+                "请先下载 OpenFOAM：openInjMoldSim 的编译依赖其源码环境。",
+            ));
+        }
         let dest = dir.join(&file_name);
 
         // 带超时与 UA 的共享 agent：部分官方站点对无 UA 请求或无限挂起不友好。
@@ -265,6 +271,37 @@ fn extract_archive(archive: &Path, dest: &Path) -> Result<()> {
         ));
     }
     Ok(())
+}
+
+/// 收集受管目录下的 bin 目录（求解器运行 / 网格生成的 PATH 前缀）。
+pub fn managed_bin_dirs(app: &AppHandle) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    let Ok(dir) = downloads_dir(app) else {
+        return out;
+    };
+    for component in ["openfoam", "gmsh"] {
+        collect_bin_dirs(&dir.join(component), 0, 4, &mut out);
+    }
+    out
+}
+
+fn collect_bin_dirs(dir: &Path, depth: u8, max_depth: u8, out: &mut Vec<PathBuf>) {
+    if depth > max_depth {
+        return;
+    }
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        if path.file_name().and_then(|n| n.to_str()) == Some("bin") {
+            out.push(path.clone());
+        }
+        collect_bin_dirs(&path, depth + 1, max_depth, out);
+    }
 }
 
 fn now_ms() -> u64 {

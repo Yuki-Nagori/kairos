@@ -1,7 +1,9 @@
 //! 依赖命令：运行时依赖清单（许可分级 + 就绪状态）与官方页打开。
 
+use std::fs;
+use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 // creation_flags（CREATE_NO_WINDOW）来自 Windows 专属 trait；cfg 裁剪外的平台
 // 看不到这段代码，import 必须同样带 cfg，否则非 Windows 编译报未使用。
@@ -13,6 +15,7 @@ use kairos_core::models::dependencies::RuntimeDependency;
 use kairos_core::services::dependencies as dependencies_service;
 use serde::Serialize;
 use tauri::AppHandle;
+use tauri::ipc::Channel;
 
 use super::downloads;
 
@@ -86,6 +89,93 @@ fn find_executable(dir: &Path, binary: &str, depth: u8) -> Option<PathBuf> {
         }
     }
     None
+}
+
+/// 定位解压出的内容目录（压缩包内通常有单一顶层目录）。
+fn locate_extracted(component_dir: &Path) -> Result<PathBuf> {
+    let entries = fs::read_dir(component_dir)
+        .map_err(|e| KairosError::io(format!("读取组件目录失败：{e}")))?;
+    for entry in entries.flatten() {
+        if entry.path().is_dir() {
+            return Ok(entry.path());
+        }
+    }
+    Err(KairosError::not_found(format!(
+        "组件目录不存在或为空：{}",
+        component_dir.display()
+    )))
+}
+
+/// 组件编译脚本：openfoam 全量构建；openinjmoldsim 在 openfoam 环境中构建。
+fn build_compile_script(
+    component_id: &str,
+    src: &Path,
+    openfoam_src: Option<&Path>,
+) -> Result<String> {
+    let sh_quote = |path: &Path| format!("'{}'", path.to_string_lossy().replace('\'', "'\\''"));
+    let src_q = sh_quote(src);
+    match component_id {
+        "openfoam" => Ok(format!(
+            "cd {src_q} && source ./etc/bashrc && ./Allwmake 2>&1"
+        )),
+        "openinjmoldsim" => {
+            let of = openfoam_src.ok_or_else(|| {
+                KairosError::validation("请先下载并解压 OpenFOAM（编译求解器需要其环境）。")
+            })?;
+            let of_bashrc = sh_quote(&of.join("etc").join("bashrc"));
+            Ok(format!(
+                "source {of_bashrc} && cd {src_q} && ./Allwmake 2>&1"
+            ))
+        }
+        other => Err(KairosError::validation(format!(
+            "组件 {other} 没有编译流程"
+        ))),
+    }
+}
+
+/// 一键编译：下载解压完成后构建源码组件（OpenFOAM 30–60 分钟级，
+/// openInjMoldSim 数分钟且依赖前者），日志行经 Channel 流式回传。
+#[tauri::command]
+pub async fn compile_dependency(
+    app: AppHandle,
+    component_id: String,
+    progress: Channel<String>,
+) -> Result<String> {
+    let downloads_dir = downloads::downloads_dir(&app)?;
+    let src = locate_extracted(&downloads_dir.join(&component_id))?;
+    let openfoam_src = locate_extracted(&downloads_dir.join("openfoam")).ok();
+    let script = build_compile_script(&component_id, &src, openfoam_src.as_deref())?;
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut command = Command::new("bash");
+        command
+            .arg("-c")
+            .arg(format!("{script} 2>&1"))
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null());
+        let mut child = command
+            .spawn()
+            .map_err(|e| KairosError::io(format!("编译启动失败：{e}")))?;
+        if let Some(stdout) = child.stdout.take() {
+            let reader = BufReader::new(stdout);
+            for line in reader.lines().map_while(std::result::Result::ok) {
+                let _ = progress.send(line);
+            }
+        }
+        let status = child
+            .wait()
+            .map_err(|e| KairosError::io(format!("编译进程等待失败：{e}")))?;
+        if status.success() {
+            Ok("编译完成".into())
+        } else {
+            Err(KairosError::io(format!(
+                "编译失败（退出码 {:?}），详见上方日志",
+                status.code()
+            )))
+        }
+    })
+    .await
+    .map_err(|e| KairosError::internal(format!("编译任务失败：{e}")))?
 }
 
 /// 打开组件的官方下载 / 编译页（引导安装的落地动作，GPL 组件不分发二进制）。

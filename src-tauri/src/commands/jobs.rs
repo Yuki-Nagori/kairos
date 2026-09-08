@@ -27,11 +27,14 @@ struct Inner {
 #[derive(Clone)]
 pub struct JobScheduler {
     inner: Arc<Mutex<Inner>>,
+    /// 受管 bin 目录的 PATH 前缀（下载解压后由命令层注入）。
+    managed_path: Option<String>,
 }
 
 impl Default for JobScheduler {
     fn default() -> Self {
         Self {
+            managed_path: None,
             inner: Arc::new(Mutex::new(Inner {
                 jobs: Vec::new(),
                 children: HashMap::new(),
@@ -49,10 +52,14 @@ fn now_ms() -> u64 {
         .as_millis() as u64
 }
 
-fn spawn_run_script(case_dir: &str) -> Result<Child> {
+fn spawn_run_script(case_dir: &str, managed_path: Option<&str>) -> Result<Child> {
+    let path_export = managed_path
+        .map(|prefix| format!("export PATH='{prefix}:$PATH'; "))
+        .unwrap_or_default();
     // 单引号内的 shell 转义：' → '\''（防路径注入）。
     let safe_dir = case_dir.replace('\'', "'\\''");
-    let script = format!("cd '{safe_dir}' && decomposePar -force && openInjMoldSim -parallel");
+    let script =
+        format!("{path_export}cd '{safe_dir}' && decomposePar -force && openInjMoldSim -parallel");
     let mut command = Command::new("bash");
     command
         .arg("-lc")
@@ -91,14 +98,17 @@ impl JobScheduler {
             job_logic::promote_ready(&mut inner.jobs, &limits, now)
         };
         for job_id in started {
-            let case_dir = self
-                .lock()
-                .jobs
-                .iter()
-                .find(|job| job.id == job_id)
-                .map(|job| job.case_dir.clone())
-                .unwrap_or_default();
-            match spawn_run_script(&case_dir) {
+            let (case_dir, managed_path) = {
+                let inner = self.lock();
+                let case_dir = inner
+                    .jobs
+                    .iter()
+                    .find(|job| job.id == job_id)
+                    .map(|job| job.case_dir.clone())
+                    .unwrap_or_default();
+                (case_dir, self.managed_path.clone())
+            };
+            match spawn_run_script(&case_dir, managed_path.as_deref()) {
                 Ok(child) => self.run_job_thread(job_id, child),
                 Err(e) => {
                     let mut inner = self.lock();
@@ -111,6 +121,7 @@ impl JobScheduler {
     /// 单作业运行线程：流式回传日志与进度，收尾后写回状态并提升下一个排队作业。
     fn run_job_thread(&self, job_id: String, mut child: Child) {
         let inner = self.arc();
+        let managed_path = self.managed_path.clone();
         let mut stdout = child.stdout.take();
         thread::spawn(move || {
             if let Some(pipe) = stdout.take() {
@@ -146,7 +157,10 @@ impl JobScheduler {
                 guard.channels.remove(&job_id);
             }
             // 一个作业结束 → 立即尝试提升队列中的下一个（自动续跑）
-            let scheduler = JobScheduler { inner };
+            let scheduler = JobScheduler {
+                inner,
+                managed_path,
+            };
             scheduler.promote_and_spawn(now);
         });
     }
