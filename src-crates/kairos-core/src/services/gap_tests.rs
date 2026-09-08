@@ -4,6 +4,7 @@
 //! 校验分支、错误路径与边界情况。全部通过公开 API 驱动，不依赖私有实现。
 
 use crate::error::{ErrorKind, KairosError};
+use crate::models::geometry::{Triangle, TriangleMesh};
 use crate::models::jobs::{Job, JobStatus};
 use crate::models::material::Material;
 use crate::models::mesh::VolumeMesh;
@@ -40,8 +41,8 @@ fn valid_process() -> ProcessSettings {
     }
 }
 
-fn sample_mesh() -> crate::models::geometry::TriangleMesh {
-    crate::models::geometry::TriangleMesh::sample_box(10.0)
+fn sample_mesh() -> TriangleMesh {
+    TriangleMesh::sample_box(10.0)
 }
 
 fn binary_stl_bytes() -> Vec<u8> {
@@ -193,15 +194,15 @@ fn check_mesh_flags_self_loop_as_non_manifold() {
     // 焊接容差 = 对角线 × 1e-6，退化阈值 = 对角线 × 1e-9：
     // 用一个巨型三角形撑大对角线，另一个近重合顶点的三角形
     // 面积高于退化阈值、顶点却落入焊接容差 → 自环 → 非流形。
-    let mesh = crate::models::geometry::TriangleMesh {
+    let mesh = TriangleMesh {
         triangles: vec![
-            crate::models::geometry::Triangle {
+            Triangle {
                 a: [0.0, 0.0, 0.0],
                 b: [0.001, 0.0, 0.0],
                 c: [0.0005, 0.02, 0.0],
                 normal: [0.0, 0.0, 1.0],
             },
-            crate::models::geometry::Triangle {
+            Triangle {
                 a: [5000.0, 0.0, 0.0],
                 b: [0.0, 5000.0, 0.0],
                 c: [0.0, 0.0, 5000.0],
@@ -316,15 +317,15 @@ fn material_merge_pushes_entries_with_new_ids() {
 fn meshing_rejects_target_size_that_yields_no_voxels() {
     // 两个分离的封闭立方体共享一个大包围盒：超大目标尺寸下唯一体素
     // 中心落在两立方体之间的空洞里，射线无交点 → 零体素。
-    let mut shifted = crate::models::geometry::TriangleMesh::sample_box(2.0);
+    let mut shifted = TriangleMesh::sample_box(2.0);
     for triangle in &mut shifted.triangles {
         for vertex in [&mut triangle.a, &mut triangle.b, &mut triangle.c] {
             *vertex = [vertex[0] + 8.0, vertex[1] + 8.0, vertex[2] + 8.0];
         }
     }
-    let mut triangles = crate::models::geometry::TriangleMesh::sample_box(2.0).triangles;
+    let mut triangles = TriangleMesh::sample_box(2.0).triangles;
     triangles.extend(shifted.triangles);
-    let hollow = crate::models::geometry::TriangleMesh { triangles };
+    let hollow = TriangleMesh { triangles };
 
     let params = meshing::VolumeMeshParams { target_size: 5.0 };
     let error = meshing::generate(&hollow, &params).unwrap_err();

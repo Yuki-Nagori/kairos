@@ -56,6 +56,41 @@ fn ensure_allowed(url: &str) -> Result<()> {
     }
 }
 
+/// 从 URL 推导落盘文件名。
+///
+/// 规则：URL 末段是分支名形态（`master.tar.gz` / `master` 等，codeload 直链
+/// 的典型样子，落盘完全没法用）时改用「组件 id + 扩展名」；其余保留官方
+/// 原始文件名。仍剥离 query/hash 并拒绝相对路径段。
+fn derive_file_name(component_id: &str, url: &str) -> String {
+    let last_segment = url.rsplit('/').next().unwrap_or_default();
+    let stem = last_segment.split(['?', '#']).next().unwrap_or_default();
+    let branch_like = stem.is_empty()
+        || stem == "."
+        || stem == ".."
+        || stem.starts_with("master")
+        || stem.starts_with("main")
+        || !stem.contains('.');
+    if !branch_like {
+        return stem.to_string();
+    }
+    // 扩展名判定顺序：.tar.gz / .tgz 双段扩展优先于最后一个点（否则
+    // master.tar.gz 会被截成 .gz）；相对路径段（. / ..）视为无扩展名。
+    let ext = if stem == "." || stem == ".." {
+        String::new()
+    } else if stem.ends_with(".tar.gz") || url.contains(".tar.gz") || url.contains("/tar.gz/") {
+        ".tar.gz".to_string()
+    } else if stem.ends_with(".tgz") || url.contains(".tgz") {
+        ".tgz".to_string()
+    } else if let Some(dot) = stem.rfind('.') {
+        stem[dot..].to_string()
+    } else if url.contains(".zip") || url.contains("/zip/") {
+        ".zip".to_string()
+    } else {
+        String::new()
+    };
+    format!("{component_id}{ext}")
+}
+
 /// 下载文件到受管目录：流式写盘并按百分比回传进度（Channel<u64>）；
 /// 成功后登记进 manifest.json（跨会话记住「已下载」状态）。
 #[tauri::command]
@@ -66,33 +101,7 @@ pub async fn download_file(
     progress: Channel<u64>,
 ) -> Result<SavedDownload> {
     ensure_allowed(&url)?;
-    // 文件名规则：URL 末段是分支名形态（master.tar.gz / master 等，codeload
-    // 直链的典型样子，落盘完全没法用）时改用「组件 id + 扩展名」；
-    // 其余保留官方原始文件名。仍剥离 query/hash 并拒绝相对路径段。
-    let last_segment = url.rsplit('/').next().unwrap_or_default();
-    let stem = last_segment.split(['?', '#']).next().unwrap_or_default();
-    let branch_like = stem.is_empty()
-        || stem == "."
-        || stem == ".."
-        || stem.starts_with("master")
-        || stem.starts_with("main")
-        || !stem.contains('.');
-    let file_name = if branch_like {
-        let ext = if let Some(dot) = stem.rfind('.') {
-            &stem[dot..]
-        } else if url.contains(".tar.gz") || url.contains("/tar.gz/") {
-            ".tar.gz"
-        } else if url.contains(".tgz") {
-            ".tgz"
-        } else if url.contains(".zip") || url.contains("/zip/") {
-            ".zip"
-        } else {
-            ""
-        };
-        format!("{component_id}{ext}")
-    } else {
-        stem.to_string()
-    };
+    let file_name = derive_file_name(&component_id, &url);
 
     tauri::async_runtime::spawn_blocking(move || {
         let dir = downloads_dir(&app)?;
@@ -329,6 +338,41 @@ mod tests {
         assert_eq!(read_manifest(&dir).len(), 2);
 
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn derive_file_name_covers_branch_rules() {
+        let cases = [
+            // codeload 分支名形态 → 组件 id + 扩展名
+            (
+                "openfoam",
+                "https://github.com/OpenFOAM/OpenFOAM-7/archive/refs/heads/master.tar.gz",
+                "openfoam.tar.gz",
+            ),
+            (
+                "openinjmoldsim",
+                "https://codeload.github.com/krebeljk/openInjMoldSim/zip/refs/heads/master",
+                "openinjmoldsim.zip",
+            ),
+            // 官方原始文件名保留
+            (
+                "gmsh",
+                "https://gmsh.info/bin/macOS/gmsh-4.15.2-MacOSARM-sdk.tgz",
+                "gmsh-4.15.2-MacOSARM-sdk.tgz",
+            ),
+            // 剥离 query；拒绝空段与相对路径段
+            (
+                "gmsh",
+                "https://gmsh.info/bin/Linux/gmsh.zip?query=1#hash",
+                "gmsh.zip",
+            ),
+            ("openfoam", "https://openfoam.org/master", "openfoam"),
+            ("openfoam", "https://openfoam.org/..", "openfoam"),
+            ("openfoam", "https://openfoam.org/", "openfoam"),
+        ];
+        for (id, url, expected) in cases {
+            assert_eq!(derive_file_name(id, url), expected, "url: {url}");
+        }
     }
 
     #[test]
