@@ -88,3 +88,4 @@
 - **13:0x** feat(test): TS lib 覆盖率四维 100%，Rust core 行覆盖 98.88% 门槛 98
 - **13:3x** refactor(test): 测试集结到根 tests/ 并分类（前端 + Rust 契约）
 - **13:1x** refactor(test): tests/frontend 更名 tests/web
+- **13:1x** refactor(ci): 简化为三平台单作业流水线，消除重复编译
