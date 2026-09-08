@@ -7,12 +7,15 @@ import {
 import { openDownloadsDir } from "../services/downloads";
 import { button, card, hint } from "./ui";
 
-const LICENSE_BADGE: Record<string, { label: string; className: string }> = {
-  mit: {
-    label: "MIT · 可直接下载",
-    className: "border-emerald-500/60 bg-emerald-500/10 text-emerald-300",
-  },
-  gpl: { label: "GPL · 引导安装", className: "border-amber-500/60 bg-amber-500/10 text-amber-300" },
+/** 徽标：许可定颜色（合规口径），安装策略定文案——两者正交（Gmsh = GPL + 官方直链）。 */
+const LICENSE_CLASS: Record<string, string> = {
+  mit: "border-emerald-500/60 bg-emerald-500/10 text-emerald-300",
+  gpl: "border-amber-500/60 bg-amber-500/10 text-amber-300",
+};
+
+const STRATEGY_LABEL: Record<string, string> = {
+  direct_download: "官方直链 · 可直接下载",
+  guided_install: "引导安装",
 };
 
 /** 运行时依赖面板：许可分级、就绪状态、应用内下载与官方页引导。 */
@@ -54,12 +57,10 @@ export function createDependenciesPanel(): HTMLElement {
       name.textContent = dep.name;
 
       const badge = document.createElement("span");
-      const badgeStyle = LICENSE_BADGE[dep.licenseKind] ?? {
-        label: dep.license,
-        className: "border-zinc-700 text-zinc-400",
-      };
-      badge.className = `rounded-full border px-2 py-0.5 ${badgeStyle.className}`;
-      badge.textContent = badgeStyle.label;
+      badge.className = `rounded-full border px-2 py-0.5 ${
+        LICENSE_CLASS[dep.licenseKind] ?? "border-zinc-700 text-zinc-400"
+      }`;
+      badge.textContent = STRATEGY_LABEL[dep.strategy] ?? dep.license;
 
       const ready = document.createElement("span");
       ready.className = dep.ready ? "text-emerald-400" : "text-red-400";

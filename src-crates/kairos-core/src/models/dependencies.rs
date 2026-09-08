@@ -2,27 +2,27 @@
 
 use serde::{Deserialize, Serialize};
 
-/// 许可分级：决定安装策略与 UI 徽标。
+/// 许可分级：决定 UI 徽标的颜色与合规口径。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LicenseKind {
-    /// MIT：可点击直接下载（无合规负担）。
+    /// MIT：无再分发合规负担。
     Mit,
-    /// GPL：只走引导安装（打开官方页，用户自行安装），Kairos 不分发。
+    /// GPL：Kairos 不做再分发方，只转发官方直链或引导安装。
     Gpl,
 }
 
-/// 安装策略。
+/// 安装策略（与许可分级正交：有官方预编译单文件的 GPL 组件也可直链下载）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum InstallStrategy {
-    /// MIT 组件：点击直接下载到应用数据目录。
+    /// 有官方单文件直链（预编译包或源码包）：应用内点击下载（只转发官方直链，Kairos 不是分发方）。
     DirectDownload,
-    /// GPL 组件：打开官方下载/编译页，用户自行安装后 Kairos 重新探测。
+    /// 无单文件可下（纯在线安装流程）：打开官方页引导，装好后重新探测。
     GuidedInstall,
 }
 
-/// 组件安装包的按平台下载地址（缺失平台 = 无预编译包，走引导安装）。
+/// 组件的按平台下载地址（缺失平台 = 该平台无直链，走引导安装）。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DownloadSpec {
@@ -48,7 +48,7 @@ pub struct RuntimeDependency {
     /// 就绪判定所依赖的命令名。
     pub check_command: String,
     pub hint: String,
-    /// 应用内直接下载地址（MIT 组件）；GPL 组件为 None（引导安装）。
+    /// 应用内直接下载地址（有官方预编译单文件的组件）；否则 None（引导安装）。
     #[serde(default)]
     pub download: Option<DownloadSpec>,
 }

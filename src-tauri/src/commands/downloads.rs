@@ -1,4 +1,6 @@
-//! 应用内下载：MIT 组件点击直接下载到受管目录（GPL 组件仍走引导安装）。
+//! 应用内下载：有官方单文件直链的组件（Gmsh 预编译包、OpenFOAM 7 /
+//! openInjMoldSim 源码包等）点击下载到受管目录（Kairos 只转发官方直链，
+//! 不是分发方）；其余组件走引导安装。
 //! 存放位置固定为 `<应用数据目录>/downloads/`，面板展示路径并支持打开。
 
 use std::fs;
@@ -93,9 +95,9 @@ pub async fn download_file(
             }
             file.write_all(&buffer[..read])?;
             downloaded += read as u64;
-            if total > 0
-                && let Some(percent) = (downloaded * 100).checked_div(total)
-            {
+            // checked_div 满足 clippy::manual_checked_ops；不用 let-chain 写法，
+            // 兼容尚未支持 let-chains 的 rust-analyzer 版本（total = 0 时为 None 不发送）。
+            if let Some(percent) = (downloaded * 100).checked_div(total) {
                 let _ = progress.send(percent);
             }
         }

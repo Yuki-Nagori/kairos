@@ -1,13 +1,26 @@
 //! 运行时依赖目录：外部工具的许可分级、安装策略与就绪判定。
 //!
 //! 分策略规则：
-//! - **MIT 组件**：`DirectDownload`——点击直接下载到应用数据目录（MIT 允许自由再分发）；
-//! - **GPL 组件**：`GuidedInstall`——打开官方页由用户自行安装（Kairos 不分发 GPL 二进制，
-//!   规避源码附带义务；与合规文档 ai-docs/decisions/openfoam-gpl-compliance.md 一致）。
+//! - **DirectDownload**：组件有官方单文件直链（预编译包或源码包，已实测可达）——
+//!   应用内点击下载到受管目录。Kairos 只转发官方直链，不是分发方，
+//!   GPL 组件亦不触发再分发义务；
+//! - **GuidedInstall**：组件无单文件可下（纯在线安装流程）——打开官方页引导，
+//!   装好后重新探测。
 //!
-//! 当前目录中没有 MIT 运行时组件；未来新增 MIT 组件时按上表选择 DirectDownload 即可。
+//! 许可分级（LicenseKind）只决定徽标颜色与合规口径，与安装策略正交。
+//! 注意：DirectDownload 只负责「拿到文件」；OpenFOAM / openInjMoldSim 的
+//! 编译安装步骤仍需在终端完成（hint 字段向用户说明）。
 
-use crate::models::dependencies::{InstallStrategy, LicenseKind, RuntimeDependency};
+use crate::models::dependencies::{DownloadSpec, InstallStrategy, LicenseKind, RuntimeDependency};
+
+/// 三平台同源的官方单文件直链。
+fn source_download(url: &str) -> Option<DownloadSpec> {
+    Some(DownloadSpec {
+        macos: url.into(),
+        windows: url.into(),
+        linux: url.into(),
+    })
+}
 
 /// 运行时依赖目录（求解链路 + 网格升级路线）。
 pub fn catalog() -> Vec<RuntimeDependency> {
@@ -17,24 +30,28 @@ pub fn catalog() -> Vec<RuntimeDependency> {
             name: "OpenFOAM 7（.org）".into(),
             license: "GPL-3.0".into(),
             license_kind: LicenseKind::Gpl,
-            strategy: InstallStrategy::GuidedInstall,
+            strategy: InstallStrategy::DirectDownload,
             page_url: "https://openfoam.org/download/".into(),
             required: true,
             check_command: "blockMesh".into(),
-            hint: "命令 blockMesh 可用即视为就绪。".into(),
-            download: None,
+            hint: "官方源码包（约 100MB）：解压后按 openfoam.org 编译安装；Ubuntu 亦可用 apt（openfoam.org/download/7-ubuntu）。就绪判定：blockMesh。".into(),
+            download: source_download(
+                "https://codeload.github.com/OpenFOAM/OpenFOAM-7/tar.gz/refs/heads/master",
+            ),
         },
         RuntimeDependency {
             id: "openinjmoldsim".into(),
             name: "openInjMoldSim 求解器".into(),
             license: "GPL-3.0".into(),
             license_kind: LicenseKind::Gpl,
-            strategy: InstallStrategy::GuidedInstall,
+            strategy: InstallStrategy::DirectDownload,
             page_url: "https://github.com/krebeljk/openInjMoldSim".into(),
             required: true,
             check_command: "openInjMoldSim".into(),
-            hint: "命令 openInjMoldSim 可用即视为就绪（./Allwmake 编译后加入 PATH）。".into(),
-            download: None,
+            hint: "源码包：解压进 OpenFOAM 环境后 ./Allwmake 编译，产物加入 PATH 即就绪。".into(),
+            download: source_download(
+                "https://codeload.github.com/krebeljk/openInjMoldSim/zip/refs/heads/master",
+            ),
         },
         RuntimeDependency {
             id: "gmsh".into(),
@@ -67,7 +84,18 @@ mod tests {
         let solver = catalog.iter().find(|d| d.id == "openinjmoldsim").unwrap();
         assert!(openfoam.required && solver.required);
         assert_eq!(openfoam.license_kind, LicenseKind::Gpl);
-        assert_eq!(openfoam.strategy, InstallStrategy::GuidedInstall);
+        assert_eq!(solver.license_kind, LicenseKind::Gpl);
+    }
+
+    #[test]
+    fn every_dependency_has_direct_download() {
+        for dep in catalog() {
+            assert!(
+                dep.strategy == InstallStrategy::DirectDownload && dep.download.is_some(),
+                "{} 应提供应用内直链下载",
+                dep.id
+            );
+        }
     }
 
     #[test]
