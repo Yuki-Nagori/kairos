@@ -21,7 +21,7 @@
 | Rust | `cargo bench`（criterion，kairos-core） | IPC DTO 序列化（SystemInfo / KairosError，命令层往返的热路径） |
 
 - 数字以本机环境为准，横向比较须同机器同资产；
-- CI 在独立的 benchmark job（Ubuntu）运行基准并上传报告（见 T02），只记录趋势、不作为卡点。
+- CI 在 Ubuntu 作业的基准步骤运行基准并上传报告（见 T02），只记录趋势、不作为卡点。
 
 ## 标准基准资产说明
 

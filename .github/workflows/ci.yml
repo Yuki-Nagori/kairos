@@ -1,3 +1,6 @@
+# CI：三平台各一条流水线（单作业单编译链，避免多作业重复编译）
+# 门禁 = bun run verify（typecheck / lint / format / test / knip / cargo 同链）
+
 name: CI
 
 on:
@@ -10,23 +13,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  frontend:
-    name: 前端门禁
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-      - run: bun install --frozen-lockfile
-      - run: bun run typecheck
-      - run: bun run lint
-      - run: bun run format:check
-      - run: bun run test
-      - run: bun run knip
-
-  rust:
-    name: Rust 门禁（${{ matrix.os }}）
+  ci:
+    name: CI（${{ matrix.os }}）
     strategy:
       fail-fast: false
       matrix:
@@ -34,10 +22,13 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: "1.95.0"
-          components: clippy, rustfmt
+          components: clippy, rustfmt, llvm-tools-preview
       - name: 安装 Tauri Linux 依赖
         if: matrix.os == 'ubuntu-latest'
         run: |
@@ -45,98 +36,38 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file \
             libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf
       - uses: Swatinem/rust-cache@v2
-      - run: cargo fmt --all --check
-      - run: cargo clippy --workspace --all-targets -- -D warnings
-      - run: cargo test --workspace
-
-  benchmark:
-    name: 性能基准报告（只记录，不卡点）
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: "1.95.0"
-      - name: 安装 Tauri Linux 依赖
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file \
-            libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf
-      - uses: Swatinem/rust-cache@v2
       - run: bun install --frozen-lockfile
-      - run: mkdir -p bench-out
-      - run: bun run bench:web > bench-out/bench-web.txt 2>&1
-      - run: cargo bench 2>&1 | tee bench-out/bench-rust.txt
+      - name: 全量门禁（typecheck / lint / format / test / knip / Rust 同链）
+        run: bun run verify
+      - name: 覆盖率门槛（前端 lib 100% · Rust core 行 ≥98%）
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          bun run test:coverage
+          cargo llvm-cov -p kairos-core --lib --summary-only --fail-under-lines 98
+      - name: 依赖漏洞审计
+        if: matrix.os == 'ubuntu-latest'
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+      - name: cargo audit
+        if: matrix.os == 'ubuntu-latest'
+        run: cargo audit
+      - name: 性能基准（只记录，不卡点）
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          mkdir -p bench-out
+          bun run bench:web > bench-out/bench-web.txt 2>&1
+          cargo bench 2>&1 | tee bench-out/bench-rust.txt
       - uses: actions/upload-artifact@v4
+        if: matrix.os == 'ubuntu-latest' && always()
         with:
           name: bench-report
           path: bench-out/
-        if: always()
-
-  coverage:
-    name: 覆盖率门槛（Rust core 行 ≥98% · 前端 lib 100%）
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: "1.95.0"
-          components: llvm-tools-preview
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-llvm-cov
-      - uses: Swatinem/rust-cache@v2
-      - run: bun install --frozen-lockfile
-      # vitest thresholds 内建强制（lib 行 ≥90 / 函数 ≥85 / 分支 ≥80）
-      - run: bun run test:coverage
-      - run: cargo llvm-cov -p kairos-core --lib --summary-only --fail-under-lines 98
-
-  audit:
-    name: 依赖漏洞审计
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: "1.95.0"
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-audit
-      - run: cargo audit
-
-  build:
-    name: 桌面包构建（${{ matrix.os }}）
-    needs: [frontend, rust]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-latest, windows-latest, ubuntu-latest]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: "1.95.0"
-      - name: 安装 Tauri Linux 依赖
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file \
-            libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf
-      - uses: Swatinem/rust-cache@v2
-      - run: bun install --frozen-lockfile
-      - run: bun run tauri build
+      - name: 桌面包构建（主干推送时）
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: bun run tauri build
       - uses: actions/upload-artifact@v4
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         with:
           name: kairos-${{ matrix.os }}
           path: |
