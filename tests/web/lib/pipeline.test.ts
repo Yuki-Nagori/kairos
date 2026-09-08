@@ -118,11 +118,6 @@ describe("evaluatePipeline", () => {
     const steps = evaluatePipeline(base);
     expect(steps.find((s) => s.id === "submit")?.done).toBe(true);
   });
-
-  it("allPrerequisitesDone gates submission", () => {
-    const steps = evaluatePipeline(input()).map((s) => ({ ...s, done: s.id !== "submit" }));
-    expect(steps.every((s) => s.done || s.id === "submit")).toBe(true);
-  });
 });
 
 describe("allPrerequisitesDone", () => {

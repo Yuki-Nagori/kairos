@@ -2,11 +2,11 @@
 //! 之间的序列化形状。这些测试失败意味着前端联调会爆错，而不是上线后才发现。
 
 use kairos_core::error::{ErrorKind, KairosError};
+use kairos_core::models::geometry::{Triangle, TriangleMesh};
 use kairos_core::models::system::SystemInfo;
 use kairos_core::services::system;
 use serde_json::json;
 
-use kairos_core::models::geometry::{Triangle, TriangleMesh};
 use kairos_core::models::material::Material;
 use kairos_core::models::mesh::{MeshQuality, MeshingReport};
 use kairos_core::models::project::{Project, Study};
