@@ -77,3 +77,6 @@
 - **09:0x** feat: 收口 F1/F10/F11/F12/F13/F14——作业日志视图 + 主题化画布
 - **09:0x** fix: CI 工具链钉版补漏；锁中毒恢复 + WebGL 上下文恢复（F2/F9）
 - **09:1x** fix(windows): 补 CommandExt 导入，修复 Windows 门禁编译
+- **10:45** refactor(T28): state 按域拆分 / WGSL 外置 / 面板分组
+- **10:51** research(T24): 一维 Stefan PINN spike，前沿误差 12.2%，限定演示用途
+- **10:55** research(T25): moldflow-api 分层概念对照笔记

@@ -36,6 +36,9 @@
 | T23 | [T23-time-animation-done.md](T23-time-animation-done.md)         | 体素→表面场映射与时间步动画通道 |
 | T26 | [T26-cae-workbench-ui-done.md](T26-cae-workbench-ui-done.md)     | Moldflow 风格工作台 UI + 主题   |
 | T27 | [T27-component-download-done.md](T27-component-download-done.md) | 应用内组件下载                  |
+| T24 | [T24-pinn-research-done.md](T24-pinn-research-done.md)           | PINN 熔融前沿预测研究 spike     |
+| T25 | [T25-workflow-api-study-done.md](T25-workflow-api-study-done.md) | 第三方工作流 API 分层概念研究   |
+| T28 | [T28-repo-structure-done.md](T28-repo-structure-done.md)         | 仓库结构优化（state/WGSL/面板） |
 
 > T26/T27 落地后的增量打磨（系统窗口按钮、原生应用菜单、主题注入统一、
 > 品牌图标、emoji 清理、启动窗口位置）见 `ai-docs/timeline.md` 对应条目，
@@ -43,12 +46,12 @@
 
 ## 待开工任务
 
-| ID  | 文件                                                   | 任务                           | 依赖     |
-| --- | ------------------------------------------------------ | ------------------------------ | -------- |
-| T21 | [T21-milestone-review.md](T21-milestone-review.md)     | 里程碑评审循环（随里程碑触发） | 随里程碑 |
-| T24 | [T24-pinn-research.md](T24-pinn-research.md)           | PINN 熔融前沿预测研究 spike    | —        |
-| T25 | [T25-workflow-api-study.md](T25-workflow-api-study.md) | 第三方工作流 API 分层概念研究  | —        |
-| T28 | [T28-repo-structure.md](T28-repo-structure.md)         | 仓库结构优化（state 拆分等）   | —        |
+| ID  | 文件                                               | 任务                           | 依赖     |
+| --- | -------------------------------------------------- | ------------------------------ | -------- |
+| T21 | [T21-milestone-review.md](T21-milestone-review.md) | 里程碑评审循环（随里程碑触发） | 随里程碑 |
+
+> 任务池已清空：T24/T25/T28 于 2026-09-08 完成；后续新任务（如
+> CLI/批处理入口、网格质量度量）见 `ai-docs/research/` 两份结论文档的建议清单。
 
 ## 全局原则（不变）
 
