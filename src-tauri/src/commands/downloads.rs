@@ -60,12 +60,14 @@ pub async fn download_file(
     progress: Channel<u64>,
 ) -> Result<SavedDownload> {
     ensure_allowed(&url)?;
-    let file_name = url
-        .rsplit('/')
-        .next()
-        .filter(|name| !name.is_empty())
-        .unwrap_or("download.bin")
-        .to_string();
+    // 取 URL 末段做文件名：剥离 query/hash，拒绝空段与相对路径段，防目录跳跃。
+    let last_segment = url.rsplit('/').next().unwrap_or_default();
+    let stem = last_segment.split(['?', '#']).next().unwrap_or_default();
+    let file_name = if stem.is_empty() || stem == "." || stem == ".." {
+        "download.bin".to_string()
+    } else {
+        stem.to_string()
+    };
 
     tauri::async_runtime::spawn_blocking(move || {
         let dir = downloads_dir(&app)?;

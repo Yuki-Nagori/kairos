@@ -76,11 +76,11 @@ fn recents_file(app: &AppHandle) -> Result<PathBuf> {
 
 /// 新研究的默认 case 目录（应用数据目录下，按研究 ID 隔离）。
 #[tauri::command]
-pub fn default_case_dir(app: AppHandle, study_id: String) -> std::result::Result<String, String> {
+pub fn default_case_dir(app: AppHandle, study_id: String) -> Result<String> {
     let dir = app
         .path()
         .app_data_dir()
-        .map_err(|e| format!("无法定位应用数据目录：{e}"))?;
+        .map_err(|e| KairosError::io(format!("无法定位应用数据目录：{e}")))?;
     Ok(dir
         .join("cases")
         .join(study_id)

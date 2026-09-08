@@ -54,7 +54,7 @@ pub fn probe_openfoam() -> EnvironmentCheck {
 
 /// 由已导入几何生成 OpenFOAM case（polyMesh + 场 + 字典）。
 #[tauri::command]
-pub fn generate_openfoam_case(
+pub async fn generate_openfoam_case(
     store: State<'_, GeometryStore>,
     geometry_id: String,
     case_dir: String,
@@ -63,22 +63,30 @@ pub fn generate_openfoam_case(
     stage: AnalysisStage,
     cores: u32,
 ) -> Result<String> {
-    let mut sessions = store.0.lock().unwrap();
-    let session = sessions.get_mut(&geometry_id).ok_or_else(|| {
-        kairos_core::error::KairosError::not_found(format!("几何不存在：{geometry_id}"))
-    })?;
-    let volume_mesh: &VolumeMesh = session
-        .volume
-        .as_ref()
-        .ok_or_else(|| KairosError::validation("该几何尚未生成体积网格，请先执行网格划分。"))?;
     let cores = cores.clamp(1, 64) as usize;
-    openfoam::generate_case(
-        std::path::Path::new(&case_dir),
-        volume_mesh,
-        &material,
-        &process,
-        &stage,
-        cores,
-    )?;
-    Ok(case_dir)
+    // 锁只用于取网格快照；polyMesh 与场文件的写入在锁外、阻塞线程池中进行。
+    let volume_mesh: VolumeMesh = {
+        let sessions = store.0.lock().unwrap();
+        let session = sessions.get(&geometry_id).ok_or_else(|| {
+            kairos_core::error::KairosError::not_found(format!("几何不存在：{geometry_id}"))
+        })?;
+        session
+            .volume
+            .as_ref()
+            .ok_or_else(|| KairosError::validation("该几何尚未生成体积网格，请先执行网格划分。"))?
+            .clone()
+    };
+    tauri::async_runtime::spawn_blocking(move || {
+        openfoam::generate_case(
+            std::path::Path::new(&case_dir),
+            &volume_mesh,
+            &material,
+            &process,
+            &stage,
+            cores,
+        )?;
+        Ok(case_dir)
+    })
+    .await
+    .map_err(|e| KairosError::internal(format!("case 生成任务失败：{e}")))?
 }

@@ -2,11 +2,11 @@
 
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use serde::Serialize;
 
-use kairos_core::error::Result;
+use kairos_core::error::{KairosError, Result};
 use kairos_core::models::geometry::{GeometrySummary, TriangleMesh};
 use kairos_core::models::mesh::{MeshingReport, VolumeMesh};
 use kairos_core::services::geometry as geometry_service;
@@ -22,46 +22,63 @@ pub struct MeshSession {
 }
 
 /// 几何会话缓存：渲染与网格生成（T06/T14）从这里取全量数据。
-#[derive(Default)]
-pub struct GeometryStore(pub Mutex<HashMap<String, MeshSession>>);
+/// 内部为 Arc 句柄：async 命令克隆句柄后在阻塞线程池访问，不阻塞主线程。
+#[derive(Clone, Default)]
+pub struct GeometryStore(pub Arc<Mutex<HashMap<String, MeshSession>>>);
 
 #[tauri::command]
-pub fn import_stl(store: State<'_, GeometryStore>, path: String) -> Result<GeometrySummary> {
-    let mesh = geometry_service::parse_stl_file(Path::new(&path))?;
-    let file_name = Path::new(&path)
-        .file_name()
-        .map(|name| name.to_string_lossy().to_string())
-        .unwrap_or_else(|| path.clone());
-    let geometry_id = new_id("geom");
-    let summary = geometry_service::summarize(geometry_id.clone(), file_name.clone(), &mesh);
-    store.0.lock().unwrap().insert(
-        geometry_id,
-        MeshSession {
-            mesh,
-            file_name,
-            volume: None,
-        },
-    );
-    Ok(summary)
+pub async fn import_stl(store: State<'_, GeometryStore>, path: String) -> Result<GeometrySummary> {
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let mesh = geometry_service::parse_stl_file(Path::new(&path))?;
+        let file_name = Path::new(&path)
+            .file_name()
+            .map(|name| name.to_string_lossy().to_string())
+            .unwrap_or_else(|| path.clone());
+        let geometry_id = new_id("geom");
+        let summary = geometry_service::summarize(geometry_id.clone(), file_name.clone(), &mesh);
+        store.0.lock().unwrap().insert(
+            geometry_id,
+            MeshSession {
+                mesh,
+                file_name,
+                volume: None,
+            },
+        );
+        Ok(summary)
+    })
+    .await
+    .map_err(|e| KairosError::internal(format!("导入任务失败：{e}")))?
 }
 
 /// 对已导入几何生成 3D 体积网格，返回统计报告（网格保留在会话缓存中）。
 #[tauri::command]
-pub fn generate_volume_mesh(
+pub async fn generate_volume_mesh(
     store: State<'_, GeometryStore>,
     geometry_id: String,
     target_size: f64,
 ) -> Result<MeshingReport> {
     let params = VolumeMeshParams { target_size };
     params.validate()?;
-    let mut sessions = store.0.lock().unwrap();
-    let session = sessions.get_mut(&geometry_id).ok_or_else(|| {
-        kairos_core::error::KairosError::not_found(format!("几何不存在：{geometry_id}"))
-    })?;
-    let volume = meshing::generate(&session.mesh, &params)?;
-    let report = meshing::report(&volume);
-    session.volume = Some(volume);
-    Ok(report)
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        // 重计算在锁外进行：锁只覆盖表面网格快照取出与体积网格放回两个瞬间。
+        let mesh = {
+            let sessions = store.0.lock().unwrap();
+            let session = sessions
+                .get(&geometry_id)
+                .ok_or_else(|| KairosError::not_found(format!("几何不存在：{geometry_id}")))?;
+            session.mesh.clone()
+        };
+        let volume = meshing::generate(&mesh, &params)?;
+        let report = meshing::report(&volume);
+        if let Some(session) = store.0.lock().unwrap().get_mut(&geometry_id) {
+            session.volume = Some(volume);
+        }
+        Ok(report)
+    })
+    .await
+    .map_err(|e| KairosError::internal(format!("网格任务失败：{e}")))?
 }
 
 #[tauri::command]
