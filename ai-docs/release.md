@@ -2,16 +2,18 @@
 
 ## 版本与标签
 
-1. 更新 `src-tauri/tauri.conf.json` 与根 `Cargo.toml`（workspace）版本号；
-2. 提交并打标签：`git tag -a v0.x.0 -m "..."` 并推送标签。
+1. 到 GitHub Actions 页手动运行 Release 工作流，填入发布标签（如 `v0.x.0`）——
+   工作流自动把该版本同步到 `package.json` / `src-tauri/tauri.conf.json` / 根
+   `Cargo.toml`（Cargo.lock 由构建自动改写），无需手动改版本号；
+2. 标签会在本次构建的提交上自动创建，无需本地打标签推送。
 
 ## CI 流水线
 
-推送 `v*` 标签后，GitHub Actions 自动：
+手动触发 Release 工作流后，GitHub Actions 自动：
 
-1. 运行全量门禁（verify 分解：typecheck / lint / format / test / knip）；
-2. macOS 与 Windows 双平台 `bun run tauri build`；
-3. 收集 `target/release/bundle` 下的 .dmg / .app / .msi / .exe 并上传至 GitHub Release 草稿。
+1. 三平台构建：macOS（arm64）、Windows（x64）、Ubuntu（x64）各自 `bun run tauri build`；
+2. 收集各平台 bundle 下的 .dmg / .app / .msi / .exe / .deb / .rpm / .AppImage；
+3. 汇总为 Release **草稿**，挂在工作流输入的标签上——人工核对后手动发布。
 
 ## 签名（证书就绪后启用）
 

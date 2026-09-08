@@ -1,11 +1,15 @@
-# T18 发布流水线：tag 推送 → 三平台构建（macOS arm / Windows x64 / Linux x64）→ Release 草稿
+# T18 发布流水线：手动触发 → 三平台构建（macOS arm / Windows x64 / Linux x64）→ Release 草稿
+# 仅手动运行（Actions 页 → Run workflow，填发布标签如 v0.1.0）；本地验证打包用 bun run tauri build。
 
 name: Release
 
 on:
-  push:
-    tags:
-      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 发布标签（如 v0.1.0），草稿 Release 将创建在该标签上
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -45,6 +49,18 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file \
             libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+      - name: 同步版本号（tag → 三处清单）
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          # 去掉 v 前缀，同步 package.json / tauri.conf.json / Cargo.toml；
+          # Cargo.lock 里工作区成员的版本由 cargo build 自动改写。
+          VERSION="${RELEASE_TAG#v}"
+          sed -i.bak 's/"version": "[^"]*"/"version": "'"${VERSION}"'"/' package.json src-tauri/tauri.conf.json
+          sed -i.bak 's/^version = "[^"]*"/version = "'"${VERSION}"'"/' Cargo.toml
+          rm -f package.json.bak src-tauri/tauri.conf.json.bak Cargo.toml.bak
+          echo "版本已同步为 ${VERSION}"
       - uses: Swatinem/rust-cache@v2
       - run: bun install --frozen-lockfile
       # 签名证书就绪后，在此追加 macOS 公证、Windows signtool 与 Linux 包签名步骤。
@@ -79,7 +95,10 @@ jobs:
           path: release/
       - uses: softprops/action-gh-release@v2
         with:
+          # 标签不存在时，GitHub 会在 target_commitish（本次构建的提交）上创建它。
           draft: true
+          tag_name: ${{ inputs.tag }}
+          target_commitish: ${{ github.sha }}
           files: release/**/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
