@@ -62,3 +62,4 @@
 - **07:5x** feat: Tauri 窗口默认全屏启动
 - **08:0x** feat: 沙漏图标统一三端 bundle 图标；macOS 最大化、Win/Linux 全屏启动
 - **08:0x** fix: 清理界面 emoji 与装饰性符号
+- **08:1x** fix: macOS 启动窗口偏左，改启动时最大化
