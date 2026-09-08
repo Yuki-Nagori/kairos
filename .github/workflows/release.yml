@@ -35,6 +35,9 @@ jobs:
           bun-version: latest
       - uses: dtolnay/rust-toolchain@master
         with:
+          # 与 rust-toolchain.toml 钉版一致；否则交叉目标装在默认工具链上，
+          # cargo 切到 1.95.0 后找不到 target（同 ci.yml 06:49 的修复）。
+          toolchain: "1.95.0"
           targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
       - run: bun install --frozen-lockfile
@@ -46,10 +49,14 @@ jobs:
       - name: 收集安装包
         shell: bash
         run: |
+          # 交叉编译产物在 target/<triple>/release/bundle，host 构建在 target/release/bundle；
+          # nullglob 让 Windows 下未命中的通配安全展开为空，找不到安装包时由
+          # upload-artifact 报错，不在此吞掉失败。
+          shopt -s nullglob
           mkdir -p release
-          find target/release/bundle -name "*.dmg" -exec cp {} release/ \; || true
-          find target/release/bundle -name "*.msi" -exec cp {} release/ \; || true
-          find target/release/bundle -name "*.exe" -exec cp {} release/ \; || true
+          bundles=(target/release/bundle target/*/release/bundle)
+          find "${bundles[@]}" \( -name "*.dmg" -o -name "*.msi" -o -name "*.exe" \) \
+            -exec cp {} release/ \;
       - uses: actions/upload-artifact@v4
         with:
           name: kairos-${{ matrix.os }}-${{ matrix.target }}
