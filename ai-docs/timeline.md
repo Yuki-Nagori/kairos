@@ -68,3 +68,4 @@
 - **08:2x** refactor: 菜单构建去样板，下拉框样式归口 ui.ts
 - **08:2x** refactor: 输入框构建归口 ui.ts，修正求解日志失实注释
 - **08:2x** fix: 网格流水线 async 化（review F4/F5/F6 兑现）
+- **08:3x** fix(ci): release 流水线工具链钉版与交叉产物收集（F7/F8 兑现）
