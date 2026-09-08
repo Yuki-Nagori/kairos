@@ -200,6 +200,13 @@ export interface DownloadSpec {
   linux: string;
 }
 
+/** 组件下载/编译流水线的阶段状态（仅进行中或失败时存在；成功后清除）。
+ * failed 保留日志尾部：编译失败的现场需要留给你诊断。 */
+export type ComponentStageState =
+  | { stage: "downloading"; percent: number }
+  | { stage: "compiling"; logs: string[] }
+  | { stage: "failed"; error: string; logs: string[] };
+
 /** 下载完成后的落盘信息（压缩包自动解压后 extractDir 指向组件目录）。 */
 export interface SavedDownload {
   path: string;

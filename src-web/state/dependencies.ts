@@ -4,7 +4,7 @@ import {
   openDependencyPage as apiOpenDependencyPage,
 } from "../services/dependencies";
 import { downloadComponentFile, listDownloads } from "../services/downloads";
-import type { DownloadedEntry, SavedDownload } from "../types";
+import type { ComponentStageState, DownloadedEntry, SavedDownload } from "../types";
 import { appStore, setError } from "./store";
 
 /** 刷新运行时依赖就绪状态，并恢复跨会话的「已下载」清单。 */
@@ -31,56 +31,64 @@ export async function openDependencyPageAction(pageUrl: string): Promise<void> {
 
 const COMPILE_LOG_LIMIT = 200;
 
-/** 编译已下载的源码组件：后台 Allwmake/wmake，日志环形缓冲进 store，
+/** 更新某组件的阶段状态；null 表示清除（成功收尾）。 */
+function setStage(componentId: string, stage: ComponentStageState | null): void {
+  const { componentStages } = appStore.get();
+  const next = { ...componentStages };
+  if (stage === null) {
+    delete next[componentId];
+  } else {
+    next[componentId] = stage;
+  }
+  appStore.set({ componentStages: next });
+}
+
+/** 编译已下载的源码组件：后台 Allwmake，日志环形缓冲进 store 的阶段状态，
  * 结束后重扫依赖就绪状态（编译产物进入受管 bin 目录后即转绿）。 */
 export async function compileDependencyAction(componentId: string): Promise<void> {
-  if (appStore.get().compiling[componentId]) {
+  if (appStore.get().componentStages[componentId]?.stage === "compiling") {
     return;
   }
-  appStore.set({ compiling: { ...appStore.get().compiling, [componentId]: true } });
+  setStage(componentId, { stage: "compiling", logs: [] });
+  // 阶段已被收尾（成功清除 / 失败落定）后，迟到的日志行直接丢弃。
   const append = (line: string): void => {
-    const logs = appStore.get().compileLogs[componentId] ?? [];
-    const next = [...logs, line];
-    if (next.length > COMPILE_LOG_LIMIT) {
-      next.splice(0, next.length - COMPILE_LOG_LIMIT);
+    const stage = appStore.get().componentStages[componentId];
+    if (stage?.stage !== "compiling") {
+      return;
     }
-    appStore.set({ compileLogs: { ...appStore.get().compileLogs, [componentId]: next } });
+    const logs = [...stage.logs, line];
+    if (logs.length > COMPILE_LOG_LIMIT) {
+      logs.splice(0, logs.length - COMPILE_LOG_LIMIT);
+    }
+    setStage(componentId, { stage: "compiling", logs });
   };
   try {
     const message = await compileDependency(componentId, append);
     append(`── ${message} ──`);
+    setStage(componentId, null);
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
-    append(`── 编译失败：${reason} ──`);
+    const stage = appStore.get().componentStages[componentId];
+    setStage(componentId, {
+      stage: "failed",
+      error: `编译失败：${reason}`,
+      logs: stage?.stage === "compiling" ? stage.logs : [],
+    });
   } finally {
-    const compiling = { ...appStore.get().compiling };
-    delete compiling[componentId];
-    appStore.set({ compiling });
     await refreshDependencies();
-  }
-}
-
-/** 清除某组件的失败标记（重试前调用）。 */
-function clearDownloadFailure(componentId: string): void {
-  const { downloadErrors } = appStore.get();
-  if (componentId in downloadErrors) {
-    const next = { ...downloadErrors };
-    delete next[componentId];
-    appStore.set({ downloadErrors: next });
   }
 }
 
 /** 应用内下载：把官方单文件直链取回受管目录。
  * 下载不占用全局 busy（大文件不应阻塞其他面板操作），
- * 进度行内展示；失败信息落在行内并支持重试。 */
+ * 进度在组件的阶段状态里行内展示；失败落定在 failed 阶段并支持重试。 */
 export async function downloadComponent(componentId: string, url: string): Promise<void> {
-  clearDownloadFailure(componentId);
-  appStore.set({ downloadProgress: { ...appStore.get().downloadProgress, [componentId]: 0 } });
+  setStage(componentId, { stage: "downloading", percent: 0 });
   try {
     const saved = await downloadComponentFile(componentId, url, (percent) => {
-      appStore.set({
-        downloadProgress: { ...appStore.get().downloadProgress, [componentId]: percent },
-      });
+      if (appStore.get().componentStages[componentId]?.stage === "downloading") {
+        setStage(componentId, { stage: "downloading", percent });
+      }
     });
     appStore.set({
       savedDownloads: { ...appStore.get().savedDownloads, [componentId]: saved },
@@ -89,20 +97,14 @@ export async function downloadComponent(componentId: string, url: string): Promi
         [componentId]: toEntry(saved),
       },
     });
+    setStage(componentId, null);
     // 源码组件：下载解压后立即自动编译（日志实时滚动，耗时 30 分钟级）。
-    if (componentId === "openfoam" || componentId === "openinjmoldsim") {
+    if (componentId === "openfoam") {
       void compileDependencyAction(componentId);
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    appStore.set({ downloadErrors: { ...appStore.get().downloadErrors, [componentId]: message } });
-  } finally {
-    const { downloadProgress } = appStore.get();
-    if (componentId in downloadProgress) {
-      const next = { ...downloadProgress };
-      delete next[componentId];
-      appStore.set({ downloadProgress: next });
-    }
+    setStage(componentId, { stage: "failed", error: `下载失败：${message}`, logs: [] });
   }
 }
 

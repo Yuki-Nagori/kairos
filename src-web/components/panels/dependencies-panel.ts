@@ -38,23 +38,14 @@ export function createDependenciesPanel(): HTMLElement {
   });
 
   function render(): void {
-    const {
-      dependencies,
-      busy,
-      downloadProgress,
-      savedDownloads,
-      downloadedFiles,
-      downloadErrors,
-      compiling,
-      compileLogs,
-    } = appStore.get();
+    const { dependencies, busy, savedDownloads, downloadedFiles, componentStages } = appStore.get();
     const working = busy !== null;
     refreshButton.disabled = working;
     openDirButton.disabled = working;
 
     listBox.replaceChildren();
     if (dependencies.length === 0) {
-      listBox.append(hint("尚未探测。点击「重新探测」检查 OpenFOAM 环境与求解器。"));
+      listBox.append(hint("尚未探测。点击「重新探测」检查 OpenFOAM 环境。"));
       return;
     }
     for (const dep of dependencies) {
@@ -87,9 +78,12 @@ export function createDependenciesPanel(): HTMLElement {
       });
 
       // 有应用内下载地址的组件：提供「下载」按钮（用户点击触发，官方源 + 许可展示）。
-      const downloading = dep.id in downloadProgress;
-      // 源码组件：下载解压后需要编译（后台 Allwmake/wmake），可随时重新编译。
-      const hasCompileFlow = dep.id === "openfoam" || dep.id === "openinjmoldsim";
+      // 按钮可用性从统一阶段状态推导：下载/编译进行中一律禁用。
+      const stage = componentStages[dep.id];
+      const downloading = stage?.stage === "downloading";
+      const compilingThis = stage?.stage === "compiling";
+      // 源码组件：下载解压后需要编译（后台 Allwmake），可随时重新编译。
+      const hasCompileFlow = dep.id === "openfoam";
       let downloadButton: HTMLButtonElement | null = null;
       if (dep.download !== null) {
         const os = appStore.get().info?.os ?? "linux";
@@ -99,7 +93,6 @@ export function createDependenciesPanel(): HTMLElement {
             : os === "windows"
               ? dep.download.windows
               : dep.download.linux;
-        const compilingThis = compiling[dep.id] === true;
         const already = dep.id in savedDownloads || dep.id in downloadedFiles;
         downloadButton = button(already ? "重新下载" : "下载", already ? "ghost" : "primary");
         downloadButton.disabled = downloading || compilingThis;
@@ -116,7 +109,7 @@ export function createDependenciesPanel(): HTMLElement {
       // 编译按钮：仅源码组件需要；失败后可随时重试。
       if (hasCompileFlow && dep.download !== null) {
         const compileButton = button("编译", "ghost");
-        compileButton.disabled = compiling[dep.id] === true;
+        compileButton.disabled = compilingThis;
         compileButton.addEventListener("click", () => {
           void compileDependencyAction(dep.id);
         });
@@ -124,12 +117,19 @@ export function createDependenciesPanel(): HTMLElement {
       }
       listBox.append(row);
 
-      if (compiling[dep.id]) {
+      // 阶段状态行：编译中（琥珀）→ 失败（红，附原因）→ 日志尾部 → 下载进度。
+      if (compilingThis) {
         const compileLine = hint("编译中…（首次 OpenFOAM 全量构建约 30–60 分钟）");
         compileLine.className = "text-xs text-amber-400";
         listBox.append(compileLine);
       }
-      const compileTail = (compileLogs[dep.id] ?? []).slice(-10);
+      if (stage?.stage === "failed") {
+        const failedLine = hint(stage.error);
+        failedLine.className = "text-xs text-red-400";
+        listBox.append(failedLine);
+      }
+      const compileTail =
+        stage?.stage === "compiling" || stage?.stage === "failed" ? stage.logs.slice(-10) : [];
       if (compileTail.length > 0) {
         const pre = document.createElement("pre");
         pre.className =
@@ -137,20 +137,12 @@ export function createDependenciesPanel(): HTMLElement {
         pre.textContent = compileTail.join("\n");
         listBox.append(pre);
       }
-
-      const failure = downloadErrors[dep.id];
-      if (failure !== undefined) {
-        const failedLine = hint(`下载失败：${failure}`);
-        failedLine.className = "text-xs text-red-400";
-        listBox.append(failedLine);
-      }
-
-      const progress = downloadProgress[dep.id];
-      if (progress !== undefined) {
+      if (downloading) {
+        const percent = stage?.stage === "downloading" ? stage.percent : 0;
         const progressWrap = document.createElement("div");
         progressWrap.className = "flex items-center gap-2 pl-3";
-        progressWrap.append(progressBar(progress));
-        const progressLine = hint(`${progress}%`);
+        progressWrap.append(progressBar(percent));
+        const progressLine = hint(`${percent}%`);
         progressLine.className = "w-9 text-[10px] tabular-nums text-zinc-400";
         progressWrap.append(progressLine);
         listBox.append(progressWrap);

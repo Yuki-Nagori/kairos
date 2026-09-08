@@ -1,6 +1,7 @@
 import { createStore } from "../lib/store";
 import { IpcUnavailableError } from "../lib/ipc";
 import type {
+  ComponentStageState,
   DependencyStatus,
   DownloadedEntry,
   GeometrySummary,
@@ -47,18 +48,10 @@ export interface AppState {
   jobLogs: Record<string, string[]>;
   /** 运行时依赖状态（许可分级 + 就绪探测）。 */
   dependencies: DependencyStatus[];
-  /** 源码组件编译进行中（key = 组件 id）。 */
-  compiling: Record<string, boolean>;
-  /** 编译日志尾部（环形缓冲，key = 组件 id）。 */
-  compileLogs: Record<string, string[]>;
-  /** 组件下载进度（百分比，key = 依赖 id；仅下载中存在）。 */
-  downloadProgress: Record<string, number>;
-  /** 组件下载完成后的落盘信息（key = 依赖 id；仅本次会话内下载的存在）。 */
   savedDownloads: Record<string, SavedDownload>;
-  /** 跨会话的已下载清单（来自 manifest.json）。 */
   downloadedFiles: Record<string, DownloadedEntry>;
-  /** 组件下载失败信息（key = 依赖 id；重试成功后清除）。 */
-  downloadErrors: Record<string, string>;
+  /** 组件下载/编译流水线的阶段状态（key = 组件 id；成功后清除该条目）。 */
+  componentStages: Record<string, ComponentStageState>;
   /** 探针列表（节点序号）。 */
   probes: Probe[];
   /** 材料库：内置示例材料 + 用户自定义材料。 */
@@ -92,12 +85,9 @@ export const initialAppState: AppState = {
   jobs: [],
   jobLogs: {},
   dependencies: [],
-  compiling: {},
-  compileLogs: {},
   savedDownloads: {},
-  downloadProgress: {},
   downloadedFiles: {},
-  downloadErrors: {},
+  componentStages: {},
   probes: [],
   busy: null,
   error: null,
