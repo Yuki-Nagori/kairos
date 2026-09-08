@@ -435,7 +435,7 @@ fn write_atomic_reports_rename_failure() {
     std::fs::create_dir_all(&dir).unwrap();
     // 目标路径是一个目录：rename 到既有目录必然失败，覆盖错误分支
     let target = dir.join("x.kairos");
-    std::fs::create_dir(&target).unwrap();
+    std::fs::create_dir_all(&target).unwrap();
     let error = project_service::write_atomic(&target, "content").unwrap_err();
     assert!(error.message().contains("工程文件替换失败"));
     std::fs::remove_dir_all(&dir).unwrap();
@@ -464,7 +464,7 @@ fn scan_times_skips_files_and_non_numeric_dirs() {
     {
         use std::os::unix::ffi::OsStrExt;
         let bad = std::ffi::OsStr::from_bytes(b"\xff\xfe-bad");
-        std::fs::create_dir(dir.join(bad)).unwrap();
+        std::fs::create_dir_all(dir.join(bad)).unwrap();
     }
     std::fs::write(time_a.join("p"), "internalField uniform 0;").unwrap();
     std::fs::write(time_b.join("U"), "internalField uniform 0;").unwrap();
