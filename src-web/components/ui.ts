@@ -1,4 +1,7 @@
-/** 共享 DOM 构建辅助：样式集中此处，通过 CSS 变量支持主题切换。 */
+/**
+ * 共享 DOM 构建辅助：面板控件的样式集中此处，避免类名字符串跨文件复制。
+ * 主题切换基于 Tailwind v4 的 CSS 变量色板（theme/*.css 覆盖 --color-zinc-*）。
+ */
 
 export function card(
   title: string,
@@ -61,5 +64,13 @@ export function textInput(placeholder: string): HTMLInputElement {
   element.placeholder = placeholder;
   element.className =
     "rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none";
+  return element;
+}
+
+/** 面板内紧凑下拉框；选项由调用方按需填充（含动态刷新场景）。 */
+export function dropdown(): HTMLSelectElement {
+  const element = document.createElement("select");
+  element.className =
+    "rounded-lg border border-zinc-700 bg-zinc-950 px-2 py-2 text-xs text-zinc-300 focus:border-emerald-500 focus:outline-none";
   return element;
 }

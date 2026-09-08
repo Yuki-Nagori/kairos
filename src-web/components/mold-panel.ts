@@ -7,7 +7,7 @@ import {
   removeRunnerElement,
 } from "../state";
 import type { CoolingChannel, RunnerElement, RunnerKind } from "../types";
-import { button, card, hint, textInput } from "./ui";
+import { button, card, dropdown, hint, textInput } from "./ui";
 
 function numInput(value: number): HTMLInputElement {
   const input = textInput(String(value));
@@ -31,9 +31,7 @@ export function createMoldPanel(): HTMLElement {
   // —— 流道 / 浇口表单 ——
   const runnerForm = document.createElement("div");
   runnerForm.className = "flex flex-wrap items-center gap-1";
-  const kindSelect = document.createElement("select");
-  kindSelect.className =
-    "rounded-lg border border-zinc-700 bg-zinc-950 px-2 py-2 text-xs text-zinc-300";
+  const kindSelect = dropdown();
   for (const [value, label] of [
     ["runner", "流道"],
     ["gate", "浇口"],

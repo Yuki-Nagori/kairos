@@ -1,7 +1,7 @@
 import { appStore } from "../state";
 import type { ProcessSettings } from "../types";
 import { checkProcess } from "../services/process";
-import { button, card, hint, textInput } from "./ui";
+import { button, card, dropdown, hint, textInput } from "./ui";
 
 const PRESETS_KEY = "kairos-process-presets";
 
@@ -147,9 +147,7 @@ export function createProcessPanel(): HTMLElement {
   const presetName = textInput("预设名称");
   presetName.className += " w-32";
   const savePresetButton = button("保存预设");
-  const presetSelect = document.createElement("select");
-  presetSelect.className =
-    "rounded-lg border border-zinc-700 bg-zinc-950 px-2 py-2 text-xs text-zinc-300";
+  const presetSelect = dropdown();
   const loadPresetButton = button("载入预设");
 
   function refreshPresetSelect(): void {

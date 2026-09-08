@@ -1,7 +1,7 @@
 import { appStore, submitPipeline } from "../state";
 import type { AnalysisStage } from "../types";
 import { allPrerequisitesDone, evaluatePipeline } from "../lib/pipeline";
-import { button, card, hint, textInput } from "./ui";
+import { button, card, dropdown, hint, textInput } from "./ui";
 
 /** 流水线引导面板：五步闭环的状态检查与下一步指引（T11）。 */
 export function createPipelinePanel(): HTMLElement {
@@ -18,9 +18,7 @@ export function createPipelinePanel(): HTMLElement {
   coresInput.className += " w-20";
   coresInput.title = "并行核数";
   const coresLabel = hint("核数");
-  const stageSelect = document.createElement("select");
-  stageSelect.className =
-    "rounded-lg border border-zinc-700 bg-zinc-950 px-2 py-2 text-xs text-zinc-300";
+  const stageSelect = dropdown();
   for (const [value, label] of [
     ["fill", "填充"],
     ["fill_pack", "填充 + 保压"],

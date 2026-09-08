@@ -23,24 +23,27 @@ pub fn run() {
 
             // 原生应用菜单：macOS 在屏幕顶部系统栏，Windows / Linux 在窗口标题栏下方。
             // 菜单项只做「动作 id」的发射，具体行为由前端监听 menu-action 路由。
-            let new_project = MenuItemBuilder::with_id("file.new", "新建项目")
-                .accelerator("CmdOrCtrl+N")
-                .build(_app)?;
-            let open_project = MenuItemBuilder::with_id("file.open", "打开项目…")
-                .accelerator("CmdOrCtrl+O")
-                .build(_app)?;
-            let save_project = MenuItemBuilder::with_id("file.save", "保存")
-                .accelerator("CmdOrCtrl+S")
-                .build(_app)?;
-            let save_as = MenuItemBuilder::with_id("file.saveAs", "另存为…")
-                .accelerator("Shift+CmdOrCtrl+S")
-                .build(_app)?;
+            let action = |id: &str,
+                          label: &str,
+                          accelerator: Option<&str>|
+             -> Result<tauri::menu::MenuItem<tauri::Wry>, tauri::Error> {
+                let mut item = MenuItemBuilder::with_id(id, label);
+                if let Some(accelerator) = accelerator {
+                    item = item.accelerator(accelerator);
+                }
+                item.build(_app)
+            };
+
             let file = SubmenuBuilder::new(_app, "文件")
-                .item(&new_project)
-                .item(&open_project)
+                .item(&action("file.new", "新建项目", Some("CmdOrCtrl+N"))?)
+                .item(&action("file.open", "打开项目…", Some("CmdOrCtrl+O"))?)
                 .separator()
-                .item(&save_project)
-                .item(&save_as)
+                .item(&action("file.save", "保存", Some("CmdOrCtrl+S"))?)
+                .item(&action(
+                    "file.saveAs",
+                    "另存为…",
+                    Some("Shift+CmdOrCtrl+S"),
+                )?)
                 .build()?;
 
             // 编辑菜单用系统预定义项：没有它 macOS 的 ⌘C/⌘V 在输入框里不生效。
@@ -55,27 +58,17 @@ pub fn run() {
                 .select_all()
                 .build()?;
 
-            let toggle_theme = MenuItemBuilder::with_id("view.theme", "切换主题").build(_app)?;
             let view = SubmenuBuilder::new(_app, "视图")
-                .item(&toggle_theme)
+                .item(&action("view.theme", "切换主题", None)?)
                 .build()?;
-
-            let check_network =
-                MenuItemBuilder::with_id("analysis.checkNetwork", "校验模具网络").build(_app)?;
             let analysis = SubmenuBuilder::new(_app, "分析")
-                .item(&check_network)
+                .item(&action("analysis.checkNetwork", "校验模具网络", None)?)
                 .build()?;
-
-            let export_csv =
-                MenuItemBuilder::with_id("results.exportCsv", "导出当前场为 CSV").build(_app)?;
             let results = SubmenuBuilder::new(_app, "结果")
-                .item(&export_csv)
+                .item(&action("results.exportCsv", "导出当前场为 CSV", None)?)
                 .build()?;
-
-            let refresh_deps =
-                MenuItemBuilder::with_id("tools.refreshDeps", "探测运行时依赖").build(_app)?;
             let tools = SubmenuBuilder::new(_app, "工具")
-                .item(&refresh_deps)
+                .item(&action("tools.refreshDeps", "探测运行时依赖", None)?)
                 .build()?;
 
             let help = SubmenuBuilder::new(_app, "帮助")

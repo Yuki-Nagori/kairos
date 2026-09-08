@@ -1,4 +1,4 @@
-import { button, hint, textInput } from "./ui";
+import { button, dropdown, hint, textInput } from "./ui";
 import {
   appStore,
   addStudy,
@@ -34,9 +34,7 @@ export function createProjectBar(): HTMLElement {
   newProjectConfirm.className += " hidden";
   const studyInput = textInput("新研究名称，如：填充分析");
   const addStudyButton = button("添加研究");
-  const recentsSelect = document.createElement("select");
-  recentsSelect.className =
-    "rounded-lg border border-zinc-700 bg-zinc-950 px-2 py-2 text-xs text-zinc-300";
+  const recentsSelect = dropdown();
 
   actions.append(newButton, openButton, saveButton, saveAsButton, recentsSelect);
   root.append(
