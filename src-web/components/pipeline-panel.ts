@@ -1,7 +1,7 @@
 import { appStore, submitPipeline } from "../state";
 import type { AnalysisStage } from "../types";
 import { allPrerequisitesDone, evaluatePipeline } from "../lib/pipeline";
-import { button, card, dropdown, hint, textInput } from "./ui";
+import { button, card, dropdown, hint, numberInput } from "./ui";
 
 /** 流水线引导面板：五步闭环的状态检查与下一步指引（T11）。 */
 export function createPipelinePanel(): HTMLElement {
@@ -12,10 +12,8 @@ export function createPipelinePanel(): HTMLElement {
 
   const submitRow = document.createElement("div");
   submitRow.className = "flex flex-wrap items-center gap-2";
-  const coresInput = textInput("2");
-  coresInput.type = "number";
+  const coresInput = numberInput("2", "w-20");
   coresInput.min = "1";
-  coresInput.className += " w-20";
   coresInput.title = "并行核数";
   const coresLabel = hint("核数");
   const stageSelect = dropdown();

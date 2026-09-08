@@ -6,7 +6,7 @@ import {
   removeGeometryById,
 } from "../state";
 import type { MeshingReport } from "../types";
-import { button, card, hint, textInput } from "./ui";
+import { button, card, hint, numberInput } from "./ui";
 
 /** 几何面板：STL 导入、健康检查、体积网格生成与已导入几何列表。 */
 export function createGeometryPanel(): HTMLElement {
@@ -91,12 +91,10 @@ export function createGeometryPanel(): HTMLElement {
       const meshRow = document.createElement("div");
       meshRow.className = "flex w-full flex-wrap items-center gap-2 border-t border-zinc-800 pt-2";
 
-      const sizeInput = textInput("目标尺寸");
-      sizeInput.type = "number";
+      const sizeInput = numberInput("目标尺寸", "w-28");
       sizeInput.step = "any";
       sizeInput.min = "0";
       sizeInput.value = (Math.max(...geometry.size) / 20).toPrecision(3);
-      sizeInput.className += " w-28";
       const generateButton = button("生成体积网格");
       generateButton.disabled = working;
       const reportLine = hint(reportText(meshReports[geometry.geometryId]));

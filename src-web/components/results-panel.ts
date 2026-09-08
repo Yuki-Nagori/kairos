@@ -1,14 +1,12 @@
 import { appStore, loadField, loadResultsCatalog } from "../state";
 import { button, card, hint, textInput } from "./ui";
-
 /** 结果面板：扫描 case 结果目录、查看时间步与场统计（完整视口见 T14）。 */
 export function createResultsPanel(): HTMLElement {
   const { root, body } = card("结果");
 
   const scanForm = document.createElement("div");
   scanForm.className = "flex flex-wrap items-center gap-2";
-  const dirInput = textInput("OpenFOAM case 目录路径");
-  dirInput.className += " flex-1 min-w-48";
+  const dirInput = textInput("OpenFOAM case 目录路径", "flex-1 min-w-48");
   const scanButton = button("扫描结果", "primary");
   scanForm.append(dirInput, scanButton);
 

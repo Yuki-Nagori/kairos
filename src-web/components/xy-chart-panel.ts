@@ -16,8 +16,7 @@ export function createXyChartPanel(): HTMLElement {
 
   const probeForm = document.createElement("div");
   probeForm.className = "flex flex-wrap items-center gap-2";
-  const nodeInput = textInput("节点序号");
-  nodeInput.className += " w-28";
+  const nodeInput = textInput("节点序号", "w-28");
   const addProbeButton = button("添加探针");
   const exportButton = button("导出 CSV");
   const refreshButton = button("重绘");

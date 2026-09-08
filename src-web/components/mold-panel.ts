@@ -7,13 +7,11 @@ import {
   removeRunnerElement,
 } from "../state";
 import type { CoolingChannel, RunnerElement, RunnerKind } from "../types";
-import { button, card, dropdown, hint, textInput } from "./ui";
+import { button, card, dropdown, hint, numberInput } from "./ui";
 
 function numInput(value: number): HTMLInputElement {
-  const input = textInput(String(value));
-  input.type = "number";
+  const input = numberInput(String(value), "w-20");
   input.step = "any";
-  input.className += " w-20";
   return input;
 }
 

@@ -29,9 +29,9 @@ export function createProjectBar(): HTMLElement {
   const saveButton = button("保存");
   const saveAsButton = button("另存为");
   const newProjectInput = textInput("项目名称");
-  newProjectInput.className += " hidden";
+  newProjectInput.classList.add("hidden");
   const newProjectConfirm = button("确定", "primary");
-  newProjectConfirm.className += " hidden";
+  newProjectConfirm.classList.add("hidden");
   const studyInput = textInput("新研究名称，如：填充分析");
   const addStudyButton = button("添加研究");
   const recentsSelect = dropdown();

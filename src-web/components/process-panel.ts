@@ -1,7 +1,7 @@
 import { appStore } from "../state";
 import type { ProcessSettings } from "../types";
 import { checkProcess } from "../services/process";
-import { button, card, dropdown, hint, textInput } from "./ui";
+import { button, card, dropdown, hint, numberInput, textInput } from "./ui";
 
 const PRESETS_KEY = "kairos-process-presets";
 
@@ -42,10 +42,8 @@ function numField(
   const label = document.createElement("span");
   label.className = "text-xs text-zinc-400";
   label.textContent = labelText;
-  const input = textInput(String(value));
-  input.type = "number";
+  const input = numberInput(String(value), "w-24");
   input.step = "any";
-  input.className += " w-24";
   return { label, input };
 }
 
@@ -144,8 +142,7 @@ export function createProcessPanel(): HTMLElement {
 
   // —— 预设（localStorage，随应用保留）——
   const presetPrefix = `${PRESETS_KEY}:`;
-  const presetName = textInput("预设名称");
-  presetName.className += " w-32";
+  const presetName = textInput("预设名称", "w-32");
   const savePresetButton = button("保存预设");
   const presetSelect = dropdown();
   const loadPresetButton = button("载入预设");

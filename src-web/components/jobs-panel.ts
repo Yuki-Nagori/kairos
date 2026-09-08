@@ -1,7 +1,7 @@
 import { probeOpenfoam } from "../services/solver";
 import { appStore, cancelJobAction, refreshJobs, submitJobAction } from "../state";
 import type { Job } from "../types";
-import { button, card, hint, textInput } from "./ui";
+import { button, card, hint, numberInput, textInput } from "./ui";
 
 const STATUS_LABEL: Record<Job["status"], string> = {
   queued: "排队中",
@@ -25,12 +25,9 @@ export function createJobsPanel(): HTMLElement {
 
   const form = document.createElement("div");
   form.className = "flex flex-wrap items-center gap-2";
-  const caseDirInput = textInput("case 目录路径");
-  caseDirInput.className += " flex-1 min-w-48";
-  const coresInput = textInput("2");
-  coresInput.type = "number";
+  const caseDirInput = textInput("case 目录路径", "flex-1 min-w-48");
+  const coresInput = numberInput("2", "w-20");
   coresInput.min = "1";
-  coresInput.className += " w-20";
   const submitButton = button("提交作业", "primary");
   const refreshButton = button("刷新");
   form.append(caseDirInput, coresInput, submitButton, refreshButton);

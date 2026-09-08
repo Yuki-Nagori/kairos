@@ -2,7 +2,7 @@ import { invokeCommand } from "../lib/ipc";
 import type { Channel } from "@tauri-apps/api/core";
 import type { Job } from "../types";
 
-/** 提交求解作业（入队，按预算自动启动）。progress 通道回传日志行。 */
+/** 提交求解作业（入队，按预算自动启动）。progress 通道回传求解日志行，前端暂未消费。 */
 export function submitJob(
   caseDir: string,
   cores: number,

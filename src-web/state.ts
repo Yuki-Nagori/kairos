@@ -529,16 +529,11 @@ export async function checkNetwork(): Promise<void> {
   }
 }
 
-/** 提交求解作业（case 目录 + 核数），日志行经 Channel 由作业面板展示。 */
+/** 提交求解作业（case 目录 + 核数）。Rust 侧解析时间标记写入作业进度并经
+ * Channel 转发原始日志行；日志行前端暂未消费，进度与状态走 listJobs 轮询。 */
 export async function submitJobAction(caseDir: string, cores: number): Promise<void> {
   appStore.set({ busy: "正在提交作业…", error: null });
   const channel = new Channel<string>();
-  channel.onmessage = (line) => {
-    if (!line.startsWith("__TIME__")) {
-      // 日志行走作业面板展示；时间标记由调度器解析。
-      void line;
-    }
-  };
   try {
     await apiSubmitJob(caseDir, cores, appStore.get().activeStudyId, channel);
     await refreshJobs();

@@ -58,12 +58,23 @@ export function button(
   return element;
 }
 
-export function textInput(placeholder: string): HTMLInputElement {
+export function textInput(placeholder: string, extraClass = ""): HTMLInputElement {
   const element = document.createElement("input");
   element.type = "text";
   element.placeholder = placeholder;
-  element.className =
-    "rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none";
+  element.className = [
+    "rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none",
+    extraClass,
+  ]
+    .filter(Boolean)
+    .join(" ");
+  return element;
+}
+
+/** 数字输入框：type=number 的 textInput 变体；min/step 等约束由调用方按需补充。 */
+export function numberInput(placeholder: string, extraClass = ""): HTMLInputElement {
+  const element = textInput(placeholder, extraClass);
+  element.type = "number";
   return element;
 }
 
