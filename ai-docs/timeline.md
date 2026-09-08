@@ -86,3 +86,4 @@
 - **11:3x** fix(ui): 布局对标 ui.html——整页锁定、卡片零裁切、视口主导
 - **12:4x** feat(download): 智能命名 + 压缩包自动解压
 - **13:0x** feat(test): TS lib 覆盖率四维 100%，Rust core 行覆盖 98.88% 门槛 98
+- **13:3x** refactor(test): 测试集结到根 tests/ 并分类（前端 + Rust 契约）
