@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { CommandError, invokeCommand } from "./ipc";
+import { CommandError, invokeCommand } from "../../../src-web/lib/ipc";
 
 const { invokeMock } = vi.hoisted(() => ({ invokeMock: vi.fn() }));
 
-vi.mock("./environment", () => ({ isTauriRuntime: () => true }));
+vi.mock("../../../src-web/lib/environment", () => ({ isTauriRuntime: () => true }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: invokeMock }));
 
 describe("invokeCommand", () => {

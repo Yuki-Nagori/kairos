@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isTauriRuntime } from "./environment";
+import { isTauriRuntime } from "../../../src-web/lib/environment";
 
 describe("isTauriRuntime", () => {
   it("无 __TAURI_INTERNALS__ 时为 false", () => {

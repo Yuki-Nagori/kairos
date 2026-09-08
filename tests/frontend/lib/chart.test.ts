@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { drawLineChart, downsampleSeries, toCsv } from "./chart";
+import { drawLineChart, downsampleSeries, toCsv } from "../../../src-web/lib/chart";
 
 describe("downsampleSeries", () => {
   it("returns a copy when small enough", () => {

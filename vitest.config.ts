@@ -3,7 +3,7 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     environment: "happy-dom",
-    include: ["src-web/**/*.test.ts"],
+    include: ["tests/frontend/**/*.test.ts"],
     coverage: {
       provider: "v8",
       // 覆盖率口径：纯逻辑与 UI 组件；services 是薄 IPC 封装（逻辑在 Rust core，

@@ -26,3 +26,5 @@ Kairos：注塑成型 CAE 仿真软件，对标行业领先的同类产品（自
 - **里程碑评审**：每个里程碑结束强制执行 [T21 整体评审与优化](ai-docs/tasks/T21-milestone-review.md)（架构 / 性能 / 质量 / 文档 / 安全八项清单），发现按「立即修 / 回流任务 / 接受并记录」闭环，未通过不得开启下一里程碑。
 
 详细理由与代码模板见 [ai-docs/ARCHITECTURE.md](ai-docs/ARCHITECTURE.md)。
+
+- 测试地图见 [tests/README.md](tests/README.md)。

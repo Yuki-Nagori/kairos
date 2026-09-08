@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { allPrerequisitesDone, evaluatePipeline, type PipelineInput } from "./pipeline";
+import {
+  allPrerequisitesDone,
+  evaluatePipeline,
+  type PipelineInput,
+} from "../../../src-web/lib/pipeline";
 
 function input(overrides: Partial<PipelineInput> = {}): PipelineInput {
   return {

@@ -2055,6 +2055,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "kairos-tests"
+version = "0.1.0"
+dependencies = [
+ "kairos-core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "keyboard-types"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

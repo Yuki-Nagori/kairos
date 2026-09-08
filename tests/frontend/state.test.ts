@@ -1,22 +1,29 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { IpcUnavailableError } from "./lib/ipc";
-import { addStudy, appStore, bootstrap, initialAppState, newProject, setError } from "./state";
-import { getSystemInfo } from "./services/system";
-import { createProject, listRecentProjects } from "./services/project";
-import { listBuiltinMaterials, listCustomMaterials } from "./services/materials";
+import { IpcUnavailableError } from "../../src-web/lib/ipc";
+import {
+  addStudy,
+  appStore,
+  bootstrap,
+  initialAppState,
+  newProject,
+  setError,
+} from "../../src-web/state";
+import { getSystemInfo } from "../../src-web/services/system";
+import { createProject, listRecentProjects } from "../../src-web/services/project";
+import { listBuiltinMaterials, listCustomMaterials } from "../../src-web/services/materials";
 
-vi.mock("./services/system", () => ({ getSystemInfo: vi.fn() }));
-vi.mock("./services/project", () => ({
+vi.mock("../../src-web/services/system", () => ({ getSystemInfo: vi.fn() }));
+vi.mock("../../src-web/services/project", () => ({
   createProject: vi.fn(),
   listRecentProjects: vi.fn(),
   loadProjectFile: vi.fn(),
   saveProjectFile: vi.fn(),
 }));
-vi.mock("./services/geometry", () => ({
+vi.mock("../../src-web/services/geometry", () => ({
   importStl: vi.fn(),
   removeGeometry: vi.fn(),
 }));
-vi.mock("./services/materials", () => ({
+vi.mock("../../src-web/services/materials", () => ({
   listBuiltinMaterials: vi.fn(),
   listCustomMaterials: vi.fn(),
   importCustomMaterials: vi.fn(),

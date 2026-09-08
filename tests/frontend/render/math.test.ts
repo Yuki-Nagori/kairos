@@ -11,7 +11,7 @@ import {
   mat4RotateY,
   normalize,
   sub,
-} from "./math";
+} from "../../../src-web/render/math";
 
 describe("math", () => {
   it("identity leaves points unchanged", () => {

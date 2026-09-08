@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { appStore, initialAppState } from "../state";
-import type { SystemInfo } from "../types";
-import { createStatusBar } from "./app-header";
+import { appStore, initialAppState } from "../../../src-web/state";
+import type { SystemInfo } from "../../../src-web/types";
+import { createStatusBar } from "../../../src-web/components/app-header";
 
 const info: SystemInfo = { name: "kairos", version: "0.1.0", os: "macos" };
 

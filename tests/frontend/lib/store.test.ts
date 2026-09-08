@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createStore, select } from "./store";
+import { createStore, select } from "../../../src-web/lib/store";
 
 describe("createStore", () => {
   it("merges patches and notifies subscribers", () => {

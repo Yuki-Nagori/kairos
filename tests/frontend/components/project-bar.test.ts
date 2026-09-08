@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { appStore, initialAppState } from "../state";
-import type { Project } from "../types";
-import { createProjectBar } from "./project-bar";
+import { appStore, initialAppState } from "../../../src-web/state";
+import type { Project } from "../../../src-web/types";
+import { createProjectBar } from "../../../src-web/components/project-bar";
 
 const project: Project = {
   schemaVersion: 1,

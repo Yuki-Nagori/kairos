@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildReportHtml, escapeHtml } from "./report";
+import { buildReportHtml, escapeHtml } from "../../../src-web/lib/report";
 
 describe("escapeHtml", () => {
   it("escapes html special characters", () => {
