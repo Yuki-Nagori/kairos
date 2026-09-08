@@ -82,3 +82,4 @@
 - **10:55** research(T25): moldflow-api 分层概念对照笔记
 - **11:0x** feat(ui): 海军蓝 CAE 色板 + 控件/面板视觉升级
 - **11:1x** docs: 入库下一阶段任务 T29–T33（真实求解验证 / Gmsh 集成 / 派生算子 / CLI / 发布加固）
+- **11:2x** feat(download): 修 Gmsh 404 死链，失败重试 + 跨会话清单
