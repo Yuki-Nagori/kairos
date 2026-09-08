@@ -22,3 +22,5 @@ tauri-plugin-dialog = "2"
 ureq = "2"
 wgpu = "24"
 
+[dev-dependencies]
+zip = { version = "2", default-features = false, features = ["deflate"] }

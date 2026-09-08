@@ -238,18 +238,20 @@ fn extract_archive(archive: &Path, dest: &Path) -> Result<()> {
         .unwrap_or_default()
         .to_lowercase();
     let is_zip = name.ends_with(".zip");
-    let mut command = Command::new(if is_zip && cfg!(target_os = "linux") {
-        "unzip"
-    } else {
-        "tar"
-    });
+
+    #[cfg(target_os = "windows")]
+    let mut command = Command::new("tar"); // Windows 的 tar 是 bsdtar，可直接解 zip
+    #[cfg(not(target_os = "windows"))]
+    let mut command = Command::new(if is_zip { "unzip" } else { "tar" });
+
     if is_zip {
-        command.arg("-o").arg(archive);
-        command.arg(if cfg!(target_os = "linux") {
-            "-d"
+        // Linux / macOS：unzip -o；Windows：bsdtar -xf（auto 识别 zip）
+        command.arg(archive);
+        if cfg!(target_os = "windows") {
+            command.arg("-C");
         } else {
-            "-C"
-        });
+            command.arg("-d");
+        }
     } else {
         command.arg("-xzf").arg(archive).arg("-C");
     }
@@ -373,6 +375,29 @@ mod tests {
         for (id, url, expected) in cases {
             assert_eq!(derive_file_name(id, url), expected, "url: {url}");
         }
+    }
+
+    #[test]
+    fn extract_archive_handles_zip() {
+        let dir = std::env::temp_dir().join(format!("kairos-zip-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let zip_path = dir.join("pkg.zip");
+        let file = fs::File::create(&zip_path).unwrap();
+        let mut writer = zip::ZipWriter::new(file);
+        writer
+            .start_file("hello.txt", zip::write::SimpleFileOptions::default())
+            .unwrap();
+        writer.write_all(b"kairos").unwrap();
+        writer.finish().unwrap();
+
+        let dest = dir.join("out");
+        extract_archive(&zip_path, &dest).unwrap();
+        assert_eq!(
+            fs::read_to_string(dest.join("hello.txt")).unwrap(),
+            "kairos"
+        );
+
+        fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

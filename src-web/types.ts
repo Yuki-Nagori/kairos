@@ -229,4 +229,6 @@ export interface DependencyStatus {
   hint: string;
   download: DownloadSpec | null;
   ready: boolean;
+  /** 应用内受管目录中检测到可执行副本（下载 + 解压后即可用）。 */
+  managedReady: boolean;
 }

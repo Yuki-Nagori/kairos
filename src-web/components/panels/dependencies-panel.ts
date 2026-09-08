@@ -70,8 +70,9 @@ export function createDependenciesPanel(): HTMLElement {
       badge.textContent = STRATEGY_LABEL[dep.strategy] ?? dep.license;
 
       const ready = document.createElement("span");
-      ready.className = dep.ready ? "text-emerald-400" : "text-red-400";
-      ready.textContent = dep.ready ? "就绪" : "未就绪";
+      const usable = dep.ready || dep.managedReady;
+      ready.className = usable ? "text-emerald-400" : "text-red-400";
+      ready.textContent = usable ? (dep.managedReady ? "就绪（应用内副本）" : "就绪") : "未就绪";
 
       const requiredTag = document.createElement("span");
       requiredTag.className = "text-zinc-600";
