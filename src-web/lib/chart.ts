@@ -19,16 +19,12 @@ export function downsampleSeries(values: number[], targetBuckets: number): numbe
     let min = Infinity;
     let max = -Infinity;
     for (let index = start; index < end; index += 1) {
-      const value = values[index] ?? 0;
+      // 不变量：index < end <= values.length
+      const value = values[index]!;
       min = Math.min(min, value);
       max = Math.max(max, value);
     }
-    if (min === Infinity) {
-      // 空桶（极端bucketSize）—— 取起点值
-      const fallback = values[start] ?? 0;
-      out.push(fallback, fallback);
-      continue;
-    }
+    // end >= start+1 恒成立，桶内必有元素，min/max 必然被赋值。
     out.push(min, max);
   }
   return out;
@@ -117,7 +113,8 @@ export function drawLineChart(
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     for (let index = 0; index < sampled.length; index += 1) {
-      const value = sampled[index] ?? 0;
+      // 不变量：index < sampled.length
+      const value = sampled[index]!;
       const x = padding.left + (index * plotWidth) / Math.max(sampled.length - 1, 1);
       const y = padding.top + plotHeight - ((value - minValue) / valueSpan) * plotHeight;
       if (index === 0) {

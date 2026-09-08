@@ -39,11 +39,7 @@ fn looks_like_binary(bytes: &[u8]) -> bool {
 }
 
 fn parse_binary(bytes: &[u8]) -> Result<TriangleMesh> {
-    if bytes.len() < BINARY_HEADER {
-        return Err(KairosError::validation(
-            "二进制 STL 文件不完整（不足 84 字节）。",
-        ));
-    }
+    // 不变量：两条调用路径（looks_like_binary / 长度兜底）都保证 len >= BINARY_HEADER。
     let count = u32::from_le_bytes(bytes[80..84].try_into().expect("长度已检查")) as usize;
     let expected = BINARY_HEADER + count * BINARY_TRIANGLE;
     if bytes.len() < expected {

@@ -30,4 +30,18 @@ describe("invokeCommand", () => {
     expect(error).not.toBeInstanceOf(CommandError);
     expect((error as Error).message).toBe("只有消息，没有 code");
   });
+
+  it("passes native Error rejections through unchanged", async () => {
+    const native = new Error("原生错误");
+    invokeMock.mockRejectedValueOnce(native);
+    const error = await invokeCommand("system_info").catch((rejection: unknown) => rejection);
+    expect(error).toBe(native);
+  });
+
+  it("serializes objects without a message field", async () => {
+    invokeMock.mockRejectedValueOnce({ reason: 42 });
+    const error = await invokeCommand("system_info").catch((rejection: unknown) => rejection);
+    expect(error).not.toBeInstanceOf(CommandError);
+    expect((error as Error).message).toContain("42");
+  });
 });

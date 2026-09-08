@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { evaluatePipeline, type PipelineInput } from "./pipeline";
+import { allPrerequisitesDone, evaluatePipeline, type PipelineInput } from "./pipeline";
 
 function input(overrides: Partial<PipelineInput> = {}): PipelineInput {
   return {
@@ -118,5 +118,32 @@ describe("evaluatePipeline", () => {
   it("allPrerequisitesDone gates submission", () => {
     const steps = evaluatePipeline(input()).map((s) => ({ ...s, done: s.id !== "submit" }));
     expect(steps.every((s) => s.done || s.id === "submit")).toBe(true);
+  });
+});
+
+describe("allPrerequisitesDone", () => {
+  it("非 submit 步骤全部完成时为 true（submit 未完成不影响）", () => {
+    const steps = [
+      { id: "a", label: "", done: true, hint: null },
+      { id: "submit", label: "", done: false, hint: null },
+    ];
+    expect(allPrerequisitesDone(steps)).toBe(true);
+  });
+
+  it("任一前置未完成时为 false", () => {
+    const steps = [
+      { id: "a", label: "", done: true, hint: null },
+      { id: "b", label: "", done: false, hint: null },
+    ];
+    expect(allPrerequisitesDone(steps)).toBe(false);
+  });
+});
+
+describe("evaluatePipeline 网格步骤的精确指引", () => {
+  it("几何已导入但未生成网格：hint 指向生成体积网格", () => {
+    const steps = evaluatePipeline(input({ meshReports: {} }));
+    const meshStep = steps.find((s) => s.id === "mesh");
+    expect(meshStep?.done).toBe(false);
+    expect(meshStep?.hint).toContain("生成体积网格");
   });
 });

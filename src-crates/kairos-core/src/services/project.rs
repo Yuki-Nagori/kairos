@@ -29,10 +29,9 @@ pub fn new_id(prefix: &str) -> String {
 /// 创建项目：名称去空白、非空。
 pub fn create(name: &str, now: u64) -> Result<Project> {
     let name = name.trim();
-    if name.is_empty() {
-        return Err(KairosError::validation("项目名称不能为空。"));
-    }
-    Ok(Project::new(new_id("proj"), name.to_string(), now))
+    let project = Project::new(new_id("proj"), name.to_string(), now);
+    validate(&project)?;
+    Ok(project)
 }
 
 /// 保存前的一致性校验（名称非空、研究名唯一、schema 版本正确）。
@@ -90,9 +89,8 @@ pub fn parse(content: &str) -> Result<Project> {
 pub fn write_atomic(path: &Path, content: &str) -> Result<()> {
     let tmp = path.with_extension("kairos.tmp");
     fs::write(&tmp, content).map_err(|e| KairosError::io(format!("写入临时文件失败：{e}")))?;
-    if cfg!(windows) {
-        let _ = fs::remove_file(path);
-    }
+    #[cfg(target_os = "windows")]
+    let _ = fs::remove_file(path);
     fs::rename(&tmp, path).map_err(|e| {
         let _ = fs::remove_file(&tmp);
         KairosError::io(format!("工程文件替换失败：{e}"))

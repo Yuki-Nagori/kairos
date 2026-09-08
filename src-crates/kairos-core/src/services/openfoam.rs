@@ -224,9 +224,8 @@ pub fn parse_time_line(line: &str) -> Option<f64> {
 }
 
 fn write(path: &Path, content: &str) -> Result<()> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|e| KairosError::io(format!("创建目录失败：{e}")))?;
-    }
+    fs::create_dir_all(path.parent().unwrap_or_else(|| Path::new(".")))
+        .map_err(|e| KairosError::io(format!("创建目录失败：{e}")))?;
     fs::write(path, content).map_err(|e| KairosError::io(format!("写入 {path:?} 失败：{e}")))
 }
 

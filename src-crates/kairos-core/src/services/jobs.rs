@@ -63,17 +63,14 @@ pub fn promote_ready(jobs: &mut [Job], limits: &SchedulerLimits, now_ms: u64) ->
         if running >= limits.max_concurrent {
             break;
         }
-        if job.status != JobStatus::Queued {
-            continue;
+        // 仅排队中且不超核数预算的作业才启动；其余保持排队。
+        if job.status == JobStatus::Queued && used_cores + job.cores <= limits.max_cores {
+            job.status = JobStatus::Running;
+            job.started_ms = Some(now_ms);
+            used_cores += job.cores;
+            running += 1;
+            started.push(job.id.clone());
         }
-        if used_cores + job.cores > limits.max_cores {
-            continue;
-        }
-        job.status = JobStatus::Running;
-        job.started_ms = Some(now_ms);
-        used_cores += job.cores;
-        running += 1;
-        started.push(job.id.clone());
     }
     started
 }

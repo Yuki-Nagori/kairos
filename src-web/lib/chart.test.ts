@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { drawLineChart, downsampleSeries, toCsv } from "./chart";
 
 describe("downsampleSeries", () => {
@@ -98,5 +98,62 @@ describe("drawLineChart", () => {
         height: 80,
       }),
     ).not.toThrow();
+  });
+});
+
+describe("drawLineChart 与 downsampleSeries 的边界", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("downsampleSeries：值数不超过桶数两倍时原样返回", () => {
+    // 早退分支：值太密不需要降采样
+    const values = [1, 2];
+    expect(downsampleSeries(values, 3)).toEqual([1, 2]);
+  });
+
+  it("drawLineChart：命中 CSS 变量时使用变量值", () => {
+    vi.stubGlobal("getComputedStyle", () => ({
+      getPropertyValue: (name: string) => (name === "--c-bg-input" ? "#abcdef" : ""),
+    }));
+    const ctx = fakeCtx();
+    const drawn = drawLineChart(ctx, [{ values: [1, 2], color: "#fff", label: "" }], {
+      width: 100,
+      height: 80,
+    });
+    expect(drawn).toBeGreaterThan(0);
+  });
+
+  it("drawLineChart：cssVar 不可用时用回退色不抛错", () => {
+    vi.stubGlobal("getComputedStyle", undefined);
+    const ctx = fakeCtx();
+    expect(() =>
+      drawLineChart(ctx, [{ values: [1, 2], color: "#fff", label: "" }], {
+        width: 100,
+        height: 80,
+      }),
+    ).not.toThrow();
+  });
+
+  it("drawLineChart：平坦序列自动扩展示宽范围", () => {
+    const ctx = fakeCtx();
+    const drawn = drawLineChart(ctx, [{ values: [5, 5, 5], color: "#fff", label: "" }], {
+      width: 200,
+      height: 100,
+    });
+    expect(drawn).toBeGreaterThan(0);
+  });
+
+  it("drawLineChart：跳过空序列项", () => {
+    const ctx = fakeCtx();
+    const drawn = drawLineChart(
+      ctx,
+      [
+        { values: [], color: "#fff", label: "空" },
+        { values: [1, 2, 3], color: "#fff", label: "有" },
+      ],
+      { width: 200, height: 100 },
+    );
+    expect(drawn).toBeGreaterThan(0);
   });
 });

@@ -33,22 +33,23 @@ pub fn scan_times(case_dir: &Path) -> Result<ResultCatalog> {
         if !path.is_dir() {
             continue;
         }
-        let Some(dir_name) = path.file_name().and_then(|n| n.to_str()) else {
-            continue;
+        let dir_name = match path.file_name().and_then(|n| n.to_str()) {
+            Some(dir_name) => dir_name,
+            None => continue,
         };
         let Some(time_s) = parse_time_dir_name(dir_name) else {
             continue;
         };
-        let mut fields = Vec::new();
-        if let Ok(field_entries) = fs::read_dir(&path) {
-            for field_entry in field_entries.flatten() {
-                if let Some(name) = field_entry.file_name().to_str()
-                    && field_entry.path().is_file()
-                {
-                    fields.push(name.to_string());
-                }
-            }
-        }
+        // read_dir 失败（极罕见）等价于无字段文件：两层 flatten 剥掉 Result 与目录迭代器。
+        let mut fields: Vec<String> = fs::read_dir(&path)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .filter_map(|entry| {
+                let name = entry.file_name().to_str()?.to_string();
+                entry.path().is_file().then_some(name)
+            })
+            .collect();
         fields.sort();
         times.push(TimeStepMeta {
             dir_name: dir_name.to_string(),
@@ -108,10 +109,11 @@ pub fn parse_internal_scalar(content: &str) -> (Vec<f64>, bool) {
             .unwrap_or(f64::NAN);
         return (vec![value], value.is_finite());
     }
-    // 列表形式：数值位于首个左括号之后，声明的数量在括号之前。
-    let Some(open) = trimmed.find('(') else {
-        return (Vec::new(), false);
-    };
+    // 列表形式：数值位于首个左括号之后。非 uniform 时 extract_internal_field
+    // 已保证存在配对括号（否则返回 None），故这里必然是 Some。
+    let open = trimmed
+        .find('(')
+        .expect("extract_internal_field 已保证非 uniform 形式含左括号");
     let declared = declared_count(trimmed[..open].trim_start());
     let numbers: Vec<f64> = trimmed[open..]
         .split(['(', ')', ';', ','])

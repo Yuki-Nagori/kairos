@@ -75,12 +75,12 @@ impl Job {
             return None;
         }
         self.status = next;
-        match next {
-            JobStatus::Running => self.started_ms = Some(now_ms),
-            JobStatus::Done | JobStatus::Failed | JobStatus::Cancelled => {
-                self.finished_ms = Some(now_ms)
-            }
-            _ => {}
+        // Running 记录开始时间；Done / Failed / Cancelled 记录结束时间。
+        // （Queued 不可能是迁移目标：can_transition_to 不放行。）
+        if next == JobStatus::Running {
+            self.started_ms = Some(now_ms);
+        } else {
+            self.finished_ms = Some(now_ms);
         }
         Some(())
     }
