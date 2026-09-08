@@ -1,7 +1,6 @@
 # Kairos 任务索引
 
-- **已完成**（T01–T20）：文件名以 `-done` 结尾，对应里程碑 M0–M5 全部关闭，评审报告见 `ai-docs/reviews/`；
-- **下一阶段**（T22–T25）：基于生态在线调研新立的任务，待开工；
+- 已完成任务文件名以 `-done` 结尾，评审报告见 `ai-docs/reviews/`，时间线见 `ai-docs/timeline.md`；
 - 任务文件只写任务本身（目标 / 范围 / 非目标 / 交付物 / 验收标准），实现方案在开工时再定。
 
 ## 已完成任务（M0–M5）
@@ -29,25 +28,32 @@
 | T19 | [T19-gpu-infrastructure-done.md](T19-gpu-infrastructure-done.md)     | GPU 计算基础设施       |
 | T20 | [T20-gpu-postprocessing-done.md](T20-gpu-postprocessing-done.md)     | GPU 加速后处理算子     |
 
-## M4/M5 补充任务
+## 后续完成任务
 
-| ID  | 文件                                                   | 任务                                   | 状态   |
-| --- | ------------------------------------------------------ | -------------------------------------- | ------ |
-| T26 | [T26-cae-workbench-ui.md](T26-cae-workbench-ui.md)     | UI 重构为 Moldflow 风格专业 CAE 工作台 | 待开工 |
-| T27 | [T27-component-download.md](T27-component-download.md) | 应用内组件下载                         | ✅     |
+| ID  | 文件                                                             | 任务                            |
+| --- | ---------------------------------------------------------------- | ------------------------------- |
+| T22 | [T22-gmsh-evaluation-done.md](T22-gmsh-evaluation-done.md)       | Gmsh 网格引擎评估与解析原型     |
+| T23 | [T23-time-animation-done.md](T23-time-animation-done.md)         | 体素→表面场映射与时间步动画通道 |
+| T26 | [T26-cae-workbench-ui-done.md](T26-cae-workbench-ui-done.md)     | Moldflow 风格工作台 UI + 主题   |
+| T27 | [T27-component-download-done.md](T27-component-download-done.md) | 应用内组件下载                  |
 
-## 下一阶段任务（待开工）
+> T26/T27 落地后的增量打磨（系统窗口按钮、原生应用菜单、主题注入统一、
+> 品牌图标、emoji 清理、启动窗口位置）见 `ai-docs/timeline.md` 对应条目，
+> 不单独立任务。
 
-| ID  | 文件                                                   | 任务                            | 依赖     |
-| --- | ------------------------------------------------------ | ------------------------------- | -------- |
-| T22 | [T22-gmsh-evaluation.md](T22-gmsh-evaluation.md)       | Gmsh 网格引擎集成评估与原型     | —        |
-| T23 | [T23-time-animation.md](T23-time-animation.md)         | 体素→表面场映射与时间步动画通道 | T13、T14 |
-| T24 | [T24-pinn-research.md](T24-pinn-research.md)           | PINN 熔融前沿预测研究 spike     | —        |
-| T25 | [T25-workflow-api-study.md](T25-workflow-api-study.md) | 第三方工作流 API 分层概念研究   | —        |
+## 待开工任务
+
+| ID  | 文件                                                   | 任务                           | 依赖     |
+| --- | ------------------------------------------------------ | ------------------------------ | -------- |
+| T21 | [T21-milestone-review.md](T21-milestone-review.md)     | 里程碑评审循环（随里程碑触发） | 随里程碑 |
+| T24 | [T24-pinn-research.md](T24-pinn-research.md)           | PINN 熔融前沿预测研究 spike    | —        |
+| T25 | [T25-workflow-api-study.md](T25-workflow-api-study.md) | 第三方工作流 API 分层概念研究  | —        |
+| T28 | [T28-repo-structure.md](T28-repo-structure.md)         | 仓库结构优化（state 拆分等）   | —        |
 
 ## 全局原则（不变）
 
 - **性能是一等约束**：新任务带明确性能验收标准，预算源自 T01；
 - **GPL 隔离红线**：GPL 代码只走子进程 + 文件交换；
 - **GPU 统一走 wgpu**：跨 NVIDIA / AMD / Intel / Apple，无 GPU 环境回退 CPU；
-- 领域代码进 `src-crates/kairos-core`，适配进 `src-tauri`，UI 进 `src-web`。
+- 领域代码进 `src-crates/kairos-core`，适配进 `src-tauri`，UI 进 `src-web`；
+- 任务完成即改名加 `-done` 并同步本索引。
