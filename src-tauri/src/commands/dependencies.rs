@@ -2,6 +2,11 @@
 
 use std::process::Command;
 
+// creation_flags（CREATE_NO_WINDOW）来自 Windows 专属 trait；cfg 裁剪外的平台
+// 看不到这段代码，import 必须同样带 cfg，否则非 Windows 编译报未使用。
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
 use kairos_core::error::{KairosError, Result};
 use kairos_core::models::dependencies::RuntimeDependency;
 use kairos_core::services::dependencies as dependencies_service;
