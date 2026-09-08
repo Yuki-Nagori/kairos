@@ -7,7 +7,7 @@ import {
   assignMaterial,
 } from "../../state";
 import type { Material } from "../../types";
-import { button, card, hint } from "../ui";
+import { button, card, hint, sectionLabel } from "../ui";
 
 /** 材料库面板：内置示例材料 + 自定义材料的浏览、详情、导入导出与复制。 */
 export function createMaterialsPanel(): HTMLElement {
@@ -113,11 +113,8 @@ export function createMaterialsPanel(): HTMLElement {
     heading.textContent = `${material.name}（${material.manufacturer}）`;
     detail.append(heading);
 
-    const rheologyTitle = document.createElement("p");
-    rheologyTitle.className = "text-xs font-semibold text-zinc-400";
-    rheologyTitle.textContent = "Cross-WLF 黏度";
     detail.append(
-      rheologyTitle,
+      sectionLabel("Cross-WLF 黏度"),
       paramTable([
         ["n", String(material.rheology.n)],
         ["τ*", `${material.rheology.tauStar} Pa`],
@@ -129,11 +126,8 @@ export function createMaterialsPanel(): HTMLElement {
       ]),
     );
 
-    const pvtTitle = document.createElement("p");
-    pvtTitle.className = "text-xs font-semibold text-zinc-400";
-    pvtTitle.textContent = "Tait PVT";
     detail.append(
-      pvtTitle,
+      sectionLabel("Tait PVT"),
       paramTable([
         ["b1m", `${material.pvt.b1m} m³/kg`],
         ["b1s", `${material.pvt.b1s} m³/kg`],
@@ -146,21 +140,16 @@ export function createMaterialsPanel(): HTMLElement {
       ]),
     );
 
-    const heatTitle = document.createElement("p");
-    heatTitle.className = "text-xs font-semibold text-zinc-400";
-    heatTitle.textContent = "比热 Cp";
-    detail.append(heatTitle, valueTable(material.specificHeat, "J/(kg·K)"));
-    const condTitle = document.createElement("p");
-    condTitle.className = "text-xs font-semibold text-zinc-400";
-    condTitle.textContent = "导热系数 λ";
-    detail.append(condTitle, valueTable(material.conductivity, "W/(m·K)"));
+    detail.append(
+      sectionLabel("比热 Cp"),
+      valueTable(material.specificHeat, "J/(kg·K)"),
+      sectionLabel("导热系数 λ"),
+      valueTable(material.conductivity, "W/(m·K)"),
+    );
 
     if (material.mechanics) {
-      const mechTitle = document.createElement("p");
-      mechTitle.className = "text-xs font-semibold text-zinc-400";
-      mechTitle.textContent = "力学（预留）";
       detail.append(
-        mechTitle,
+        sectionLabel("力学（预留）"),
         paramTable([
           ["E", `${material.mechanics.elasticModulus} Pa`],
           ["ν", String(material.mechanics.poissonRatio)],
