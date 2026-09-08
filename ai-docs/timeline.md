@@ -94,3 +94,4 @@
 - **13:4x** feat(deps): zip 解压修复 + 就绪检测纳入应用内受管副本
 - **13:3x** test: 删除永真式断言用例，契约测试导入合并
 - **13:5x** fix: F16 收口——大数组统计循环化，消除 spread 栈溢出
+- **13:4x** refactor(ui): materials-panel 小节标题收编 sectionLabel
