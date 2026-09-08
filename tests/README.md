@@ -2,14 +2,14 @@
 
 所有测试集结于根目录 `tests/`，按端与职能分类。跑法：`bun run verify`（全量）或下述单项命令。
 
-## 前端（vitest + happy-dom）
+## 前端（web 前端，vitest + happy-dom；与 src-web 镜像）
 
-| 目录                     | 内容                                                                    | 跑法                                           |
-| ------------------------ | ----------------------------------------------------------------------- | ---------------------------------------------- |
-| `frontend/lib/`          | 纯逻辑单元测试（chart / ipc / pipeline / report / store / environment） | `bunx vitest run tests/frontend/lib`           |
-| `frontend/components/`   | UI 组件测试（app-header / project-bar）                                 | `bunx vitest run tests/frontend/components`    |
-| `frontend/state.test.ts` | 全局状态容器与动作分片                                                  | `bunx vitest run tests/frontend/state.test.ts` |
-| `frontend/render/`       | 渲染数学工具（mat4 等）                                                 | `bunx vitest run tests/frontend/render`        |
+| 目录                | 内容                                                                    | 跑法                                      |
+| ------------------- | ----------------------------------------------------------------------- | ----------------------------------------- |
+| `web/lib/`          | 纯逻辑单元测试（chart / ipc / pipeline / report / store / environment） | `bunx vitest run tests/web/lib`           |
+| `web/components/`   | UI 组件测试（app-header / project-bar）                                 | `bunx vitest run tests/web/components`    |
+| `web/state.test.ts` | 全局状态容器与动作分片                                                  | `bunx vitest run tests/web/state.test.ts` |
+| `web/render/`       | 渲染数学工具（mat4 等）                                                 | `bunx vitest run tests/web/render`        |
 
 - 覆盖率门槛（100%，四维）：`bun run test:coverage`（口径 = `src-web/lib/**`，见 vitest.config.ts）。
 
