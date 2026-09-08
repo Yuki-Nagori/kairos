@@ -92,3 +92,4 @@
 - **13:2x** refactor(download): 文件名推导纯函数化，修正 .tar.gz 截断
 - **13:2x** fix(test): gap_tests 临时目录幂等创建（F15 收口）
 - **13:4x** feat(deps): zip 解压修复 + 就绪检测纳入应用内受管副本
+- **13:3x** test: 删除永真式断言用例，契约测试导入合并
