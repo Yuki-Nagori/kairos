@@ -76,6 +76,27 @@ jobs:
           path: bench-out/
         if: always()
 
+  coverage:
+    name: 覆盖率门槛（Rust core / 前端 lib ≥ 90%）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.95.0"
+          components: llvm-tools-preview
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+      - uses: Swatinem/rust-cache@v2
+      - run: bun install --frozen-lockfile
+      # vitest thresholds 内建强制（lib 行 ≥90 / 函数 ≥85 / 分支 ≥80）
+      - run: bun run test:coverage
+      - run: cargo llvm-cov -p kairos-core --summary-only --fail-under-lines 90
+
   audit:
     name: 依赖漏洞审计
     runs-on: ubuntu-latest

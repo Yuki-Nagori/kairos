@@ -21,6 +21,7 @@
     "bench": "bun run bench:web && cargo bench",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "coverage:rust": "cargo llvm-cov -p kairos-core --summary-only --fail-under-lines 90",
     "test:rust": "cargo test --workspace",
     "knip": "knip",
     "verify": "bun run typecheck && bun run typecheck:rust && bun run lint && bun run lint:rust && bun run format:check && bun run format:rust:check && bun run test && bun run test:rust && bun run knip",

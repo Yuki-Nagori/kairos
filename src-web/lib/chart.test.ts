@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { downsampleSeries, toCsv } from "./chart";
+import { drawLineChart, downsampleSeries, toCsv } from "./chart";
 
 describe("downsampleSeries", () => {
   it("returns a copy when small enough", () => {
@@ -42,5 +42,61 @@ describe("toCsv", () => {
       ],
     );
     expect(csv).toBe("node,T\n1,300\n2,301.5");
+  });
+});
+
+/** 录制调用的假 2D 上下文：属性可写，方法调用记入 calls。 */
+function fakeCtx(): CanvasRenderingContext2D & { calls: string[] } {
+  const calls: string[] = [];
+  return new Proxy(
+    {},
+    {
+      get(_target, prop) {
+        if (prop === "calls") {
+          return calls;
+        }
+        return (...args: unknown[]) => {
+          void args;
+          calls.push(String(prop));
+        };
+      },
+      set() {
+        return true;
+      },
+    },
+  ) as CanvasRenderingContext2D & { calls: string[] };
+}
+
+describe("drawLineChart", () => {
+  it("空序列只铺背景，返回 0", () => {
+    const ctx = fakeCtx();
+    const drawn = drawLineChart(ctx, [], { width: 200, height: 100 });
+    expect(drawn).toBe(0);
+    expect(ctx.calls).toContain("fillRect");
+    expect(ctx.calls).not.toContain("stroke");
+  });
+
+  it("绘制曲线：描边、网格与坐标轴文字都发生", () => {
+    const ctx = fakeCtx();
+    const values = Array.from({ length: 50 }, (_, i) => Math.sin(i / 5));
+    const drawn = drawLineChart(ctx, [{ values, color: "#34d399", label: "p" }], {
+      width: 400,
+      height: 200,
+      xLabel: "x",
+      yLabel: "y",
+    });
+    expect(drawn).toBeGreaterThan(0);
+    expect(ctx.calls).toContain("stroke");
+    expect(ctx.calls).toContain("fillText");
+  });
+
+  it("cssVar 缺失时使用回退色（不抛错）", () => {
+    const ctx = fakeCtx();
+    expect(() =>
+      drawLineChart(ctx, [{ values: [1, 2], color: "#fff", label: "" }], {
+        width: 100,
+        height: 80,
+      }),
+    ).not.toThrow();
   });
 });
