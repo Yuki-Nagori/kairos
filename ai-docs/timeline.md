@@ -97,3 +97,4 @@
 - **13:4x** refactor(ui): materials-panel 小节标题收编 sectionLabel
 - **13:5x** docs(deps): 依赖 hint 按真实安装流程改写
 - **13:6x** fix: 清理受管路径重构残留
+- **13:5x** fix: F15 收口——gap_tests 临时目录幂等创建；依赖 hint 按真实流程改写
