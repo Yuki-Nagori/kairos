@@ -32,8 +32,15 @@ pub fn list_runtime_dependencies() -> Vec<DependencyStatus> {
 /// 打开组件的官方下载 / 编译页（引导安装的落地动作，GPL 组件不分发二进制）。
 #[tauri::command]
 pub fn open_dependency_page(page_url: String) -> Result<()> {
+    // 双重校验：https 前缀 + 必须是依赖目录里登记过的页面（防任意 URL 打开）。
     if !page_url.starts_with("https://") {
         return Err(KairosError::validation("仅允许打开 https 页面。"));
+    }
+    let registered = dependencies_service::catalog()
+        .iter()
+        .any(|dep| dep.page_url == page_url);
+    if !registered {
+        return Err(KairosError::validation("页面不在依赖目录内。"));
     }
     #[cfg(target_os = "macos")]
     {

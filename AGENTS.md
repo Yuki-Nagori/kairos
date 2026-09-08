@@ -14,7 +14,7 @@ Kairos：注塑成型 CAE 仿真软件，对标行业领先的同类产品（自
 ## 不可违反的约定（速查）
 
 - **目录职责**：`src-web/` 前端（TypeScript）；`src-crates/` Rust 领域层 crate；`src-tauri/` Tauri 桌面适配层。各目录内部的 `src/` 是 Rust crate 固定结构，勿混淆。
-- **依赖方向**：前端 `components → state → services → lib`；Rust `src-tauri → kairos-core`。`kairos-core` 禁止依赖 tauri；命令层不写业务逻辑，业务只住 core。
+- **依赖方向**：前端 `components → state → services → lib / render`；Rust `src-tauri → kairos-core`。`kairos-core` 禁止依赖 tauri；命令层不写业务逻辑，业务只住 core。
 - **错误契约**：命令一律返回 `Result<T, KairosError>`，跨 IPC 序列化为 `{ code, message }`；`code ∈ validation / not_found / io / solver / internal`。前端按 `code` 分支，禁止文本匹配 message。
 - **DTO 双端镜像**：Rust `models/` ↔ `src-web/types.ts`，任何改动必须同步两处并让契约测试（`src-crates/kairos-core/tests/contract.rs`）通过。
 - **线程模型**：同步 Tauri 命令跑在主线程，重计算必须异步 / 另起线程；进度回传用 `tauri::ipc::Channel`；大体积数据用 `tauri::ipc::Response`。

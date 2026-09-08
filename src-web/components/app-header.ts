@@ -66,11 +66,10 @@ export function createAppHeader(): HTMLElement {
   select(appStore, (s) => s.info, renderStatus);
 
   themeButton.addEventListener("click", () => {
+    // cycleTheme 广播 THEME_CHANGED_EVENT，图标经下方监听同步。
     cycleTheme();
-    syncThemeIcon();
   });
 
-  // 原生菜单切换主题时图标不经过 store，借窗口事件保持同步。
   window.addEventListener("kairos:theme-changed", syncThemeIcon);
 
   syncThemeIcon();

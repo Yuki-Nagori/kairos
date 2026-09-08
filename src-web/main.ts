@@ -96,11 +96,7 @@ const menuActions: Record<string, () => void> = {
   "file.open": () => void openProject(),
   "file.save": () => void saveProject(),
   "file.saveAs": () => void saveProjectAs(),
-  "view.theme": () => {
-    cycleTheme();
-    // 头部图标不经过 store，用窗口事件同步
-    window.dispatchEvent(new CustomEvent("kairos:theme-changed"));
-  },
+  "view.theme": () => cycleTheme(),
   "analysis.checkNetwork": () => void checkNetwork(),
   "results.exportCsv": () => exportFieldCsv(),
   "tools.refreshDeps": () => void refreshDependencies(),

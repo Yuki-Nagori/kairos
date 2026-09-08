@@ -18,6 +18,9 @@ const THEME_STYLES: [string, string][] = Object.entries(
 
 const STORAGE_KEY = "kairos-theme";
 
+/** 主题切换后广播的窗口事件：标题栏图标、图表与视口重绘都监听它。 */
+export const THEME_CHANGED_EVENT = "kairos:theme-changed";
+
 function resolveSaved(): string {
   const saved = localStorage.getItem(STORAGE_KEY);
   const names = THEME_STYLES.map(([name]) => name);
@@ -56,5 +59,6 @@ export function cycleTheme(): string {
   const index = THEME_STYLES.findIndex(([name]) => name === active);
   const next = THEME_STYLES[(index + 1) % THEME_STYLES.length]?.[0] ?? active;
   setTheme(next);
+  window.dispatchEvent(new CustomEvent(THEME_CHANGED_EVENT));
   return next;
 }

@@ -51,7 +51,7 @@ export function createJobsPanel(): HTMLElement {
   refreshButton.addEventListener("click", () => void refreshJobs());
 
   function render(): void {
-    const { jobs, busy } = appStore.get();
+    const { jobs, jobLogs, busy } = appStore.get();
     const working = busy !== null;
     submitButton.disabled = working;
     refreshButton.disabled = working;
@@ -88,6 +88,16 @@ export function createJobsPanel(): HTMLElement {
 
       row.append(id, status, dir, time, cancel);
       listBox.append(row);
+
+      // 求解日志尾部（环形缓冲的最后 8 行），运行中与结束后都可查看。
+      const logs = jobLogs[job.id] ?? [];
+      if (logs.length > 0) {
+        const tail = document.createElement("pre");
+        tail.className =
+          "max-h-32 overflow-y-auto whitespace-pre-wrap break-all rounded border border-zinc-800 bg-zinc-950 px-2 py-1 text-[10px] leading-4 text-zinc-500";
+        tail.textContent = logs.slice(-8).join("\n");
+        listBox.append(tail);
+      }
     }
   }
 

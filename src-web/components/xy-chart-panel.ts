@@ -1,6 +1,7 @@
 import { appStore, addProbe, removeProbe, exportFieldCsv } from "../state";
 import type { ScalarField } from "../types";
 import { drawLineChart } from "../lib/chart";
+import { THEME_CHANGED_EVENT } from "../theme";
 import { registerSnapshot } from "../render/snapshot";
 import { button, card, hint, textInput } from "./ui";
 
@@ -114,6 +115,8 @@ export function createXyChartPanel(): HTMLElement {
 
   body.append(canvas, probeForm, probeList);
   render();
+  // 主题切换后画布配色取自 CSS 变量，需整帧重绘。
+  window.addEventListener(THEME_CHANGED_EVENT, render);
   appStore.subscribe(render);
   return root;
 }

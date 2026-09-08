@@ -34,6 +34,15 @@ export function downsampleSeries(values: number[], targetBuckets: number): numbe
   return out;
 }
 
+/** 读文档根的 CSS 变量（主题切换后面板监听事件重绘即拿到新值）；缺失时用回退色。 */
+function cssVar(name: string, fallback: string): string {
+  if (typeof getComputedStyle !== "function") {
+    return fallback;
+  }
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return value.length > 0 ? value : fallback;
+}
+
 interface DrawOptions {
   width: number;
   height: number;
@@ -55,7 +64,8 @@ export function drawLineChart(
   const plotWidth = Math.max(width - padding.left - padding.right, 1);
   const plotHeight = Math.max(height - padding.top - padding.bottom, 1);
 
-  ctx.fillStyle = options.background ?? "#09090b";
+  // 默认色来自主题 CSS 变量：深浅主题下面板都保持一致观感。
+  ctx.fillStyle = options.background ?? cssVar("--c-bg-input", "#09090b");
   ctx.fillRect(0, 0, width, height);
 
   let minValue = Infinity;
@@ -83,7 +93,7 @@ export function drawLineChart(
   const valueSpan = maxValue - minValue;
 
   // 网格（4×4）
-  ctx.strokeStyle = options.gridColor ?? "#27272a";
+  ctx.strokeStyle = options.gridColor ?? cssVar("--c-grid", "#27272a");
   ctx.lineWidth = 1;
   ctx.beginPath();
   for (let grid = 1; grid < 4; grid += 1) {
@@ -121,7 +131,7 @@ export function drawLineChart(
   }
 
   // 坐标轴标签
-  ctx.fillStyle = options.axisLabelColor ?? "#71717a";
+  ctx.fillStyle = options.axisLabelColor ?? cssVar("--c-text-muted", "#71717a");
   ctx.font = "11px sans-serif";
   ctx.fillText(options.yLabel ?? "", 8, padding.top + 12);
   ctx.fillText(options.xLabel ?? "", padding.left, height - 8);

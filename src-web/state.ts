@@ -73,6 +73,8 @@ interface AppState {
   moldIssues: string[];
   /** 求解作业列表（调度器持有的快照）。 */
   jobs: Job[];
+  /** 每作业的求解日志尾部（环形缓冲，key = 作业 id）。 */
+  jobLogs: Record<string, string[]>;
   /** 运行时依赖状态（许可分级 + 就绪探测）。 */
   dependencies: DependencyStatus[];
   /** 组件下载进度（百分比，key = 依赖 id）。 */
@@ -110,6 +112,7 @@ export const initialAppState: AppState = {
   activeStudyId: null,
   moldIssues: [],
   jobs: [],
+  jobLogs: {},
   dependencies: [],
   downloadProgress: {},
   savedDownloads: {},
@@ -529,19 +532,49 @@ export async function checkNetwork(): Promise<void> {
   }
 }
 
+/** 每作业日志的环形上限：超出后丢弃最旧行，避免长作业撑爆内存。 */
+const JOB_LOG_LIMIT = 200;
+
 /** 提交求解作业（case 目录 + 核数）。Rust 侧解析时间标记写入作业进度并经
- * Channel 转发原始日志行；日志行前端暂未消费，进度与状态走 listJobs 轮询。 */
+ * Channel 转发原始日志行；日志按作业缓存进 store 供作业面板展示。 */
 export async function submitJobAction(caseDir: string, cores: number): Promise<void> {
   appStore.set({ busy: "正在提交作业…", error: null });
   const channel = new Channel<string>();
+  // invoke 尚未返回时日志就可能到达：先攒进 pending，拿到 jobId 后一次性入账。
+  const pending: string[] = [];
+  let jobId: string | null = null;
+  channel.onmessage = (line) => {
+    if (line.startsWith("__TIME__")) {
+      return; // 时间标记由调度器解析，不经前端。
+    }
+    if (jobId === null) {
+      pending.push(line);
+      return;
+    }
+    appendJobLog(jobId, line);
+  };
   try {
-    await apiSubmitJob(caseDir, cores, appStore.get().activeStudyId, channel);
+    const job = await apiSubmitJob(caseDir, cores, appStore.get().activeStudyId, channel);
+    jobId = job.id;
+    const buffered = pending.splice(0);
+    if (buffered.length > 0) {
+      buffered.forEach((line) => appendJobLog(jobId as string, line));
+    }
     await refreshJobs();
   } catch (error) {
     setError(error);
   } finally {
     appStore.set({ busy: null });
   }
+}
+
+function appendJobLog(jobId: string, line: string): void {
+  const logs = appStore.get().jobLogs[jobId] ?? [];
+  const next = [...logs, line];
+  if (next.length > JOB_LOG_LIMIT) {
+    next.splice(0, next.length - JOB_LOG_LIMIT);
+  }
+  appStore.set({ jobLogs: { ...appStore.get().jobLogs, [jobId]: next } });
 }
 
 export async function cancelJobAction(jobId: string): Promise<void> {

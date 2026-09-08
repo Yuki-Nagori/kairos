@@ -1,4 +1,18 @@
 import { mat4Identity, mat4LookAt, mat4Multiply, mat4Perspective, type Vec3 } from "./math";
+import { THEME_CHANGED_EVENT } from "../theme";
+
+/** 视口清屏色的深色缺省（CSS 变量缺失时的兜底）。 */
+const FALLBACK_CLEAR: [number, number, number] = [0.06, 0.07, 0.09];
+
+/** 把 #rrggbb 形式的 CSS 颜色解析为 0..1 的 RGB 分量。 */
+function hexToRgb(hex: string): [number, number, number] | null {
+  const match = /^#([0-9a-f]{6})$/i.exec(hex.trim());
+  if (match === null || match[1] === undefined) {
+    return null;
+  }
+  const int = parseInt(match[1], 16);
+  return [((int >> 16) & 0xff) / 255, ((int >> 8) & 0xff) / 255, (int & 0xff) / 255];
+}
 
 /** 渲染网格数据：扁平化顶点与三角形索引（可选每面标量值用于云图）。 */
 interface RenderMesh {
@@ -111,6 +125,10 @@ export class ViewportRenderer {
   private frameTimes: number[] = [];
   private rafHandle = 0;
   private disposed = false;
+  private clearColor: [number, number, number] = FALLBACK_CLEAR;
+  private readonly onThemeChanged = (): void => {
+    this.refreshClearColor();
+  };
 
   private constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -119,6 +137,8 @@ export class ViewportRenderer {
   ) {
     this.program = this.buildProgram();
     this.attachControls();
+    this.refreshClearColor();
+    window.addEventListener(THEME_CHANGED_EVENT, this.onThemeChanged);
     this.startLoop();
   }
 
@@ -233,6 +253,19 @@ export class ViewportRenderer {
   dispose(): void {
     this.disposed = true;
     cancelAnimationFrame(this.rafHandle);
+    window.removeEventListener(THEME_CHANGED_EVENT, this.onThemeChanged);
+  }
+
+  /** 清屏色取主题变量 --c-viewport-bg；变量缺失时保留深色兜底。 */
+  private refreshClearColor(): void {
+    if (typeof getComputedStyle !== "function") {
+      return;
+    }
+    const raw = getComputedStyle(document.documentElement).getPropertyValue("--c-viewport-bg");
+    const rgb = hexToRgb(raw);
+    if (rgb !== null) {
+      this.clearColor = rgb;
+    }
   }
 
   private attachControls(): void {
@@ -296,7 +329,8 @@ export class ViewportRenderer {
   private draw(): void {
     const gl = this.gl;
     gl.enable(gl.DEPTH_TEST);
-    gl.clearColor(0.06, 0.07, 0.09, 1);
+    const [clearR, clearG, clearB] = this.clearColor;
+    gl.clearColor(clearR, clearG, clearB, 1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     if (this.indexCount === 0) {
       return;
