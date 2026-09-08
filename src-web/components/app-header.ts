@@ -70,6 +70,9 @@ export function createAppHeader(): HTMLElement {
     syncThemeIcon();
   });
 
+  // 原生菜单切换主题时图标不经过 store，借窗口事件保持同步。
+  window.addEventListener("kairos:theme-changed", syncThemeIcon);
+
   syncThemeIcon();
   root.append(logo, title, subtitle, themeButton, status);
   return root;

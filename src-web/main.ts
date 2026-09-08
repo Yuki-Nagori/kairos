@@ -1,4 +1,5 @@
 import "./app.css";
+import { listen } from "@tauri-apps/api/event";
 import { createAppHeader } from "./components/app-header";
 import { createDependenciesPanel } from "./components/dependencies-panel";
 import { createGeometryPanel } from "./components/geometry-panel";
@@ -12,8 +13,17 @@ import { createReportPanel } from "./components/report-panel";
 import { createResultsPanel } from "./components/results-panel";
 import { createViewportPanel } from "./components/viewport-panel";
 import { createXyChartPanel } from "./components/xy-chart-panel";
-import { initTheme } from "./theme";
-import { bootstrap, newProject, openProject, saveProject } from "./state";
+import { initTheme, cycleTheme } from "./theme";
+import {
+  bootstrap,
+  checkNetwork,
+  exportFieldCsv,
+  newProject,
+  openProject,
+  refreshDependencies,
+  saveProject,
+  saveProjectAs,
+} from "./state";
 
 const root = document.querySelector<HTMLDivElement>("#app");
 
@@ -79,6 +89,27 @@ window.addEventListener("keydown", (event) => {
 });
 
 root.append(header, workspace, resultsSection, bottomBar);
+
+// 原生菜单路由：Rust 菜单项只发射动作 id，这里映射到全局状态动作。
+const menuActions: Record<string, () => void> = {
+  "file.new": () => void newProject("未命名项目"),
+  "file.open": () => void openProject(),
+  "file.save": () => void saveProject(),
+  "file.saveAs": () => void saveProjectAs(),
+  "view.theme": () => {
+    cycleTheme();
+    // 头部图标不经过 store，用窗口事件同步
+    window.dispatchEvent(new CustomEvent("kairos:theme-changed"));
+  },
+  "analysis.checkNetwork": () => void checkNetwork(),
+  "results.exportCsv": () => exportFieldCsv(),
+  "tools.refreshDeps": () => void refreshDependencies(),
+};
+
+// 浏览器预览没有 IPC，listen 会拒绝，静默忽略即可。
+listen<string>("menu-action", (event) => {
+  menuActions[event.payload]?.();
+}).catch(() => undefined);
 
 // bootstrap 内部已自行处理失败（setError），无需 await。
 void bootstrap();
