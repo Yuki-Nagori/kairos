@@ -90,3 +90,4 @@
 - **13:1x** refactor(test): tests/frontend 更名 tests/web
 - **13:1x** refactor(ci): 简化为三平台单作业流水线，消除重复编译
 - **13:2x** refactor(download): 文件名推导纯函数化，修正 .tar.gz 截断
+- **13:2x** fix(test): gap_tests 临时目录幂等创建（F15 收口）
