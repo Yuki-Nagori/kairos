@@ -1,5 +1,6 @@
 import {
   appStore,
+  compileDependencyAction,
   downloadComponent,
   openDependencyPageAction,
   refreshDependencies,
@@ -44,6 +45,8 @@ export function createDependenciesPanel(): HTMLElement {
       savedDownloads,
       downloadedFiles,
       downloadErrors,
+      compiling,
+      compileLogs,
     } = appStore.get();
     const working = busy !== null;
     refreshButton.disabled = working;
@@ -85,6 +88,8 @@ export function createDependenciesPanel(): HTMLElement {
 
       // 有应用内下载地址的组件：提供「下载」按钮（用户点击触发，官方源 + 许可展示）。
       const downloading = dep.id in downloadProgress;
+      // 源码组件：下载解压后需要编译（后台 Allwmake/wmake），可随时重新编译。
+      const hasCompileFlow = dep.id === "openfoam" || dep.id === "openinjmoldsim";
       let downloadButton: HTMLButtonElement | null = null;
       if (dep.download !== null) {
         const os = appStore.get().info?.os ?? "linux";
@@ -94,9 +99,10 @@ export function createDependenciesPanel(): HTMLElement {
             : os === "windows"
               ? dep.download.windows
               : dep.download.linux;
+        const compilingThis = compiling[dep.id] === true;
         const already = dep.id in savedDownloads || dep.id in downloadedFiles;
         downloadButton = button(already ? "重新下载" : "下载", already ? "ghost" : "primary");
-        downloadButton.disabled = downloading;
+        downloadButton.disabled = downloading || compilingThis;
         downloadButton.title = `下载（${dep.license}）`;
         downloadButton.addEventListener("click", () => {
           void downloadComponent(dep.id, downloadUrl);
@@ -107,7 +113,30 @@ export function createDependenciesPanel(): HTMLElement {
       if (downloadButton !== null) {
         row.append(downloadButton);
       }
+      // 编译按钮：仅源码组件需要；失败后可随时重试。
+      if (hasCompileFlow && dep.download !== null) {
+        const compileButton = button("编译", "ghost");
+        compileButton.disabled = compiling[dep.id] === true;
+        compileButton.addEventListener("click", () => {
+          void compileDependencyAction(dep.id);
+        });
+        row.append(compileButton);
+      }
       listBox.append(row);
+
+      if (compiling[dep.id]) {
+        const compileLine = hint("编译中…（首次 OpenFOAM 全量构建约 30–60 分钟）");
+        compileLine.className = "text-xs text-amber-400";
+        listBox.append(compileLine);
+      }
+      const compileTail = (compileLogs[dep.id] ?? []).slice(-10);
+      if (compileTail.length > 0) {
+        const pre = document.createElement("pre");
+        pre.className =
+          "max-h-40 overflow-y-auto whitespace-pre-wrap break-all rounded-lg border border-zinc-800 bg-zinc-950 px-2 py-1 text-[10px] leading-4 text-zinc-400";
+        pre.textContent = compileTail.join("\n");
+        listBox.append(pre);
+      }
 
       const failure = downloadErrors[dep.id];
       if (failure !== undefined) {

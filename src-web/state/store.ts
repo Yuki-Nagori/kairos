@@ -47,6 +47,10 @@ export interface AppState {
   jobLogs: Record<string, string[]>;
   /** 运行时依赖状态（许可分级 + 就绪探测）。 */
   dependencies: DependencyStatus[];
+  /** 源码组件编译进行中（key = 组件 id）。 */
+  compiling: Record<string, boolean>;
+  /** 编译日志尾部（环形缓冲，key = 组件 id）。 */
+  compileLogs: Record<string, string[]>;
   /** 组件下载进度（百分比，key = 依赖 id；仅下载中存在）。 */
   downloadProgress: Record<string, number>;
   /** 组件下载完成后的落盘信息（key = 依赖 id；仅本次会话内下载的存在）。 */
@@ -88,8 +92,10 @@ export const initialAppState: AppState = {
   jobs: [],
   jobLogs: {},
   dependencies: [],
-  downloadProgress: {},
+  compiling: {},
+  compileLogs: {},
   savedDownloads: {},
+  downloadProgress: {},
   downloadedFiles: {},
   downloadErrors: {},
   probes: [],

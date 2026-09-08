@@ -1,4 +1,5 @@
 import {
+  compileDependency,
   listRuntimeDependencies,
   openDependencyPage as apiOpenDependencyPage,
 } from "../services/dependencies";
@@ -25,6 +26,37 @@ export async function openDependencyPageAction(pageUrl: string): Promise<void> {
     await apiOpenDependencyPage(pageUrl);
   } catch (error) {
     setError(error);
+  }
+}
+
+const COMPILE_LOG_LIMIT = 200;
+
+/** 编译已下载的源码组件：后台 Allwmake/wmake，日志环形缓冲进 store，
+ * 结束后重扫依赖就绪状态（编译产物进入受管 bin 目录后即转绿）。 */
+export async function compileDependencyAction(componentId: string): Promise<void> {
+  if (appStore.get().compiling[componentId]) {
+    return;
+  }
+  appStore.set({ compiling: { ...appStore.get().compiling, [componentId]: true } });
+  const append = (line: string): void => {
+    const logs = appStore.get().compileLogs[componentId] ?? [];
+    const next = [...logs, line];
+    if (next.length > COMPILE_LOG_LIMIT) {
+      next.splice(0, next.length - COMPILE_LOG_LIMIT);
+    }
+    appStore.set({ compileLogs: { ...appStore.get().compileLogs, [componentId]: next } });
+  };
+  try {
+    const message = await compileDependency(componentId, append);
+    append(`── ${message} ──`);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    append(`── 编译失败：${reason} ──`);
+  } finally {
+    const compiling = { ...appStore.get().compiling };
+    delete compiling[componentId];
+    appStore.set({ compiling });
+    await refreshDependencies();
   }
 }
 
@@ -57,6 +89,10 @@ export async function downloadComponent(componentId: string, url: string): Promi
         [componentId]: toEntry(saved),
       },
     });
+    // 源码组件：下载解压后立即自动编译（日志实时滚动，耗时 30 分钟级）。
+    if (componentId === "openfoam" || componentId === "openinjmoldsim") {
+      void compileDependencyAction(componentId);
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     appStore.set({ downloadErrors: { ...appStore.get().downloadErrors, [componentId]: message } });
