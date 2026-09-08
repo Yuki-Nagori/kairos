@@ -69,3 +69,4 @@
 - **08:2x** refactor: 输入框构建归口 ui.ts，修正求解日志失实注释
 - **08:2x** fix: 网格流水线 async 化（review F4/F5/F6 兑现）
 - **08:3x** fix(ci): release 流水线工具链钉版与交叉产物收集（F7/F8 兑现）
+- **08:3x** ci: macOS 仅 arm64，补 Ubuntu 构建/门禁/产物
