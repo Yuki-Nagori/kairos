@@ -71,8 +71,12 @@ fn spawn_run_script(case_dir: &str) -> Result<Child> {
 }
 
 impl JobScheduler {
+    /// 锁的宽容获取：持锁线程 panic 导致中毒时取回内部数据继续（作业列表可重建，
+    /// 中毒恢复优于让后续命令整体失效）。
     fn lock(&self) -> std::sync::MutexGuard<'_, Inner> {
-        self.inner.lock().unwrap()
+        self.inner
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
     fn arc(&self) -> Arc<Mutex<Inner>> {
@@ -114,7 +118,9 @@ impl JobScheduler {
                 for line in reader.lines().map_while(std::result::Result::ok) {
                     let time_s = openfoam::parse_time_line(&line);
                     let forward = {
-                        let mut guard = inner.lock().unwrap();
+                        let mut guard = inner
+                            .lock()
+                            .unwrap_or_else(|poisoned| poisoned.into_inner());
                         if let Some(time_s) = time_s {
                             let _ = job_logic::update_progress(&mut guard.jobs, &job_id, time_s);
                         }
@@ -128,7 +134,9 @@ impl JobScheduler {
             let exit_ok = child.wait().map(|status| status.success()).unwrap_or(false);
             let now = now_ms();
             {
-                let mut guard = inner.lock().unwrap();
+                let mut guard = inner
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
                 if exit_ok {
                     let _ = job_logic::mark_done(&mut guard.jobs, &job_id, now);
                 } else {

@@ -126,8 +126,26 @@ export class ViewportRenderer {
   private rafHandle = 0;
   private disposed = false;
   private clearColor: [number, number, number] = FALLBACK_CLEAR;
+  /** 最后一次上传的网格：上下文恢复时全部 GL 资源需按它重建。 */
+  private lastMesh: RenderMesh | null = null;
+  private contextLost = false;
   private readonly onThemeChanged = (): void => {
     this.refreshClearColor();
+  };
+  private readonly onContextLost = (event: Event): void => {
+    // preventDefault 是触发浏览器恢复流程的前提。
+    event.preventDefault();
+    this.contextLost = true;
+    cancelAnimationFrame(this.rafHandle);
+  };
+  private readonly onContextRestored = (): void => {
+    this.contextLost = false;
+    if (this.lastMesh !== null) {
+      this.uploadGlResources(this.lastMesh);
+    } else {
+      this.indexCount = 0;
+    }
+    this.startLoop();
   };
 
   private constructor(
@@ -137,6 +155,7 @@ export class ViewportRenderer {
   ) {
     this.program = this.buildProgram();
     this.attachControls();
+    this.attachContextHandlers();
     this.refreshClearColor();
     window.addEventListener(THEME_CHANGED_EVENT, this.onThemeChanged);
     this.startLoop();
@@ -182,8 +201,16 @@ export class ViewportRenderer {
 
   /** 上传渲染网格：扁平顶点 + 三角形索引（可选每面单元索引用于云图）。 */
   uploadMesh(mesh: RenderMesh): void {
+    this.lastMesh = mesh;
+    this.uploadGlResources(mesh);
+  }
+
+  /** 重建全部 GL 资源（首次上传与上下文恢复共用路径）。 */
+  private uploadGlResources(mesh: RenderMesh): void {
     const gl = this.gl;
-    this.vao ??= gl.createVertexArray();
+    this.program = this.buildProgram();
+    // 恢复后旧句柄全部失效，VAO 与缓冲必须全新创建（不能用 ??= 复用）。
+    this.vao = gl.createVertexArray();
     gl.bindVertexArray(this.vao);
 
     const positionBuffer = gl.createBuffer();
@@ -254,6 +281,14 @@ export class ViewportRenderer {
     this.disposed = true;
     cancelAnimationFrame(this.rafHandle);
     window.removeEventListener(THEME_CHANGED_EVENT, this.onThemeChanged);
+    this.canvas.removeEventListener("webglcontextlost", this.onContextLost);
+    this.canvas.removeEventListener("webglcontextrestored", this.onContextRestored);
+  }
+
+  /** 注册 WebGL 上下文丢失 / 恢复监听：丢失时暂停渲染，恢复后按缓存网格重建全部资源。 */
+  private attachContextHandlers(): void {
+    this.canvas.addEventListener("webglcontextlost", this.onContextLost);
+    this.canvas.addEventListener("webglcontextrestored", this.onContextRestored);
   }
 
   /** 清屏色取主题变量 --c-viewport-bg；变量缺失时保留深色兜底。 */
@@ -327,6 +362,9 @@ export class ViewportRenderer {
   }
 
   private draw(): void {
+    if (this.contextLost) {
+      return;
+    }
     const gl = this.gl;
     gl.enable(gl.DEPTH_TEST);
     const [clearR, clearG, clearB] = this.clearColor;

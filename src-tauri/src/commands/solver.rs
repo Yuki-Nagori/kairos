@@ -66,7 +66,7 @@ pub async fn generate_openfoam_case(
     let cores = cores.clamp(1, 64) as usize;
     // 锁只用于取网格快照；polyMesh 与场文件的写入在锁外、阻塞线程池中进行。
     let volume_mesh: VolumeMesh = {
-        let sessions = store.0.lock().unwrap();
+        let sessions = store.lock();
         let session = sessions.get(&geometry_id).ok_or_else(|| {
             kairos_core::error::KairosError::not_found(format!("几何不存在：{geometry_id}"))
         })?;

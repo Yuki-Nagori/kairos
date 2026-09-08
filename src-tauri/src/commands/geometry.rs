@@ -26,6 +26,16 @@ pub struct MeshSession {
 #[derive(Clone, Default)]
 pub struct GeometryStore(pub Arc<Mutex<HashMap<String, MeshSession>>>);
 
+impl GeometryStore {
+    /// 锁的宽容获取：持锁线程 panic 导致中毒时取回内部数据继续。
+    /// 锁只保护 HashMap 本身，恢复后不存在被破坏的不变量。
+    pub fn lock(&self) -> std::sync::MutexGuard<'_, HashMap<String, MeshSession>> {
+        self.0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+}
+
 #[tauri::command]
 pub async fn import_stl(store: State<'_, GeometryStore>, path: String) -> Result<GeometrySummary> {
     let store = store.inner().clone();
@@ -37,7 +47,7 @@ pub async fn import_stl(store: State<'_, GeometryStore>, path: String) -> Result
             .unwrap_or_else(|| path.clone());
         let geometry_id = new_id("geom");
         let summary = geometry_service::summarize(geometry_id.clone(), file_name.clone(), &mesh);
-        store.0.lock().unwrap().insert(
+        store.lock().insert(
             geometry_id,
             MeshSession {
                 mesh,
@@ -64,7 +74,7 @@ pub async fn generate_volume_mesh(
     tauri::async_runtime::spawn_blocking(move || {
         // 重计算在锁外进行：锁只覆盖表面网格快照取出与体积网格放回两个瞬间。
         let mesh = {
-            let sessions = store.0.lock().unwrap();
+            let sessions = store.lock();
             let session = sessions
                 .get(&geometry_id)
                 .ok_or_else(|| KairosError::not_found(format!("几何不存在：{geometry_id}")))?;
@@ -72,7 +82,7 @@ pub async fn generate_volume_mesh(
         };
         let volume = meshing::generate(&mesh, &params)?;
         let report = meshing::report(&volume);
-        if let Some(session) = store.0.lock().unwrap().get_mut(&geometry_id) {
+        if let Some(session) = store.lock().get_mut(&geometry_id) {
             session.volume = Some(volume);
         }
         Ok(report)
@@ -83,7 +93,7 @@ pub async fn generate_volume_mesh(
 
 #[tauri::command]
 pub fn remove_geometry(store: State<'_, GeometryStore>, geometry_id: String) -> Result<()> {
-    store.0.lock().unwrap().remove(&geometry_id);
+    store.lock().remove(&geometry_id);
     Ok(())
 }
 
@@ -169,7 +179,7 @@ pub fn get_render_mesh(
     store: State<'_, GeometryStore>,
     geometry_id: String,
 ) -> Result<RenderMeshData> {
-    let sessions = store.0.lock().unwrap();
+    let sessions = store.lock();
     let session = sessions.get(&geometry_id).ok_or_else(|| {
         kairos_core::error::KairosError::not_found(format!("几何不存在：{geometry_id}"))
     })?;
@@ -186,7 +196,7 @@ pub fn import_sample_box(store: State<'_, GeometryStore>, size: f64) -> Result<G
     let mesh = TriangleMesh::sample_box(size);
     let geometry_id = new_id("geom");
     let summary = geometry_service::summarize(geometry_id.clone(), "样例立方体.stl".into(), &mesh);
-    store.0.lock().unwrap().insert(
+    store.lock().insert(
         geometry_id,
         MeshSession {
             mesh,

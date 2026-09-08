@@ -58,6 +58,8 @@ jobs:
         with:
           bun-version: latest
       - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.95.0"
       - name: 安装 Tauri Linux 依赖
         run: |
           sudo apt-get update
@@ -80,6 +82,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.95.0"
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-audit
@@ -100,6 +104,8 @@ jobs:
         with:
           bun-version: latest
       - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.95.0"
       - name: 安装 Tauri Linux 依赖
         if: matrix.os == 'ubuntu-latest'
         run: |
