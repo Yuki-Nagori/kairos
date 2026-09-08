@@ -80,3 +80,4 @@
 - **10:45** refactor(T28): state 按域拆分 / WGSL 外置 / 面板分组
 - **10:51** research(T24): 一维 Stefan PINN spike，前沿误差 12.2%，限定演示用途
 - **10:55** research(T25): moldflow-api 分层概念对照笔记
+- **11:0x** feat(ui): 海军蓝 CAE 色板 + 控件/面板视觉升级
