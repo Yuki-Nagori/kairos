@@ -1,6 +1,6 @@
 import "./app.css";
 import { listen } from "@tauri-apps/api/event";
-import { createAppHeader } from "./components/app-header";
+import { createAppHeader, createStatusBar } from "./components/app-header";
 import { createDependenciesPanel } from "./components/panels/dependencies-panel";
 import { createGeometryPanel } from "./components/panels/geometry-panel";
 import { createJobsPanel } from "./components/panels/jobs-panel";
@@ -31,7 +31,7 @@ if (!root) {
   throw new Error("Root element #app not found");
 }
 
-// CAE 三列工作台：左（工程与研究）/ 中（流程与视口）/ 右（模具与工艺作业），底部结果。
+// CAE 三列工作台（对标 ui.html）：整页锁定不滚动，只有左右列与视口内部各自伸缩。
 root.className = "flex h-screen flex-col overflow-hidden bg-zinc-950 text-zinc-100";
 
 // 先恢复主题再创建组件，标题栏的初始主题图标才能与持久化偏好一致。
@@ -40,35 +40,46 @@ initTheme();
 const header = createAppHeader();
 
 const leftColumn = document.createElement("div");
-leftColumn.className = "flex w-[320px] shrink-0 flex-col gap-3 overflow-y-auto p-3";
-leftColumn.append(createProjectTree(), createMaterialsPanel(), createGeometryPanel());
+leftColumn.className = "flex min-h-0 flex-col gap-3 overflow-y-auto py-1 pr-1";
+// 流程引导属工作流辅助，放左列（可折叠）；中列留给视口与图表。
+// 滚动列里的卡片必须 shrink-0：宁可列滚动，也不让卡片内容被压缩裁切。
+for (const panel of [
+  createProjectTree(),
+  createPipelinePanel(),
+  createMaterialsPanel(),
+  createGeometryPanel(),
+]) {
+  panel.classList.add("shrink-0");
+  leftColumn.append(panel);
+}
 
 const centerColumn = document.createElement("div");
-centerColumn.className = "flex min-w-0 flex-1 flex-col gap-3 overflow-y-auto p-3";
-centerColumn.append(createPipelinePanel(), createViewportPanel(), createXyChartPanel());
+centerColumn.className = "flex min-h-0 min-w-0 flex-col gap-3 overflow-hidden";
+centerColumn.append(createViewportPanel(), createXyChartPanel());
 
 const rightColumn = document.createElement("div");
-rightColumn.className = "flex w-[340px] shrink-0 flex-col gap-3 overflow-y-auto p-3";
-rightColumn.append(
+rightColumn.className = "flex min-h-0 flex-col gap-3 overflow-y-auto py-1 pl-1";
+for (const panel of [
   createMoldPanel(),
   createProcessPanel(),
   createDependenciesPanel(),
   createReportPanel(),
   createJobsPanel(),
-);
+]) {
+  panel.classList.add("shrink-0");
+  rightColumn.append(panel);
+}
 
 const workspace = document.createElement("main");
 workspace.className =
-  "grid flex-1 grid-cols-[320px_minmax(0,1fr)_340px] gap-3 overflow-hidden px-3";
+  "grid min-h-0 flex-1 grid-cols-[280px_minmax(0,1fr)_320px] gap-3 overflow-hidden px-3 py-2";
 workspace.append(leftColumn, centerColumn, rightColumn);
 
 const resultsSection = document.createElement("section");
-resultsSection.className = "border-t border-zinc-800 bg-zinc-900 px-3 py-3";
+resultsSection.className = "shrink-0 border-t border-zinc-800 bg-zinc-900 px-4 py-2.5";
 resultsSection.append(createResultsPanel());
 
-const bottomBar = document.createElement("footer");
-bottomBar.className =
-  "flex items-center justify-between border-t border-zinc-800 px-4 py-1.5 text-[11px] text-zinc-500";
+const statusBar = createStatusBar();
 
 // 全局快捷键（CAD 习惯）：Ctrl/Cmd+S 保存、Ctrl/Cmd+O 打开、Ctrl/Cmd+N 新建
 window.addEventListener("keydown", (event) => {
@@ -88,7 +99,7 @@ window.addEventListener("keydown", (event) => {
   }
 });
 
-root.append(header, workspace, resultsSection, bottomBar);
+root.append(header, workspace, resultsSection, statusBar);
 
 // 原生菜单路由：Rust 菜单项只发射动作 id，这里映射到全局状态动作。
 const menuActions: Record<string, () => void> = {

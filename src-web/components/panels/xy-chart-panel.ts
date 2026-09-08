@@ -8,10 +8,11 @@ import { button, card, hint, textInput } from "../ui";
 /** XY 图表面板：场分布曲线（节点序号 → 值）+ 探针管理 + CSV 导出。 */
 export function createXyChartPanel(): HTMLElement {
   const { root, body } = card("XY 曲线与探针");
+  root.classList.add("shrink-0");
 
   const canvas = document.createElement("canvas");
   canvas.width = 720;
-  canvas.height = 260;
+  canvas.height = 200;
   canvas.className = "w-full rounded-lg bg-zinc-950";
   registerSnapshot("xy-chart", canvas);
 

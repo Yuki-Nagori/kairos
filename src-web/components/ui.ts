@@ -10,7 +10,7 @@ export function card(
 ): { root: HTMLElement; body: HTMLElement } {
   const root = document.createElement("section");
   root.className =
-    "overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 shadow-lg shadow-black/20";
+    "min-w-0 overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 shadow-lg shadow-black/20";
 
   const heading = document.createElement("h2");
   heading.className =
@@ -18,7 +18,7 @@ export function card(
   heading.textContent = title;
 
   const body = document.createElement("div");
-  body.className = "space-y-3 px-4 py-3.5";
+  body.className = "min-w-0 space-y-3 overflow-x-hidden px-4 py-3.5";
 
   if (options?.collapsible === true) {
     const storageKey = `kairos-panel:${title}`;

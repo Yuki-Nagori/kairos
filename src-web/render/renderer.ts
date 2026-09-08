@@ -361,10 +361,22 @@ export class ViewportRenderer {
     this.rafHandle = requestAnimationFrame(frame);
   }
 
+  /** 让绘制缓冲跟随 CSS 尺寸（含 DPR 上限 2），视口面板弹性伸缩时保持清晰且比例正确。 */
+  private syncCanvasSize(): void {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const width = Math.max(Math.round(this.canvas.clientWidth * dpr), 1);
+    const height = Math.max(Math.round(this.canvas.clientHeight * dpr), 1);
+    if (this.canvas.width !== width || this.canvas.height !== height) {
+      this.canvas.width = width;
+      this.canvas.height = height;
+    }
+  }
+
   private draw(): void {
     if (this.contextLost) {
       return;
     }
+    this.syncCanvasSize();
     const gl = this.gl;
     gl.enable(gl.DEPTH_TEST);
     const [clearR, clearG, clearB] = this.clearColor;

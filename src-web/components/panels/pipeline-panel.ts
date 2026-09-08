@@ -5,7 +5,8 @@ import { button, card, dropdown, hint, numberInput } from "../ui";
 
 /** 流水线引导面板：五步闭环的状态检查与下一步指引（T11）。 */
 export function createPipelinePanel(): HTMLElement {
-  const { root, body } = card("填充分析流程");
+  const { root, body } = card("填充分析流程", { collapsible: true });
+  root.classList.add("shrink-0");
 
   const stepsBox = document.createElement("ol");
   stepsBox.className = "space-y-2";

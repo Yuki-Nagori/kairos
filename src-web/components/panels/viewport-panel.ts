@@ -9,25 +9,27 @@ import { button, card, hint } from "../ui";
 /** 3D 视口面板：WebGL2 渲染器 + 云图/剖切/时间步动画控制（WebGPU 探测提示）。 */
 export function createViewportPanel(): HTMLElement {
   const { root, body } = card("3D 视口");
+  // 视口是工作台主角：卡片弹性充满中列剩余空间，画布随容器缩放。
+  root.classList.add("flex", "min-h-[280px]", "flex-1", "flex-col", "overflow-hidden");
+  body.classList.add("flex", "min-h-0", "flex-1", "flex-col");
 
-  const note = hint("正在探测渲染能力…");
   const canvasWrap = document.createElement("div");
-  canvasWrap.className = "relative";
+  canvasWrap.className = "relative flex min-h-0 flex-1";
   const canvas = document.createElement("canvas");
-  canvas.className = "w-full rounded-lg bg-zinc-950";
-  canvas.width = 960;
-  canvas.height = 540;
+  // 绘制缓冲由渲染器按 CSS 尺寸 + DPR 维护，这里只负责铺满容器。
+  canvas.className = "h-full w-full rounded-lg bg-zinc-950";
   registerSnapshot("viewport", canvas);
   canvas.style.touchAction = "none";
   // 空态提示：载入网格前视口不应是一片空白
   const emptyHint = document.createElement("p");
   emptyHint.className =
     "pointer-events-none absolute inset-0 flex items-center justify-center text-xs text-zinc-600";
-  emptyHint.textContent = "导入几何并生成网格后，点击「载入网格到视口」查看 3D 模型";
+  emptyHint.textContent =
+    "导入几何并生成网格后，点击「载入网格到视口」查看 3D 模型（WebGPU 可用时自动启用）";
   canvasWrap.append(canvas, emptyHint);
 
   const controls = document.createElement("div");
-  controls.className = "flex flex-wrap items-center gap-2";
+  controls.className = "flex shrink-0 flex-wrap items-center gap-2";
   const loadMeshButton = button("载入网格到视口");
   const playButton = button("播放动画");
   playButton.disabled = true;
@@ -98,7 +100,9 @@ export function createViewportPanel(): HTMLElement {
       fpsLabel.textContent = `FPS: ${fps}`;
     });
     if (renderer === null) {
-      note.textContent = "当前环境不支持 WebGL2，无法渲染视口。";
+      emptyHint.textContent = "当前环境不支持 WebGL2，无法渲染视口。";
+      emptyHint.classList.add("text-red-400");
+      emptyHint.classList.remove("text-zinc-600");
     }
   }
 
@@ -152,12 +156,10 @@ export function createViewportPanel(): HTMLElement {
     applyField(appStore.get().loadedField);
   }
 
-  body.append(note, canvasWrap, controls);
+  body.append(canvasWrap, controls);
   void detectRenderCapabilityInBrowser().then((capability) => {
-    if (capability.backend === "webgpu") {
-      note.textContent = `${capability.note}（视口渲染当前使用 WebGL2 后端）`;
-    } else if (capability.backend === "webgl2") {
-      note.textContent = capability.note;
+    if (capability.backend === "webgl2") {
+      emptyHint.textContent = `${emptyHint.textContent}（${capability.note}）`;
     }
   });
   appStore.subscribe(onStateChange);
