@@ -2,14 +2,18 @@ import {
   listRuntimeDependencies,
   openDependencyPage as apiOpenDependencyPage,
 } from "../services/dependencies";
-import { downloadComponentFile } from "../services/downloads";
+import { downloadComponentFile, listDownloads } from "../services/downloads";
+import type { DownloadedEntry, SavedDownload } from "../types";
 import { appStore, setError } from "./store";
 
-/** 刷新运行时依赖就绪状态（探测 blockMesh / openInjMoldSim / gmsh）。 */
+/** 刷新运行时依赖就绪状态，并恢复跨会话的「已下载」清单。 */
 export async function refreshDependencies(): Promise<void> {
   try {
-    const dependencies = await listRuntimeDependencies();
-    appStore.set({ dependencies });
+    const [dependencies, downloadedFiles] = await Promise.all([
+      listRuntimeDependencies(),
+      listDownloads(),
+    ]);
+    appStore.set({ dependencies, downloadedFiles });
   } catch (error) {
     setError(error);
   }
@@ -24,21 +28,52 @@ export async function openDependencyPageAction(pageUrl: string): Promise<void> {
   }
 }
 
-/** 应用内下载：把官方单文件直链取回受管目录；进度经 downloadProgress 反馈到面板。 */
+/** 清除某组件的失败标记（重试前调用）。 */
+function clearDownloadFailure(componentId: string): void {
+  const { downloadErrors } = appStore.get();
+  if (componentId in downloadErrors) {
+    const next = { ...downloadErrors };
+    delete next[componentId];
+    appStore.set({ downloadErrors: next });
+  }
+}
+
+/** 应用内下载：把官方单文件直链取回受管目录。
+ * 下载不占用全局 busy（大文件不应阻塞其他面板操作），
+ * 进度行内展示；失败信息落在行内并支持重试。 */
 export async function downloadComponent(componentId: string, url: string): Promise<void> {
-  appStore.set({ busy: "正在下载…", error: null });
+  clearDownloadFailure(componentId);
+  appStore.set({ downloadProgress: { ...appStore.get().downloadProgress, [componentId]: 0 } });
   try {
-    const saved = await downloadComponentFile(url, (percent) => {
+    const saved = await downloadComponentFile(componentId, url, (percent) => {
       appStore.set({
         downloadProgress: { ...appStore.get().downloadProgress, [componentId]: percent },
       });
     });
     appStore.set({
       savedDownloads: { ...appStore.get().savedDownloads, [componentId]: saved },
+      downloadedFiles: {
+        ...appStore.get().downloadedFiles,
+        [componentId]: toEntry(saved),
+      },
     });
   } catch (error) {
-    setError(error);
+    const message = error instanceof Error ? error.message : String(error);
+    appStore.set({ downloadErrors: { ...appStore.get().downloadErrors, [componentId]: message } });
   } finally {
-    appStore.set({ busy: null });
+    const { downloadProgress } = appStore.get();
+    if (componentId in downloadProgress) {
+      const next = { ...downloadProgress };
+      delete next[componentId];
+      appStore.set({ downloadProgress: next });
+    }
   }
+}
+
+function toEntry(saved: SavedDownload): DownloadedEntry {
+  return {
+    fileName: saved.fileName,
+    sizeBytes: saved.sizeBytes,
+    downloadedAtMs: Date.now(),
+  };
 }

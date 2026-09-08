@@ -5,7 +5,7 @@
 
 use std::fs;
 use std::io::{Read, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use kairos_core::error::{KairosError, Result};
@@ -54,10 +54,12 @@ fn ensure_allowed(url: &str) -> Result<()> {
     }
 }
 
-/// 下载文件到受管目录：流式写盘并按百分比回传进度（Channel<u64>）。
+/// 下载文件到受管目录：流式写盘并按百分比回传进度（Channel<u64>）；
+/// 成功后登记进 manifest.json（跨会话记住「已下载」状态）。
 #[tauri::command]
 pub async fn download_file(
     app: AppHandle,
+    component_id: String,
     url: String,
     progress: Channel<u64>,
 ) -> Result<SavedDownload> {
@@ -76,7 +78,14 @@ pub async fn download_file(
         fs::create_dir_all(&dir)?;
         let dest = dir.join(&file_name);
 
-        let response = ureq::get(&url)
+        // 带超时与 UA 的共享 agent：部分官方站点对无 UA 请求或无限挂起不友好。
+        let agent: ureq::Agent = ureq::AgentBuilder::new()
+            .timeout_connect(std::time::Duration::from_secs(30))
+            .timeout(std::time::Duration::from_secs(1800))
+            .user_agent("kairos-dependency-manager/1.0")
+            .build();
+        let response = agent
+            .get(&url)
             .call()
             .map_err(|e| KairosError::io(format!("下载请求失败：{e}")))?;
         let total: u64 = response
@@ -103,14 +112,71 @@ pub async fn download_file(
         }
         file.flush()?;
         drop(file);
-        Ok(SavedDownload {
+        let saved = SavedDownload {
             path: dest.to_string_lossy().to_string(),
-            file_name,
+            file_name: file_name.clone(),
             size_bytes: downloaded,
-        })
+        };
+        register_in_manifest(&dir, &component_id, &saved)?;
+        Ok(saved)
     })
     .await
     .map_err(|e| KairosError::internal(format!("下载任务失败：{e}")))?
+}
+
+/// 跨会话的下载清单（manifest.json，key = 组件 id）。
+pub type DownloadManifest = std::collections::HashMap<String, ManifestEntry>;
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ManifestEntry {
+    pub file_name: String,
+    pub size_bytes: u64,
+    pub downloaded_at_ms: u64,
+}
+
+fn manifest_path(dir: &Path) -> PathBuf {
+    dir.join("manifest.json")
+}
+
+fn read_manifest(dir: &Path) -> DownloadManifest {
+    fs::read_to_string(manifest_path(dir))
+        .ok()
+        .and_then(|content| serde_json::from_str(&content).ok())
+        .unwrap_or_default()
+}
+
+/// 成功下载后把条目写进清单（读改写，原子替换）。
+fn register_in_manifest(dir: &Path, component_id: &str, saved: &SavedDownload) -> Result<()> {
+    let mut manifest = read_manifest(dir);
+    manifest.insert(
+        component_id.to_string(),
+        ManifestEntry {
+            file_name: saved.file_name.clone(),
+            size_bytes: saved.size_bytes,
+            downloaded_at_ms: now_ms(),
+        },
+    );
+    let json = serde_json::to_string_pretty(&manifest)
+        .map_err(|e| KairosError::internal(format!("清单序列化失败：{e}")))?;
+    let tmp = manifest_path(dir).with_extension("json.tmp");
+    fs::write(&tmp, json)?;
+    fs::rename(&tmp, manifest_path(dir))?;
+    Ok(())
+}
+
+/// 返回已下载组件清单（前端启动时恢复「已下载」徽标）。
+#[tauri::command]
+pub fn list_downloads(app: AppHandle) -> Result<DownloadManifest> {
+    let dir = downloads_dir(&app)?;
+    Ok(read_manifest(&dir))
+}
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64
 }
 
 /// 返回下载目录路径（前端展示「文件存放在哪里」）。
@@ -147,4 +213,36 @@ pub fn open_downloads_dir(app: AppHandle) -> Result<String> {
             .map_err(|e| KairosError::io(format!("打开目录失败：{e}")))?;
     }
     Ok(dir.to_string_lossy().to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn manifest_roundtrip_and_upsert() {
+        let dir = std::env::temp_dir().join(format!("kairos-manifest-test-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+
+        assert!(read_manifest(&dir).is_empty());
+
+        let saved = SavedDownload {
+            path: dir.join("a.tgz").to_string_lossy().to_string(),
+            file_name: "a.tgz".into(),
+            size_bytes: 123,
+        };
+        register_in_manifest(&dir, "gmsh", &saved).unwrap();
+        register_in_manifest(&dir, "openfoam", &saved).unwrap();
+
+        let manifest = read_manifest(&dir);
+        assert_eq!(manifest.len(), 2);
+        assert_eq!(manifest["gmsh"].file_name, "a.tgz");
+        assert_eq!(manifest["gmsh"].size_bytes, 123);
+
+        // 同组件重复下载：upsert 不产生重复条目
+        register_in_manifest(&dir, "gmsh", &saved).unwrap();
+        assert_eq!(read_manifest(&dir).len(), 2);
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
 }

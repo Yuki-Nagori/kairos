@@ -207,6 +207,13 @@ export interface SavedDownload {
   sizeBytes: number;
 }
 
+/** 跨会话的下载清单条目（manifest.json，key = 组件 id）。 */
+export interface DownloadedEntry {
+  fileName: string;
+  sizeBytes: number;
+  downloadedAtMs: number;
+}
+
 /** 依赖状态视图（目录项 + 就绪探测）。 */
 export interface DependencyStatus {
   id: string;

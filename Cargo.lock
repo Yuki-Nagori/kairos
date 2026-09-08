@@ -2037,6 +2037,7 @@ dependencies = [
  "kairos-core",
  "pollster",
  "serde",
+ "serde_json",
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",

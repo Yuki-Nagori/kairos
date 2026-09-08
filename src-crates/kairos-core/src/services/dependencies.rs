@@ -64,9 +64,11 @@ pub fn catalog() -> Vec<RuntimeDependency> {
             check_command: "gmsh".into(),
             hint: "T22 Delaunay 网格升级路线（条件触发，可选）。".into(),
             download: Some(crate::models::dependencies::DownloadSpec {
-                macos: "https://gmsh.info/bin/macOSX/gmsh-4.12.2-MacOSX-sdk.tgz".into(),
-                windows: "https://gmsh.info/bin/Windows/gmsh-4.12.2-Windows64.zip".into(),
-                linux: "https://gmsh.info/bin/Linux/gmsh-4.12.2-Linux64-sdk.tgz".into(),
+                // 注意：macOS 目录是 bin/macOS（ARM 版），且旧版本文件会被官方
+                // 移除——升级版本号时三条 URL 必须同步更新。
+                macos: "https://gmsh.info/bin/macOS/gmsh-4.15.2-MacOSARM-sdk.tgz".into(),
+                windows: "https://gmsh.info/bin/Windows/gmsh-4.15.2-Windows64-sdk.zip".into(),
+                linux: "https://gmsh.info/bin/Linux/gmsh-4.15.2-Linux64-sdk.tgz".into(),
             }),
         },
     ]

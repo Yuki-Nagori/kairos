@@ -37,7 +37,14 @@ export function createDependenciesPanel(): HTMLElement {
   });
 
   function render(): void {
-    const { dependencies, busy, downloadProgress, savedDownloads } = appStore.get();
+    const {
+      dependencies,
+      busy,
+      downloadProgress,
+      savedDownloads,
+      downloadedFiles,
+      downloadErrors,
+    } = appStore.get();
     const working = busy !== null;
     refreshButton.disabled = working;
     openDirButton.disabled = working;
@@ -76,6 +83,7 @@ export function createDependenciesPanel(): HTMLElement {
       });
 
       // 有应用内下载地址的组件：提供「下载」按钮（用户点击触发，官方源 + 许可展示）。
+      const downloading = dep.id in downloadProgress;
       let downloadButton: HTMLButtonElement | null = null;
       if (dep.download !== null) {
         const os = appStore.get().info?.os ?? "linux";
@@ -85,7 +93,9 @@ export function createDependenciesPanel(): HTMLElement {
             : os === "windows"
               ? dep.download.windows
               : dep.download.linux;
-        downloadButton = button("下载", "primary");
+        const already = dep.id in savedDownloads || dep.id in downloadedFiles;
+        downloadButton = button(already ? "重新下载" : "下载", already ? "ghost" : "primary");
+        downloadButton.disabled = downloading;
         downloadButton.title = `下载（${dep.license}）`;
         downloadButton.addEventListener("click", () => {
           void downloadComponent(dep.id, downloadUrl);
@@ -98,6 +108,13 @@ export function createDependenciesPanel(): HTMLElement {
       }
       listBox.append(row);
 
+      const failure = downloadErrors[dep.id];
+      if (failure !== undefined) {
+        const failedLine = hint(`下载失败：${failure}`);
+        failedLine.className = "text-xs text-red-400";
+        listBox.append(failedLine);
+      }
+
       const progress = downloadProgress[dep.id];
       if (progress !== undefined) {
         const progressWrap = document.createElement("div");
@@ -107,6 +124,14 @@ export function createDependenciesPanel(): HTMLElement {
         progressLine.className = "w-9 text-[10px] tabular-nums text-zinc-400";
         progressWrap.append(progressLine);
         listBox.append(progressWrap);
+      }
+
+      const downloaded = downloadedFiles[dep.id];
+      if (downloaded !== undefined) {
+        const sizeMb = (downloaded.sizeBytes / 1024 / 1024).toFixed(1);
+        const doneLine = hint(`已下载 ${downloaded.fileName}（${sizeMb} MB）`);
+        doneLine.className = "text-xs text-emerald-400";
+        listBox.append(doneLine);
       }
 
       const saved = savedDownloads[dep.id];

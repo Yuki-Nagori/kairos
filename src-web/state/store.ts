@@ -2,6 +2,7 @@ import { createStore } from "../lib/store";
 import { IpcUnavailableError } from "../lib/ipc";
 import type {
   DependencyStatus,
+  DownloadedEntry,
   GeometrySummary,
   Job,
   Material,
@@ -46,10 +47,14 @@ export interface AppState {
   jobLogs: Record<string, string[]>;
   /** 运行时依赖状态（许可分级 + 就绪探测）。 */
   dependencies: DependencyStatus[];
-  /** 组件下载进度（百分比，key = 依赖 id）。 */
+  /** 组件下载进度（百分比，key = 依赖 id；仅下载中存在）。 */
   downloadProgress: Record<string, number>;
-  /** 组件下载完成后的落盘信息（key = 依赖 id）。 */
+  /** 组件下载完成后的落盘信息（key = 依赖 id；仅本次会话内下载的存在）。 */
   savedDownloads: Record<string, SavedDownload>;
+  /** 跨会话的已下载清单（来自 manifest.json）。 */
+  downloadedFiles: Record<string, DownloadedEntry>;
+  /** 组件下载失败信息（key = 依赖 id；重试成功后清除）。 */
+  downloadErrors: Record<string, string>;
   /** 探针列表（节点序号）。 */
   probes: Probe[];
   /** 材料库：内置示例材料 + 用户自定义材料。 */
@@ -85,6 +90,8 @@ export const initialAppState: AppState = {
   dependencies: [],
   downloadProgress: {},
   savedDownloads: {},
+  downloadedFiles: {},
+  downloadErrors: {},
   probes: [],
   busy: null,
   error: null,

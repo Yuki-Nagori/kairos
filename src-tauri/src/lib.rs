@@ -121,6 +121,7 @@ pub fn run() {
             commands::downloads::download_file,
             commands::downloads::get_downloads_dir,
             commands::downloads::open_downloads_dir,
+            commands::downloads::list_downloads,
             commands::results::list_result_times,
             commands::results::load_result_field,
         ])
