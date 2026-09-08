@@ -1,3 +1,5 @@
+use tauri::Manager;
+
 pub mod commands;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -7,13 +9,15 @@ pub fn run() {
         .manage(commands::geometry::GeometryStore::default())
         .manage(commands::jobs::JobScheduler::default())
         .setup(|_app| {
-            // macOS 原生全屏会强制隐藏标题栏，与「工具栏可见」冲突：macOS 停留在
-            // 配置的 maximized；Windows / Linux 无此问题，按需求进入全屏。
-            #[cfg(not(target_os = "macos"))]
-            {
-                if let Some(window) = _app.get_webview_window("main") {
-                    let _ = window.set_fullscreen(true);
-                }
+            // 窗口铺满与全屏统一在启动时处理：配置式的 center/maximized 在 macOS
+            // 不扣除 Dock 与菜单栏的可见区域，居中窗口会显得偏左，且 maximized
+            // 在 dev 下常不生效。macOS 最大化（原生全屏会隐藏标题栏，故不用）；
+            // Windows / Linux 无此问题，直接进入全屏。
+            if let Some(window) = _app.get_webview_window("main") {
+                #[cfg(not(target_os = "macos"))]
+                let _ = window.set_fullscreen(true);
+                #[cfg(target_os = "macos")]
+                let _ = window.maximize();
             }
             Ok(())
         })
