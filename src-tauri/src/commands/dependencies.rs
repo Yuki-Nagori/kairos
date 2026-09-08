@@ -106,35 +106,23 @@ fn locate_extracted(component_dir: &Path) -> Result<PathBuf> {
     )))
 }
 
-/// 组件编译脚本：openfoam 全量构建；openinjmoldsim 在 openfoam 环境中构建。
-fn build_compile_script(
-    component_id: &str,
-    src: &Path,
-    openfoam_src: Option<&Path>,
-) -> Result<String> {
+/// 组件编译脚本：目前仅 openfoam 全量构建（注塑求解器将由 OpenFOAM-14
+/// fork 以求解模块形式提供，随其本体一起编译，见 ai-docs/tasks/T34）。
+fn build_compile_script(component_id: &str, src: &Path) -> Result<String> {
     let sh_quote = |path: &Path| format!("'{}'", path.to_string_lossy().replace('\'', "'\\''"));
     let src_q = sh_quote(src);
     match component_id {
         "openfoam" => Ok(format!(
             "cd {src_q} && source ./etc/bashrc && ./Allwmake 2>&1"
         )),
-        "openinjmoldsim" => {
-            let of = openfoam_src.ok_or_else(|| {
-                KairosError::validation("请先下载并解压 OpenFOAM（编译求解器需要其环境）。")
-            })?;
-            let of_bashrc = sh_quote(&of.join("etc").join("bashrc"));
-            Ok(format!(
-                "source {of_bashrc} && cd {src_q} && ./Allwmake 2>&1"
-            ))
-        }
         other => Err(KairosError::validation(format!(
             "组件 {other} 没有编译流程"
         ))),
     }
 }
 
-/// 一键编译：下载解压完成后构建源码组件（OpenFOAM 30–60 分钟级，
-/// openInjMoldSim 数分钟且依赖前者），日志行经 Channel 流式回传。
+/// 一键编译：下载解压完成后构建源码组件（OpenFOAM 全量构建 30–60 分钟级），
+/// 日志行经 Channel 流式回传。
 #[tauri::command]
 pub async fn compile_dependency(
     app: AppHandle,
@@ -143,8 +131,7 @@ pub async fn compile_dependency(
 ) -> Result<String> {
     let downloads_dir = downloads::downloads_dir(&app)?;
     let src = locate_extracted(&downloads_dir.join(&component_id))?;
-    let openfoam_src = locate_extracted(&downloads_dir.join("openfoam")).ok();
-    let script = build_compile_script(&component_id, &src, openfoam_src.as_deref())?;
+    let script = build_compile_script(&component_id, &src)?;
 
     tauri::async_runtime::spawn_blocking(move || {
         let mut command = Command::new("bash");

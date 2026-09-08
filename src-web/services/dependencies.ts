@@ -12,7 +12,7 @@ export function openDependencyPage(pageUrl: string): Promise<void> {
   return invokeCommand("open_dependency_page", { pageUrl });
 }
 
-/** 编译已下载的源码组件（OpenFOAM 全量构建 / openInjMoldSim 对接编译），
+/** 编译已下载的源码组件（OpenFOAM 全量构建），
  * 日志行经 Channel 流式回传；完成后 promise 以结果消息 resolve。 */
 export function compileDependency(
   componentId: string,

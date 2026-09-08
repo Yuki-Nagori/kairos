@@ -1,4 +1,4 @@
-//! 材料模型：热塑性塑料牌号，参数组与 openInjMoldSim 的物理输入对齐
+//! 材料模型：热塑性塑料牌号，参数组与注塑模拟的标准物理输入对齐
 //! （Cross-WLF 黏度、Tait PVT、温度表热物性）。
 
 use serde::{Deserialize, Serialize};

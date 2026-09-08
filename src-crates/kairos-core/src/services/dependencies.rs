@@ -8,8 +8,8 @@
 //!   装好后重新探测。
 //!
 //! 许可分级（LicenseKind）只决定徽标颜色与合规口径，与安装策略正交。
-//! 注意：DirectDownload 只负责「拿到文件」；OpenFOAM / openInjMoldSim 的
-//! 编译安装步骤仍需在终端完成（hint 字段向用户说明）。
+//! 注意：DirectDownload 只负责「拿到文件」；OpenFOAM 的编译安装步骤
+//! 仍需在应用内编译流程或终端完成（hint 字段向用户说明）。
 
 use crate::models::dependencies::{DownloadSpec, InstallStrategy, LicenseKind, RuntimeDependency};
 
@@ -25,34 +25,21 @@ fn source_download(url: &str) -> Option<DownloadSpec> {
 /// 运行时依赖目录（求解链路 + 网格升级路线）。
 pub fn catalog() -> Vec<RuntimeDependency> {
     vec![
+        // 求解链路只依赖 OpenFOAM 本体：其 foamRun 模块化框架自 11 起内置
+        // compressibleVoF 模块（compressibleInterFoam 的原生后继），无需第三方求解器。
         RuntimeDependency {
             id: "openfoam".into(),
-            name: "OpenFOAM 7（.org）".into(),
+            name: "OpenFOAM 14（.org）".into(),
             license: "GPL-3.0".into(),
             license_kind: LicenseKind::Gpl,
             strategy: InstallStrategy::DirectDownload,
             page_url: "https://openfoam.org/download/".into(),
             required: true,
             check_command: "blockMesh".into(),
-            hint: "官方源码包（自动解压）。编译安装后 blockMesh 进入 PATH 即就绪：                   Linux 推荐 apt 直接装预编译包（openfoam.org/download/7-ubuntu）；                   macOS 需源码编译（较耗时）。"
+            hint: "官方源码包（自动解压）。编译安装后 blockMesh / foamRun 进入 PATH 即就绪：                   Linux 推荐 apt 直接装预编译包（openfoam.org/download/14-ubuntu）；                   macOS 需源码编译（较耗时）。"
                 .into(),
             download: source_download(
-                "https://github.com/OpenFOAM/OpenFOAM-7/archive/refs/heads/master.tar.gz",
-            ),
-        },
-        RuntimeDependency {
-            id: "openinjmoldsim".into(),
-            name: "openInjMoldSim 求解器".into(),
-            license: "GPL-3.0".into(),
-            license_kind: LicenseKind::Gpl,
-            strategy: InstallStrategy::DirectDownload,
-            page_url: "https://github.com/krebeljk/openInjMoldSim".into(),
-            required: true,
-            check_command: "openInjMoldSim".into(),
-            hint: "求解器源码包（自动解压）。前提：OpenFOAM 已就绪。                   解压后置于 OpenFOAM 环境中 ./Allwmake 编译，产物加入 PATH 即就绪。"
-                .into(),
-            download: source_download(
-                "https://github.com/krebeljk/openInjMoldSim/archive/refs/heads/master.zip",
+                "https://github.com/OpenFOAM/OpenFOAM-14/archive/refs/heads/master.tar.gz",
             ),
         },
         RuntimeDependency {
@@ -82,13 +69,13 @@ mod tests {
     use crate::models::dependencies::{InstallStrategy, LicenseKind};
 
     #[test]
-    fn solver_chain_dependencies_are_required_and_gpl() {
+    fn solver_chain_dependency_is_required_and_gpl() {
         let catalog = catalog();
         let openfoam = catalog.iter().find(|d| d.id == "openfoam").unwrap();
-        let solver = catalog.iter().find(|d| d.id == "openinjmoldsim").unwrap();
-        assert!(openfoam.required && solver.required);
+        assert!(openfoam.required);
         assert_eq!(openfoam.license_kind, LicenseKind::Gpl);
-        assert_eq!(solver.license_kind, LicenseKind::Gpl);
+        // foamRun 模块化求解器随 OpenFOAM 本体分发，不单列第三方求解器依赖。
+        assert!(!catalog.iter().any(|d| d.id == "openinjmoldsim"));
     }
 
     #[test]

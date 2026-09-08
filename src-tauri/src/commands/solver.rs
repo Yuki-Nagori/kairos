@@ -21,7 +21,8 @@ use crate::commands::geometry::GeometryStore;
 pub struct EnvironmentCheck {
     /// OpenFOAM 工具链（以 blockMesh 为代表）是否可用。
     pub openfoam: bool,
-    /// openInjMoldSim 求解器是否可用。
+    /// foamRun 模块化运行器是否可用（OpenFOAM 11+ 才有；求解模块由
+    /// case 的 controlDict 指定，无需第三方求解器二进制）。
     pub solver: bool,
     /// 面向用户的就绪状态提示。
     pub hint: String,
@@ -37,13 +38,14 @@ pub fn probe_openfoam() -> EnvironmentCheck {
             .map(|output| output.status.success())
             .unwrap_or(false)
     };
-    let (openfoam, solver) = (check("blockMesh"), check("openInjMoldSim"));
+    let (openfoam, solver) = (check("blockMesh"), check("foamRun"));
     let hint = if openfoam && solver {
-        "OpenFOAM 与 openInjMoldSim 已就绪。".into()
+        "OpenFOAM 已就绪（foamRun 模块化求解器可用）。".into()
     } else if !openfoam {
-        "未检测到 OpenFOAM 7（.org 版）。请安装后重试：openfoam.org".into()
+        "未检测到 OpenFOAM（.org 版，需 11+，推荐 14）。可在依赖面板应用内下载，或参考 openfoam.org。"
+            .into()
     } else {
-        "已检测到 OpenFOAM，但缺少 openInjMoldSim 求解器。请编译并加入 PATH。".into()
+        "OpenFOAM 版本过旧：缺少 foamRun 模块化运行器，请升级到 11+（推荐 14）。".into()
     };
     EnvironmentCheck {
         openfoam,

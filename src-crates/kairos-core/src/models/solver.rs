@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-/// 分析阶段：v1 覆盖 openInjMoldSim 的填充 / 填充+保压 / 填充+保压+冷却。
+/// 分析阶段：v1 覆盖填充 / 填充+保压 / 填充+保压+冷却（OpenFOAM compressibleVoF 链路）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AnalysisStage {

@@ -58,8 +58,10 @@ fn spawn_run_script(case_dir: &str, managed_path: Option<&str>) -> Result<Child>
         .unwrap_or_default();
     // 单引号内的 shell 转义：' → '\''（防路径注入）。
     let safe_dir = case_dir.replace('\'', "'\\''");
+    // 求解入口：foamRun 是 OpenFOAM 11+ 的模块化运行器，具体求解模块由
+    // case 的 controlDict（solver 键，见 openfoam.rs::SOLVER_MODULE）提供。
     let script =
-        format!("{path_export}cd '{safe_dir}' && decomposePar -force && openInjMoldSim -parallel");
+        format!("{path_export}cd '{safe_dir}' && decomposePar -force && foamRun -parallel");
     let mut command = Command::new("bash");
     command
         .arg("-lc")

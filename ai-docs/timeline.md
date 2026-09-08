@@ -99,3 +99,4 @@
 - **13:6x** fix: 清理受管路径重构残留
 - **13:5x** fix: F15 收口——gap_tests 临时目录幂等创建；依赖 hint 按真实流程改写
 - **13:6x** feat(deps): 一键下载后自动编译，日志实时滚动进面板
+- **21:0x** feat(solver): 移除 openInjMoldSim，求解入口切到 OpenFOAM 14 foamRun（T34 移除部分）

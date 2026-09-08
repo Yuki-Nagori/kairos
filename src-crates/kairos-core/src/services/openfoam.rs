@@ -1,7 +1,10 @@
 //! OpenFOAM case 生成与进度解析（纯函数，无进程操作）。
 //! 输出为标准 OpenFOAM case 目录：constant/polyMesh + 0/ 场 + system/ 字典。
-//! 字典键名以 openInjMoldSim（v7.2，OpenFOAM 7 .org）为基准；
-//! 求解器专属参数的精确校准在 T11 端到端时用官方 dogbone 样例复核。
+//! 字典以 OpenFOAM .org 新版（11+ 的 foamRun 模块化框架，compressibleVoF
+//! 模块）为基准；case 模板的端到端校准在 T29 真机求解时复核。
+//! packingDict / coolingDict / transportProperties（Cross-WLF、Tait）是
+//! Kairos 的过程参数扩展字典，vanilla foamRun 会忽略未知 constant/ 字典，
+//! 它们为后续专用求解模块（T29 校准）保留。
 
 use std::collections::HashMap;
 use std::fs;
@@ -146,7 +149,7 @@ pub fn write_poly_mesh(case_dir: &Path, mesh: &VolumeMesh) -> Result<()> {
     Ok(())
 }
 
-/// 写出 0/ 场与 system/、constant/ 字典（v1 模板；求解器专属校准在 T11 完成）。
+/// 写出 0/ 场与 system/、constant/ 字典（v1 模板；端到端校准在 T29 完成）。
 pub fn write_case_files(
     case_dir: &Path,
     material: &Material,
@@ -229,9 +232,17 @@ fn write(path: &Path, content: &str) -> Result<()> {
     fs::write(path, content).map_err(|e| KairosError::io(format!("写入 {path:?} 失败：{e}")))
 }
 
+/// 求解入口单点：foamRun 框架的求解模块名。上游阶段用 compressibleVoF
+/// （compressibleInterFoam 的原生后继，覆盖熔体/空气两相的填充、压缩保压
+/// 与传热）；OpenFOAM-14 fork 的注塑求解模块就绪后在此一处替换
+/// （见 ai-docs/tasks/T34-openfoam14-fork-entry.md）。
+pub const SOLVER_MODULE: &str = "compressibleVoF";
+
+/// 求解入口固定为 foamRun 模块化运行器，具体模块由 controlDict 的 solver
+/// 键指定（SOLVER_MODULE 单点入口）。
 fn control_dict(end_time: f64, cores: usize) -> String {
     format!(
-        "FoamFile\n{{\n    version 2.0;\n    format ascii;\n    class \"dictionary\";\n    object controlDict;\n}}\napplication     openInjMoldSim;\nstartFrom       latestTime;\nstopAt          endTime;\nendTime         {end_time:.6};\ndeltaT          1e-4;\nwriteControl    adjustableRunTime;\nwriteInterval   {end_time:.4};\npurgeWrite      3;\nwriteFormat     ascii;\nwritePrecision  8;\ntimeFormat      general;\nrunTimeModifiable false;\n// 并行核数提示：{cores}（由 decomposeParDict 生效）\n"
+        "FoamFile\n{{\n    version 2.0;\n    format ascii;\n    class \"dictionary\";\n    object controlDict;\n}}\napplication     foamRun;\nsolver          {SOLVER_MODULE};\nstartFrom       latestTime;\nstopAt          endTime;\nendTime         {end_time:.6};\ndeltaT          1e-4;\nwriteControl    adjustableRunTime;\nwriteInterval   {end_time:.4};\npurgeWrite      3;\nwriteFormat     ascii;\nwritePrecision  8;\ntimeFormat      general;\nrunTimeModifiable false;\n// 并行核数提示：{cores}（由 decomposeParDict 生效）\n"
     )
 }
 
@@ -407,9 +418,11 @@ mod tests {
         assert!(faces.contains("\n7\n")); // 2 四面体：6 边界面 + 1 内部面
         let neighbour = fs::read_to_string(case.join("constant/polyMesh/neighbour")).unwrap();
         assert!(neighbour.contains("\n1\n"));
-        // 控制字典 endTime = 注射×2（Fill 阶段）
+        // 控制字典 endTime = 注射×2（Fill 阶段）；求解入口为 foamRun 模块化运行器
         let control = fs::read_to_string(case.join("system/controlDict")).unwrap();
         assert!(control.contains("endTime         2.000000"));
+        assert!(control.contains("application     foamRun;"));
+        assert!(control.contains("solver          compressibleVoF;"));
         fs::remove_dir_all(&dir).ok();
     }
 

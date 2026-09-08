@@ -22,13 +22,14 @@ export function generateOpenfoamCase(input: GenerateCaseInput): Promise<string> 
   });
 }
 
+/** OpenFOAM 环境探测结果（solver = foamRun 模块化运行器，11+ 才有）。 */
 interface EnvironmentCheck {
   openfoam: boolean;
   solver: boolean;
   hint: string;
 }
 
-/** 探测 OpenFOAM / openInjMoldSim 运行时是否就绪。 */
+/** 探测 OpenFOAM 运行时是否就绪（工具链 + foamRun 模块化求解器）。 */
 export function probeOpenfoam(): Promise<EnvironmentCheck> {
   return invokeCommand("probe_openfoam");
 }

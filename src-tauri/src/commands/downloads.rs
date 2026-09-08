@@ -1,7 +1,6 @@
-//! 应用内下载：有官方单文件直链的组件（Gmsh 预编译包、OpenFOAM 7 /
-//! openInjMoldSim 源码包等）点击下载到受管目录（Kairos 只转发官方直链，
-//! 不是分发方）；其余组件走引导安装。
-//! 存放位置固定为 `<应用数据目录>/downloads/`，面板展示路径并支持打开。
+//! 应用内下载：有官方单文件直链的组件（Gmsh 预编译包、OpenFOAM 源码包）
+//! 点击下载到受管目录（Kairos 只转发官方直链，不是分发方）；其余组件走
+//! 引导安装。存放位置固定为 `<应用数据目录>/downloads/`，面板展示路径并支持打开。
 
 use std::fs;
 use std::io::{Read, Write};
@@ -20,8 +19,6 @@ const ALLOWED_PREFIXES: &[&str] = &[
     "https://openfoam.org/",
     "https://github.com/OpenFOAM/",
     "https://codeload.github.com/OpenFOAM/",
-    "https://github.com/krebeljk/",
-    "https://codeload.github.com/krebeljk/",
 ];
 
 #[derive(Debug, Clone, Serialize)]
@@ -106,12 +103,6 @@ pub async fn download_file(
     tauri::async_runtime::spawn_blocking(move || {
         let dir = downloads_dir(&app)?;
         fs::create_dir_all(&dir)?;
-        // 组件顺序约束：求解器源码依赖 OpenFOAM 的环境提供编译基建。
-        if component_id == "openinjmoldsim" && !read_manifest(&dir).contains_key("openfoam") {
-            return Err(KairosError::validation(
-                "请先下载 OpenFOAM：openInjMoldSim 的编译依赖其源码环境。",
-            ));
-        }
         let dest = dir.join(&file_name);
 
         // 带超时与 UA 的共享 agent：部分官方站点对无 UA 请求或无限挂起不友好。
@@ -382,16 +373,17 @@ mod tests {
     #[test]
     fn derive_file_name_covers_branch_rules() {
         let cases = [
-            // codeload 分支名形态 → 组件 id + 扩展名
+            // 分支归档形态 → 组件 id + 扩展名（.tar.gz 双段扩展优先于最后一个点）
             (
                 "openfoam",
-                "https://github.com/OpenFOAM/OpenFOAM-7/archive/refs/heads/master.tar.gz",
+                "https://github.com/OpenFOAM/OpenFOAM-14/archive/refs/heads/master.tar.gz",
                 "openfoam.tar.gz",
             ),
+            // codeload 直链的 zip 分支形态
             (
-                "openinjmoldsim",
-                "https://codeload.github.com/krebeljk/openInjMoldSim/zip/refs/heads/master",
-                "openinjmoldsim.zip",
+                "openfoam",
+                "https://codeload.github.com/OpenFOAM/OpenFOAM-14/zip/refs/heads/master",
+                "openfoam.zip",
             ),
             // 官方原始文件名保留
             (

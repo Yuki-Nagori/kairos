@@ -46,18 +46,20 @@
 
 ## 待开工任务
 
-| ID  | 文件                                                 | 任务                                | 依赖     |
-| --- | ---------------------------------------------------- | ----------------------------------- | -------- |
-| T21 | [T21-milestone-review.md](T21-milestone-review.md)   | 里程碑评审循环（随里程碑触发）      | 随里程碑 |
-| T29 | [T29-real-solve-e2e.md](T29-real-solve-e2e.md)       | 真实求解端到端验证（OpenFOAM）      | T09–T11  |
-| T30 | [T30-gmsh-integration.md](T30-gmsh-integration.md)   | Gmsh 网格引擎正式集成               | T22      |
-| T31 | [T31-derived-fields.md](T31-derived-fields.md)       | 派生结果算子（对标 data_transform） | T19/T20  |
-| T32 | [T32-headless-cli.md](T32-headless-cli.md)           | 无头 CLI 与批处理入口（门面式）     | T25 结论 |
-| T33 | [T33-updater-hardening.md](T33-updater-hardening.md) | 发布加固：updater + CSP 收窄        | T18      |
+| ID  | 文件                                                         | 任务                                                          | 依赖     |
+| --- | ------------------------------------------------------------ | ------------------------------------------------------------- | -------- |
+| T21 | [T21-milestone-review.md](T21-milestone-review.md)           | 里程碑评审循环（随里程碑触发）                                | 随里程碑 |
+| T29 | [T29-real-solve-e2e.md](T29-real-solve-e2e.md)               | 真实求解端到端验证（OpenFOAM）                                | T09–T11  |
+| T30 | [T30-gmsh-integration.md](T30-gmsh-integration.md)           | Gmsh 网格引擎正式集成                                         | T22      |
+| T31 | [T31-derived-fields.md](T31-derived-fields.md)               | 派生结果算子（对标 data_transform）                           | T19/T20  |
+| T32 | [T32-headless-cli.md](T32-headless-cli.md)                   | 无头 CLI 与批处理入口（门面式）                               | T25 结论 |
+| T33 | [T33-updater-hardening.md](T33-updater-hardening.md)         | 发布加固：updater + CSP 收窄                                  | T18      |
+| T34 | [T34-openfoam14-fork-entry.md](T34-openfoam14-fork-entry.md) | 求解入口收口：移除 openInjMoldSim，预留 OpenFOAM-14 fork 对接 | T09–T12  |
 
 > 上一批任务（T24/T25/T28）于 2026-09-08 完成；本批来源：T25 研究采纳建议
 > （CLI 门面 / 批处理编排 / 派生算子）、T22 后续（Gmsh 集成）与 M4 遗留
-> （真实求解验证）。T29 优先级最高——求解集成从未对接真实求解器。
+> （真实求解验证）。T29 优先级最高——求解集成从未对接真实求解器；
+> T34 的移除部分落地后，T29 的目标环境改为 OpenFOAM 14（含 fork 对接）。
 
 ## 全局原则（不变）
 
