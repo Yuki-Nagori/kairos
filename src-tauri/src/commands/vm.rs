@@ -498,7 +498,7 @@ fn shell_start_blocking(
         }
         _ => {}
     }
-    let args = vm_logic::shell_args(*provider);
+    let args = wrap_pty(vm_logic::shell_args(*provider));
     let mut child = platform_command(&args[0])
         .args(&args[1..])
         .stdin(Stdio::piped())
@@ -556,6 +556,32 @@ fn kill_session(state: &VmShellState) {
         let _ = child.kill();
         let _ = child.wait();
     }
+}
+
+/// 给交互 Shell 包一层 PTY：multipass exec / bash 在非 TTY 管道下是批处理
+/// 语义（stdin 读到 EOF 才执行，无法交互——真机踩过），script 提供伪终端后
+/// multipass 检测到 TTY 即切完整交互模式（回显/提示符/输出全通）。
+#[cfg(target_os = "macos")]
+fn wrap_pty(args: Vec<String>) -> Vec<String> {
+    let mut wrapped = vec!["script".into(), "-q".into(), "/dev/null".into()];
+    wrapped.extend(args);
+    wrapped
+}
+
+#[cfg(target_os = "linux")]
+fn wrap_pty(args: Vec<String>) -> Vec<String> {
+    vec![
+        "script".into(),
+        "-qec".into(),
+        args.join(" "),
+        "/dev/null".into(),
+    ]
+}
+
+/// Windows：wsl.exe 自带 ConPTY 桥，管道模式保持交互转发。
+#[cfg(target_os = "windows")]
+fn wrap_pty(args: Vec<String>) -> Vec<String> {
+    args
 }
 
 /// 停止受管虚拟机实例（先结束 Shell 会话；graceful stop 到秒级，走异步）。

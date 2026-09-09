@@ -73,9 +73,8 @@ export function openVmShellAction(): Promise<void> {
   return withVmBusy("shell", () => apiVmShellStart(appendShellLog));
 }
 
-/** 发送一行命令；管道 Shell 没有回显，本函数把输入自己记进日志区。 */
+/** 发送一行命令（PTY 会回显输入行，无需前端手动记日志）。 */
 export async function sendVmShellLine(line: string): Promise<void> {
-  appendShellLog(`> ${line}`);
   try {
     await apiVmShellSend(line);
   } catch (error) {

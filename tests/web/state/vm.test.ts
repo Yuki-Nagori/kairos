@@ -89,30 +89,20 @@ describe("vm state slice", () => {
     expect(appStore.get().vmBusy).toBeNull();
   });
 
-  it("shell lines echo local input before the round trip", async () => {
+  it("sends shell lines without manual echo (PTY echoes)", async () => {
     vi.mocked(vmShellSend).mockResolvedValue(undefined);
     vi.mocked(vmShellStart).mockResolvedValue(undefined);
 
     await openVmShellAction();
     await sendVmShellLine("blockMesh");
 
-    expect(appStore.get().vmShellLogs).toEqual(["> blockMesh"]);
+    // 回显由 PTY 提供，前端不重复记录
+    expect(appStore.get().vmShellLogs).toEqual([]);
     expect(vmShellSend).toHaveBeenCalledWith("blockMesh");
 
     await stopVmShellAction();
     expect(vmShellStop).toHaveBeenCalled();
     expect(appStore.get().vmShellLogs.at(-1)).toBe("── Shell 会话已结束 ──");
-  });
-
-  it("keeps the shell log ring at 500 lines", async () => {
-    vi.mocked(vmShellSend).mockResolvedValue(undefined);
-    for (let i = 0; i < 505; i += 1) {
-      await sendVmShellLine(`line-${i}`);
-    }
-    const logs = appStore.get().vmShellLogs;
-    expect(logs).toHaveLength(500);
-    expect(logs[0]).toBe("> line-5");
-    expect(logs.at(-1)).toBe("> line-504");
   });
 
   it("stop stops the instance and rescans", async () => {
