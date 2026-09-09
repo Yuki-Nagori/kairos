@@ -308,6 +308,10 @@ fn ensure_vm_image(app: &AppHandle, progress: &Channel<String>) -> Result<Option
 
 /// 从单个 URL 流式下载到目标文件，按去重后的百分比回传进度。
 fn download_to_file(url: &str, dest: &Path, progress: &Channel<String>) -> Result<()> {
+    // images/ 子目录尚不存在时会 os error 2（真机踩过），先建父目录。
+    if let Some(parent) = dest.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
     // 大文件（约 600MB）：连接 30s、总量 1h 超时，UA 与依赖下载保持一致。
     let agent: ureq::Agent = ureq::AgentBuilder::new()
         .timeout_connect(std::time::Duration::from_secs(30))

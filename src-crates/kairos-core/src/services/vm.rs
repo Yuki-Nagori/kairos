@@ -243,26 +243,31 @@ pub fn decode_wsl_output(bytes: &[u8]) -> String {
     text.replace('\0', "")
 }
 
-/// 清洗终端行：剥掉 ANSI 转义序列（multipass 等工具在非 TTY 下仍会吐
-/// 转圈动画的控制字节），并把 \r 分段折叠为最后一帧（spinner 语义）。
+/// 清洗终端行：剥掉 ANSI 转义序列与全部控制字符（multipass 的转圈动画
+/// 既有 CSI 也有退格 \x08 重绘、夹 NUL），并把 \r / \x08 分段折叠为
+/// 最后一帧（spinner 语义：只有最新帧有意义）。
 pub fn clean_terminal_line(line: &str) -> String {
     let mut out = String::with_capacity(line.len());
     let mut chars = line.chars();
     while let Some(c) = chars.next() {
-        if c == '\u{1b}' {
-            // CSI 序列：跳过到结束字母；其他转义跳过单字符
-            if chars.next() == Some('[') {
-                for follow in chars.by_ref() {
-                    if follow.is_ascii_alphabetic() {
-                        break;
+        match c {
+            '\u{1b}' => {
+                // CSI 序列：跳过到结束字母；其他转义跳过单字符
+                if chars.next() == Some('[') {
+                    for follow in chars.by_ref() {
+                        if follow.is_ascii_alphabetic() {
+                            break;
+                        }
                     }
                 }
             }
-            continue;
+            // 回退重绘（回车 / 退格）：清空已收字符，只保留最后一帧
+            '\r' | '\u{8}' => out.clear(),
+            c if c.is_control() => {}
+            c => out.push(c),
         }
-        out.push(c);
     }
-    out.rsplit('\r').next().unwrap_or("").trim_end().to_string()
+    out.trim_end().to_string()
 }
 
 /// 组装状态视图与用户提示。
@@ -508,6 +513,13 @@ mod tests {
             clean_terminal_line("frame one\rframe two\rframe three"),
             "frame three"
         );
+        // 退格重绘 + 夹 NUL（multipass 真机形态）
+        assert_eq!(
+            clean_terminal_line("Starting kairos  0/0-0\\0|0/0"),
+            "Starting kairos  0/0-0\\0|0/0"
+        );
+        assert_eq!(clean_terminal_line("a\u{8}b\u{8}c"), "c");
+        assert_eq!(clean_terminal_line("plain\u{0}line"), "plainline");
         assert_eq!(clean_terminal_line("plain line"), "plain line");
         // 纯控制序列清洗后为空
         assert_eq!(clean_terminal_line("\u{1b}[?25l"), "");
