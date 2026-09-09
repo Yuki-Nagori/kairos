@@ -22,9 +22,13 @@ import {
   exportFieldCsv,
   newProject,
   openProject,
+  openVmShellAction,
   refreshDependencies,
+  refreshVmStatus,
   saveProject,
   saveProjectAs,
+  startVmAction,
+  stopVmAction,
 } from "./state";
 
 const root = document.querySelector<HTMLDivElement>("#app");
@@ -125,6 +129,17 @@ const menuActions: Record<string, () => void> = {
   "analysis.checkNetwork": () => void checkNetwork(),
   "results.exportCsv": () => exportFieldCsv(),
   "tools.refreshDeps": () => void refreshDependencies(),
+  // 虚拟机：面板入口顺带展开抽屉，动作直接走状态分片
+  "tools.vmPanel": () => {
+    appStore.set({ vmPanelVisible: true });
+    void refreshVmStatus();
+  },
+  "tools.vmStart": () => void startVmAction(),
+  "tools.vmShell": () => {
+    appStore.set({ vmPanelVisible: true });
+    void openVmShellAction();
+  },
+  "tools.vmStop": () => void stopVmAction(),
 };
 
 // 浏览器预览没有 IPC，listen 会拒绝，静默忽略即可。

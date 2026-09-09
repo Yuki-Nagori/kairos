@@ -122,3 +122,4 @@
 - **17:5x** fix(vm): multipass 状态解析大小写不敏感（新版 Running 形态真机踩坑）；进入 Shell 前自动拉起已停止实例
 - **17:6x** fix(vm): Shell 子进程包 PTY（script -q /dev/null）——multipass exec 非 TTY 是批处理语义（stdin 读到 EOF 才执行），PTY 后交互全通；前端去掉手动回显防双显（真机反馈）
 - **17:7x** fix(ui): 图标改用 createElementNS 构建——WKWebView 的 CSP 下 innerHTML 内联 SVG 不渲染（浏览器正常、tauri dev 没有，真机踩坑）
+- **17:8x** feat(ui): 虚拟机动作接入原生「工具」菜单——面板/启动/Shell/关闭四项，前端 menu-action 路由

@@ -70,6 +70,11 @@ pub fn run() {
                 .build()?;
             let tools = SubmenuBuilder::new(_app, "工具")
                 .item(&action("tools.refreshDeps", "探测运行时依赖", None)?)
+                .separator()
+                .item(&action("tools.vmPanel", "虚拟机面板", None)?)
+                .item(&action("tools.vmStart", "启动虚拟机", None)?)
+                .item(&action("tools.vmShell", "进入虚拟机 Shell", None)?)
+                .item(&action("tools.vmStop", "关闭虚拟机", None)?)
                 .build()?;
 
             let help = SubmenuBuilder::new(_app, "帮助")
