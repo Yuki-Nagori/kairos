@@ -242,24 +242,32 @@ fn extract_archive(archive: &Path, dest: &Path) -> Result<()> {
     let mut command = Command::new(if is_zip { "unzip" } else { "tar" });
 
     if is_zip {
-        // Linux / macOS：unzip -o；Windows：bsdtar -xf（auto 识别 zip）
-        command.arg(archive);
+        // Linux / macOS：unzip <archive> -d <dest>；
+        // Windows：bsdtar -xf <archive> -C <dest>——必须显式给解压模式位，
+        // 裸位置参数 bsdtar 只打用法提示不干活（Windows CI 真机踩过）。
         if cfg!(target_os = "windows") {
-            command.arg("-C");
-        } else {
-            command.arg("-d");
+            command.arg("-xf");
         }
+        command.arg(archive);
+        command.arg(if cfg!(target_os = "windows") {
+            "-C"
+        } else {
+            "-d"
+        });
     } else {
         command.arg("-xzf").arg(archive).arg("-C");
     }
     command.arg(dest);
-    let status = command
-        .status()
+    // 捕获 stderr：解压失败时把工具的最后一条报错带给用户，便于定位。
+    let output = command
+        .output()
         .map_err(|e| KairosError::io(format!("解压启动失败：{e}")))?;
-    if !status.success() {
-        return Err(KairosError::io(
-            "压缩包解压失败（原始文件已保留，可手动解压）",
-        ));
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+        let detail = stderr.lines().last().unwrap_or("无 stderr 输出");
+        return Err(KairosError::io(format!(
+            "压缩包解压失败（原始文件已保留，可手动解压）：{detail}"
+        )));
     }
     Ok(())
 }
