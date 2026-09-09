@@ -1,5 +1,6 @@
 import {
   appStore,
+  checkUpdateAction,
   downloadComponent,
   openDependencyPageAction,
   refreshDependencies,
@@ -17,6 +18,20 @@ const STRATEGY_LABEL: Record<string, string> = {
   direct_download: "官方直链 · 可直接下载",
   guided_install: "引导安装",
 };
+
+/** 取组件在当前平台的下载地址（OS 未就绪时回落 linux 源）。 */
+function updateDownloadUrl(dep: {
+  download: { macos: string; windows: string; linux: string } | null;
+}): string {
+  const os = appStore.get().info?.os ?? "linux";
+  return dep.download === null
+    ? ""
+    : os === "macos"
+      ? dep.download.macos
+      : os === "windows"
+        ? dep.download.windows
+        : dep.download.linux;
+}
 
 /** 运行时依赖面板：许可分级、就绪状态、应用内下载与官方页引导。 */
 export function createDependenciesPanel(): HTMLElement {
@@ -37,7 +52,8 @@ export function createDependenciesPanel(): HTMLElement {
   });
 
   function render(): void {
-    const { dependencies, busy, savedDownloads, downloadedFiles, componentStages } = appStore.get();
+    const { dependencies, busy, savedDownloads, downloadedFiles, componentStages, updateChecks } =
+      appStore.get();
     const working = busy !== null;
     refreshButton.disabled = working;
     openDirButton.disabled = working;
@@ -80,6 +96,7 @@ export function createDependenciesPanel(): HTMLElement {
       // 按钮可用性从统一阶段状态推导：下载进行中禁用。
       const stage = componentStages[dep.id];
       const downloading = stage?.stage === "downloading";
+      const already = dep.id in savedDownloads || dep.id in downloadedFiles;
       let downloadButton: HTMLButtonElement | null = null;
       if (dep.download !== null) {
         const os = appStore.get().info?.os ?? "linux";
@@ -89,7 +106,6 @@ export function createDependenciesPanel(): HTMLElement {
             : os === "windows"
               ? dep.download.windows
               : dep.download.linux;
-        const already = dep.id in savedDownloads || dep.id in downloadedFiles;
         downloadButton = button(already ? "重新下载" : "下载", already ? "ghost" : "primary");
         downloadButton.disabled = downloading;
         downloadButton.title = `下载（${dep.license}）`;
@@ -98,11 +114,45 @@ export function createDependenciesPanel(): HTMLElement {
         });
       }
 
+      // 已安装的 release 流组件：提供「检查更新」。
+      if (dep.updatable && already) {
+        const checkButton = button("检查更新", "ghost");
+        checkButton.addEventListener("click", () => {
+          void checkUpdateAction(dep.id);
+        });
+        row.append(checkButton);
+      }
+
       row.append(name, badge, ready, requiredTag, openButton);
       if (downloadButton !== null) {
         row.append(downloadButton);
       }
       listBox.append(row);
+
+      // 更新提示：发现新版（琥珀 + 更新按钮）→ 已是最新（绿）→ 版本未知（灰）。
+      const check = updateChecks[dep.id];
+      if (check?.updateAvailable === true) {
+        const updateLine = hint(
+          `发现新版本 ${check.latestTag}（当前 ${check.installedTag ?? "未知"}）`,
+        );
+        updateLine.className = "text-xs text-amber-400";
+        listBox.append(updateLine);
+        const updateButton = button("更新到新版");
+        updateButton.addEventListener("click", () => {
+          void downloadComponent(dep.id, updateDownloadUrl(dep));
+        });
+        listBox.append(updateButton);
+      } else if (check !== undefined) {
+        const freshLine = hint(
+          check.installedTag === null
+            ? "已安装（版本标识未知，重新下载可获得版本标记）。"
+            : `已是最新版本（${check.installedTag}）。`,
+        );
+        freshLine.className = `text-xs ${
+          check.installedTag === null ? "text-zinc-400" : "text-emerald-400"
+        }`;
+        listBox.append(freshLine);
+      }
 
       // 阶段状态行：失败（红，附原因）→ 下载进度。
       if (stage?.stage === "failed") {

@@ -200,6 +200,14 @@ export interface DownloadSpec {
   linux: string;
 }
 
+/** 对应 `kairos-core::models::dependencies::UpdateCheck`（在线更新检查结果）。 */
+export interface UpdateCheck {
+  componentId: string;
+  installedTag: string | null;
+  latestTag: string | null;
+  updateAvailable: boolean;
+}
+
 /** 组件下载流水线的阶段状态（仅进行中或失败时存在；成功后清除）。 */
 export type ComponentStageState =
   { stage: "downloading"; percent: number } | { stage: "failed"; error: string };
@@ -225,6 +233,8 @@ export interface SavedDownload {
   fileName: string;
   sizeBytes: number;
   extractDir: string | null;
+  /** release 流组件的来源版本标签；静态直链组件为 null。 */
+  releaseTag: string | null;
 }
 
 /** 跨会话的下载清单条目（manifest.json，key = 组件 id）。 */
@@ -250,4 +260,6 @@ export interface DependencyStatus {
   ready: boolean;
   /** 应用内受管目录中检测到可执行副本（下载 + 解压后即可用）。 */
   managedReady: boolean;
+  /** 是否来自可在线检查更新的 release 流。 */
+  updatable: boolean;
 }

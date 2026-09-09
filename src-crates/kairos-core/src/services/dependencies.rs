@@ -22,6 +22,15 @@ fn source_download(url: &str) -> Option<DownloadSpec> {
     })
 }
 
+/// 组件是否来自可在线检查更新的 release 流（`releases/latest` 直链）。
+/// 静态直链组件（如 Gmsh 固定版本文件）没有可查询的版本源，不支持。
+pub fn is_release_updatable(dep: &RuntimeDependency) -> bool {
+    dep.download
+        .as_ref()
+        .map(|spec| spec.linux.ends_with("/releases/latest"))
+        .unwrap_or(false)
+}
+
 /// release 资产名是否匹配宿主架构（moldingFoam bundle 按 linux64 / linuxArm64
 /// 分包；匹配对大小写不敏感）。无法识别的架构一律不匹配。
 pub fn bundle_asset_matches_arch(asset_name: &str, arch: &str) -> bool {
@@ -111,6 +120,18 @@ mod tests {
         let gmsh = catalog.iter().find(|d| d.id == "gmsh").unwrap();
         assert!(!gmsh.required);
         assert!(gmsh.download.is_some(), "Gmsh 应提供应用内直接下载地址");
+    }
+
+    #[test]
+    fn only_release_stream_components_are_updatable() {
+        let catalog = catalog();
+        let moldingfoam = catalog
+            .iter()
+            .find(|d| d.id == "moldingfoam")
+            .expect("moldingfoam entry");
+        assert!(is_release_updatable(moldingfoam));
+        let gmsh = catalog.iter().find(|d| d.id == "gmsh").expect("gmsh entry");
+        assert!(!is_release_updatable(gmsh));
     }
 
     #[test]

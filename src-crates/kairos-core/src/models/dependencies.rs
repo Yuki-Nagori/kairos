@@ -52,3 +52,15 @@ pub struct RuntimeDependency {
     #[serde(default)]
     pub download: Option<DownloadSpec>,
 }
+
+/// 组件更新检查结果（前端提示用）。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateCheck {
+    pub component_id: String,
+    /// 当前安装的版本标签；清单中无记录（旧版下载）时为 None。
+    pub installed_tag: Option<String>,
+    /// 线上最新版本标签。
+    pub latest_tag: Option<String>,
+    pub update_available: bool,
+}

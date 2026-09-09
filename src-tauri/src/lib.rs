@@ -118,6 +118,7 @@ pub fn run() {
             commands::jobs::cancel_job,
             commands::jobs::list_jobs,
             commands::dependencies::list_runtime_dependencies,
+            commands::dependencies::check_dependency_update,
             commands::dependencies::open_dependency_page,
             commands::downloads::download_file,
             commands::downloads::get_downloads_dir,

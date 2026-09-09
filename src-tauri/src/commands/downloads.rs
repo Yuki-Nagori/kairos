@@ -26,6 +26,8 @@ pub struct SavedDownload {
     pub size_bytes: u64,
     /// 压缩包自动解压后的目录（非压缩包为 None）。
     pub extract_dir: Option<String>,
+    /// release 流组件的来源版本标签（如 v0.1.1）；静态直链组件为 None。
+    pub release_tag: Option<String>,
 }
 
 pub fn downloads_dir(app: &AppHandle) -> Result<PathBuf> {
@@ -89,7 +91,8 @@ fn derive_file_name(component_id: &str, url: &str) -> String {
 const BUNDLE_REPO: &str = "Yuki-Nagori/moldingFoam";
 
 #[derive(serde::Deserialize)]
-struct ReleaseAssets {
+pub struct ReleaseInfo {
+    pub tag_name: String,
     assets: Vec<ReleaseAsset>,
 }
 
@@ -99,13 +102,8 @@ struct ReleaseAsset {
     browser_download_url: String,
 }
 
-/// `releases/latest` 形态的 URL 在下载时动态解析为具体资产：资产名含日期，
-/// 固定文件名的 latest/download 直链会随下个版本失效。按宿主架构挑资产，
-/// 找不到匹配时明确报错而不是猜。其余 URL 原样返回。
-fn resolve_release_asset(url: &str) -> Result<String> {
-    if !url.ends_with("/releases/latest") {
-        return Ok(url.to_string());
-    }
+/// 查询 moldingFoam 仓库的最新 release（tag + 资产清单）。
+pub fn query_latest_release() -> Result<ReleaseInfo> {
     let agent: ureq::Agent = ureq::AgentBuilder::new()
         .timeout_connect(std::time::Duration::from_secs(30))
         .timeout(std::time::Duration::from_secs(60))
@@ -118,8 +116,18 @@ fn resolve_release_asset(url: &str) -> Result<String> {
         .set("Accept", "application/vnd.github+json")
         .call()
         .map_err(|e| KairosError::io(format!("查询最新 release 失败：{e}")))?;
-    let release: ReleaseAssets = serde_json::from_reader(response.into_reader())
-        .map_err(|e| KairosError::io(format!("release 数据解析失败：{e}")))?;
+    serde_json::from_reader(response.into_reader())
+        .map_err(|e| KairosError::io(format!("release 数据解析失败：{e}")))
+}
+
+/// `releases/latest` 形态的 URL 在下载时动态解析为具体资产：资产名含日期，
+/// 固定文件名的 latest/download 直链会随下个版本失效。按宿主架构挑资产，
+/// 找不到匹配时明确报错而不是猜。其余 URL 原样返回（无版本标签）。
+fn resolve_release_asset(url: &str) -> Result<(String, Option<String>)> {
+    if !url.ends_with("/releases/latest") {
+        return Ok((url.to_string(), None));
+    }
+    let release = query_latest_release()?;
     let asset = release
         .assets
         .iter()
@@ -135,7 +143,7 @@ fn resolve_release_asset(url: &str) -> Result<String> {
                 std::env::consts::ARCH
             ))
         })?;
-    Ok(asset.browser_download_url.clone())
+    Ok((asset.browser_download_url.clone(), Some(release.tag_name)))
 }
 
 /// 下载文件到受管目录：流式写盘并按百分比回传进度（Channel<u64>）；
@@ -148,12 +156,15 @@ pub async fn download_file(
     progress: Channel<u64>,
 ) -> Result<SavedDownload> {
     ensure_allowed(&url)?;
-    let url = resolve_release_asset(&url)?;
+    let (url, release_tag) = resolve_release_asset(&url)?;
     let file_name = derive_file_name(&component_id, &url);
 
     tauri::async_runtime::spawn_blocking(move || {
         let dir = downloads_dir(&app)?;
         fs::create_dir_all(&dir)?;
+        // 升级场景：记录旧条目，成功登记新版本后清理旧归档（解压目录
+        // 由 extract_if_archive 的先清后解天然覆盖）。
+        let previous = read_manifest(&dir).get(&component_id).cloned();
         let dest = dir.join(&file_name);
 
         // 带超时与 UA 的共享 agent：部分官方站点对无 UA 请求或无限挂起不友好。
@@ -197,8 +208,15 @@ pub async fn download_file(
             file_name: file_name.clone(),
             size_bytes: downloaded,
             extract_dir: extract_dir.map(|p| p.to_string_lossy().to_string()),
+            release_tag,
         };
         register_in_manifest(&dir, &component_id, &saved)?;
+        // 新版本登记成功后才删旧归档：下载失败不破坏已可用版本。
+        if let Some(old) = previous
+            && old.file_name != saved.file_name
+        {
+            let _ = fs::remove_file(dir.join(&old.file_name));
+        }
         Ok(saved)
     })
     .await
@@ -215,6 +233,9 @@ pub struct ManifestEntry {
     pub size_bytes: u64,
     pub downloaded_at_ms: u64,
     pub extract_dir: Option<String>,
+    /// release 流组件的来源版本标签；旧版清单无此字段，读为 None。
+    #[serde(default)]
+    pub release_tag: Option<String>,
 }
 
 fn manifest_path(dir: &Path) -> PathBuf {
@@ -238,6 +259,7 @@ fn register_in_manifest(dir: &Path, component_id: &str, saved: &SavedDownload) -
             size_bytes: saved.size_bytes,
             downloaded_at_ms: now_ms(),
             extract_dir: saved.extract_dir.clone(),
+            release_tag: saved.release_tag.clone(),
         },
     );
     let json = serde_json::to_string_pretty(&manifest)
@@ -246,6 +268,12 @@ fn register_in_manifest(dir: &Path, component_id: &str, saved: &SavedDownload) -
     fs::write(&tmp, json)?;
     fs::rename(&tmp, manifest_path(dir))?;
     Ok(())
+}
+
+/// 读取单组件的清单条目（检查更新用）。
+pub fn manifest_entry(app: &AppHandle, component_id: &str) -> Result<Option<ManifestEntry>> {
+    let dir = downloads_dir(app)?;
+    Ok(read_manifest(&dir).get(component_id).cloned())
 }
 
 /// 返回已下载组件清单（前端启动时恢复「已下载」徽标）。
@@ -421,6 +449,7 @@ mod tests {
             file_name: "a.tgz".into(),
             size_bytes: 123,
             extract_dir: None,
+            release_tag: Some("v0.1.1".into()),
         };
         register_in_manifest(&dir, "gmsh", &saved).unwrap();
         register_in_manifest(&dir, "moldingfoam", &saved).unwrap();
@@ -429,6 +458,8 @@ mod tests {
         assert_eq!(manifest.len(), 2);
         assert_eq!(manifest["gmsh"].file_name, "a.tgz");
         assert_eq!(manifest["gmsh"].size_bytes, 123);
+        // release 流组件的版本标签随条目落盘（检查更新的比对依据）
+        assert_eq!(manifest["gmsh"].release_tag.as_deref(), Some("v0.1.1"));
 
         // 同组件重复下载：upsert 不产生重复条目
         register_in_manifest(&dir, "gmsh", &saved).unwrap();

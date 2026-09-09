@@ -1,4 +1,5 @@
 import {
+  checkDependencyUpdate,
   listRuntimeDependencies,
   openDependencyPage as apiOpenDependencyPage,
 } from "../services/dependencies";
@@ -40,6 +41,18 @@ function setStage(componentId: string, stage: ComponentStageState | null): void 
   appStore.set({ componentStages: next });
 }
 
+/** 在线检查组件更新（release 流组件），结果落在 updateChecks 供面板提示。 */
+export async function checkUpdateAction(componentId: string): Promise<void> {
+  try {
+    const check = await checkDependencyUpdate(componentId);
+    appStore.set({
+      updateChecks: { ...appStore.get().updateChecks, [componentId]: check },
+    });
+  } catch (error) {
+    setError(error);
+  }
+}
+
 /** 应用内下载：把官方单文件直链取回受管目录。
  * 下载不占用全局 busy（大文件不应阻塞其他面板操作），
  * 进度在组件的阶段状态里行内展示；失败落定在 failed 阶段并支持重试。 */
@@ -51,12 +64,16 @@ export async function downloadComponent(componentId: string, url: string): Promi
         setStage(componentId, { stage: "downloading", percent });
       }
     });
+    const { updateChecks } = appStore.get();
+    const nextChecks = { ...updateChecks };
+    delete nextChecks[componentId];
     appStore.set({
       savedDownloads: { ...appStore.get().savedDownloads, [componentId]: saved },
       downloadedFiles: {
         ...appStore.get().downloadedFiles,
         [componentId]: toEntry(saved),
       },
+      updateChecks: nextChecks,
     });
     setStage(componentId, null);
   } catch (error) {

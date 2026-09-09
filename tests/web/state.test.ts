@@ -4,6 +4,7 @@ import {
   addStudy,
   appStore,
   bootstrap,
+  checkUpdateAction,
   downloadComponent,
   initialAppState,
   newProject,
@@ -12,9 +13,12 @@ import {
 import { getSystemInfo } from "../../src-web/services/system";
 import { createProject, listRecentProjects } from "../../src-web/services/project";
 import { listBuiltinMaterials, listCustomMaterials } from "../../src-web/services/materials";
-import { listRuntimeDependencies } from "../../src-web/services/dependencies";
+import {
+  checkDependencyUpdate,
+  listRuntimeDependencies,
+} from "../../src-web/services/dependencies";
 import { downloadComponentFile, listDownloads } from "../../src-web/services/downloads";
-import type { SavedDownload } from "../../src-web/types";
+import type { SavedDownload, UpdateCheck } from "../../src-web/types";
 
 vi.mock("../../src-web/services/system", () => ({ getSystemInfo: vi.fn() }));
 vi.mock("../../src-web/services/project", () => ({
@@ -36,6 +40,7 @@ vi.mock("../../src-web/services/materials", () => ({
   exportMaterialsToFile: vi.fn(),
 }));
 vi.mock("../../src-web/services/dependencies", () => ({
+  checkDependencyUpdate: vi.fn(),
   listRuntimeDependencies: vi.fn(),
   openDependencyPage: vi.fn(),
 }));
@@ -52,6 +57,7 @@ function resetMocks(): void {
   vi.mocked(listRecentProjects).mockReset();
   vi.mocked(listBuiltinMaterials).mockReset();
   vi.mocked(listCustomMaterials).mockReset();
+  vi.mocked(checkDependencyUpdate).mockReset();
   vi.mocked(listRuntimeDependencies).mockReset();
   vi.mocked(downloadComponentFile).mockReset();
   vi.mocked(listDownloads).mockReset();
@@ -199,6 +205,7 @@ describe("dependency stage transitions", () => {
     fileName: "gmsh.tgz",
     sizeBytes: 1024,
     extractDir: "/downloads/gmsh",
+    releaseTag: null,
   };
 
   beforeEach(() => {
@@ -221,11 +228,39 @@ describe("dependency stage transitions", () => {
       return saved;
     });
 
+    appStore.set({
+      updateChecks: {
+        gmsh: {
+          componentId: "gmsh",
+          installedTag: "v0.1.1",
+          latestTag: "v0.1.1",
+          updateAvailable: false,
+        },
+      },
+    });
+
     await downloadComponent("gmsh", "https://gmsh.info/a.tgz");
 
     expect(appStore.get().componentStages.gmsh).toBeUndefined();
     expect(appStore.get().savedDownloads.gmsh?.fileName).toBe("gmsh.tgz");
+    // 重新下载成功后，过期的更新检查结果被清除
+    expect(appStore.get().updateChecks.gmsh).toBeUndefined();
     // 求解环境为预编译 bundle：下载不触发任何编译。
+  });
+
+  it("stores the update check result for the component", async () => {
+    const check: UpdateCheck = {
+      componentId: "moldingfoam",
+      installedTag: "v0.1.1",
+      latestTag: "v0.2.0",
+      updateAvailable: true,
+    };
+    vi.mocked(checkDependencyUpdate).mockResolvedValue(check);
+
+    await checkUpdateAction("moldingfoam");
+
+    expect(appStore.get().updateChecks.moldingfoam).toEqual(check);
+    expect(appStore.get().updateChecks.moldingfoam?.updateAvailable).toBe(true);
   });
 
   it("lands a failed download in the failed stage with the reason", async () => {

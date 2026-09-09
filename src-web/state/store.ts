@@ -3,6 +3,7 @@ import { IpcUnavailableError } from "../lib/ipc";
 import type {
   ComponentStageState,
   DependencyStatus,
+  UpdateCheck,
   VmAction,
   VmStatus,
   DownloadedEntry,
@@ -62,6 +63,8 @@ export interface AppState {
   vmBusy: VmAction | null;
   /** 虚拟机终端面板是否可见（状态栏右侧 Shell 按钮切换，默认隐藏）。 */
   vmPanelVisible: boolean;
+  /** 组件在线更新检查结果（key = 组件 id；重新下载成功后清除）。 */
+  updateChecks: Record<string, UpdateCheck>;
   /** 探针列表（节点序号）。 */
   probes: Probe[];
   /** 材料库：内置示例材料 + 用户自定义材料。 */
@@ -102,6 +105,7 @@ export const initialAppState: AppState = {
   vmShellLogs: [],
   vmBusy: null,
   vmPanelVisible: false,
+  updateChecks: {},
   probes: [],
   busy: null,
   error: null,

@@ -27,6 +27,8 @@ pub struct DependencyStatus {
     /// 应用内受管目录（downloads/<id>/）中检测到可执行副本
     /// （下载 + 自动解压后即可用，无需手动加 PATH）。
     pub managed_ready: bool,
+    /// 是否来自可在线检查更新的 release 流。
+    pub updatable: bool,
 }
 
 #[tauri::command]
@@ -44,6 +46,7 @@ pub fn list_runtime_dependencies(app: AppHandle) -> Vec<DependencyStatus> {
                 dependency: dep.clone(),
                 ready: managed_ready || command_exists(&dep.check_command),
                 managed_ready,
+                updatable: dependencies_service::is_release_updatable(dep),
             }
         })
         .collect()
@@ -86,6 +89,37 @@ fn find_executable(dir: &Path, binary: &str, depth: u8) -> Option<PathBuf> {
         }
     }
     None
+}
+
+/// 在线检查组件更新：比对受管清单记录的 release 标签与线上最新标签。
+/// 仅 release 流组件支持；清单无版本标签（旧版下载）时提示重新下载。
+#[tauri::command]
+pub async fn check_dependency_update(
+    app: AppHandle,
+    component_id: String,
+) -> Result<kairos_core::models::dependencies::UpdateCheck> {
+    let updatable = dependencies_service::catalog()
+        .iter()
+        .find(|dep| dep.id == component_id)
+        .map(dependencies_service::is_release_updatable)
+        .unwrap_or(false);
+    if !updatable {
+        return Err(KairosError::validation("该组件不支持在线检查更新。"));
+    }
+    let installed_tag = downloads::manifest_entry(&app, &component_id)?.and_then(|e| e.release_tag);
+    tauri::async_runtime::spawn_blocking(move || {
+        let latest_tag = Some(downloads::query_latest_release()?.tag_name);
+        let update_available =
+            installed_tag.is_some() && installed_tag.as_deref() != latest_tag.as_deref();
+        Ok(kairos_core::models::dependencies::UpdateCheck {
+            component_id,
+            installed_tag,
+            latest_tag,
+            update_available,
+        })
+    })
+    .await
+    .map_err(|e| KairosError::internal(format!("更新检查任务失败：{e}")))?
 }
 
 /// 打开组件的官方下载 / 编译页（引导安装的落地动作，GPL 组件不分发二进制）。

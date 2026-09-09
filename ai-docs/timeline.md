@@ -114,3 +114,4 @@
 - **15:5x** fix(ci): 覆盖率步骤补装 cargo-llvm-cov（简化流水线时遗失）；Windows zip 解压显式 -xf 并回传工具 stderr
 - **15:6x** feat(deps): 求解环境改下载 moldingFoam release bundle（latest + 按架构解析资产，tar.xz 解压），应用内编译流程退役
 - **16:0x** refactor(deps): 求解环境条目身份正名为 moldingfoam——基于 OpenFOAM-14 但不是 OpenFOAM-14
+- **16:1x** feat(deps): 已安装组件支持在线检查更新——release tag 入清单，比对最新标签提示拉新并自动清理旧归档

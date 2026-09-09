@@ -179,3 +179,26 @@ fn vm_status_serializes_with_camel_case() {
         })
     );
 }
+
+/// UpdateCheck 的形状：camelCase 字段 + Option 的 null 语义，
+/// 前端 `src-web/types.ts` 的 UpdateCheck 与之对应。
+#[test]
+fn update_check_serializes_with_camel_case() {
+    use kairos_core::models::dependencies::UpdateCheck;
+    let check = UpdateCheck {
+        component_id: "moldingfoam".into(),
+        installed_tag: Some("v0.1.1".into()),
+        latest_tag: Some("v0.2.0".into()),
+        update_available: true,
+    };
+    let json = serde_json::to_value(&check).unwrap();
+    assert_eq!(
+        json,
+        json!({
+            "componentId": "moldingfoam",
+            "installedTag": "v0.1.1",
+            "latestTag": "v0.2.0",
+            "updateAvailable": true,
+        })
+    );
+}
