@@ -77,22 +77,67 @@ pub fn plan_resources(host_cpus: u32, host_memory_gib: u32) -> VmResources {
     }
 }
 
+/// 视为中国大陆时区的 IANA / Windows 时区名（本机判断，不发起网络请求）。
+pub const CN_TIMEZONES: &[&str] = &[
+    "Asia/Shanghai",
+    "Asia/Urumqi",
+    "Asia/Chongqing",
+    "Asia/Harbin",
+    "Asia/Kashgar",
+    "China Standard Time",
+];
+
+/// 中国大陆时区 → 云镜像走国内镜像源（multipassd 直连上游下载慢）。
+pub fn is_china_timezone(tz: &str) -> bool {
+    CN_TIMEZONES.contains(&tz)
+}
+
+/// 平台架构 → Ubuntu 云镜像文件名（noble / 24.04）。
+pub fn image_file_name(arch: &str) -> Option<&'static str> {
+    match arch {
+        "aarch64" => Some("noble-server-cloudimg-arm64.img"),
+        "x86_64" => Some("noble-server-cloudimg-amd64.img"),
+        _ => None,
+    }
+}
+
+/// 国内镜像源候选（清华 TUNA，实测可达；按序尝试）。
+pub fn image_mirror_urls(arch: &str) -> Vec<String> {
+    let Some(name) = image_file_name(arch) else {
+        return Vec::new();
+    };
+    vec![format!(
+        "https://mirrors.tuna.tsinghua.edu.cn/ubuntu-cloud-images/noble/current/{name}"
+    )]
+}
+
 /// 首次创建实例（multipass 按宿主规格拉起 Ubuntu；WSL 安装发行版）。
-pub fn launch_args(provider: VmProviderKind, resources: &VmResources) -> Vec<String> {
+/// `image` 为本地云镜像路径（国内镜像源预下载后 file:// 导入）；
+/// None 时由 multipass 直接拉取 `24.04`。
+pub fn launch_args(
+    provider: VmProviderKind,
+    resources: &VmResources,
+    image: Option<&str>,
+) -> Vec<String> {
     match provider {
         VmProviderKind::Multipass => {
+            let source = match image {
+                Some(path) => format!("file://{path}"),
+                None => "24.04".into(),
+            };
             vec![
                 "multipass".into(),
                 "launch".into(),
                 "--name".into(),
                 INSTANCE_NAME.into(),
+                // --mem 已被 multipass 弃用（真机警告），新脚本一律用 --memory。
                 "--cpus".into(),
                 resources.cpus.to_string(),
                 "--memory".into(),
                 format!("{}G", resources.memory_gib),
                 "--disk".into(),
                 format!("{}G", resources.disk_gib),
-                "24.04".into(),
+                source,
             ]
         }
         VmProviderKind::Wsl => vec![
@@ -303,11 +348,42 @@ mod tests {
         for args in [
             version_args(VmProviderKind::Native),
             instance_info_args(VmProviderKind::Native),
-            launch_args(VmProviderKind::Native, &plan_resources(8, 16)),
+            launch_args(VmProviderKind::Native, &plan_resources(8, 16), None),
             stop_args(VmProviderKind::Native),
         ] {
             assert_eq!(args, vec!["true"]);
         }
+    }
+
+    #[test]
+    fn china_timezone_uses_mirror_image_for_launch() {
+        assert!(is_china_timezone("Asia/Shanghai"));
+        assert!(is_china_timezone("China Standard Time"));
+        assert!(!is_china_timezone("America/New_York"));
+        assert!(!is_china_timezone(""));
+
+        assert_eq!(
+            image_file_name("aarch64"),
+            Some("noble-server-cloudimg-arm64.img")
+        );
+        assert_eq!(image_file_name("riscv"), None);
+        let urls = image_mirror_urls("x86_64");
+        assert_eq!(urls.len(), 1);
+        assert!(urls[0].starts_with(
+            "https://mirrors.tuna.tsinghua.edu.cn/ubuntu-cloud-images/noble/current/"
+        ));
+        assert!(urls[0].ends_with("noble-server-cloudimg-amd64.img"));
+
+        // file:// 导入：本地镜像替换 24.04 位置参数
+        let launch = launch_args(
+            VmProviderKind::Multipass,
+            &plan_resources(8, 16),
+            Some("/tmp/noble.img"),
+        );
+        assert!(launch.contains(&"file:///tmp/noble.img".to_string()));
+        assert!(!launch.contains(&"24.04".to_string()));
+        let direct = launch_args(VmProviderKind::Multipass, &plan_resources(8, 16), None);
+        assert_eq!(direct.last().unwrap(), "24.04");
     }
 
     #[test]
@@ -338,12 +414,12 @@ mod tests {
         ] {
             assert_eq!(version_args(provider)[0], bin);
             assert_eq!(instance_info_args(provider)[0], bin);
-            assert_eq!(launch_args(provider, &resources)[0], bin);
+            assert_eq!(launch_args(provider, &resources, None)[0], bin);
             assert_eq!(shell_args(provider)[0], bin);
             assert_eq!(stop_args(provider)[0], bin);
         }
         // multipass：实例名贯穿 launch/start/shell/stop；WSL：无独立 start 步骤
-        let launch = launch_args(VmProviderKind::Multipass, &resources);
+        let launch = launch_args(VmProviderKind::Multipass, &resources, None);
         assert!(launch.contains(&INSTANCE_NAME.to_string()));
         // 规格来自宿主探测结果：4 核 / 8G / 80G + Ubuntu 24.04（plan_resources(8,16)）
         let cpus_pos = launch.iter().position(|a| a == "--cpus").unwrap();

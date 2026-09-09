@@ -11,8 +11,9 @@ use std::time::{Duration, Instant};
 use kairos_core::error::{KairosError, Result};
 use kairos_core::models::vm::{VmProviderKind, VmState, VmStatus};
 use kairos_core::services::vm as vm_logic;
-use tauri::State;
+use std::path::PathBuf;
 use tauri::ipc::Channel;
+use tauri::{AppHandle, State};
 
 /// 应用内 Shell 子进程句柄（同一时刻至多一个会话；新会话顶替旧会话）。
 pub struct VmShellState(Arc<Mutex<Option<Child>>>);
@@ -235,6 +236,109 @@ fn run_and_stream(args: &[String], progress: &Channel<String>) -> Result<bool> {
     Ok(child.wait().map(|status| status.success()).unwrap_or(false))
 }
 
+/// 宿主 IANA 时区名（如 Asia/Shanghai）：unix 读 /etc/localtime 链接目标，
+/// Windows 用 PowerShell Get-TimeZone，兜底 TZ 环境变量。纯本机判断，零网络请求。
+fn host_timezone() -> String {
+    #[cfg(not(target_os = "windows"))]
+    {
+        // /etc/localtime → .../zoneinfo/Asia/Shanghai：取 zoneinfo 之后的完整路径段。
+        if let Ok(target) = std::fs::read_link("/etc/localtime") {
+            let text = target.to_string_lossy();
+            if let Some(pos) = text.find("zoneinfo/") {
+                return text[pos + "zoneinfo/".len()..].to_string();
+            }
+        }
+    }
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(output) = Command::new("powershell")
+            .args(["-NoProfile", "-Command", "(Get-TimeZone).Id"])
+            .output()
+        {
+            let id = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !id.is_empty() {
+                return id;
+            }
+        }
+    }
+    std::env::var("TZ").unwrap_or_default()
+}
+
+/// 国内时区：从清华镜像预下载 24.04 云镜像到受管目录（已存在则复用），
+/// 之后 `multipass launch file://` 本地导入——multipassd 直连上游下载慢。
+/// 失败返回 None 并回退官方直连（不阻塞创建流程）。
+fn ensure_vm_image(app: &AppHandle, progress: &Channel<String>) -> Result<Option<PathBuf>> {
+    if provider()? != VmProviderKind::Multipass {
+        return Ok(None);
+    }
+    if !vm_logic::is_china_timezone(&host_timezone()) {
+        return Ok(None);
+    }
+    let Some(file_name) = vm_logic::image_file_name(std::env::consts::ARCH) else {
+        return Ok(None);
+    };
+    let dest = super::downloads::downloads_dir(app)?
+        .join("images")
+        .join(file_name);
+    if dest.exists() {
+        let _ = progress.send("── 复用已下载的云镜像 ──".into());
+        return Ok(Some(dest));
+    }
+    let part = dest.with_extension("img.part");
+    let agent: ureq::Agent = ureq::AgentBuilder::new()
+        .timeout_connect(std::time::Duration::from_secs(30))
+        .timeout(std::time::Duration::from_secs(3600))
+        .user_agent("kairos-dependency-manager/1.0")
+        .build();
+    let mut last_percent: Option<u64> = None;
+    for url in &vm_logic::image_mirror_urls(std::env::consts::ARCH) {
+        let _ = progress.send(format!("── 从镜像源下载云镜像：{url} ──"));
+        let response = match agent.get(url).call() {
+            Ok(response) => response,
+            Err(e) => {
+                let _ = progress.send(format!("镜像源不可用：{e}"));
+                continue;
+            }
+        };
+        let total: u64 = response
+            .header("Content-Length")
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(0);
+        let mut file = std::fs::File::create(&part)?;
+        let mut reader = response.into_reader();
+        let mut buffer = [0u8; 65_536];
+        let mut downloaded: u64 = 0;
+        loop {
+            match reader.read(&mut buffer) {
+                Ok(0) => break,
+                Ok(n) => {
+                    file.write_all(&buffer[..n])?;
+                    downloaded += n as u64;
+                }
+                Err(e) => {
+                    let _ = std::fs::remove_file(&part);
+                    return Err(KairosError::io(format!("镜像下载中断：{e}")));
+                }
+            }
+            // checked_div 兼容 total=0（内容长度未知）时不发进度，模式同 downloads.rs。
+            match (downloaded * 100).checked_div(total) {
+                Some(percent) if last_percent != Some(percent) => {
+                    let _ = progress.send(format!("镜像下载 {percent}%"));
+                    last_percent = Some(percent);
+                }
+                _ => {}
+            }
+        }
+        file.flush()?;
+        drop(file);
+        std::fs::rename(&part, &dest)?;
+        return Ok(Some(dest));
+    }
+    let _ = std::fs::remove_file(&part);
+    let _ = progress.send("── 镜像源均不可用，改用官方源直连 ──".into());
+    Ok(None)
+}
+
 /// 探测虚拟机运行时状态（异步：进程探测可能到秒级，绝不阻塞主线程）。
 #[tauri::command]
 pub async fn vm_status() -> Result<VmStatus> {
@@ -281,7 +385,7 @@ pub async fn vm_install(progress: Channel<String>) -> Result<String> {
 
 /// 确保受管实例就绪：缺则创建（multipass launch / wsl --install），停则启动。
 #[tauri::command]
-pub async fn vm_start(progress: Channel<String>) -> Result<String> {
+pub async fn vm_start(app: AppHandle, progress: Channel<String>) -> Result<String> {
     let provider = provider()?;
     if provider == VmProviderKind::Native {
         return Ok("Linux 原生环境无需虚拟机，可直接进入 Shell。".into());
@@ -293,11 +397,18 @@ pub async fn vm_start(progress: Channel<String>) -> Result<String> {
             "── 虚拟机规格（按宿主推导）：{} 核 / {}G 内存 / {}G 磁盘 ──",
             resources.cpus, resources.memory_gib, resources.disk_gib
         ));
-        match probe_instance_state(provider)? {
-            VmState::Running => Ok("虚拟机已在运行。".into()),
+        let state = probe_instance_state(provider)?;
+        if state == VmState::Running {
+            return Ok("虚拟机已在运行。".into());
+        }
+        // 需要创建：国内时区先从镜像源预下载云镜像（multipass launch file:// 导入）。
+        let image = ensure_vm_image(&app, &progress)?;
+        let image_str = image.as_deref().map(|p| p.to_string_lossy().into_owned());
+        let launch = vm_logic::launch_args(provider, &resources, image_str.as_deref());
+        match state {
             VmState::Missing => {
                 let _ = progress.send("── 实例不存在，开始创建（首次需下载镜像）──".into());
-                if run_and_stream(&vm_logic::launch_args(provider, &resources), &progress)? {
+                if run_and_stream(&launch, &progress)? {
                     Ok("虚拟机已创建并就绪。".into())
                 } else {
                     Err(KairosError::io("实例创建失败，详见上方日志。"))
@@ -312,8 +423,7 @@ pub async fn vm_start(progress: Channel<String>) -> Result<String> {
                         // 探测与实际状态存在竞态（或状态解析异常）：start 失败时
                         // 不直接报错，自动回落到创建流程自愈。
                         let _ = progress.send("── 实例启动失败，改用创建流程 ──".into());
-                        if run_and_stream(&vm_logic::launch_args(provider, &resources), &progress)?
-                        {
+                        if run_and_stream(&launch, &progress)? {
                             Ok("虚拟机已创建并就绪。".into())
                         } else {
                             Err(KairosError::io("实例创建失败，详见上方日志。"))
