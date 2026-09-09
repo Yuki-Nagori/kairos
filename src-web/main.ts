@@ -2,7 +2,7 @@ import "./app.css";
 import { createAppHeader, createStatusBar } from "./components/app-header";
 import { setupMenuActions } from "./menu-actions";
 import { createDependenciesPanel } from "./components/panels/dependencies-panel";
-import { createVmPanel } from "./components/panels/vm-panel";
+import { createVmDock } from "./components/vm-dock";
 import { createGeometryPanel } from "./components/panels/geometry-panel";
 import { createJobsPanel } from "./components/panels/jobs-panel";
 import { createMaterialsPanel } from "./components/panels/materials-panel";
@@ -14,8 +14,9 @@ import { createReportPanel } from "./components/panels/report-panel";
 import { createResultsPanel } from "./components/panels/results-panel";
 import { createViewportPanel } from "./components/panels/viewport-panel";
 import { createXyChartPanel } from "./components/panels/xy-chart-panel";
+import { setupGlobalShortcuts } from "./shortcuts";
 import { initTheme } from "./theme";
-import { appStore, bootstrap, newProject, openProject, saveProject } from "./state";
+import { bootstrap } from "./state";
 
 const root = document.querySelector<HTMLDivElement>("#app");
 
@@ -68,16 +69,7 @@ workspace.className =
 workspace.append(leftColumn, centerColumn, rightColumn);
 
 // 虚拟机 / Shell 面板：浮于工作区右下角（终端抽屉式，不占布局列）。
-const vmDock = document.createElement("div");
-vmDock.className = "absolute bottom-2 right-2 z-40 w-[26rem] shadow-2xl shadow-black/50";
-vmDock.append(createVmPanel());
-workspace.append(vmDock);
-// 显隐由状态栏右侧 Shell 按钮控制（默认隐藏，点击出现）。
-const syncVmDock = (): void => {
-  vmDock.classList.toggle("hidden", !appStore.get().vmPanelVisible);
-};
-syncVmDock();
-appStore.subscribe(syncVmDock);
+workspace.append(createVmDock());
 
 const resultsSection = document.createElement("section");
 resultsSection.className = "shrink-0 border-t border-zinc-800 bg-zinc-900 px-4 py-2.5";
@@ -85,26 +77,9 @@ resultsSection.append(createResultsPanel());
 
 const statusBar = createStatusBar();
 
-// 全局快捷键（CAD 习惯）：Ctrl/Cmd+S 保存、Ctrl/Cmd+O 打开、Ctrl/Cmd+N 新建
-window.addEventListener("keydown", (event) => {
-  if (!(event.ctrlKey || event.metaKey)) {
-    return;
-  }
-  const key = event.key.toLowerCase();
-  if (key === "s") {
-    event.preventDefault();
-    void saveProject();
-  } else if (key === "o") {
-    event.preventDefault();
-    void openProject();
-  } else if (key === "n") {
-    event.preventDefault();
-    void newProject("未命名项目");
-  }
-});
-
 root.append(header, workspace, resultsSection, statusBar);
 
+setupGlobalShortcuts();
 setupMenuActions();
 
 // bootstrap 内部已自行处理失败（setError），无需 await。
