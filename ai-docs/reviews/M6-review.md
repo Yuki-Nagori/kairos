@@ -27,3 +27,12 @@
 8. 上轮遗留：无。
 
 分类结论：立即修 0；回流 1（solve 流式日志）；接受 1（CLI 单测以冒烟替代）。
+
+## T32/T30/T33/T29 触发评审（CLI/Gmsh/加固/E2E 批次）
+
+- T32（CLI）：✓ 独立 crate 零 tauri；solve tail -5 吞日志 → 回流（改流式，已记录 T32 已知项）；
+- T30（Gmsh）：✓ core write_stl_binary + tetrahedralize_args 纯函数化；MeshingReport engine 字段双端镜像 + 契约测试；【立即修】无；
+- T33（加固）：✓ updater 插件接入（端点占位）；CSP 收窄 img-src；style-src unsafe-inline 保留（主题注入依赖）→ 接受并记录（nonce 化改造待主题文件化）；
+- T29（E2E）：环境链路全通；阻塞于 bundle SIGILL → 报告已出（e2e-solve-report.md），按约定移交用户。
+
+分类结论：立即修 0；回流 2（T32 流式日志、T01 derive 基准）；接受 2（unsafe-inline、Duplicate entry 警告）。

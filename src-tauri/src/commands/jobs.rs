@@ -3,6 +3,7 @@
 
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader};
+use std::path::Path;
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -113,13 +114,44 @@ fn spawn_run_script(
     // VM 执行：宿主 case 目录 1:1 挂载进虚拟机（路径不变，脚本零翻译），
     // 环境树由 vm_deploy_bundle 预先解压在 ~/moldingfoam-env。
     if let Some(shell) = vm_shell {
+        // 真机验证：multipass mount 的 sshfs 权限映射导致子目录不可读，
+        // 改为 tar 管道把 case 目录复制进 VM 原生文件系统（权限与性能可靠）。
         #[cfg(target_os = "macos")]
-        {
-            let mount = Command::new("multipass")
-                .args(["mount", case_dir, &format!("kairos:{case_dir}")])
-                .status();
-            let _ = mount; // 已挂载时 multipass 报错，忽略即可
+        if shell == "multipass" {
+            let parent = Path::new(case_dir).parent().unwrap_or(Path::new("."));
+            let name = Path::new(case_dir)
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| "case".into());
+            let vm_case = format!("/home/ubuntu/{name}");
+            let mut tar_cmd = Command::new("tar");
+            tar_cmd
+                .arg("-C")
+                .arg(parent)
+                .arg("-czf")
+                .arg("-")
+                .arg(&name);
+            let mut mp = Command::new("multipass");
+            mp.args([
+                "exec",
+                "kairos",
+                "--",
+                "bash",
+                "-lc",
+                &format!("mkdir -p '{vm_case}' && tar -xzf - -C '{vm_case}'"),
+            ]);
+            let tar_child = tar_cmd.stdout(Stdio::piped()).spawn();
+            if let Ok(mut tchild) = tar_child {
+                mp.stdin(tchild.stdout.take().expect("tar stdout"));
+                let st = mp.status()?;
+                let _ = tchild.wait();
+                if !st.success() {
+                    return Err(KairosError::io("case 目录复制进虚拟机失败。"));
+                }
+            }
         }
+        #[cfg(target_os = "windows")]
+        let case_dir = to_wsl_path(case_dir);
         let safe_dir = case_dir.replace('\'', "'\\''");
         let inner = format!(
             "source ~/moldingfoam-env/openfoam14/etc/bashrc && cd '{safe_dir}' && decomposePar -force && foamRun -parallel"
@@ -130,10 +162,10 @@ fn spawn_run_script(
         #[cfg(target_os = "windows")]
         command.args([
             "-d",
-            crate::kairos_core::services::vm::WSL_DISTRO,
+            kairos_core::services::vm::WSL_DISTRO,
             "bash",
             "-lc",
-            &to_wsl_path_case(&inner),
+            &inner,
         ]);
         return command
             .stdout(Stdio::piped())
