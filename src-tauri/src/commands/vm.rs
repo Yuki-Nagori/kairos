@@ -101,6 +101,59 @@ fn output_text(output: &Output) -> String {
     )
 }
 
+/// 探测宿主机资源并推导虚拟机默认规格。
+/// CPU 用标准库 available_parallelism；内存按平台取总量，检测失败回退
+/// 保守默认 16 GiB。全部调用点都在 spawn_blocking 内，不在主线程执行。
+fn detect_host_resources() -> vm_logic::VmResources {
+    let cpus = std::thread::available_parallelism()
+        .map(|n| n.get() as u32)
+        .unwrap_or(4);
+    let memory_gib = detect_memory_gib().unwrap_or(16);
+    vm_logic::plan_resources(cpus, memory_gib)
+}
+
+/// 宿主物理内存总量（GiB，向下取整）。
+#[cfg(target_os = "macos")]
+fn detect_memory_gib() -> Option<u32> {
+    // 绝对路径：GUI 进程的精简 PATH 不含 /usr/sbin。
+    let output = Command::new("/usr/sbin/sysctl")
+        .arg("-n")
+        .arg("hw.memsize")
+        .output()
+        .ok()?;
+    let bytes: u64 = String::from_utf8_lossy(&output.stdout)
+        .trim()
+        .parse()
+        .ok()?;
+    Some((bytes / (1024 * 1024 * 1024)) as u32)
+}
+
+#[cfg(target_os = "linux")]
+fn detect_memory_gib() -> Option<u32> {
+    let text = std::fs::read_to_string("/proc/meminfo").ok()?;
+    let line = text.lines().find(|line| line.starts_with("MemTotal:"))?;
+    let kb: u64 = line.split_whitespace().nth(1)?.parse().ok()?;
+    Some((kb / (1024 * 1024)) as u32)
+}
+
+#[cfg(target_os = "windows")]
+fn detect_memory_gib() -> Option<u32> {
+    // wmic 已从新 Windows 移除，走 PowerShell CIM（秒级，调用点在 spawn_blocking）。
+    let output = Command::new("powershell")
+        .args([
+            "-NoProfile",
+            "-Command",
+            "(Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory",
+        ])
+        .output()
+        .ok()?;
+    let bytes: u64 = String::from_utf8_lossy(&output.stdout)
+        .trim()
+        .parse()
+        .ok()?;
+    Some((bytes / (1024 * 1024 * 1024)) as u32)
+}
+
 /// 从探测输出解析实例状态；命令失败 / 超时视为实例不存在。
 fn probe_instance_state(provider: VmProviderKind) -> Result<VmState> {
     let Some(output) = run_bytes(&vm_logic::instance_info_args(provider))? else {
@@ -235,11 +288,16 @@ pub async fn vm_start(progress: Channel<String>) -> Result<String> {
     }
     tauri::async_runtime::spawn_blocking(move || {
         let _ = progress.send("── 检查受管实例状态 ──".into());
+        let resources = detect_host_resources();
+        let _ = progress.send(format!(
+            "── 虚拟机规格（按宿主推导）：{} 核 / {}G 内存 / {}G 磁盘 ──",
+            resources.cpus, resources.memory_gib, resources.disk_gib
+        ));
         match probe_instance_state(provider)? {
             VmState::Running => Ok("虚拟机已在运行。".into()),
             VmState::Missing => {
                 let _ = progress.send("── 实例不存在，开始创建（首次需下载镜像）──".into());
-                if run_and_stream(&vm_logic::launch_args(provider), &progress)? {
+                if run_and_stream(&vm_logic::launch_args(provider, &resources), &progress)? {
                     Ok("虚拟机已创建并就绪。".into())
                 } else {
                     Err(KairosError::io("实例创建失败，详见上方日志。"))
@@ -254,7 +312,8 @@ pub async fn vm_start(progress: Channel<String>) -> Result<String> {
                         // 探测与实际状态存在竞态（或状态解析异常）：start 失败时
                         // 不直接报错，自动回落到创建流程自愈。
                         let _ = progress.send("── 实例启动失败，改用创建流程 ──".into());
-                        if run_and_stream(&vm_logic::launch_args(provider), &progress)? {
+                        if run_and_stream(&vm_logic::launch_args(provider, &resources), &progress)?
+                        {
                             Ok("虚拟机已创建并就绪。".into())
                         } else {
                             Err(KairosError::io("实例创建失败，详见上方日志。"))

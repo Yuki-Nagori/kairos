@@ -57,22 +57,44 @@ pub fn instance_info_args(provider: VmProviderKind) -> Vec<String> {
     }
 }
 
-/// 首次创建实例（multipass 拉起 Ubuntu 镜像；WSL 安装发行版）。
-pub fn launch_args(provider: VmProviderKind) -> Vec<String> {
+/// 虚拟机资源规格（multipass 用；wsl/原生环境由系统自管，不消费此结构）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct VmResources {
+    pub cpus: u32,
+    pub memory_gib: u32,
+    pub disk_gib: u32,
+}
+
+/// 由宿主机规格推导虚拟机默认规格。
+/// - CPU：宿主核数的一半（给宿主留余量），收敛到 [2, 8]；
+/// - 内存：宿主内存的一半，收敛到 [4, 16] GiB；
+/// - 磁盘：multipass 磁盘是稀疏分配、按需增长，固定 80G 足够 openfoam14 + bundle。
+pub fn plan_resources(host_cpus: u32, host_memory_gib: u32) -> VmResources {
+    VmResources {
+        cpus: (host_cpus / 2).clamp(2, 8),
+        memory_gib: (host_memory_gib / 2).clamp(4, 16),
+        disk_gib: 80,
+    }
+}
+
+/// 首次创建实例（multipass 按宿主规格拉起 Ubuntu；WSL 安装发行版）。
+pub fn launch_args(provider: VmProviderKind, resources: &VmResources) -> Vec<String> {
     match provider {
-        VmProviderKind::Multipass => vec![
-            "multipass".into(),
-            "launch".into(),
-            "--name".into(),
-            INSTANCE_NAME.into(),
-            "--cpus".into(),
-            "8".into(),
-            "--memory".into(),
-            "16G".into(),
-            "--disk".into(),
-            "80G".into(),
-            "24.04".into(),
-        ],
+        VmProviderKind::Multipass => {
+            vec![
+                "multipass".into(),
+                "launch".into(),
+                "--name".into(),
+                INSTANCE_NAME.into(),
+                "--cpus".into(),
+                resources.cpus.to_string(),
+                "--memory".into(),
+                format!("{}G", resources.memory_gib),
+                "--disk".into(),
+                format!("{}G", resources.disk_gib),
+                "24.04".into(),
+            ]
+        }
         VmProviderKind::Wsl => vec![
             "wsl".into(),
             "--install".into(),
@@ -281,7 +303,7 @@ mod tests {
         for args in [
             version_args(VmProviderKind::Native),
             instance_info_args(VmProviderKind::Native),
-            launch_args(VmProviderKind::Native),
+            launch_args(VmProviderKind::Native, &plan_resources(8, 16)),
             stop_args(VmProviderKind::Native),
         ] {
             assert_eq!(args, vec!["true"]);
@@ -289,25 +311,46 @@ mod tests {
     }
 
     #[test]
+    fn resources_plan_scales_with_host_and_clamps() {
+        // 大机器：封顶 8 核 / 16G（moldingFoam 的推荐规格），磁盘恒 80G。
+        assert_eq!(
+            plan_resources(16, 64),
+            VmResources {
+                cpus: 8,
+                memory_gib: 16,
+                disk_gib: 80
+            }
+        );
+        // 中等机器：宿主的一半。
+        assert_eq!(plan_resources(12, 32).cpus, 6);
+        assert_eq!(plan_resources(12, 32).memory_gib, 16);
+        // 小机器：保底 2 核 / 4G，宿主与虚拟机各占一半。
+        assert_eq!(plan_resources(4, 8).cpus, 2);
+        assert_eq!(plan_resources(4, 8).memory_gib, 4);
+    }
+
+    #[test]
     fn args_builders_cover_both_providers() {
+        let resources = plan_resources(8, 16);
         for (provider, bin) in [
             (VmProviderKind::Multipass, "multipass"),
             (VmProviderKind::Wsl, "wsl"),
         ] {
             assert_eq!(version_args(provider)[0], bin);
             assert_eq!(instance_info_args(provider)[0], bin);
-            assert_eq!(launch_args(provider)[0], bin);
+            assert_eq!(launch_args(provider, &resources)[0], bin);
             assert_eq!(shell_args(provider)[0], bin);
             assert_eq!(stop_args(provider)[0], bin);
         }
         // multipass：实例名贯穿 launch/start/shell/stop；WSL：无独立 start 步骤
-        assert!(launch_args(VmProviderKind::Multipass).contains(&INSTANCE_NAME.to_string()));
-        // 规格/镜像对齐 moldingFoam README：8 核 16G 80G + Ubuntu 24.04
-        assert!(launch_args(VmProviderKind::Multipass).contains(&"--memory".to_string()));
-        assert_eq!(
-            launch_args(VmProviderKind::Multipass).last().unwrap(),
-            "24.04"
-        );
+        let launch = launch_args(VmProviderKind::Multipass, &resources);
+        assert!(launch.contains(&INSTANCE_NAME.to_string()));
+        // 规格来自宿主探测结果：4 核 / 8G / 80G + Ubuntu 24.04（plan_resources(8,16)）
+        let cpus_pos = launch.iter().position(|a| a == "--cpus").unwrap();
+        assert_eq!(launch[cpus_pos + 1], "4");
+        let mem_pos = launch.iter().position(|a| a == "--memory").unwrap();
+        assert_eq!(launch[mem_pos + 1], "8G");
+        assert_eq!(launch.last().unwrap(), "24.04");
         assert_eq!(
             start_args(VmProviderKind::Multipass).as_deref(),
             Some(
