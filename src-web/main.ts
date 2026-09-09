@@ -64,7 +64,6 @@ for (const panel of [
   createMoldPanel(),
   createProcessPanel(),
   createDependenciesPanel(),
-  createVmPanel(),
   createReportPanel(),
   createJobsPanel(),
 ]) {
@@ -74,8 +73,14 @@ for (const panel of [
 
 const workspace = document.createElement("main");
 workspace.className =
-  "grid min-h-0 flex-1 grid-cols-[280px_minmax(0,1fr)_320px] gap-3 overflow-hidden px-3 py-2";
+  "relative grid min-h-0 flex-1 grid-cols-[280px_minmax(0,1fr)_320px] gap-3 overflow-hidden px-3 py-2";
 workspace.append(leftColumn, centerColumn, rightColumn);
+
+// 虚拟机 / Shell 面板：浮于工作区右下角（终端抽屉式，不占布局列）。
+const vmDock = document.createElement("div");
+vmDock.className = "absolute bottom-2 right-2 z-40 w-[26rem] shadow-2xl shadow-black/50";
+vmDock.append(createVmPanel());
+workspace.append(vmDock);
 
 const resultsSection = document.createElement("section");
 resultsSection.className = "shrink-0 border-t border-zinc-800 bg-zinc-900 px-4 py-2.5";

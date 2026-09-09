@@ -104,3 +104,4 @@
 - **13:5x** feat(vm): 虚拟机适配层——Multipass/WSL2 一键安装、内嵌 Shell 与退出联动关机（T35）
 - **14:1x** fix(vm): multipass info 非 0 退出判定为实例缺失；start 失败自动回落创建流程；日志清洗 ANSI 转义（真机反馈收口）
 - **14:1x** fix(vm): 探测/停止异步化 + 15s 超时防挂死；新增 Linux native provider——无虚拟机语义，Shell 即本地 bash（真机反馈收口）
+- **14:4x** feat(vm): Shell 模拟终端化（shell.svg 转 currentColor 图标 + 提示符行内输入），面板浮于右下角；--mem 改 --memory（真机反馈收口）

@@ -66,7 +66,7 @@ pub fn launch_args(provider: VmProviderKind) -> Vec<String> {
             INSTANCE_NAME.into(),
             "--cpus".into(),
             "4".into(),
-            "--mem".into(),
+            "--memory".into(),
             "8G".into(),
             "--disk".into(),
             "40G".into(),

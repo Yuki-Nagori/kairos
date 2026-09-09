@@ -8,14 +8,18 @@ import {
   stopVmAction,
   stopVmShellAction,
 } from "../../state";
-import { button, card, hint, textInput } from "../ui";
+import { createShellIcon } from "../icons";
+import { button, card, hint } from "../ui";
 
-/** 虚拟机面板：Multipass（macOS）/ WSL2（Windows）的一键安装、启动、
- * 应用内 Shell 与关闭。全部逻辑在 state/vm.ts 与 Rust 适配层，这里只渲染。 */
+/** 虚拟机面板（浮于工作区右下角）：Multipass（macOS）/ WSL2（Windows）的
+ * 一键安装、启动、应用内 Shell 与关闭。全部逻辑在 state/vm.ts 与 Rust 适配层，
+ * 这里只渲染；Shell 区模拟终端外观（图标标题栏 + 提示符行内输入）。 */
 export function createVmPanel(): HTMLElement {
   const { root, body } = card("虚拟机");
+  // 面板 logo：终端窗口图标（颜色随主题 currentColor）。
+  root.querySelector("h2")?.prepend(createShellIcon("h-4 w-4 text-emerald-400"));
 
-  const refreshButton = button("重新探测");
+  const refreshButton = button("重新探测", "ghost");
   const statusLine = hint("探测中…");
 
   const installButton = button("安装虚拟机");
@@ -27,17 +31,36 @@ export function createVmPanel(): HTMLElement {
   buttons.className = "flex flex-wrap items-center gap-2";
   buttons.append(installButton, startButton, shellButton, shellStopButton, vmStopButton);
 
+  // 模拟终端：深色窗口 + 输出滚动区 + 提示符行内输入。
+  const terminal = document.createElement("div");
+  terminal.className =
+    "overflow-hidden rounded-lg border border-zinc-800 bg-black font-mono select-none";
+  const terminalHeader = document.createElement("div");
+  terminalHeader.className =
+    "flex items-center gap-2 border-b border-zinc-800 bg-zinc-900 px-3 py-1.5 text-[10px] text-zinc-400";
+  const terminalTitle = document.createElement("span");
+  terminalTitle.textContent = "shell";
+  terminalHeader.append(createShellIcon("h-3.5 w-3.5 text-emerald-400"), terminalTitle);
   const output = document.createElement("pre");
   output.className =
-    "max-h-64 overflow-y-auto whitespace-pre-wrap break-all rounded-lg border border-zinc-800 bg-zinc-950 px-2 py-1 text-[10px] leading-4 text-zinc-400";
+    "h-44 overflow-y-auto whitespace-pre-wrap break-all px-3 py-2 text-[11px] leading-4 text-emerald-300/90";
+  const promptRow = document.createElement("div");
+  promptRow.className = "flex items-center gap-1.5 px-3 pb-2 text-[11px]";
+  const prompt = document.createElement("span");
+  prompt.className = "text-amber-400";
+  prompt.textContent = "❯";
+  const input = document.createElement("input");
+  input.className =
+    "min-w-0 flex-1 border-none bg-transparent font-mono text-[11px] text-emerald-200 outline-none placeholder:text-zinc-600";
+  input.placeholder = "输入命令，回车发送…";
+  input.autocomplete = "off";
+  input.spellcheck = false;
+  promptRow.append(prompt, input);
+  terminal.append(terminalHeader, output, promptRow);
+  // 点终端任意处聚焦输入行。
+  terminal.addEventListener("click", () => input.focus());
 
-  const input = textInput("输入命令，回车发送…");
-  const sendButton = button("发送", "ghost");
-  const inputRow = document.createElement("div");
-  inputRow.className = "flex items-center gap-2";
-  inputRow.append(input, sendButton);
-
-  body.append(refreshButton, statusLine, buttons, output, inputRow);
+  body.append(refreshButton, statusLine, buttons, terminal);
 
   refreshButton.addEventListener("click", () => void refreshVmStatus());
   installButton.addEventListener("click", () => void installVmAction());
@@ -54,7 +77,6 @@ export function createVmPanel(): HTMLElement {
     input.value = "";
     void sendVmShellLine(line);
   };
-  sendButton.addEventListener("click", send);
   input.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
       send();
@@ -66,6 +88,7 @@ export function createVmPanel(): HTMLElement {
     const busy = vmBusy !== null;
     refreshButton.disabled = busy;
     statusLine.textContent = vmStatus?.hint ?? "尚未探测。点击「重新探测」检查虚拟机运行时。";
+    terminalTitle.textContent = vmStatus === null ? "shell" : `shell · ${vmStatus.instanceName}`;
 
     const toolInstalled = vmStatus?.toolInstalled ?? false;
     const instanceState = vmStatus?.instanceState ?? "missing";
