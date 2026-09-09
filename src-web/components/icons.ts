@@ -1,6 +1,8 @@
 /**
  * 内联 SVG 图标：stroke 一律走 currentColor，颜色由外部 className 传入。
- * 图形源自用户提供的 shell.svg（终端窗口 + 提示符），转 currentColor 以适配主题。
+ *
+ * 来源：Icons8（icons8.com）的终端图标——免费授权要求使用时署名，
+ * 已在 README「致谢」标注；不得用作产品 Logo 或单独再分发图标文件。
  */
 
 const SHELL_SVG = `<svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">

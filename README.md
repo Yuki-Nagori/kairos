@@ -6,6 +6,10 @@
 
 技术栈：Tauri 2 + Bun + TypeScript + Vite + Tailwind CSS v4；Rust 侧为 Cargo 工作区（领域层 + Tauri 适配层）。架构与开发约定见 [AGENTS.md](AGENTS.md) 及 [ai-docs/](ai-docs/)。
 
+## 致谢
+
+- 界面部分图标来自 [Icons8](https://icons8.com)（免费授权，已署名）。
+
 ## 环境要求
 
 - [Bun](https://bun.sh) ≥ 1.2
