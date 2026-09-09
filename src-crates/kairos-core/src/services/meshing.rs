@@ -320,6 +320,7 @@ pub fn report(volume_mesh: &VolumeMesh) -> MeshingReport {
         min_volume: if count > 0 { min_volume } else { 0.0 },
     };
     MeshingReport {
+        engine: "voxel".into(),
         node_count: volume_mesh.nodes.len(),
         element_count: volume_mesh.tets.len(),
         surface_face_count: volume_mesh.surface_faces.len(),

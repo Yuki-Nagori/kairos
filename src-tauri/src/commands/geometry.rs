@@ -91,6 +91,75 @@ pub async fn generate_volume_mesh(
     .map_err(|e| KairosError::internal(format!("网格任务失败：{e}")))?
 }
 
+/// 生成 Gmsh 引擎网格：定位应用内下载的 gmsh 可执行文件，写临时 STL 后
+/// 子进程调用（GPL 隔离红线），解析 msh2 回 VolumeMesh。
+#[tauri::command]
+pub async fn generate_gmsh_mesh(
+    app: tauri::AppHandle,
+    store: State<'_, GeometryStore>,
+    geometry_id: String,
+    target_size: f64,
+) -> Result<MeshingReport> {
+    let _ = target_size;
+    // 定位 gmsh 可执行文件：受管 bin 目录优先，其次 PATH。
+    let mut gmsh_path: Option<std::path::PathBuf> = None;
+    for dir in super::downloads::managed_bin_dirs(&app) {
+        let candidate = dir.join("gmsh");
+        if candidate.exists() {
+            gmsh_path = Some(candidate);
+            break;
+        }
+    }
+    let gmsh_path = gmsh_path.ok_or_else(|| {
+        KairosError::not_found("未找到 gmsh 可执行文件，请先在依赖面板下载 Gmsh。")
+    })?;
+
+    let store_clone = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        // 取出表面网格并写临时 STL（gmsh 只接受文件输入）
+        let mesh = {
+            let sessions = store_clone.lock();
+            let session = sessions
+                .get(&geometry_id)
+                .ok_or_else(|| KairosError::not_found(format!("几何不存在：{geometry_id}")))?;
+            session.mesh.clone()
+        };
+        let temp = std::env::temp_dir().join(format!("kairos-gmsh-{geometry_id}.stl"));
+        let out_msh = std::env::temp_dir().join(format!("kairos-gmsh-{geometry_id}.msh"));
+        let _ = std::fs::remove_file(&out_msh);
+        kairos_core::services::geometry::write_stl_binary(&mesh, &temp)?;
+
+        let args = kairos_core::services::gmsh::tetrahedralize_args(&temp, &out_msh);
+        let output = std::process::Command::new(&gmsh_path)
+            .args(&args)
+            .output()
+            .map_err(|e| KairosError::io(format!("gmsh 启动失败：{e}")))?;
+        if !output.status.success() {
+            let tail = String::from_utf8_lossy(&output.stderr)
+                .lines()
+                .last()
+                .unwrap_or("无 stderr 输出")
+                .to_string();
+            return Err(KairosError::io(format!("gmsh 网格化失败：{tail}")));
+        }
+
+        let content = std::fs::read_to_string(&out_msh)
+            .map_err(|e| KairosError::io(format!("读取 msh 失败：{e}")))?;
+        let volume = kairos_core::services::gmsh::parse_msh_v2(&content)?;
+        let mut report = kairos_core::services::meshing::report(&volume);
+        report.engine = "gmsh".into();
+
+        if let Some(session) = store_clone.lock().get_mut(&geometry_id) {
+            session.volume = Some(volume);
+        }
+        let _ = std::fs::remove_file(&temp);
+        let _ = std::fs::remove_file(&out_msh);
+        Ok(report)
+    })
+    .await
+    .map_err(|e| KairosError::internal(format!("gmsh 网格任务失败：{e}")))?
+}
+
 #[tauri::command]
 pub fn remove_geometry(store: State<'_, GeometryStore>, geometry_id: String) -> Result<()> {
     store.lock().remove(&geometry_id);

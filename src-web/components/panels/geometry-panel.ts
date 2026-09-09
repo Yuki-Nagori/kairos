@@ -1,5 +1,6 @@
 import {
   appStore,
+  generateGmshMesh,
   generateMesh,
   importGeometry,
   importSampleGeometry,
@@ -95,15 +96,31 @@ export function createGeometryPanel(): HTMLElement {
       sizeInput.step = "any";
       sizeInput.min = "0";
       sizeInput.value = (Math.max(...geometry.size) / 20).toPrecision(3);
+      // 引擎选择：体素（内置，规则几何）与 Gmsh（复杂曲面件，需依赖面板已下载）
+      const engineSelect = document.createElement("select");
+      engineSelect.className = "text-xs";
+      for (const [value, label] of [
+        ["voxel", "体素"],
+        ["gmsh", "Gmsh"],
+      ] as const) {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = label;
+        engineSelect.append(option);
+      }
       const generateButton = button("生成体积网格");
       generateButton.disabled = working;
       const reportLine = hint(reportText(meshReports[geometry.geometryId]));
 
       generateButton.addEventListener("click", () => {
-        void generateMesh(geometry.geometryId, Number(sizeInput.value));
+        const engine = engineSelect.value;
+        const size = Number(sizeInput.value);
+        void (engine === "gmsh"
+          ? generateGmshMesh(geometry.geometryId, size)
+          : generateMesh(geometry.geometryId, size));
       });
 
-      meshRow.append(sizeInput, generateButton, reportLine);
+      meshRow.append(sizeInput, engineSelect, generateButton, reportLine);
       row.append(meshRow);
       listBox.append(row);
     }

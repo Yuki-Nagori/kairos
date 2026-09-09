@@ -128,6 +128,7 @@ pub fn run() {
             commands::geometry::import_sample_box,
             commands::geometry::get_render_mesh,
             commands::geometry::generate_volume_mesh,
+            commands::geometry::generate_gmsh_mesh,
             commands::mold::check_mold_network,
             commands::process::check_process,
             commands::solver::probe_openfoam,

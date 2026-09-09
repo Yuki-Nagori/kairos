@@ -30,3 +30,8 @@ interface RenderMeshData {
 export function getRenderMesh(geometryId: string): Promise<RenderMeshData> {
   return invokeCommand("get_render_mesh", { geometryId });
 }
+
+/** 生成 Gmsh 引擎体积网格（需已下载 Gmsh 并定位到可执行文件）。 */
+export function generateGmshMesh(geometryId: string, targetSize: number): Promise<MeshingReport> {
+  return invokeCommand("generate_gmsh_mesh", { geometryId, targetSize });
+}

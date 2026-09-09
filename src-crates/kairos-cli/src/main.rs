@@ -230,15 +230,27 @@ fn run_mesh(action: MeshAction, json: bool) -> kairos_core::error::Result<()> {
             engine,
             target_size,
         } => {
-            if engine != "voxel" {
-                return Err(KairosError::validation(
-                    "gmsh 引擎将在 T30 落地；当前仅支持 --engine voxel。",
-                ));
-            }
             let mesh = geometry::parse_stl_file(Path::new(&stl))?;
-            let params = meshing::VolumeMeshParams { target_size };
-            params.validate()?;
-            let volume = meshing::generate(&mesh, &params)?;
+            let volume = if engine == "gmsh" {
+                let stl_path = Path::new(&stl);
+                let out_msh = Path::new(&stl).with_extension("msh");
+                let _ = std::fs::remove_file(&out_msh);
+                let status = std::process::Command::new("gmsh")
+                    .args(kairos_core::services::gmsh::tetrahedralize_args(
+                        stl_path, &out_msh,
+                    ))
+                    .status()
+                    .map_err(|e| KairosError::io(format!("gmsh 启动失败：{e}")))?;
+                if !status.success() {
+                    return Err(KairosError::io("gmsh 网格化失败。"));
+                }
+                let content = std::fs::read_to_string(&out_msh)?;
+                kairos_core::services::gmsh::parse_msh_v2(&content)?
+            } else {
+                let params = meshing::VolumeMeshParams { target_size };
+                params.validate()?;
+                meshing::generate(&mesh, &params)?
+            };
             if json {
                 emit_json(&serde_json::json!({
                     "nodes": volume.nodes.len(),

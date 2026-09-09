@@ -28,6 +28,8 @@ pub struct MeshQuality {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MeshingReport {
+    /// 生成引擎标识（voxel / gmsh）。
+    pub engine: String,
     pub node_count: usize,
     pub element_count: usize,
     pub surface_face_count: usize,

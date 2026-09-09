@@ -101,6 +101,7 @@ fn geometry_summary_serializes_with_camel_case() {
 #[test]
 fn meshing_report_serializes_with_camel_case() {
     let report = MeshingReport {
+        engine: "voxel".into(),
         node_count: 27,
         element_count: 40,
         surface_face_count: 48,
@@ -113,6 +114,7 @@ fn meshing_report_serializes_with_camel_case() {
         },
     };
     let json = serde_json::to_value(&report).unwrap();
+    assert_eq!(json["engine"], "voxel");
     assert_eq!(json["nodeCount"], 27);
     assert_eq!(json["elementCount"], 40);
     assert_eq!(json["surfaceFaceCount"], 48);

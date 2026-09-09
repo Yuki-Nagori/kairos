@@ -1,4 +1,5 @@
 import {
+  generateGmshMesh as apiGenerateGmshMesh,
   generateVolumeMesh,
   importSampleBox,
   importStl,
@@ -33,6 +34,25 @@ export async function removeGeometryById(geometryId: string): Promise<void> {
     });
   } catch (error) {
     setError(error);
+  }
+}
+
+/** 为几何生成 Gmsh 引擎 3D 体积网格（薄壁/曲面件；需依赖面板已下载 Gmsh）。 */
+export async function generateGmshMesh(geometryId: string, targetSize: number): Promise<void> {
+  if (!(targetSize > 0)) {
+    setError("目标网格尺寸必须为正数。");
+    return;
+  }
+  appStore.set({ busy: "正在生成 Gmsh 网格…", error: null });
+  try {
+    const report = await apiGenerateGmshMesh(geometryId, targetSize);
+    appStore.set({
+      meshReports: { ...appStore.get().meshReports, [geometryId]: report },
+    });
+  } catch (error) {
+    setError(error);
+  } finally {
+    appStore.set({ busy: null });
   }
 }
 

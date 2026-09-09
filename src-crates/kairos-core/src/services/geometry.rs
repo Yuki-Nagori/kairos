@@ -225,6 +225,32 @@ pub fn summarize(geometry_id: String, file_name: String, mesh: &TriangleMesh) ->
 }
 
 /// 读取 STL 文件并解析。
+/// 写出二进制 STL（Gmsh 引擎的文件输入；80 字节头 + 三角形逐个落盘）。
+pub fn write_stl_binary(mesh: &TriangleMesh, path: &Path) -> Result<()> {
+    use std::io::Write;
+    let mut file =
+        std::fs::File::create(path).map_err(|e| KairosError::io(format!("创建 STL 失败：{e}")))?;
+    file.write_all(&[0u8; 80])
+        .and_then(|_| file.write_all(&(mesh.triangles.len() as u32).to_le_bytes()))
+        .map_err(|e| KairosError::io(format!("STL 头写入失败：{e}")))?;
+    for tri in &mesh.triangles {
+        // 法向取自 STL 解析时保存的三角形法向（只读记录，不参与几何）
+        let mut record = Vec::with_capacity(50);
+        for v in &tri.normal {
+            record.extend_from_slice(&v.to_le_bytes());
+        }
+        for vertex in [&tri.a, &tri.b, &tri.c] {
+            for component in vertex {
+                record.extend_from_slice(&component.to_le_bytes());
+            }
+        }
+        record.extend_from_slice(&0u16.to_le_bytes());
+        file.write_all(&record)
+            .map_err(|e| KairosError::io(format!("STL 三角形写入失败：{e}")))?;
+    }
+    Ok(())
+}
+
 pub fn parse_stl_file(path: &Path) -> Result<TriangleMesh> {
     let bytes = fs::read(path).map_err(|e| KairosError::io(format!("读取 STL 文件失败：{e}")))?;
     parse_stl(&bytes)

@@ -1,6 +1,8 @@
 //! Gmsh .msh（v2.2 ASCII）解析原型（T22）：评估替代体素方案的网格引擎路线。
 //! Gmsh 为 GPL——本模块只解析其**输出文件**（纯数据），不做链接、不含其源码。
 
+use std::path::Path;
+
 use crate::error::{KairosError, Result};
 use crate::models::mesh::VolumeMesh;
 
@@ -150,6 +152,20 @@ pub fn to_msh_v2(mesh: &VolumeMesh, case_name: &str) -> String {
 /// 评估用：体素四面体转 msh 再解析回读（往返一致性，演示数据交换路径）。
 pub fn from_volume_mesh(mesh: &VolumeMesh, case_name: &str) -> Result<VolumeMesh> {
     parse_msh_v2(&to_msh_v2(mesh, case_name))
+}
+
+/// 组装 Gmsh 体网格化命令参数：STL 输入 → 一阶 msh2 输出（解析器只认一阶）。
+pub fn tetrahedralize_args(stl: &Path, out_msh: &Path) -> Vec<String> {
+    vec![
+        stl.to_string_lossy().to_string(),
+        "-3".into(),
+        "-format".into(),
+        "msh2".into(),
+        "-order".into(),
+        "1".into(),
+        "-o".into(),
+        out_msh.to_string_lossy().to_string(),
+    ]
 }
 
 #[cfg(test)]
