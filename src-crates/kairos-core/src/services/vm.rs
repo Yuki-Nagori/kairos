@@ -165,6 +165,28 @@ pub fn decode_wsl_output(bytes: &[u8]) -> String {
     text.replace('\0', "")
 }
 
+/// 清洗终端行：剥掉 ANSI 转义序列（multipass 等工具在非 TTY 下仍会吐
+/// 转圈动画的控制字节），并把 \r 分段折叠为最后一帧（spinner 语义）。
+pub fn clean_terminal_line(line: &str) -> String {
+    let mut out = String::with_capacity(line.len());
+    let mut chars = line.chars();
+    while let Some(c) = chars.next() {
+        if c == '\u{1b}' {
+            // CSI 序列：跳过到结束字母；其他转义跳过单字符
+            if chars.next() == Some('[') {
+                for follow in chars.by_ref() {
+                    if follow.is_ascii_alphabetic() {
+                        break;
+                    }
+                }
+            }
+            continue;
+        }
+        out.push(c);
+    }
+    out.rsplit('\r').next().unwrap_or("").trim_end().to_string()
+}
+
 /// 组装状态视图与用户提示。
 pub fn build_status(
     provider: VmProviderKind,
@@ -304,6 +326,22 @@ mod tests {
         assert_eq!(decode_wsl_output(b"plain utf8"), "plain utf8");
         // 非法 UTF-8 落入替换字符而非 panic
         assert!(decode_wsl_output(&[0xff, 0xfe]).contains('\u{fffd}'));
+    }
+
+    #[test]
+    fn terminal_line_cleaner_strips_ansi_and_collapses_carriage_returns() {
+        assert_eq!(
+            clean_terminal_line("\u{1b}[2K\u{1b}[0A\u{1b}[0EStarting kairos  / "),
+            "Starting kairos  /"
+        );
+        // \r 折叠：spinner 多帧只保留最后一帧
+        assert_eq!(
+            clean_terminal_line("frame one\rframe two\rframe three"),
+            "frame three"
+        );
+        assert_eq!(clean_terminal_line("plain line"), "plain line");
+        // 纯控制序列清洗后为空
+        assert_eq!(clean_terminal_line("\u{1b}[?25l"), "");
     }
 
     #[test]

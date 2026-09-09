@@ -73,11 +73,16 @@ fn probe_instance_state(provider: VmProviderKind) -> VmState {
         Err(_) => return VmState::Missing,
     };
     let text = output_text(&output);
-    if !output.status.success() && text.trim().is_empty() {
-        return VmState::Missing;
-    }
     match provider {
-        VmProviderKind::Multipass => vm_logic::parse_multipass_state(&text),
+        // `multipass info <实例>` 只在实例不存在（或守护进程未起）时非 0 退出，
+        // 此时 stderr 的报错文本不代表状态，一律按 Missing 走创建流程。
+        VmProviderKind::Multipass => {
+            if output.status.success() {
+                vm_logic::parse_multipass_state(&text)
+            } else {
+                VmState::Missing
+            }
+        }
         VmProviderKind::Wsl => {
             // `wsl -l -v` 在没有发行版时退出码非 0，但有输出（Missing 由解析兜底）。
             if output.status.success() || text.contains("Ubuntu") {
@@ -98,7 +103,10 @@ fn forward_output<R: std::io::Read>(pipe: R, progress: &Channel<String>) {
         let mut buffer = Vec::new();
         let _ = pipe.read_to_end(&mut buffer);
         for line in vm_logic::decode_wsl_output(&buffer).lines() {
-            let _ = progress.send(line.to_string());
+            let cleaned = vm_logic::clean_terminal_line(line);
+            if !cleaned.is_empty() {
+                let _ = progress.send(cleaned);
+            }
         }
     }
     #[cfg(not(target_os = "windows"))]
@@ -108,7 +116,10 @@ fn forward_output<R: std::io::Read>(pipe: R, progress: &Channel<String>) {
             .lines()
             .map_while(std::result::Result::ok)
         {
-            let _ = progress.send(line);
+            let cleaned = vm_logic::clean_terminal_line(&line);
+            if !cleaned.is_empty() {
+                let _ = progress.send(cleaned);
+            }
         }
     }
 }
@@ -194,7 +205,14 @@ pub async fn vm_start(progress: Channel<String>) -> Result<String> {
                     if run_and_stream(&start, &progress)? {
                         Ok("虚拟机已启动。".into())
                     } else {
-                        Err(KairosError::io("实例启动失败，详见上方日志。"))
+                        // 探测与实际状态存在竞态（或状态解析异常）：start 失败时
+                        // 不直接报错，自动回落到创建流程自愈。
+                        let _ = progress.send("── 实例启动失败，改用创建流程 ──".into());
+                        if run_and_stream(&vm_logic::launch_args(provider), &progress)? {
+                            Ok("虚拟机已创建并就绪。".into())
+                        } else {
+                            Err(KairosError::io("实例创建失败，详见上方日志。"))
+                        }
                     }
                 }
                 // WSL 实例随首次执行自启，无独立 start 步骤。
