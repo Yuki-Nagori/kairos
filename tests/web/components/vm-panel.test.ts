@@ -56,8 +56,8 @@ describe("vm panel", () => {
     expect(findButton(root, "进入 Shell").disabled).toBe(false);
     expect(findButton(root, "关闭虚拟机").disabled).toBe(false);
     expect(root.querySelector("pre")?.textContent).toContain("Shell 会话已建立");
-    // 模拟终端：shell.svg 图标（currentColor）出现在面板 logo 与终端标题栏。
-    expect(root.querySelectorAll("svg").length).toBeGreaterThanOrEqual(2);
+    // 模拟终端：shell.svg 以图片资源方式出现在面板 logo 与终端标题栏。
+    expect(root.querySelectorAll('img[src="/shell.svg"]').length).toBeGreaterThanOrEqual(2);
     expect(root.textContent).toContain("shell · kairos");
   });
 

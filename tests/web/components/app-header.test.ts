@@ -57,9 +57,9 @@ describe("status bar shell toggle", () => {
     if (!button) {
       throw new Error("shell button not found");
     }
-    // 文字提示在左，shell 图标（currentColor SVG）在右
+    // 文字提示在左，shell 图标（图片资源）在右
     expect(button.textContent).toContain("Shell 环境");
-    expect(button.querySelector("svg")).not.toBeNull();
+    expect(button.querySelector('img[src="/shell.svg"]')).not.toBeNull();
     expect(appStore.get().vmPanelVisible).toBe(false);
 
     button.click();

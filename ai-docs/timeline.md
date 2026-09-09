@@ -123,3 +123,4 @@
 - **17:6x** fix(vm): Shell 子进程包 PTY（script -q /dev/null）——multipass exec 非 TTY 是批处理语义（stdin 读到 EOF 才执行），PTY 后交互全通；前端去掉手动回显防双显（真机反馈）
 - **17:7x** fix(ui): 图标改用 createElementNS 构建——WKWebView 的 CSP 下 innerHTML 内联 SVG 不渲染（浏览器正常、tauri dev 没有，真机踩坑）
 - **17:8x** feat(ui): 虚拟机动作接入原生「工具」菜单——面板/启动/Shell/关闭四项，前端 menu-action 路由
+- **17:9x** refactor(ui): shell 图标改图片资源加载（public/shell.svg + <img>，描边固定 emerald）——createElementNS 在 tauri 窗口仍不显示，彻底绕开内联 SVG
