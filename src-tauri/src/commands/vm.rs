@@ -38,18 +38,22 @@ fn provider() -> Result<VmProviderKind> {
         .ok_or_else(|| KairosError::validation("不支持的平台。"))
 }
 
-/// 构造受管命令。GUI 进程在 macOS 下只继承精简 PATH，必须补上
+/// 构造受管命令（macOS）：GUI 进程只继承精简 PATH，必须补上
 /// Homebrew（/opt/homebrew/bin）与官方 pkg（/usr/local/bin）的常见安装位置。
+#[cfg(target_os = "macos")]
 fn platform_command(bin: &str) -> Command {
     let mut command = Command::new(bin);
-    #[cfg(target_os = "macos")]
-    {
-        let path = std::env::var("PATH").unwrap_or_default();
-        if !path.starts_with("/opt/homebrew/bin:") {
-            command.env("PATH", format!("/opt/homebrew/bin:/usr/local/bin:{path}"));
-        }
+    let path = std::env::var("PATH").unwrap_or_default();
+    if !path.starts_with("/opt/homebrew/bin:") {
+        command.env("PATH", format!("/opt/homebrew/bin:/usr/local/bin:{path}"));
     }
     command
+}
+
+/// 构造受管命令（Windows / Linux）：无需 PATH 修补。
+#[cfg(not(target_os = "macos"))]
+fn platform_command(bin: &str) -> Command {
+    Command::new(bin)
 }
 
 /// 带超时的一次性探测：multipass / wsl 首次调用可能要按需拉起守护进程，

@@ -109,3 +109,4 @@
 - **15:0x** feat(vm): 虚拟机规格按宿主机动态推导——CPU 半数收敛 [2,8]、内存一半收敛 [4,16]G、磁盘固定 80G 稀疏分配
 - **15:1x** feat(vm): 国内时区自动走清华镜像源预下载 24.04 云镜像（file:// 导入），失败自动回落官方直连
 - **15:2x** feat(ui): Shell 入口上状态栏——右侧「Shell 环境 + shell.svg 图标」按钮切换右下角终端面板显隐（默认隐藏）
+- **15:3x** fix(ci): platform_command 按 cfg 拆成 macOS / 非 macOS 两个变体，消除非 macOS 平台的 unused_mut 报错
