@@ -15,7 +15,7 @@ path = "tests/rust/contract/main.rs"
 
 [workspace]
 resolver = "2"
-members = ["src-crates/kairos-core", "src-tauri"]
+members = ["src-crates/kairos-core", "src-crates/kairos-cli", "src-tauri"]
 
 [workspace.package]
 version = "0.1.0"

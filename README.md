@@ -6,6 +6,17 @@
 
 技术栈：Tauri 2 + Bun + TypeScript + Vite + Tailwind CSS v4；Rust 侧为 Cargo 工作区（领域层 + Tauri 适配层）。架构与开发约定见 [AGENTS.md](AGENTS.md) 及 [ai-docs/](ai-docs/)。
 
+## 无头 CLI（T32）
+
+```console
+$ cargo run -p kairos-cli -- pipeline run --sample-box --out-dir kairos-case
+$ cargo run -p kairos-cli -- solve submit --case-dir kairos-case   # 需本机 OpenFOAM 11+
+$ cargo run -p kairos-cli -- results list --case-dir kairos-case
+```
+
+子命令覆盖 project / mesh / solve / results / pipeline；`--json` 输出结构化
+结果，错误一律 `{code, message}` 形态（与 IPC 契约同形）。
+
 ## 致谢
 
 - 界面部分图标来自 [Icons8](https://icons8.com)（免费授权，已署名）；
