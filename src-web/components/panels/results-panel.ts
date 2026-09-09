@@ -91,8 +91,66 @@ export function createResultsPanel(): HTMLElement {
     }
   }
 
-  body.append(scanForm, timesBox, statsBox);
+  // 派生场（T31）：对已加载场做标量运算生成新场，图表与视口即时可用。
+  const deriveSelect = document.createElement("select");
+  deriveSelect.className = "flex-1 min-w-0 text-xs";
+  for (const [value, label] of [
+    ["normalize", "归一化 (0–1)"],
+    ["threshold", "阈值掩码（中位幅值）"],
+  ] as const) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = label;
+    deriveSelect.append(option);
+  }
+  const deriveButton = button("生成派生场", "ghost");
+  deriveButton.disabled = true;
+  const deriveRow = document.createElement("div");
+  deriveRow.className = "flex items-center gap-2";
+  deriveRow.append(deriveSelect, deriveButton);
+
+  deriveButton.addEventListener("click", () => {
+    const source = appStore.get().loadedField;
+    if (!source || source.values.length === 0) {
+      return;
+    }
+    const values = source.values;
+    let derived: number[];
+    let suffix: string;
+    if (deriveSelect.value === "threshold") {
+      const { min, max } = minMax(values);
+      const threshold = (min + max) / 2;
+      derived = values.map((v) => (v >= threshold ? 1 : 0));
+      suffix = "阈值掩码";
+    } else {
+      const { min, max } = minMax(values);
+      const range = max - min;
+      derived = range > 0 ? values.map((v) => (v - min) / range) : values.map(() => 0);
+      suffix = "归一化";
+    }
+    appStore.set({
+      loadedField: {
+        ...source,
+        field: `${source.field} · ${suffix}`,
+        isMagnitude: false,
+        values: derived,
+        complete: source.complete,
+      },
+    });
+  });
+
+  function renderDerive(): void {
+    const loaded = appStore.get().loadedField !== null;
+    deriveButton.disabled = !loaded;
+    deriveSelect.disabled = !loaded;
+  }
+
+  body.append(scanForm, timesBox, statsBox, deriveRow);
+  appStore.subscribe(() => {
+    render();
+    renderDerive();
+  });
   render();
-  appStore.subscribe(render);
+  renderDerive();
   return root;
 }
