@@ -37,3 +37,16 @@ Tauri v2 updater 插件需要：
 3. 每次发布附带签名清单。
 
 密钥与端点就绪后启用 `tauri.conf.json` 的 `plugins.updater` 段并安装 `tauri-plugin-updater`。
+
+## T33 · 自动更新与签名（证书就绪后启用）
+
+- 端点：静态 JSON（`https://releases.kairos.example/latest.json`，占位域名，
+  正式发布时替换为对象存储直链）；
+- 签名密钥：`bunx tauri signer generate -w ~/.tauri/kairos.key`——公钥写入
+  `tauri.conf.json` 的 `plugins.updater.pubkey`，私钥放 GitHub Secrets
+  （`TAURI_SIGNING_PRIVATE_KEY` / `_PASSWORD`）；
+- release.yml 在 `tauri build` 前注入上述 Secrets 即可产出
+  `.sig` 更新签名清单；`latest.json` 按官方 updater 格式手写生成脚本（后续）；
+- CSP 收窄结论：`img-src` 已去掉 `blob:`（无运行时 blob 图片）；
+  `style-src 'unsafe-inline'` 暂保留——主题切换依赖运行时 `<style>` 注入，
+  移除需 nonce 化改造（记录为接受项，待主题文件化时重评）。

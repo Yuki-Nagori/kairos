@@ -6,6 +6,8 @@ pub mod commands;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // 自动更新（T33）：端点与签名约定见 ai-docs/release.md
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .manage(commands::geometry::GeometryStore::default())
         .manage(commands::jobs::JobScheduler::default().with_vm_shell(
