@@ -41,6 +41,28 @@ Linux 环境：macOS 走 **Multipass**（Ubuntu 虚拟机），Windows 走 **WSL
 - Windows 安装走 UAC 提权，安装日志不可回传，完成后需「重新探测」；
 - WSL 发行版固定 `Ubuntu-24.04`；用户自装其他发行版不会被受管流程识别。
 
+## 与 moldingFoam README 的对齐（2026-09-09 确认）
+
+- 规格与镜像对齐 README 2.2 节验证配方：`--cpus 8 --memory 16G --disk 80G
+24.04`；实例名保留 `kairos`（Kairos 独立受管实例，不与 README 的 of14
+  开发虚拟机混用，两台可共存）；
+- WSL 命令（`wsl --install -d Ubuntu-24.04` / `wsl -d Ubuntu-24.04`）与
+  README 2.3 节一致；
+- 应用内 Shell 用 `multipass exec kairos -- bash --login`（README 的脚本式
+  用法，管道友好）；交互完整版仍是系统终端里的 `multipass shell`。
+
+README 带来的下一步关键信息（求解包进虚拟机任务用）：
+
+1. VM 内 OpenFOAM 走 **apt 官方二进制 `openfoam14`**（`/opt/openfoam14`），
+   不是源码全量编译；xmake 只编译 moldingFoam 本体；
+2. macOS 仓库经 `multipass mount` 挂载 + `scripts/vm-sync.sh` 同步到 VM
+   原生目录构建（挂载目录大小写不敏感，不能直接构建）；
+3. 分发形态是 `xmake run bundle` 产出的 tar.xz（OpenFOAM 官方环境树 +
+   libmoldingFoam 并入），解压后 `. etc/bashrc` 即用；
+4. 已知坑：multipassd 下载器不继承用户网络配置（镜像可 `file://` 手动
+   导入）；macOS 26+ 需在 系统设置→隐私与安全性→本地网络 给 App 开权限，
+   否则 `multipass exec` 报 `No route to host`。
+
 ## 验收标准
 
 - `bun run verify` 全绿；core 新增纯函数 100% 分支有测试；契约测试覆盖 VmStatus DTO；

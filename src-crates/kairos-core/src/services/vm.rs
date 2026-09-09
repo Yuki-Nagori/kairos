@@ -4,7 +4,8 @@
 
 use crate::models::vm::{VmProviderKind, VmState, VmStatus};
 
-/// 受管实例名：multipass 虚拟机与 WSL 发行版共用一个标识口径。
+/// 受管实例名：Kairos 自己管理的 multipass 虚拟机，与 moldingFoam README
+/// 的 of14 开发虚拟机相互独立（规格与镜像仍对齐其验证配方）。
 pub const INSTANCE_NAME: &str = "kairos";
 /// WSL 受管发行版（`wsl --install -d` 的目标；v1 固定，自装发行版不受管）。
 pub const WSL_DISTRO: &str = "Ubuntu-24.04";
@@ -65,11 +66,12 @@ pub fn launch_args(provider: VmProviderKind) -> Vec<String> {
             "--name".into(),
             INSTANCE_NAME.into(),
             "--cpus".into(),
-            "4".into(),
+            "8".into(),
             "--memory".into(),
-            "8G".into(),
+            "16G".into(),
             "--disk".into(),
-            "40G".into(),
+            "80G".into(),
+            "24.04".into(),
         ],
         VmProviderKind::Wsl => vec![
             "wsl".into(),
@@ -300,6 +302,12 @@ mod tests {
         }
         // multipass：实例名贯穿 launch/start/shell/stop；WSL：无独立 start 步骤
         assert!(launch_args(VmProviderKind::Multipass).contains(&INSTANCE_NAME.to_string()));
+        // 规格/镜像对齐 moldingFoam README：8 核 16G 80G + Ubuntu 24.04
+        assert!(launch_args(VmProviderKind::Multipass).contains(&"--memory".to_string()));
+        assert_eq!(
+            launch_args(VmProviderKind::Multipass).last().unwrap(),
+            "24.04"
+        );
         assert_eq!(
             start_args(VmProviderKind::Multipass).as_deref(),
             Some(
