@@ -1,6 +1,7 @@
 //! 领域服务：无状态、纯逻辑；命令适配层只做参数注入与调度。
 
 pub mod dependencies;
+pub mod derive;
 pub mod geometry;
 pub mod gmsh;
 pub mod jobs;

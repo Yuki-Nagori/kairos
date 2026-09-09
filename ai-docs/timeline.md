@@ -127,3 +127,4 @@
 - **18:0x** refactor(ui): 菜单动作路由抽离 menu-actions.ts；关于对话框加入 Icons8 / OpenFOAM / moldingFoam 致谢
 - **18:1x** refactor(ui): main.ts 瘦身——全局快捷键（shortcuts.ts）与虚拟机浮层（vm-dock.ts）各自成模块，main 只保留布局组合与启动编排
 - **18:2x** feat(vm): T36 Part 2 完成——vm_deploy_bundle 传输解压 bundle 进 VM；作业执行自动 multipass exec（宿主 case 1:1 挂载）+ WSL /mnt 路径换算；面板「部署到虚拟机」按钮
+- **18:3x** feat(derive): 派生结果算子 CPU 参考实现——归一化/线性映射/两场差值/阈值掩码（T31 第一批）
