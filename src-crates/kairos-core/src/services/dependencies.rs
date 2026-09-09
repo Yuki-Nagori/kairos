@@ -22,24 +22,38 @@ fn source_download(url: &str) -> Option<DownloadSpec> {
     })
 }
 
+/// release 资产名是否匹配宿主架构（moldingFoam bundle 按 linux64 / linuxArm64
+/// 分包；匹配对大小写不敏感）。无法识别的架构一律不匹配。
+pub fn bundle_asset_matches_arch(asset_name: &str, arch: &str) -> bool {
+    let lower = asset_name.to_lowercase();
+    match arch {
+        "aarch64" => lower.contains("arm64"),
+        "x86_64" => lower.contains("linux64"),
+        _ => false,
+    }
+}
+
 /// 运行时依赖目录（求解链路 + 网格升级路线）。
 pub fn catalog() -> Vec<RuntimeDependency> {
     vec![
-        // 求解链路只依赖 OpenFOAM 本体：其 foamRun 模块化框架自 11 起内置
-        // compressibleVoF 模块（compressibleInterFoam 的原生后继），无需第三方求解器。
+        // 注塑求解环境 = moldingFoam 仓库发布的 bundle：OpenFOAM-14 完整官方
+        // 环境树 + libmoldingFoam 并入（GPL-3.0，Kairos 只转发官方直链）。
+        // 下载 `releases/latest` 形态的 URL，适配层在下载时按宿主架构解析
+        // 具体资产（资产名含日期，无法用固定 latest/download 文件名）。
+        // 自动解压即用：无需编译，解压目录内 platforms/*/bin 会被求解时
+        // 自动加入 PATH 前缀。
         RuntimeDependency {
             id: "openfoam".into(),
-            name: "OpenFOAM 14（.org）".into(),
+            name: "moldingFoam 求解环境（OpenFOAM-14）".into(),
             license: "GPL-3.0".into(),
             license_kind: LicenseKind::Gpl,
             strategy: InstallStrategy::DirectDownload,
-            page_url: "https://openfoam.org/download/".into(),
+            page_url: "https://github.com/Yuki-Nagori/moldingFoam/releases".into(),
             required: true,
             check_command: "blockMesh".into(),
-            hint: "官方源码包（自动解压）。编译安装后 blockMesh / foamRun 进入 PATH 即就绪：                   Linux 推荐 apt 直接装预编译包（openfoam.org/download/14-ubuntu）；                   macOS 需源码编译（较耗时）。"
-                .into(),
+            hint: "官方 release 预编译包（OpenFOAM-14 完整环境树 + 注塑求解模块，约 120MB）。                    自动解压即用，无需编译。".into(),
             download: source_download(
-                "https://github.com/OpenFOAM/OpenFOAM-14/archive/refs/heads/master.tar.gz",
+                "https://github.com/Yuki-Nagori/moldingFoam/releases/latest",
             ),
         },
         RuntimeDependency {
@@ -95,6 +109,31 @@ mod tests {
         let gmsh = catalog.iter().find(|d| d.id == "gmsh").unwrap();
         assert!(!gmsh.required);
         assert!(gmsh.download.is_some(), "Gmsh 应提供应用内直接下载地址");
+    }
+
+    #[test]
+    fn bundle_asset_matches_host_arch() {
+        assert!(bundle_asset_matches_arch(
+            "moldingFoam-openfoam14-linuxArm64GccDPInt32Opt-20260909.tar.xz",
+            "aarch64"
+        ));
+        assert!(!bundle_asset_matches_arch(
+            "moldingFoam-openfoam14-linuxArm64GccDPInt32Opt-20260909.tar.xz",
+            "x86_64"
+        ));
+        assert!(bundle_asset_matches_arch(
+            "moldingFoam-openfoam14-linux64GccDPInt32Opt-20260909.tar.xz",
+            "x86_64"
+        ));
+        assert!(!bundle_asset_matches_arch(
+            "moldingFoam-openfoam14-linux64GccDPInt32Opt-20260909.tar.xz",
+            "aarch64"
+        ));
+        // 未知架构一律不匹配（不猜）
+        assert!(!bundle_asset_matches_arch(
+            "moldingFoam-openfoam14-linux64GccDPInt32Opt-20260909.tar.xz",
+            "riscv64"
+        ));
     }
 
     #[test]

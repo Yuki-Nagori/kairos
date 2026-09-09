@@ -1,6 +1,5 @@
 import {
   appStore,
-  compileDependencyAction,
   downloadComponent,
   openDependencyPageAction,
   refreshDependencies,
@@ -78,12 +77,9 @@ export function createDependenciesPanel(): HTMLElement {
       });
 
       // 有应用内下载地址的组件：提供「下载」按钮（用户点击触发，官方源 + 许可展示）。
-      // 按钮可用性从统一阶段状态推导：下载/编译进行中一律禁用。
+      // 按钮可用性从统一阶段状态推导：下载进行中禁用。
       const stage = componentStages[dep.id];
       const downloading = stage?.stage === "downloading";
-      const compilingThis = stage?.stage === "compiling";
-      // 源码组件：下载解压后需要编译（后台 Allwmake），可随时重新编译。
-      const hasCompileFlow = dep.id === "openfoam";
       let downloadButton: HTMLButtonElement | null = null;
       if (dep.download !== null) {
         const os = appStore.get().info?.os ?? "linux";
@@ -95,7 +91,7 @@ export function createDependenciesPanel(): HTMLElement {
               : dep.download.linux;
         const already = dep.id in savedDownloads || dep.id in downloadedFiles;
         downloadButton = button(already ? "重新下载" : "下载", already ? "ghost" : "primary");
-        downloadButton.disabled = downloading || compilingThis;
+        downloadButton.disabled = downloading;
         downloadButton.title = `下载（${dep.license}）`;
         downloadButton.addEventListener("click", () => {
           void downloadComponent(dep.id, downloadUrl);
@@ -106,36 +102,13 @@ export function createDependenciesPanel(): HTMLElement {
       if (downloadButton !== null) {
         row.append(downloadButton);
       }
-      // 编译按钮：仅源码组件需要；失败后可随时重试。
-      if (hasCompileFlow && dep.download !== null) {
-        const compileButton = button("编译", "ghost");
-        compileButton.disabled = compilingThis;
-        compileButton.addEventListener("click", () => {
-          void compileDependencyAction(dep.id);
-        });
-        row.append(compileButton);
-      }
       listBox.append(row);
 
-      // 阶段状态行：编译中（琥珀）→ 失败（红，附原因）→ 日志尾部 → 下载进度。
-      if (compilingThis) {
-        const compileLine = hint("编译中…（首次 OpenFOAM 全量构建约 30–60 分钟）");
-        compileLine.className = "text-xs text-amber-400";
-        listBox.append(compileLine);
-      }
+      // 阶段状态行：失败（红，附原因）→ 下载进度。
       if (stage?.stage === "failed") {
         const failedLine = hint(stage.error);
         failedLine.className = "text-xs text-red-400";
         listBox.append(failedLine);
-      }
-      const compileTail =
-        stage?.stage === "compiling" || stage?.stage === "failed" ? stage.logs.slice(-10) : [];
-      if (compileTail.length > 0) {
-        const pre = document.createElement("pre");
-        pre.className =
-          "max-h-40 overflow-y-auto whitespace-pre-wrap break-all rounded-lg border border-zinc-800 bg-zinc-950 px-2 py-1 text-[10px] leading-4 text-zinc-400";
-        pre.textContent = compileTail.join("\n");
-        listBox.append(pre);
       }
       if (downloading) {
         const percent = stage?.stage === "downloading" ? stage.percent : 0;

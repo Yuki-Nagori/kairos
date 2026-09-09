@@ -15,10 +15,7 @@ use tauri::{AppHandle, Manager};
 /// 允许下载的官方源前缀白名单（防任意 URL 下载）。
 const ALLOWED_PREFIXES: &[&str] = &[
     "https://gmsh.info/",
-    "https://files.openfoam.com/",
-    "https://openfoam.org/",
-    "https://github.com/OpenFOAM/",
-    "https://codeload.github.com/OpenFOAM/",
+    "https://github.com/Yuki-Nagori/moldingFoam/releases/",
 ];
 
 #[derive(Debug, Clone, Serialize)]
@@ -88,6 +85,59 @@ fn derive_file_name(component_id: &str, url: &str) -> String {
     format!("{component_id}{ext}")
 }
 
+/// moldingFoam 仓库：bundle 由其 CI 按 release 发布。
+const BUNDLE_REPO: &str = "Yuki-Nagori/moldingFoam";
+
+#[derive(serde::Deserialize)]
+struct ReleaseAssets {
+    assets: Vec<ReleaseAsset>,
+}
+
+#[derive(serde::Deserialize)]
+struct ReleaseAsset {
+    name: String,
+    browser_download_url: String,
+}
+
+/// `releases/latest` 形态的 URL 在下载时动态解析为具体资产：资产名含日期，
+/// 固定文件名的 latest/download 直链会随下个版本失效。按宿主架构挑资产，
+/// 找不到匹配时明确报错而不是猜。其余 URL 原样返回。
+fn resolve_release_asset(url: &str) -> Result<String> {
+    if !url.ends_with("/releases/latest") {
+        return Ok(url.to_string());
+    }
+    let agent: ureq::Agent = ureq::AgentBuilder::new()
+        .timeout_connect(std::time::Duration::from_secs(30))
+        .timeout(std::time::Duration::from_secs(60))
+        .user_agent("kairos-dependency-manager/1.0")
+        .build();
+    let response = agent
+        .get(&format!(
+            "https://api.github.com/repos/{BUNDLE_REPO}/releases/latest"
+        ))
+        .set("Accept", "application/vnd.github+json")
+        .call()
+        .map_err(|e| KairosError::io(format!("查询最新 release 失败：{e}")))?;
+    let release: ReleaseAssets = serde_json::from_reader(response.into_reader())
+        .map_err(|e| KairosError::io(format!("release 数据解析失败：{e}")))?;
+    let asset = release
+        .assets
+        .iter()
+        .find(|asset| {
+            kairos_core::services::dependencies::bundle_asset_matches_arch(
+                &asset.name,
+                std::env::consts::ARCH,
+            )
+        })
+        .ok_or_else(|| {
+            KairosError::not_found(format!(
+                "最新 release 中没有适配 {} 架构的资产",
+                std::env::consts::ARCH
+            ))
+        })?;
+    Ok(asset.browser_download_url.clone())
+}
+
 /// 下载文件到受管目录：流式写盘并按百分比回传进度（Channel<u64>）；
 /// 成功后登记进 manifest.json（跨会话记住「已下载」状态）。
 #[tauri::command]
@@ -98,6 +148,7 @@ pub async fn download_file(
     progress: Channel<u64>,
 ) -> Result<SavedDownload> {
     ensure_allowed(&url)?;
+    let url = resolve_release_asset(&url)?;
     let file_name = derive_file_name(&component_id, &url);
 
     tauri::async_runtime::spawn_blocking(move || {
@@ -212,8 +263,10 @@ fn extract_if_archive(
     file_name: &str,
 ) -> Result<Option<PathBuf>> {
     let lower = file_name.to_lowercase();
-    let is_archive =
-        lower.ends_with(".zip") || lower.ends_with(".tar.gz") || lower.ends_with(".tgz");
+    let is_archive = lower.ends_with(".zip")
+        || lower.ends_with(".tar.gz")
+        || lower.ends_with(".tgz")
+        || lower.ends_with(".tar.xz");
     if !is_archive {
         return Ok(None);
     }
@@ -255,7 +308,13 @@ fn extract_archive(archive: &Path, dest: &Path) -> Result<()> {
             "-d"
         });
     } else {
-        command.arg("-xzf").arg(archive).arg("-C");
+        // GNU tar：-z 是 gzip、-J 是 xz（moldingFoam bundle 为 tar.xz）。
+        let compress = if name.ends_with(".tar.xz") {
+            "-xJf"
+        } else {
+            "-xzf"
+        };
+        command.arg(compress).arg(archive).arg("-C");
     }
     command.arg(dest);
     // 捕获 stderr：解压失败时把工具的最后一条报错带给用户，便于定位。
@@ -381,17 +440,17 @@ mod tests {
     #[test]
     fn derive_file_name_covers_branch_rules() {
         let cases = [
+            // release 资产：官方原始文件名保留（.tar.xz 双段扩展不受最后一个点影响）
+            (
+                "openfoam",
+                "https://github.com/Yuki-Nagori/moldingFoam/releases/download/v0.1.1/moldingFoam-openfoam14-linuxArm64GccDPInt32Opt-20260909.tar.xz",
+                "moldingFoam-openfoam14-linuxArm64GccDPInt32Opt-20260909.tar.xz",
+            ),
             // 分支归档形态 → 组件 id + 扩展名（.tar.gz 双段扩展优先于最后一个点）
             (
-                "openfoam",
-                "https://github.com/OpenFOAM/OpenFOAM-14/archive/refs/heads/master.tar.gz",
-                "openfoam.tar.gz",
-            ),
-            // codeload 直链的 zip 分支形态
-            (
-                "openfoam",
-                "https://codeload.github.com/OpenFOAM/OpenFOAM-14/zip/refs/heads/master",
-                "openfoam.zip",
+                "gmsh",
+                "https://github.com/example/example/archive/refs/heads/master.tar.gz",
+                "gmsh.tar.gz",
             ),
             // 官方原始文件名保留
             (

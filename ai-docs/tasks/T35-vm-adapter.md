@@ -54,7 +54,10 @@ Linux 环境：macOS 走 **Multipass**（Ubuntu 虚拟机），Windows 走 **WSL
 README 带来的下一步关键信息（求解包进虚拟机任务用）：
 
 1. VM 内 OpenFOAM 走 **apt 官方二进制 `openfoam14`**（`/opt/openfoam14`），
-   不是源码全量编译；xmake 只编译 moldingFoam 本体；
+   不是源码全量编译；xmake 只编译 moldingFoam 本体。
+   （2026-09-09 起 Kairos 依赖面板已改为直接下载 moldingFoam release
+   bundle——OpenFOAM-14 环境树 + libmoldingFoam，约 120MB，解压即用，
+   原应用内源码编译流程随之退役删除；bundle 进 VM 的传输仍待做。）
 2. macOS 仓库经 `multipass mount` 挂载 + `scripts/vm-sync.sh` 同步到 VM
    原生目录构建（挂载目录大小写不敏感，不能直接构建）；
 3. 分发形态是 `xmake run bundle` 产出的 tar.xz（OpenFOAM 官方环境树 +

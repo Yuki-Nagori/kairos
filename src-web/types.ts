@@ -200,12 +200,9 @@ export interface DownloadSpec {
   linux: string;
 }
 
-/** 组件下载/编译流水线的阶段状态（仅进行中或失败时存在；成功后清除）。
- * failed 保留日志尾部：编译失败的现场需要留给你诊断。 */
+/** 组件下载流水线的阶段状态（仅进行中或失败时存在；成功后清除）。 */
 export type ComponentStageState =
-  | { stage: "downloading"; percent: number }
-  | { stage: "compiling"; logs: string[] }
-  | { stage: "failed"; error: string; logs: string[] };
+  { stage: "downloading"; percent: number } | { stage: "failed"; error: string };
 
 /** 对应 `kairos-core::models::vm`：虚拟机 provider（平台固定；native = Linux
  * 原生环境，无虚拟机，Shell 即本地 bash）与实例状态。 */

@@ -31,13 +31,15 @@
 
 ## fork 就绪后的对接清单（待办）
 
-1. 依赖目录 OpenFOAM 条目的下载直链换成 fork 仓库（或按 fork 发布形态
-   新增独立条目）；
-2. `openfoam.rs::SOLVER_MODULE` 换成 fork 的注塑求解模块名；
-3. packingDict / coolingDict / transportProperties（Cross-WLF、Tait）字典
-   由 fork 模块消费——当前 vanilla foamRun 忽略 constant/ 下的未知字典，
-   字段已按 openInjMoldSim v7.2 口径预留；
-4. T29 端到端在 fork 环境跑通填充 / 保压 / 冷却并复核 case 模板字段。
+1. ~~依赖目录下载直链换成 fork 仓库~~（已完成：`openfoam` 条目现指向
+   `Yuki-Nagori/moldingFoam` 的 `releases/latest`，下载时按宿主架构解析
+   资产并 tar.xz 解压，应用内副本直接可用，无需编译）；
+2. `openfoam.rs::SOLVER_MODULE` 换成 `moldingFoam`——bundle 已自带
+   `libmoldingFoamSolver.so` 探测链接，需与第 3 条 case 字典布局切换同步做；
+3. case 生成器按 moldingFoam 的 `case-contract/` v1.1 字典布局重写
+   （packingDict/coolingDict/transportProperties → moldingDict +
+   physicalProperties.<相> 等）；
+4. T29 端到端在 bundle 环境跑通填充 / 保压 / 冷却并复核 case 模板字段。
 
 ## 非目标
 

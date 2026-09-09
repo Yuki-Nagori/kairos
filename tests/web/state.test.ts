@@ -4,7 +4,6 @@ import {
   addStudy,
   appStore,
   bootstrap,
-  compileDependencyAction,
   downloadComponent,
   initialAppState,
   newProject,
@@ -13,7 +12,7 @@ import {
 import { getSystemInfo } from "../../src-web/services/system";
 import { createProject, listRecentProjects } from "../../src-web/services/project";
 import { listBuiltinMaterials, listCustomMaterials } from "../../src-web/services/materials";
-import { compileDependency, listRuntimeDependencies } from "../../src-web/services/dependencies";
+import { listRuntimeDependencies } from "../../src-web/services/dependencies";
 import { downloadComponentFile, listDownloads } from "../../src-web/services/downloads";
 import type { SavedDownload } from "../../src-web/types";
 
@@ -37,7 +36,6 @@ vi.mock("../../src-web/services/materials", () => ({
   exportMaterialsToFile: vi.fn(),
 }));
 vi.mock("../../src-web/services/dependencies", () => ({
-  compileDependency: vi.fn(),
   listRuntimeDependencies: vi.fn(),
   openDependencyPage: vi.fn(),
 }));
@@ -54,7 +52,6 @@ function resetMocks(): void {
   vi.mocked(listRecentProjects).mockReset();
   vi.mocked(listBuiltinMaterials).mockReset();
   vi.mocked(listCustomMaterials).mockReset();
-  vi.mocked(compileDependency).mockReset();
   vi.mocked(listRuntimeDependencies).mockReset();
   vi.mocked(downloadComponentFile).mockReset();
   vi.mocked(listDownloads).mockReset();
@@ -228,8 +225,7 @@ describe("dependency stage transitions", () => {
 
     expect(appStore.get().componentStages.gmsh).toBeUndefined();
     expect(appStore.get().savedDownloads.gmsh?.fileName).toBe("gmsh.tgz");
-    // 非源码组件不触发编译
-    expect(compileDependency).not.toHaveBeenCalled();
+    // 求解环境为预编译 bundle：下载不触发任何编译。
   });
 
   it("lands a failed download in the failed stage with the reason", async () => {
@@ -240,69 +236,6 @@ describe("dependency stage transitions", () => {
     expect(appStore.get().componentStages.gmsh).toEqual({
       stage: "failed",
       error: "下载失败：网络中断",
-      logs: [],
     });
-  });
-
-  it("openfoam download auto-compiles with logs, then clears on success", async () => {
-    vi.mocked(downloadComponentFile).mockResolvedValue(saved);
-    let emitLog: ((line: string) => void) | undefined;
-    let release: ((message: string) => void) | undefined;
-    vi.mocked(compileDependency).mockImplementation(
-      (_id, onLog) =>
-        new Promise((resolve) => {
-          emitLog = onLog;
-          release = resolve;
-        }),
-    );
-
-    await downloadComponent("openfoam", "https://github.com/OpenFOAM/a.tar.gz");
-    expect(compileDependency).toHaveBeenCalledWith("openfoam", expect.any(Function));
-    emitLog?.("wmake 1/3");
-    expect(appStore.get().componentStages.openfoam).toEqual({
-      stage: "compiling",
-      logs: ["wmake 1/3"],
-    });
-
-    release?.("编译完成");
-    await vi.waitFor(() => expect(appStore.get().componentStages.openfoam).toBeUndefined());
-  });
-
-  it("keeps the ring buffer tail (last 200 lines) when compiling fails", async () => {
-    vi.mocked(compileDependency).mockImplementation(async (_id, onLog) => {
-      for (let i = 0; i < 250; i += 1) {
-        onLog(`line-${i}`);
-      }
-      throw new Error("退出码 2");
-    });
-
-    await compileDependencyAction("openfoam");
-
-    const stage = appStore.get().componentStages.openfoam;
-    expect(stage?.stage).toBe("failed");
-    if (stage?.stage !== "failed") {
-      return;
-    }
-    expect(stage.error).toBe("编译失败：退出码 2");
-    expect(stage.logs).toHaveLength(200);
-    expect(stage.logs[0]).toBe("line-50");
-    expect(stage.logs.at(-1)).toBe("line-249");
-  });
-
-  it("ignores re-entrant compile calls while one is running", async () => {
-    let release: ((message: string) => void) | undefined;
-    vi.mocked(compileDependency).mockImplementation(
-      () =>
-        new Promise((resolve) => {
-          release = resolve;
-        }),
-    );
-
-    const first = compileDependencyAction("openfoam");
-    await compileDependencyAction("openfoam");
-    expect(compileDependency).toHaveBeenCalledTimes(1);
-
-    release?.("编译完成");
-    await first;
   });
 });

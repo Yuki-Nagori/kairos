@@ -112,3 +112,4 @@
 - **15:3x** fix(ci): platform_command 按 cfg 拆成 macOS / 非 macOS 两个变体，消除非 macOS 平台的 unused_mut 报错
 - **15:4x** refactor(vm): 镜像下载抽出 download_to_file；TS 动作收敛 withVmBusy 互斥模板；--memory 注释归位
 - **15:5x** fix(ci): 覆盖率步骤补装 cargo-llvm-cov（简化流水线时遗失）；Windows zip 解压显式 -xf 并回传工具 stderr
+- **15:6x** feat(deps): 求解环境改下载 moldingFoam release bundle（latest + 按架构解析资产，tar.xz 解压），应用内编译流程退役
