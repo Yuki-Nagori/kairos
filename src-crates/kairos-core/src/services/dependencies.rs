@@ -36,15 +36,16 @@ pub fn bundle_asset_matches_arch(asset_name: &str, arch: &str) -> bool {
 /// 运行时依赖目录（求解链路 + 网格升级路线）。
 pub fn catalog() -> Vec<RuntimeDependency> {
     vec![
-        // 注塑求解环境 = moldingFoam 仓库发布的 bundle：OpenFOAM-14 完整官方
-        // 环境树 + libmoldingFoam 并入（GPL-3.0，Kairos 只转发官方直链）。
-        // 下载 `releases/latest` 形态的 URL，适配层在下载时按宿主架构解析
+        // 注塑求解环境 = moldingFoam 仓库发布的 bundle：基于 OpenFOAM-14
+        // 官方环境树构建（内含 libmoldingFoam），但它是一个独立项目，不等于
+        // OpenFOAM 本体（GPL-3.0，Kairos 只转发官方直链）。下载
+        // `releases/latest` 形态的 URL，适配层在下载时按宿主架构解析
         // 具体资产（资产名含日期，无法用固定 latest/download 文件名）。
         // 自动解压即用：无需编译，解压目录内 platforms/*/bin 会被求解时
         // 自动加入 PATH 前缀。
         RuntimeDependency {
-            id: "openfoam".into(),
-            name: "moldingFoam 求解环境（OpenFOAM-14）".into(),
+            id: "moldingfoam".into(),
+            name: "moldingFoam（基于 OpenFOAM-14）".into(),
             license: "GPL-3.0".into(),
             license_kind: LicenseKind::Gpl,
             strategy: InstallStrategy::DirectDownload,
@@ -85,11 +86,12 @@ mod tests {
     #[test]
     fn solver_chain_dependency_is_required_and_gpl() {
         let catalog = catalog();
-        let openfoam = catalog.iter().find(|d| d.id == "openfoam").unwrap();
-        assert!(openfoam.required);
-        assert_eq!(openfoam.license_kind, LicenseKind::Gpl);
-        // foamRun 模块化求解器随 OpenFOAM 本体分发，不单列第三方求解器依赖。
+        let moldingfoam = catalog.iter().find(|d| d.id == "moldingfoam").unwrap();
+        assert!(moldingfoam.required);
+        assert_eq!(moldingfoam.license_kind, LicenseKind::Gpl);
+        // 求解环境独立成条目，不再单列第三方求解器依赖。
         assert!(!catalog.iter().any(|d| d.id == "openinjmoldsim"));
+        assert!(!catalog.iter().any(|d| d.id == "openfoam"));
     }
 
     #[test]

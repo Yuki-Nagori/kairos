@@ -337,7 +337,7 @@ pub fn managed_bin_dirs(app: &AppHandle) -> Vec<PathBuf> {
     let Ok(dir) = downloads_dir(app) else {
         return out;
     };
-    for component in ["openfoam", "gmsh"] {
+    for component in ["moldingfoam", "gmsh"] {
         collect_bin_dirs(&dir.join(component), 0, 4, &mut out);
     }
     out
@@ -423,7 +423,7 @@ mod tests {
             extract_dir: None,
         };
         register_in_manifest(&dir, "gmsh", &saved).unwrap();
-        register_in_manifest(&dir, "openfoam", &saved).unwrap();
+        register_in_manifest(&dir, "moldingfoam", &saved).unwrap();
 
         let manifest = read_manifest(&dir);
         assert_eq!(manifest.len(), 2);
@@ -442,7 +442,7 @@ mod tests {
         let cases = [
             // release 资产：官方原始文件名保留（.tar.xz 双段扩展不受最后一个点影响）
             (
-                "openfoam",
+                "moldingfoam",
                 "https://github.com/Yuki-Nagori/moldingFoam/releases/download/v0.1.1/moldingFoam-openfoam14-linuxArm64GccDPInt32Opt-20260909.tar.xz",
                 "moldingFoam-openfoam14-linuxArm64GccDPInt32Opt-20260909.tar.xz",
             ),
@@ -464,9 +464,9 @@ mod tests {
                 "https://gmsh.info/bin/Linux/gmsh.zip?query=1#hash",
                 "gmsh.zip",
             ),
-            ("openfoam", "https://openfoam.org/master", "openfoam"),
-            ("openfoam", "https://openfoam.org/..", "openfoam"),
-            ("openfoam", "https://openfoam.org/", "openfoam"),
+            ("solver", "https://openfoam.org/master", "solver"),
+            ("solver", "https://openfoam.org/..", "solver"),
+            ("solver", "https://openfoam.org/", "solver"),
         ];
         for (id, url, expected) in cases {
             assert_eq!(derive_file_name(id, url), expected, "url: {url}");
