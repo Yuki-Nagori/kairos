@@ -1,6 +1,6 @@
 import "./app.css";
-import { listen } from "@tauri-apps/api/event";
 import { createAppHeader, createStatusBar } from "./components/app-header";
+import { setupMenuActions } from "./menu-actions";
 import { createDependenciesPanel } from "./components/panels/dependencies-panel";
 import { createVmPanel } from "./components/panels/vm-panel";
 import { createGeometryPanel } from "./components/panels/geometry-panel";
@@ -14,22 +14,8 @@ import { createReportPanel } from "./components/panels/report-panel";
 import { createResultsPanel } from "./components/panels/results-panel";
 import { createViewportPanel } from "./components/panels/viewport-panel";
 import { createXyChartPanel } from "./components/panels/xy-chart-panel";
-import { initTheme, cycleTheme } from "./theme";
-import {
-  appStore,
-  bootstrap,
-  checkNetwork,
-  exportFieldCsv,
-  newProject,
-  openProject,
-  openVmShellAction,
-  refreshDependencies,
-  refreshVmStatus,
-  saveProject,
-  saveProjectAs,
-  startVmAction,
-  stopVmAction,
-} from "./state";
+import { initTheme } from "./theme";
+import { appStore, bootstrap, newProject, openProject, saveProject } from "./state";
 
 const root = document.querySelector<HTMLDivElement>("#app");
 
@@ -119,33 +105,7 @@ window.addEventListener("keydown", (event) => {
 
 root.append(header, workspace, resultsSection, statusBar);
 
-// 原生菜单路由：Rust 菜单项只发射动作 id，这里映射到全局状态动作。
-const menuActions: Record<string, () => void> = {
-  "file.new": () => void newProject("未命名项目"),
-  "file.open": () => void openProject(),
-  "file.save": () => void saveProject(),
-  "file.saveAs": () => void saveProjectAs(),
-  "view.theme": () => cycleTheme(),
-  "analysis.checkNetwork": () => void checkNetwork(),
-  "results.exportCsv": () => exportFieldCsv(),
-  "tools.refreshDeps": () => void refreshDependencies(),
-  // 虚拟机：面板入口顺带展开抽屉，动作直接走状态分片
-  "tools.vmPanel": () => {
-    appStore.set({ vmPanelVisible: true });
-    void refreshVmStatus();
-  },
-  "tools.vmStart": () => void startVmAction(),
-  "tools.vmShell": () => {
-    appStore.set({ vmPanelVisible: true });
-    void openVmShellAction();
-  },
-  "tools.vmStop": () => void stopVmAction(),
-};
-
-// 浏览器预览没有 IPC，listen 会拒绝，静默忽略即可。
-listen<string>("menu-action", (event) => {
-  menuActions[event.payload]?.();
-}).catch(() => undefined);
+setupMenuActions();
 
 // bootstrap 内部已自行处理失败（setError），无需 await。
 void bootstrap();

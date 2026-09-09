@@ -22,6 +22,11 @@ function appendShellLog(line: string): void {
   appStore.set({ vmShellLogs: logs });
 }
 
+/** 展开虚拟机终端面板（原生菜单入口触发，非切换）。 */
+export function showVmPanel(): void {
+  appStore.set({ vmPanelVisible: true });
+}
+
 /** 切换虚拟机终端面板的显示/隐藏（状态栏右侧 Shell 按钮触发）。 */
 export function toggleVmPanel(): void {
   appStore.set({ vmPanelVisible: !appStore.get().vmPanelVisible });
