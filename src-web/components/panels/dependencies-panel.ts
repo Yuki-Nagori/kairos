@@ -1,6 +1,7 @@
 import {
   appStore,
   checkUpdateAction,
+  deployVmBundleAction,
   downloadComponent,
   openDependencyPageAction,
   refreshDependencies,
@@ -112,6 +113,15 @@ export function createDependenciesPanel(): HTMLElement {
         downloadButton.addEventListener("click", () => {
           void downloadComponent(dep.id, downloadUrl);
         });
+      }
+
+      // 求解环境 bundle：已下载后提供「部署到虚拟机」（multipass 平台）。
+      if (dep.id === "moldingfoam" && already) {
+        const deployButton = button("部署到虚拟机", "ghost");
+        deployButton.addEventListener("click", () => {
+          void deployVmBundleAction();
+        });
+        row.append(deployButton);
       }
 
       // 已安装的 release 流组件：提供「检查更新」。

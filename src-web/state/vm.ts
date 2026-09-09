@@ -6,6 +6,7 @@ import {
   vmShellSend as apiVmShellSend,
   vmShellStart as apiVmShellStart,
   vmShellStop as apiVmShellStop,
+  deployVmBundle as apiDeployVmBundle,
 } from "../services/vm";
 import type { VmAction } from "../types";
 import { appStore, setError } from "./store";
@@ -20,6 +21,22 @@ function appendShellLog(line: string): void {
     logs.splice(0, logs.length - SHELL_LOG_LIMIT);
   }
   appStore.set({ vmShellLogs: logs });
+}
+
+/** 部署求解环境：传输 bundle 进虚拟机并解压，日志实时滚动进终端面板。 */
+export async function deployVmBundleAction(): Promise<void> {
+  if (appStore.get().vmBusy !== null) {
+    return;
+  }
+  appStore.set({ vmBusy: "shell", error: null });
+  try {
+    await apiDeployVmBundle(appendShellLog);
+    await refreshVmStatus();
+  } catch (error) {
+    setError(error);
+  } finally {
+    appStore.set({ vmBusy: null });
+  }
 }
 
 /** 展开虚拟机终端面板（原生菜单入口触发，非切换）。 */

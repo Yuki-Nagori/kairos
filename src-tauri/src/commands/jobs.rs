@@ -29,6 +29,8 @@ pub struct JobScheduler {
     inner: Arc<Mutex<Inner>>,
     /// 受管 bin 目录的 PATH 前缀（下载解压后由命令层注入）。
     managed_path: Option<String>,
+    /// VM 执行通道：Some("multipass"/"wsl") 时作业在虚拟机内运行。
+    vm_shell: Option<String>,
 }
 
 impl Default for JobScheduler {
@@ -41,7 +43,58 @@ impl Default for JobScheduler {
                 channels: HashMap::new(),
                 limits: SchedulerLimits::new(2, 8),
             })),
+            vm_shell: None,
         }
+    }
+}
+
+impl JobScheduler {
+    /// 由 VM 执行通道构造（启动时探测一次）。
+    pub fn with_vm_shell(mut self, vm_shell: Option<String>) -> Self {
+        self.vm_shell = vm_shell;
+        self
+    }
+}
+
+/// 探测本机的 VM 执行通道：macOS 用 multipass，Windows 用 wsl；Linux 原生执行。
+pub fn detect_vm_shell() -> Option<String> {
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("multipass")
+            .arg("--version")
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+            .then(|| "multipass".to_string())
+    }
+    #[cfg(target_os = "windows")]
+    {
+        Command::new("wsl")
+            .arg("--status")
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+            .then(|| "wsl".to_string())
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        None
+    }
+}
+
+/// Windows 盘符路径 → WSL 的 /mnt 形态（C:\a\b → /mnt/c/a/b）。
+#[cfg(target_os = "windows")]
+fn to_wsl_path(path: &str) -> String {
+    let lower = path.replace('\\', "/");
+    let bytes = lower.as_bytes();
+    if bytes.len() >= 2 && bytes[1] == b':' {
+        format!(
+            "/mnt/{}{}",
+            (bytes[0] as char).to_ascii_lowercase(),
+            &lower[2..]
+        )
+    } else {
+        path.to_string()
     }
 }
 
@@ -52,7 +105,42 @@ fn now_ms() -> u64 {
         .as_millis() as u64
 }
 
-fn spawn_run_script(case_dir: &str, managed_path: Option<&str>) -> Result<Child> {
+fn spawn_run_script(
+    case_dir: &str,
+    managed_path: Option<&str>,
+    vm_shell: Option<&str>,
+) -> Result<Child> {
+    // VM 执行：宿主 case 目录 1:1 挂载进虚拟机（路径不变，脚本零翻译），
+    // 环境树由 vm_deploy_bundle 预先解压在 ~/moldingfoam-env。
+    if let Some(shell) = vm_shell {
+        #[cfg(target_os = "macos")]
+        {
+            let mount = Command::new("multipass")
+                .args(["mount", case_dir, &format!("kairos:{case_dir}")])
+                .status();
+            let _ = mount; // 已挂载时 multipass 报错，忽略即可
+        }
+        let safe_dir = case_dir.replace('\'', "'\\''");
+        let inner = format!(
+            "source ~/moldingfoam-env/openfoam14/etc/bashrc && cd '{safe_dir}' && decomposePar -force && foamRun -parallel"
+        );
+        let mut command = Command::new(shell);
+        #[cfg(target_os = "macos")]
+        command.args(["exec", "kairos", "--", "bash", "-lc", &inner]);
+        #[cfg(target_os = "windows")]
+        command.args([
+            "-d",
+            crate::kairos_core::services::vm::WSL_DISTRO,
+            "bash",
+            "-lc",
+            &to_wsl_path_case(&inner),
+        ]);
+        return command
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|e| KairosError::io(format!("VM 求解启动失败：{e}")));
+    }
     let path_export = managed_path
         .map(|prefix| format!("export PATH='{prefix}:$PATH'; "))
         .unwrap_or_default();
@@ -100,7 +188,7 @@ impl JobScheduler {
             job_logic::promote_ready(&mut inner.jobs, &limits, now)
         };
         for job_id in started {
-            let (case_dir, managed_path) = {
+            let (case_dir, managed_path, vm_shell) = {
                 let inner = self.lock();
                 let case_dir = inner
                     .jobs
@@ -108,9 +196,9 @@ impl JobScheduler {
                     .find(|job| job.id == job_id)
                     .map(|job| job.case_dir.clone())
                     .unwrap_or_default();
-                (case_dir, self.managed_path.clone())
+                (case_dir, self.managed_path.clone(), self.vm_shell.clone())
             };
-            match spawn_run_script(&case_dir, managed_path.as_deref()) {
+            match spawn_run_script(&case_dir, managed_path.as_deref(), vm_shell.as_deref()) {
                 Ok(child) => self.run_job_thread(job_id, child),
                 Err(e) => {
                     let mut inner = self.lock();
@@ -124,6 +212,7 @@ impl JobScheduler {
     fn run_job_thread(&self, job_id: String, mut child: Child) {
         let inner = self.arc();
         let managed_path = self.managed_path.clone();
+        let vm_shell = self.vm_shell.clone();
         let mut stdout = child.stdout.take();
         thread::spawn(move || {
             if let Some(pipe) = stdout.take() {
@@ -162,6 +251,7 @@ impl JobScheduler {
             let scheduler = JobScheduler {
                 inner,
                 managed_path,
+                vm_shell,
             };
             scheduler.promote_and_spawn(now);
         });

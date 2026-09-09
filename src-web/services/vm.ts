@@ -42,3 +42,10 @@ export function vmShellStop(): Promise<void> {
 export function stopVm(): Promise<string> {
   return invokeCommand("vm_stop");
 }
+
+/** 部署求解环境：把受管 bundle 传输进虚拟机并解压（multipass 平台）。 */
+export function deployVmBundle(onLog: (line: string) => void): Promise<string> {
+  const channel = new Channel<string>();
+  channel.onmessage = onLog;
+  return invokeCommand("vm_deploy_bundle", { progress: channel });
+}

@@ -353,6 +353,58 @@ fn download_to_file(url: &str, dest: &Path, progress: &Channel<String>) -> Resul
     Ok(())
 }
 
+/// 部署求解环境：把受管的 moldingFoam bundle 传输进虚拟机并解压到
+/// ~/moldingfoam-env（multipass 平台；作业执行依赖该环境树）。
+#[tauri::command]
+pub async fn vm_deploy_bundle(app: AppHandle, progress: Channel<String>) -> Result<String> {
+    let provider = provider()?;
+    if provider != VmProviderKind::Multipass {
+        return Err(KairosError::validation(
+            "当前平台作业直接在本机执行，无需部署 bundle。",
+        ));
+    }
+    let entry = super::downloads::manifest_entry(&app, "moldingfoam")?
+        .ok_or_else(|| KairosError::not_found("尚未下载求解环境 bundle，请先在依赖面板下载。"))?;
+    let archive = super::downloads::downloads_dir(&app)?.join(&entry.file_name);
+    if !archive.exists() {
+        return Err(KairosError::not_found(
+            "bundle 归档文件缺失，请重新下载求解环境。",
+        ));
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let _ = progress.send("── 传输 bundle 进虚拟机（约 120MB）──".into());
+        let transfer = platform_command("multipass")
+            .args([
+                "transfer",
+                &archive.to_string_lossy(),
+                "kairos:/home/ubuntu/moldingfoam-bundle.tar.xz",
+            ])
+            .status()
+            .map_err(|e| KairosError::io(format!("传输启动失败：{e}")))?;
+        if !transfer.success() {
+            return Err(KairosError::io("bundle 传输失败，请确认虚拟机已启动。"));
+        }
+        let _ = progress.send("── 解压环境树 ──".into());
+        let extract = platform_command("multipass")
+            .args([
+                "exec",
+                "kairos",
+                "--",
+                "bash",
+                "-lc",
+                "mkdir -p ~/moldingfoam-env && tar -xJf ~/moldingfoam-bundle.tar.xz -C ~/moldingfoam-env && test -f ~/moldingfoam-env/openfoam14/etc/bashrc",
+            ])
+            .status()
+            .map_err(|e| KairosError::io(format!("解压启动失败：{e}")))?;
+        if !extract.success() {
+            return Err(KairosError::io("解压失败，请确认 bundle 完整后重试。"));
+        }
+        Ok("求解环境已部署。提交作业即可在虚拟机内执行。".into())
+    })
+    .await
+    .map_err(|e| KairosError::internal(format!("部署任务失败：{e}")))?
+}
+
 /// 探测虚拟机运行时状态（异步：进程探测可能到秒级，绝不阻塞主线程）。
 #[tauri::command]
 pub async fn vm_status() -> Result<VmStatus> {

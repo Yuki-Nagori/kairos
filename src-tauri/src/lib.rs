@@ -8,7 +8,10 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(commands::geometry::GeometryStore::default())
-        .manage(commands::jobs::JobScheduler::default())
+        .manage(commands::jobs::JobScheduler::default().with_vm_shell(
+            // 启动时探测一次 VM 执行通道（macOS→multipass / Windows→wsl）
+            commands::jobs::detect_vm_shell(),
+        ))
         .manage(commands::vm::VmShellState::default())
         .setup(|_app| {
             // 窗口铺满与全屏统一在启动时处理：配置式的 center/maximized 在 macOS
@@ -145,6 +148,7 @@ pub fn run() {
             commands::vm::vm_status,
             commands::vm::vm_install,
             commands::vm::vm_start,
+            commands::vm::vm_deploy_bundle,
             commands::vm::vm_shell_start,
             commands::vm::vm_shell_send,
             commands::vm::vm_shell_stop,
