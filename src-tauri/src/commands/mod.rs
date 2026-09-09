@@ -13,3 +13,4 @@ pub mod project;
 pub mod results;
 pub mod solver;
 pub mod system;
+pub mod vm;

@@ -3,6 +3,8 @@ import { IpcUnavailableError } from "../lib/ipc";
 import type {
   ComponentStageState,
   DependencyStatus,
+  VmAction,
+  VmStatus,
   DownloadedEntry,
   GeometrySummary,
   Job,
@@ -52,6 +54,12 @@ export interface AppState {
   downloadedFiles: Record<string, DownloadedEntry>;
   /** 组件下载/编译流水线的阶段状态（key = 组件 id；成功后清除该条目）。 */
   componentStages: Record<string, ComponentStageState>;
+  /** 虚拟机运行时状态（Multipass / WSL2 探测结果）。 */
+  vmStatus: VmStatus | null;
+  /** 应用内 Shell 输出（环形缓冲）。 */
+  vmShellLogs: string[];
+  /** 虚拟机面板进行中的动作（同一时刻至多一个）。 */
+  vmBusy: VmAction | null;
   /** 探针列表（节点序号）。 */
   probes: Probe[];
   /** 材料库：内置示例材料 + 用户自定义材料。 */
@@ -88,6 +96,9 @@ export const initialAppState: AppState = {
   savedDownloads: {},
   downloadedFiles: {},
   componentStages: {},
+  vmStatus: null,
+  vmShellLogs: [],
+  vmBusy: null,
   probes: [],
   busy: null,
   error: null,

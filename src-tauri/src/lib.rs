@@ -9,6 +9,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(commands::geometry::GeometryStore::default())
         .manage(commands::jobs::JobScheduler::default())
+        .manage(commands::vm::VmShellState::default())
         .setup(|_app| {
             // 窗口铺满与全屏统一在启动时处理：配置式的 center/maximized 在 macOS
             // 不扣除 Dock 与菜单栏的可见区域，居中窗口会显得偏左，且 maximized
@@ -125,7 +126,20 @@ pub fn run() {
             commands::downloads::list_downloads,
             commands::results::list_result_times,
             commands::results::load_result_field,
+            commands::vm::vm_status,
+            commands::vm::vm_install,
+            commands::vm::vm_start,
+            commands::vm::vm_shell_start,
+            commands::vm::vm_shell_send,
+            commands::vm::vm_shell_stop,
+            commands::vm::vm_stop,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while running tauri application")
+        .run(|_app, event| {
+            // 应用退出（窗口关闭 / Cmd+Q）：杀 Shell 子进程并派发虚拟机关机。
+            if let tauri::RunEvent::Exit = event {
+                commands::vm::cleanup_on_exit(&_app.state::<commands::vm::VmShellState>());
+            }
+        });
 }

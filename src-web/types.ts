@@ -207,6 +207,20 @@ export type ComponentStageState =
   | { stage: "compiling"; logs: string[] }
   | { stage: "failed"; error: string; logs: string[] };
 
+/** 对应 `kairos-core::models::vm`：虚拟机 provider（平台固定）与实例状态。 */
+export type VmProvider = "multipass" | "wsl";
+export type VmState = "missing" | "stopped" | "starting" | "running" | "unknown";
+export interface VmStatus {
+  provider: VmProvider;
+  toolInstalled: boolean;
+  instanceName: string;
+  instanceState: VmState;
+  hint: string;
+}
+
+/** 虚拟机面板一次只允许一个进行中动作。 */
+export type VmAction = "install" | "start" | "shell" | "stop";
+
 /** 下载完成后的落盘信息（压缩包自动解压后 extractDir 指向组件目录）。 */
 export interface SavedDownload {
   path: string;

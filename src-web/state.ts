@@ -11,3 +11,4 @@ export * from "./state/jobs";
 export * from "./state/pipeline";
 export * from "./state/results";
 export * from "./state/dependencies";
+export * from "./state/vm";

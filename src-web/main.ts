@@ -2,6 +2,7 @@ import "./app.css";
 import { listen } from "@tauri-apps/api/event";
 import { createAppHeader, createStatusBar } from "./components/app-header";
 import { createDependenciesPanel } from "./components/panels/dependencies-panel";
+import { createVmPanel } from "./components/panels/vm-panel";
 import { createGeometryPanel } from "./components/panels/geometry-panel";
 import { createJobsPanel } from "./components/panels/jobs-panel";
 import { createMaterialsPanel } from "./components/panels/materials-panel";
@@ -63,6 +64,7 @@ for (const panel of [
   createMoldPanel(),
   createProcessPanel(),
   createDependenciesPanel(),
+  createVmPanel(),
   createReportPanel(),
   createJobsPanel(),
 ]) {

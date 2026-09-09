@@ -11,3 +11,4 @@ pub mod results;
 pub mod runners;
 pub mod solver;
 pub mod system;
+pub mod vm;

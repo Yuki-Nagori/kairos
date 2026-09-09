@@ -101,3 +101,4 @@
 - **13:6x** feat(deps): 一键下载后自动编译，日志实时滚动进面板
 - **21:0x** feat(solver): 移除 openInjMoldSim，求解入口切到 OpenFOAM 14 foamRun（T34 移除部分）
 - **21:1x** refactor(deps): 组件生命周期统一为 componentStages 阶段状态（下载/编译/失败三态 + 日志环形缓冲）
+- **13:5x** feat(vm): 虚拟机适配层——Multipass/WSL2 一键安装、内嵌 Shell 与退出联动关机（T35）

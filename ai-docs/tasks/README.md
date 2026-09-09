@@ -55,6 +55,7 @@
 | T32 | [T32-headless-cli.md](T32-headless-cli.md)                   | 无头 CLI 与批处理入口（门面式）                               | T25 结论 |
 | T33 | [T33-updater-hardening.md](T33-updater-hardening.md)         | 发布加固：updater + CSP 收窄                                  | T18      |
 | T34 | [T34-openfoam14-fork-entry.md](T34-openfoam14-fork-entry.md) | 求解入口收口：移除 openInjMoldSim，预留 OpenFOAM-14 fork 对接 | T09–T12  |
+| T35 | [T35-vm-adapter.md](T35-vm-adapter.md)                       | 虚拟机适配层（Multipass/WSL2 一键安装 + 内嵌 Shell）          | T34      |
 
 > 上一批任务（T24/T25/T28）于 2026-09-08 完成；本批来源：T25 研究采纳建议
 > （CLI 门面 / 批处理编排 / 派生算子）、T22 后续（Gmsh 集成）与 M4 遗留

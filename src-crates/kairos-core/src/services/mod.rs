@@ -12,6 +12,7 @@ pub mod project;
 pub mod results;
 pub mod runners;
 pub mod system;
+pub mod vm;
 
 #[cfg(test)]
 mod gap_tests;

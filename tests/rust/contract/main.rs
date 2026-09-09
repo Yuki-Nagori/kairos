@@ -154,3 +154,28 @@ fn result_models_serialize_with_camel_case() {
     let json = serde_json::to_value(&catalog).unwrap();
     assert_eq!(json["caseDir"], "/c");
 }
+
+/// VmStatus 的形状：camelCase 字段 + snake_case 枚举值，
+/// 前端 `src-web/types.ts` 的 VmStatus / VmState 与之对应。
+#[test]
+fn vm_status_serializes_with_camel_case() {
+    use kairos_core::models::vm::{VmProviderKind, VmState, VmStatus};
+    let status = VmStatus {
+        provider: VmProviderKind::Multipass,
+        tool_installed: true,
+        instance_name: "kairos".into(),
+        instance_state: VmState::Running,
+        hint: "虚拟机运行中".into(),
+    };
+    let json = serde_json::to_value(&status).unwrap();
+    assert_eq!(
+        json,
+        json!({
+            "provider": "multipass",
+            "toolInstalled": true,
+            "instanceName": "kairos",
+            "instanceState": "running",
+            "hint": "虚拟机运行中",
+        })
+    );
+}
