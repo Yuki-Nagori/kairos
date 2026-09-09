@@ -68,8 +68,10 @@ jobs:
         with:
           name: bench-report
           path: bench-out/
+      # 顺手产物不卡点：Windows 打包器偶发 WiX 下载超时（基础设施抖动）
       - name: 桌面包构建（主干推送时）
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        continue-on-error: true
         run: bun run tauri build
       - uses: actions/upload-artifact@v4
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
