@@ -117,3 +117,4 @@
 - **16:1x** feat(deps): 已安装组件支持在线检查更新——release tag 入清单，比对最新标签提示拉新并自动清理旧归档
 - **17:0x** docs(tasks): T36 立项——moldingFoam 契约 case 对接 + bundle 进虚拟机执行（契约调研完成，映射表齐备）
 - **17:2x** feat(ci): 覆盖率门禁（前端 lib 100% · Rust core ≥98%）从 ubuntu 扩展到三平台全跑
+- **17:3x** feat(case): case 生成对齐 moldingFoam case-contract v1.1——SOLVER_MODULE 切 moldingFoam， moldingDict/momentumTransport/Tait 热物理/三 patch 边界分类（T36 Part 1）
