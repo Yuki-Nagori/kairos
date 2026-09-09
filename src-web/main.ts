@@ -16,6 +16,7 @@ import { createViewportPanel } from "./components/panels/viewport-panel";
 import { createXyChartPanel } from "./components/panels/xy-chart-panel";
 import { initTheme, cycleTheme } from "./theme";
 import {
+  appStore,
   bootstrap,
   checkNetwork,
   exportFieldCsv,
@@ -81,6 +82,12 @@ const vmDock = document.createElement("div");
 vmDock.className = "absolute bottom-2 right-2 z-40 w-[26rem] shadow-2xl shadow-black/50";
 vmDock.append(createVmPanel());
 workspace.append(vmDock);
+// 显隐由状态栏右侧 Shell 按钮控制（默认隐藏，点击出现）。
+const syncVmDock = (): void => {
+  vmDock.classList.toggle("hidden", !appStore.get().vmPanelVisible);
+};
+syncVmDock();
+appStore.subscribe(syncVmDock);
 
 const resultsSection = document.createElement("section");
 resultsSection.className = "shrink-0 border-t border-zinc-800 bg-zinc-900 px-4 py-2.5";

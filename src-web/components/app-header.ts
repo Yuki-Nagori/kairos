@@ -1,6 +1,7 @@
 import { cycleTheme, getActiveTheme, THEME_CHANGED_EVENT } from "../theme";
 import { select } from "../lib/store";
-import { appStore } from "../state";
+import { appStore, toggleVmPanel } from "../state";
+import { createShellIcon } from "./icons";
 
 /** 应用标题栏：品牌信息 + 主题切换（全局状态展示在底部状态栏）。 */
 export function createAppHeader(): HTMLElement {
@@ -87,6 +88,25 @@ export function createStatusBar(): HTMLElement {
   select(appStore, (s) => s.busy, renderStatus);
   select(appStore, (s) => s.info, renderStatus);
 
-  root.append(status, spacer);
+  // 状态栏右侧：Shell 环境入口（文字在左、shell 图标在右），点击切换
+  // 右下角虚拟机终端面板的显隐。
+  const shellButton = document.createElement("button");
+  shellButton.type = "button";
+  shellButton.className = "flex items-center gap-1.5";
+  const shellLabel = document.createElement("span");
+  shellLabel.textContent = "Shell 环境";
+  shellButton.append(shellLabel, createShellIcon("h-4 w-4"));
+
+  function renderShell(): void {
+    const visible = appStore.get().vmPanelVisible;
+    const accent = visible ? "text-emerald-400" : "text-zinc-400 hover:text-zinc-200";
+    shellButton.className = `flex items-center gap-1.5 text-[11px] transition-colors ${accent}`;
+    shellLabel.textContent = visible ? "Shell 环境（点击收起）" : "Shell 环境";
+  }
+  shellButton.addEventListener("click", toggleVmPanel);
+  select(appStore, (s) => s.vmPanelVisible, renderShell);
+  renderShell();
+
+  root.append(status, spacer, shellButton);
   return root;
 }

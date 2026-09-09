@@ -60,6 +60,8 @@ export interface AppState {
   vmShellLogs: string[];
   /** 虚拟机面板进行中的动作（同一时刻至多一个）。 */
   vmBusy: VmAction | null;
+  /** 虚拟机终端面板是否可见（状态栏右侧 Shell 按钮切换，默认隐藏）。 */
+  vmPanelVisible: boolean;
   /** 探针列表（节点序号）。 */
   probes: Probe[];
   /** 材料库：内置示例材料 + 用户自定义材料。 */
@@ -99,6 +101,7 @@ export const initialAppState: AppState = {
   vmStatus: null,
   vmShellLogs: [],
   vmBusy: null,
+  vmPanelVisible: false,
   probes: [],
   busy: null,
   error: null,

@@ -41,3 +41,32 @@ describe("createAppHeader status precedence", () => {
     expect(statusLine(createStatusBar())).toBe("迭代不收敛");
   });
 });
+
+describe("status bar shell toggle", () => {
+  beforeEach(() => {
+    appStore.set(initialAppState);
+  });
+
+  afterEach(() => {
+    appStore.set(initialAppState);
+  });
+
+  it("toggles the vm panel visibility from the shell button", () => {
+    const bar = createStatusBar();
+    const button = [...bar.querySelectorAll("button")].at(-1);
+    if (!button) {
+      throw new Error("shell button not found");
+    }
+    // 文字提示在左，shell 图标（currentColor SVG）在右
+    expect(button.textContent).toContain("Shell 环境");
+    expect(button.querySelector("svg")).not.toBeNull();
+    expect(appStore.get().vmPanelVisible).toBe(false);
+
+    button.click();
+    expect(appStore.get().vmPanelVisible).toBe(true);
+    expect(button.textContent).toContain("点击收起");
+
+    button.click();
+    expect(appStore.get().vmPanelVisible).toBe(false);
+  });
+});
