@@ -39,13 +39,12 @@ jobs:
       - run: bun install --frozen-lockfile
       - name: 全量门禁（typecheck / lint / format / test / knip / Rust 同链）
         run: bun run verify
+      # 三平台同卡点：覆盖率门禁不分平台（llvm-tools-preview 已在工具链组件里）
       - name: 安装 cargo-llvm-cov（覆盖率门槛依赖）
-        if: matrix.os == 'ubuntu-latest'
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-llvm-cov
       - name: 覆盖率门槛（前端 lib 100% · Rust core 行 ≥98%）
-        if: matrix.os == 'ubuntu-latest'
         run: |
           bun run test:coverage
           cargo llvm-cov -p kairos-core --lib --summary-only --fail-under-lines 98
