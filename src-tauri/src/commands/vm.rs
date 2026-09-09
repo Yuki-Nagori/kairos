@@ -1,5 +1,5 @@
-//! 虚拟机命令：Multipass（macOS）/ WSL2（Windows）的探测、一键安装、启动、
-//! 应用内 Shell 与停止；应用退出时联动关闭虚拟机（T35）。
+//! 虚拟机命令：Multipass（macOS）/ WSL2（Windows）/ 原生 bash（Linux）的
+//! 探测、一键安装、启动、应用内 Shell 与停止；应用退出时联动关闭虚拟机（T35）。
 //! 纯逻辑（参数构造 / 输出解析 / 提示文案）在 `kairos_core::services::vm`，
 //! 本模块只做进程副作用与流式回传。
 
@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 use kairos_core::error::{KairosError, Result};
 use kairos_core::models::vm::{VmProviderKind, VmState, VmStatus};
 use kairos_core::services::vm as vm_logic;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tauri::ipc::Channel;
 use tauri::{AppHandle, State};
 
@@ -289,58 +289,64 @@ fn ensure_vm_image(app: &AppHandle, progress: &Channel<String>) -> Result<Option
         return Ok(Some(dest));
     }
     let part = dest.with_extension("img.part");
+    for url in &vm_logic::image_mirror_urls(std::env::consts::ARCH) {
+        let _ = progress.send(format!("── 从镜像源下载云镜像：{url} ──"));
+        match download_to_file(url, &part, progress) {
+            Ok(()) => {
+                std::fs::rename(&part, &dest)?;
+                return Ok(Some(dest));
+            }
+            Err(e) => {
+                let _ = std::fs::remove_file(&part);
+                let _ = progress.send(format!("镜像源不可用：{e}"));
+            }
+        }
+    }
+    let _ = progress.send("── 镜像源均不可用，改用官方源直连 ──".into());
+    Ok(None)
+}
+
+/// 从单个 URL 流式下载到目标文件，按去重后的百分比回传进度。
+fn download_to_file(url: &str, dest: &Path, progress: &Channel<String>) -> Result<()> {
+    // 大文件（约 600MB）：连接 30s、总量 1h 超时，UA 与依赖下载保持一致。
     let agent: ureq::Agent = ureq::AgentBuilder::new()
         .timeout_connect(std::time::Duration::from_secs(30))
         .timeout(std::time::Duration::from_secs(3600))
         .user_agent("kairos-dependency-manager/1.0")
         .build();
+    let response = agent
+        .get(url)
+        .call()
+        .map_err(|e| KairosError::io(format!("下载请求失败：{e}")))?;
+    let total: u64 = response
+        .header("Content-Length")
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(0);
+    let mut file = std::fs::File::create(dest)?;
+    let mut reader = response.into_reader();
+    let mut buffer = [0u8; 65_536];
+    let mut downloaded: u64 = 0;
     let mut last_percent: Option<u64> = None;
-    for url in &vm_logic::image_mirror_urls(std::env::consts::ARCH) {
-        let _ = progress.send(format!("── 从镜像源下载云镜像：{url} ──"));
-        let response = match agent.get(url).call() {
-            Ok(response) => response,
-            Err(e) => {
-                let _ = progress.send(format!("镜像源不可用：{e}"));
-                continue;
+    loop {
+        match reader.read(&mut buffer) {
+            Ok(0) => break,
+            Ok(n) => {
+                file.write_all(&buffer[..n])?;
+                downloaded += n as u64;
             }
-        };
-        let total: u64 = response
-            .header("Content-Length")
-            .and_then(|value| value.parse().ok())
-            .unwrap_or(0);
-        let mut file = std::fs::File::create(&part)?;
-        let mut reader = response.into_reader();
-        let mut buffer = [0u8; 65_536];
-        let mut downloaded: u64 = 0;
-        loop {
-            match reader.read(&mut buffer) {
-                Ok(0) => break,
-                Ok(n) => {
-                    file.write_all(&buffer[..n])?;
-                    downloaded += n as u64;
-                }
-                Err(e) => {
-                    let _ = std::fs::remove_file(&part);
-                    return Err(KairosError::io(format!("镜像下载中断：{e}")));
-                }
-            }
-            // checked_div 兼容 total=0（内容长度未知）时不发进度，模式同 downloads.rs。
-            match (downloaded * 100).checked_div(total) {
-                Some(percent) if last_percent != Some(percent) => {
-                    let _ = progress.send(format!("镜像下载 {percent}%"));
-                    last_percent = Some(percent);
-                }
-                _ => {}
-            }
+            Err(e) => return Err(KairosError::io(format!("镜像下载中断：{e}"))),
         }
-        file.flush()?;
-        drop(file);
-        std::fs::rename(&part, &dest)?;
-        return Ok(Some(dest));
+        // checked_div 兼容 total=0（内容长度未知）时不发进度，模式同 downloads.rs。
+        match (downloaded * 100).checked_div(total) {
+            Some(percent) if last_percent != Some(percent) => {
+                let _ = progress.send(format!("镜像下载 {percent}%"));
+                last_percent = Some(percent);
+            }
+            _ => {}
+        }
     }
-    let _ = std::fs::remove_file(&part);
-    let _ = progress.send("── 镜像源均不可用，改用官方源直连 ──".into());
-    Ok(None)
+    file.flush()?;
+    Ok(())
 }
 
 /// 探测虚拟机运行时状态（异步：进程探测可能到秒级，绝不阻塞主线程）。

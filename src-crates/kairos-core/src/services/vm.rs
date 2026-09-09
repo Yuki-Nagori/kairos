@@ -130,9 +130,9 @@ pub fn launch_args(
                 "launch".into(),
                 "--name".into(),
                 INSTANCE_NAME.into(),
-                // --mem 已被 multipass 弃用（真机警告），新脚本一律用 --memory。
                 "--cpus".into(),
                 resources.cpus.to_string(),
+                // --mem 已被 multipass 弃用（真机警告），新脚本一律用 --memory。
                 "--memory".into(),
                 format!("{}G", resources.memory_gib),
                 "--disk".into(),

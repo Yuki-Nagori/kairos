@@ -7,6 +7,7 @@ import {
   vmShellStart as apiVmShellStart,
   vmShellStop as apiVmShellStop,
 } from "../services/vm";
+import type { VmAction } from "../types";
 import { appStore, setError } from "./store";
 
 /** Shell 输出的环形上限：会话可以很长，不能让它撑爆内存。 */
@@ -26,6 +27,21 @@ export function toggleVmPanel(): void {
   appStore.set({ vmPanelVisible: !appStore.get().vmPanelVisible });
 }
 
+/** 互斥执行一个虚拟机动作：进行中拒绝并发，失败进全局错误，结束清 busy。 */
+async function withVmBusy(action: VmAction, run: () => Promise<void>): Promise<void> {
+  if (appStore.get().vmBusy !== null) {
+    return;
+  }
+  appStore.set({ vmBusy: action, error: null });
+  try {
+    await run();
+  } catch (error) {
+    setError(error);
+  } finally {
+    appStore.set({ vmBusy: null });
+  }
+}
+
 /** 探测虚拟机运行时状态。 */
 export async function refreshVmStatus(): Promise<void> {
   try {
@@ -37,50 +53,24 @@ export async function refreshVmStatus(): Promise<void> {
 }
 
 /** 安装虚拟机运行时：日志实时滚动进 Shell 输出区，结束后重扫状态。 */
-export async function installVmAction(): Promise<void> {
-  if (appStore.get().vmBusy !== null) {
-    return;
-  }
-  appStore.set({ vmBusy: "install", error: null });
-  try {
+export function installVmAction(): Promise<void> {
+  return withVmBusy("install", async () => {
     await apiInstallVm(appendShellLog);
     await refreshVmStatus();
-  } catch (error) {
-    setError(error);
-  } finally {
-    appStore.set({ vmBusy: null });
-  }
+  });
 }
 
 /** 创建 / 启动受管实例（首次需下载镜像，耗时分钟级），结束后重扫状态。 */
-export async function startVmAction(): Promise<void> {
-  if (appStore.get().vmBusy !== null) {
-    return;
-  }
-  appStore.set({ vmBusy: "start", error: null });
-  try {
+export function startVmAction(): Promise<void> {
+  return withVmBusy("start", async () => {
     await apiStartVm(appendShellLog);
     await refreshVmStatus();
-  } catch (error) {
-    setError(error);
-  } finally {
-    appStore.set({ vmBusy: null });
-  }
+  });
 }
 
 /** 开启应用内 Shell：invoke 很快返回，日志行在会话期间持续到达。 */
-export async function openVmShellAction(): Promise<void> {
-  if (appStore.get().vmBusy !== null) {
-    return;
-  }
-  appStore.set({ vmBusy: "shell", error: null });
-  try {
-    await apiVmShellStart(appendShellLog);
-  } catch (error) {
-    setError(error);
-  } finally {
-    appStore.set({ vmBusy: null });
-  }
+export function openVmShellAction(): Promise<void> {
+  return withVmBusy("shell", () => apiVmShellStart(appendShellLog));
 }
 
 /** 发送一行命令；管道 Shell 没有回显，本函数把输入自己记进日志区。 */
@@ -104,17 +94,9 @@ export async function stopVmShellAction(): Promise<void> {
 }
 
 /** 停止受管虚拟机实例（应用退出时 Rust 侧也会联动做一次）。 */
-export async function stopVmAction(): Promise<void> {
-  if (appStore.get().vmBusy !== null) {
-    return;
-  }
-  appStore.set({ vmBusy: "stop", error: null });
-  try {
+export function stopVmAction(): Promise<void> {
+  return withVmBusy("stop", async () => {
     await apiStopVm();
     await refreshVmStatus();
-  } catch (error) {
-    setError(error);
-  } finally {
-    appStore.set({ vmBusy: null });
-  }
+  });
 }
