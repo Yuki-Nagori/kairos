@@ -1,6 +1,6 @@
 # T36 · moldingFoam 契约对接 + bundle 进虚拟机执行
 
-- 阶段：Part 1（契约 case 重写）已完成；Part 2（bundle 进 VM 执行）待开工（设计见下）
+- 阶段：已完成（Part 1 契约 case 重写 + Part 2 bundle 部署与 VM 内执行）
 - 依赖：T34（bundle 下载已落地）、T35（虚拟机适配层）
 - 优先级：**P1**
 
