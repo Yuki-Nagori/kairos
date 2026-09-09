@@ -69,11 +69,13 @@ export function createVmPanel(): HTMLElement {
 
     const toolInstalled = vmStatus?.toolInstalled ?? false;
     const instanceState = vmStatus?.instanceState ?? "missing";
-    installButton.disabled = busy || toolInstalled;
-    startButton.disabled = busy || !toolInstalled || instanceState === "running";
+    // Linux 原生环境无虚拟机语义：安装/启动/关闭一律短路。
+    const native = vmStatus?.provider === "native";
+    installButton.disabled = busy || native || toolInstalled;
+    startButton.disabled = busy || native || !toolInstalled || instanceState === "running";
     shellButton.disabled = busy || !toolInstalled || instanceState === "missing";
     shellStopButton.disabled = busy;
-    vmStopButton.disabled = busy || !toolInstalled || instanceState === "missing";
+    vmStopButton.disabled = busy || native || !toolInstalled || instanceState === "missing";
 
     output.textContent = vmShellLogs.join("\n");
     output.scrollTop = output.scrollHeight;

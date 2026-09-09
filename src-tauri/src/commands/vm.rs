@@ -3,18 +3,16 @@
 //! 纯逻辑（参数构造 / 输出解析 / 提示文案）在 `kairos_core::services::vm`，
 //! 本模块只做进程副作用与流式回传。
 
-use std::io::Write;
-use std::process::{Child, Command, Stdio};
+use std::io::{Read, Write};
+use std::process::{Child, Command, Output, Stdio};
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use kairos_core::error::{KairosError, Result};
 use kairos_core::models::vm::{VmProviderKind, VmState, VmStatus};
 use kairos_core::services::vm as vm_logic;
 use tauri::State;
 use tauri::ipc::Channel;
-
-#[cfg(target_os = "windows")]
-use std::io::Read;
 
 /// 应用内 Shell 子进程句柄（同一时刻至多一个会话；新会话顶替旧会话）。
 pub struct VmShellState(Arc<Mutex<Option<Child>>>);
@@ -33,10 +31,10 @@ impl VmShellState {
     }
 }
 
-/// 平台与 provider 一一对应；Linux 原生环境不需要虚拟机。
+/// 平台与 provider 一一对应。
 fn provider() -> Result<VmProviderKind> {
     vm_logic::provider_for(std::env::consts::OS)
-        .ok_or_else(|| KairosError::validation("Linux 原生环境不需要虚拟机。"))
+        .ok_or_else(|| KairosError::validation("不支持的平台。"))
 }
 
 /// 构造受管命令。GUI 进程在 macOS 下只继承精简 PATH，必须补上
@@ -53,12 +51,49 @@ fn platform_command(bin: &str) -> Command {
     command
 }
 
-fn run_bytes(args: &[String]) -> std::io::Result<std::process::Output> {
-    platform_command(&args[0]).args(&args[1..]).output()
+/// 带超时的一次性探测：multipass / wsl 首次调用可能要按需拉起守护进程，
+/// 慢起来没有上限——超时按失败处理，绝不挂死调用线程。
+fn run_bytes(args: &[String]) -> Result<Option<Output>> {
+    let mut child = platform_command(&args[0])
+        .args(&args[1..])
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| KairosError::io(format!("命令启动失败（{args:?}）：{e}")))?;
+    let deadline = Instant::now() + Duration::from_secs(15);
+    loop {
+        match child
+            .try_wait()
+            .map_err(|e| KairosError::io(format!("命令等待失败：{e}")))?
+        {
+            Some(status) => {
+                let mut stdout = Vec::new();
+                let mut stderr = Vec::new();
+                if let Some(mut pipe) = child.stdout.take() {
+                    let _ = pipe.read_to_end(&mut stdout);
+                }
+                if let Some(mut pipe) = child.stderr.take() {
+                    let _ = pipe.read_to_end(&mut stderr);
+                }
+                return Ok(Some(Output {
+                    status,
+                    stdout,
+                    stderr,
+                }));
+            }
+            None if Instant::now() >= deadline => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Ok(None);
+            }
+            None => std::thread::sleep(Duration::from_millis(50)),
+        }
+    }
 }
 
 /// 解码一次探测输出的全部文本（WSL 的 UTF-16LE 在 core 统一归一）。
-fn output_text(output: &std::process::Output) -> String {
+fn output_text(output: &Output) -> String {
     format!(
         "{}\n{}",
         vm_logic::decode_wsl_output(&output.stdout),
@@ -66,11 +101,10 @@ fn output_text(output: &std::process::Output) -> String {
     )
 }
 
-/// 从探测输出解析实例状态；命令失败视为实例不存在。
-fn probe_instance_state(provider: VmProviderKind) -> VmState {
-    let output = match run_bytes(&vm_logic::instance_info_args(provider)) {
-        Ok(output) => output,
-        Err(_) => return VmState::Missing,
+/// 从探测输出解析实例状态；命令失败 / 超时视为实例不存在。
+fn probe_instance_state(provider: VmProviderKind) -> Result<VmState> {
+    let Some(output) = run_bytes(&vm_logic::instance_info_args(provider))? else {
+        return Ok(VmState::Missing); // 超时视为不存在，交给创建流程兜底
     };
     let text = output_text(&output);
     match provider {
@@ -78,19 +112,21 @@ fn probe_instance_state(provider: VmProviderKind) -> VmState {
         // 此时 stderr 的报错文本不代表状态，一律按 Missing 走创建流程。
         VmProviderKind::Multipass => {
             if output.status.success() {
-                vm_logic::parse_multipass_state(&text)
+                Ok(vm_logic::parse_multipass_state(&text))
             } else {
-                VmState::Missing
+                Ok(VmState::Missing)
             }
         }
         VmProviderKind::Wsl => {
             // `wsl -l -v` 在没有发行版时退出码非 0，但有输出（Missing 由解析兜底）。
             if output.status.success() || text.contains("Ubuntu") {
-                vm_logic::parse_wsl_list(&text)
+                Ok(vm_logic::parse_wsl_list(&text))
             } else {
-                VmState::Missing
+                Ok(VmState::Missing)
             }
         }
+        // 原生环境恒就绪。
+        VmProviderKind::Native => Ok(VmState::Running),
     }
 }
 
@@ -146,23 +182,27 @@ fn run_and_stream(args: &[String], progress: &Channel<String>) -> Result<bool> {
     Ok(child.wait().map(|status| status.success()).unwrap_or(false))
 }
 
-/// 探测虚拟机运行时状态（同步命令；进程调用总量小，主线程可承受）。
+/// 探测虚拟机运行时状态（异步：进程探测可能到秒级，绝不阻塞主线程）。
 #[tauri::command]
-pub fn vm_status() -> Result<VmStatus> {
+pub async fn vm_status() -> Result<VmStatus> {
     let provider = provider()?;
-    let tool_installed = run_bytes(&vm_logic::version_args(provider))
-        .map(|output| output.status.success())
-        .unwrap_or(false);
-    let instance_state = if tool_installed {
-        probe_instance_state(provider)
-    } else {
-        VmState::Missing
-    };
-    Ok(vm_logic::build_status(
-        provider,
-        tool_installed,
-        instance_state,
-    ))
+    tauri::async_runtime::spawn_blocking(move || {
+        let tool_installed = run_bytes(&vm_logic::version_args(provider))?
+            .map(|output| output.status.success())
+            .unwrap_or(false);
+        let instance_state = if tool_installed {
+            probe_instance_state(provider)?
+        } else {
+            VmState::Missing
+        };
+        Ok(vm_logic::build_status(
+            provider,
+            tool_installed,
+            instance_state,
+        ))
+    })
+    .await
+    .map_err(|e| KairosError::internal(format!("探测任务失败：{e}")))?
 }
 
 /// 一键安装运行时：macOS 走 Homebrew cask（日志实时回传）；
@@ -170,6 +210,9 @@ pub fn vm_status() -> Result<VmStatus> {
 #[tauri::command]
 pub async fn vm_install(progress: Channel<String>) -> Result<String> {
     let provider = provider()?;
+    if provider == VmProviderKind::Native {
+        return Err(KairosError::validation("Linux 原生环境无需安装虚拟机。"));
+    }
     let args = vm_logic::install_args(provider);
     tauri::async_runtime::spawn_blocking(move || {
         let _ = progress.send("── 开始安装（可能需要管理员授权 / 数分钟）──".into());
@@ -187,9 +230,12 @@ pub async fn vm_install(progress: Channel<String>) -> Result<String> {
 #[tauri::command]
 pub async fn vm_start(progress: Channel<String>) -> Result<String> {
     let provider = provider()?;
+    if provider == VmProviderKind::Native {
+        return Ok("Linux 原生环境无需虚拟机，可直接进入 Shell。".into());
+    }
     tauri::async_runtime::spawn_blocking(move || {
         let _ = progress.send("── 检查受管实例状态 ──".into());
-        match probe_instance_state(provider) {
+        match probe_instance_state(provider)? {
             VmState::Running => Ok("虚拟机已在运行。".into()),
             VmState::Missing => {
                 let _ = progress.send("── 实例不存在，开始创建（首次需下载镜像）──".into());
@@ -292,33 +338,45 @@ fn kill_session(state: &VmShellState) {
     }
 }
 
-/// 停止受管虚拟机实例（先结束 Shell 会话）。
+/// 停止受管虚拟机实例（先结束 Shell 会话；graceful stop 到秒级，走异步）。
 #[tauri::command]
-pub fn vm_stop(shell: State<'_, VmShellState>) -> Result<String> {
+pub async fn vm_stop(shell: State<'_, VmShellState>) -> Result<String> {
     kill_session(&shell);
     let provider = provider()?;
-    let args = vm_logic::stop_args(provider);
-    if run_bytes(&args)
-        .map(|output| output.status.success())
-        .unwrap_or(false)
-    {
-        Ok("虚拟机已停止。".into())
-    } else {
-        Err(KairosError::io("停止命令失败，请检查虚拟机状态。"))
+    if provider == VmProviderKind::Native {
+        return Ok("Linux 原生环境无需停止虚拟机。".into());
     }
+    let args = vm_logic::stop_args(provider);
+    tauri::async_runtime::spawn_blocking(move || {
+        if run_bytes(&args)?
+            .map(|output| output.status.success())
+            .unwrap_or(false)
+        {
+            Ok("虚拟机已停止。".into())
+        } else {
+            Err(KairosError::io("停止命令失败，请检查虚拟机状态。"))
+        }
+    })
+    .await
+    .map_err(|e| KairosError::internal(format!("停止任务失败：{e}")))?
 }
 
 /// 应用退出联动（RunEvent::Exit）：杀 Shell 子进程，并以 detached 方式派发
 /// 停止命令——故意不 wait，进程在应用退出后由系统回收。
 pub fn cleanup_on_exit(shell: &VmShellState) {
     kill_session(shell);
-    if let Ok(provider) = provider() {
-        let args = vm_logic::stop_args(provider);
-        let _ = platform_command(&args[0])
-            .args(&args[1..])
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn();
+    let Ok(provider) = provider() else {
+        return;
+    };
+    // 原生环境无虚拟机可停。
+    if provider == VmProviderKind::Native {
+        return;
     }
+    let args = vm_logic::stop_args(provider);
+    let _ = platform_command(&args[0])
+        .args(&args[1..])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn();
 }

@@ -3,12 +3,14 @@
 
 use serde::{Deserialize, Serialize};
 
-/// 虚拟机提供方（按平台一对一：macOS → Multipass，Windows → WSL）。
+/// 虚拟机提供方（按平台一对一：macOS → Multipass，Windows → WSL；
+/// Linux 原生就有 bash，无需虚拟机）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum VmProviderKind {
     Multipass,
     Wsl,
+    Native,
 }
 
 /// 受管实例的状态；Missing 表示实例尚未创建（工具可能已装）。

@@ -58,6 +58,24 @@ describe("vm panel", () => {
     expect(root.querySelector("pre")?.textContent).toContain("Shell 会话已建立");
   });
 
+  it("short-circuits vm buttons on native Linux", () => {
+    appStore.set({
+      vmStatus: {
+        provider: "native",
+        toolInstalled: true,
+        instanceName: "localhost",
+        instanceState: "running",
+        hint: "Linux 原生环境，无需虚拟机，可直接进入 Shell。",
+      },
+    });
+    const root = createVmPanel();
+    expect(root.textContent).toContain("无需虚拟机");
+    expect(findButton(root, "安装虚拟机").disabled).toBe(true);
+    expect(findButton(root, "启动虚拟机").disabled).toBe(true);
+    expect(findButton(root, "关闭虚拟机").disabled).toBe(true);
+    expect(findButton(root, "进入 Shell").disabled).toBe(false);
+  });
+
   it("sends trimmed input on Enter and clears the field", async () => {
     vi.mocked(vmShellSend).mockResolvedValue(undefined);
     const root = createVmPanel();

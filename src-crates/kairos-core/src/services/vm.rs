@@ -9,11 +9,12 @@ pub const INSTANCE_NAME: &str = "kairos";
 /// WSL 受管发行版（`wsl --install -d` 的目标；v1 固定，自装发行版不受管）。
 pub const WSL_DISTRO: &str = "Ubuntu-24.04";
 
-/// 平台 → provider 的唯一映射；Linux 原生不需要虚拟机，返回 None。
+/// 平台 → provider 的唯一映射；Linux 原生即目标环境，无需虚拟机。
 pub fn provider_for(os: &str) -> Option<VmProviderKind> {
     match os {
         "macos" => Some(VmProviderKind::Multipass),
         "windows" => Some(VmProviderKind::Wsl),
+        "linux" => Some(VmProviderKind::Native),
         _ => None,
     }
 }
@@ -23,6 +24,8 @@ pub fn version_args(provider: VmProviderKind) -> Vec<String> {
     match provider {
         VmProviderKind::Multipass => vec!["multipass".into(), "--version".into()],
         VmProviderKind::Wsl => vec!["wsl".into(), "--status".into()],
+        // 原生环境恒就绪：探测命令用 /usr/bin/true（恒成功），无需安装。
+        VmProviderKind::Native => vec!["true".into()],
     }
 }
 
@@ -40,6 +43,7 @@ pub fn install_args(provider: VmProviderKind) -> Vec<String> {
             "-Command".into(),
             "Start-Process wsl -ArgumentList '--install' -Verb RunAs".into(),
         ],
+        VmProviderKind::Native => vec![],
     }
 }
 
@@ -48,6 +52,7 @@ pub fn instance_info_args(provider: VmProviderKind) -> Vec<String> {
     match provider {
         VmProviderKind::Multipass => vec!["multipass".into(), "info".into(), INSTANCE_NAME.into()],
         VmProviderKind::Wsl => vec!["wsl".into(), "-l".into(), "-v".into()],
+        VmProviderKind::Native => vec!["true".into()],
     }
 }
 
@@ -72,6 +77,7 @@ pub fn launch_args(provider: VmProviderKind) -> Vec<String> {
             "-d".into(),
             WSL_DISTRO.into(),
         ],
+        VmProviderKind::Native => vec!["true".into()],
     }
 }
 
@@ -83,7 +89,7 @@ pub fn start_args(provider: VmProviderKind) -> Option<Vec<String>> {
             "start".into(),
             INSTANCE_NAME.into(),
         ]),
-        VmProviderKind::Wsl => None,
+        VmProviderKind::Wsl | VmProviderKind::Native => None,
     }
 }
 
@@ -102,6 +108,8 @@ pub fn shell_args(provider: VmProviderKind) -> Vec<String> {
             ]
         }
         VmProviderKind::Wsl => vec!["wsl".into(), "-d".into(), WSL_DISTRO.into()],
+        // 原生环境：Shell 就是本地登录 bash。
+        VmProviderKind::Native => vec!["bash".into(), "--login".into()],
     }
 }
 
@@ -110,6 +118,7 @@ pub fn stop_args(provider: VmProviderKind) -> Vec<String> {
     match provider {
         VmProviderKind::Multipass => vec!["multipass".into(), "stop".into(), INSTANCE_NAME.into()],
         VmProviderKind::Wsl => vec!["wsl".into(), "--terminate".into(), WSL_DISTRO.into()],
+        VmProviderKind::Native => vec!["true".into()],
     }
 }
 
@@ -196,8 +205,17 @@ pub fn build_status(
     let instance_name = match provider {
         VmProviderKind::Multipass => INSTANCE_NAME.to_string(),
         VmProviderKind::Wsl => WSL_DISTRO.to_string(),
+        VmProviderKind::Native => "localhost".to_string(),
     };
-    let hint = if !tool_installed {
+    // 原生环境无需虚拟机：恒就绪、恒可进 Shell，安装/启动/停止语义全部短路。
+    let (tool_installed, instance_state) = if provider == VmProviderKind::Native {
+        (true, VmState::Running)
+    } else {
+        (tool_installed, instance_state)
+    };
+    let hint = if provider == VmProviderKind::Native {
+        "Linux 原生环境，无需虚拟机，可直接进入 Shell。".to_string()
+    } else if !tool_installed {
         match provider {
             VmProviderKind::Multipass => {
                 "未检测到 Multipass。点击「安装虚拟机」（约需数分钟，依赖 Homebrew）。".to_string()
@@ -206,6 +224,7 @@ pub fn build_status(
                 "未检测到 WSL2。点击「安装虚拟机」（需管理员授权，完成后可能要求重启）。"
                     .to_string()
             }
+            VmProviderKind::Native => unreachable!(),
         }
     } else {
         match instance_state {
@@ -217,6 +236,7 @@ pub fn build_status(
                 VmProviderKind::Wsl => {
                     "WSL2 已就绪，Ubuntu-24.04 尚未安装。点击「启动虚拟机」安装发行版。".to_string()
                 }
+                VmProviderKind::Native => unreachable!(),
             },
             VmState::Stopped => "虚拟机已创建但未运行。点击「启动虚拟机」。".to_string(),
             VmState::Starting => "虚拟机启动中…".to_string(),
@@ -238,10 +258,32 @@ mod tests {
     use super::*;
 
     #[test]
-    fn provider_maps_by_os_and_rejects_native_linux() {
+    fn provider_maps_by_os() {
         assert_eq!(provider_for("macos"), Some(VmProviderKind::Multipass));
         assert_eq!(provider_for("windows"), Some(VmProviderKind::Wsl));
-        assert_eq!(provider_for("linux"), None);
+        assert_eq!(provider_for("linux"), Some(VmProviderKind::Native));
+        assert_eq!(provider_for("freebsd"), None);
+    }
+
+    #[test]
+    fn native_provider_needs_no_vm() {
+        let status = build_status(VmProviderKind::Native, false, VmState::Missing);
+        assert!(status.tool_installed);
+        assert_eq!(status.instance_state, VmState::Running);
+        assert_eq!(status.instance_name, "localhost");
+        assert!(status.hint.contains("无需虚拟机"));
+        // Shell 就是本地登录 bash；安装/启动/停止全部为无操作短路。
+        assert_eq!(shell_args(VmProviderKind::Native), vec!["bash", "--login"]);
+        assert!(start_args(VmProviderKind::Native).is_none());
+        assert!(install_args(VmProviderKind::Native).is_empty());
+        for args in [
+            version_args(VmProviderKind::Native),
+            instance_info_args(VmProviderKind::Native),
+            launch_args(VmProviderKind::Native),
+            stop_args(VmProviderKind::Native),
+        ] {
+            assert_eq!(args, vec!["true"]);
+        }
     }
 
     #[test]
