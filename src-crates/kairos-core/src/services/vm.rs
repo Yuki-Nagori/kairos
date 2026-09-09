@@ -195,10 +195,11 @@ pub fn stop_args(provider: VmProviderKind) -> Vec<String> {
 pub fn parse_multipass_state(text: &str) -> VmState {
     for line in text.lines() {
         if let Some(value) = line.trim().strip_prefix("State:") {
-            return match value.trim() {
-                "RUNNING" => VmState::Running,
-                "STARTING" | "DELAYING SHUTDOWN" => VmState::Starting,
-                "STOPPED" | "SUSPENDED" => VmState::Stopped,
+            // 新版 multipass 打印 Running（首字母大写），旧版全大写：统一小写匹配。
+            return match value.trim().to_lowercase().as_str() {
+                "running" => VmState::Running,
+                "starting" | "delaying shutdown" => VmState::Starting,
+                "stopped" | "suspended" => VmState::Stopped,
                 _ => VmState::Unknown,
             };
         }
@@ -454,9 +455,11 @@ mod tests {
 
     #[test]
     fn multipass_state_parser_covers_all_lines() {
-        let info = "Name: kairos\nState: RUNNING\nIPv4: 192.168.64.3\n";
+        // 新版 multipass 打印 Running（首字母大写），旧版全大写
+        let info = "Name: kairos\nState: Running\nIPv4: 192.168.64.3\n";
         assert_eq!(parse_multipass_state(info), VmState::Running);
-        assert_eq!(parse_multipass_state("State: STOPPED\n"), VmState::Stopped);
+        assert_eq!(parse_multipass_state("State: RUNNING\n"), VmState::Running);
+        assert_eq!(parse_multipass_state("State: Stopped\n"), VmState::Stopped);
         assert_eq!(
             parse_multipass_state("State: STARTING\n"),
             VmState::Starting

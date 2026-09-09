@@ -453,16 +453,52 @@ pub async fn vm_start(app: AppHandle, progress: Channel<String>) -> Result<Strin
     .map_err(|e| KairosError::internal(format!("启动任务失败：{e}")))?
 }
 
-/// 开启应用内 Shell：杀掉旧会话，新子进程双向管道，输出经 Channel 流式回传。
+/// 开启应用内 Shell：杀掉旧会话，实例未运行则先拉起，新子进程双向管道，
+/// 输出经 Channel 流式回传（异步：拉起实例到秒级，不阻塞主线程）。
 #[tauri::command]
-pub fn vm_shell_start(state: State<'_, VmShellState>, log: Channel<String>) -> Result<()> {
+pub async fn vm_shell_start(state: State<'_, VmShellState>, log: Channel<String>) -> Result<()> {
     let provider = provider()?;
-    let mut guard = state.lock();
+    let inner = state.0.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut guard = inner
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        shell_start_blocking(&provider, &mut guard, &log)
+    })
+    .await
+    .map_err(|e| KairosError::internal(format!("Shell 任务失败：{e}")))?
+}
+
+fn shell_start_blocking(
+    provider: &VmProviderKind,
+    guard: &mut std::sync::MutexGuard<'_, Option<Child>>,
+    log: &Channel<String>,
+) -> Result<()> {
     if let Some(mut old) = guard.take() {
         let _ = old.kill();
         let _ = old.wait();
     }
-    let args = vm_logic::shell_args(provider);
+    // 实例未运行时先拉起（multipass exec 对停止实例直接报错）。
+    match probe_instance_state(*provider) {
+        Err(e) => {
+            let _ = log.send(format!("── 实例状态检查失败：{e} ──"));
+        }
+        Ok(VmState::Missing) => {
+            let _ = log.send("── 虚拟机尚未创建，请先点击「启动虚拟机」──".into());
+            return Ok(());
+        }
+        Ok(VmState::Stopped) | Ok(VmState::Unknown) => {
+            if let Some(start) = vm_logic::start_args(*provider) {
+                let _ = log.send("── 实例未运行，自动拉起（约 10–30 秒）──".into());
+                if let Err(e) = run_and_stream(&start, log) {
+                    let _ = log.send(format!("── 实例拉起失败：{e} ──"));
+                    return Err(e);
+                }
+            }
+        }
+        _ => {}
+    }
+    let args = vm_logic::shell_args(*provider);
     let mut child = platform_command(&args[0])
         .args(&args[1..])
         .stdin(Stdio::piped())
@@ -478,9 +514,10 @@ pub fn vm_shell_start(state: State<'_, VmShellState>, log: Channel<String>) -> R
         std::thread::spawn(move || forward_output(stdout, &progress));
     }
     if let Some(stderr) = stderr {
+        let log = log.clone();
         std::thread::spawn(move || forward_output(stderr, &log));
     }
-    *guard = Some(child);
+    **guard = Some(child);
     Ok(())
 }
 

@@ -119,3 +119,4 @@
 - **17:2x** feat(ci): 覆盖率门禁（前端 lib 100% · Rust core ≥98%）从 ubuntu 扩展到三平台全跑
 - **17:3x** feat(case): case 生成对齐 moldingFoam case-contract v1.1——SOLVER_MODULE 切 moldingFoam， moldingDict/momentumTransport/Tait 热物理/三 patch 边界分类（T36 Part 1）
 - **17:4x** fix(vm): 镜像下载前补建 images 父目录（真机 os error 2）；终端清洗器覆盖退格重绘与 NUL（spinner 残留真机收口）
+- **17:5x** fix(vm): multipass 状态解析大小写不敏感（新版 Running 形态真机踩坑）；进入 Shell 前自动拉起已停止实例
