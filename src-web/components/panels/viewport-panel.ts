@@ -28,7 +28,7 @@ export function createViewportPanel(): HTMLElement {
   emptyHint.textContent =
     "导入几何并生成网格后，点击「载入网格到视口」查看 3D 模型（WebGPU 可用时自动启用）";
   canvasWrap.append(canvas, emptyHint);
-  // 悬浮色标图例：加载场后显示渐变标尺与 min/max 值（v2 设计稿对齐）。
+  // 悬浮色标图例：加载场后显示渐变标尺与 min/max 值。
   const legend = document.createElement("div");
   legend.className =
     "absolute left-3 top-3 z-10 flex items-center gap-2 rounded-md border border-zinc-800 bg-zinc-950/80 px-2 py-1.5";

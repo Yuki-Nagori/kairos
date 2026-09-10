@@ -1,4 +1,4 @@
-/** * 通用卡片 Vue 组件：标题/图标/状态行/刷新按钮/折叠（对标原 card() 工厂）。 */
+/** * 通用卡片 Vue 组件：标题/图标/状态行/刷新按钮/折叠。 */
 <script setup lang="ts">
 import { ref } from "vue";
 
