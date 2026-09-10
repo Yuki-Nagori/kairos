@@ -32,6 +32,13 @@ interface OverlayLayer {
   color: [number, number, number];
 }
 
+/** 相机注视点（模型坐标），供视口坐标读数展示。 */
+interface ViewState {
+  x: number;
+  y: number;
+  z: number;
+}
+
 /** 每顶点法向（按三角形面法向展开，非索引共享）。 */
 function computeNormals(positions: Float32Array, indices: Uint32Array): Float32Array {
   const normals = new Float32Array(positions.length);
@@ -195,6 +202,7 @@ export class ViewportRenderer {
     private readonly canvas: HTMLCanvasElement,
     private readonly gl: WebGL2RenderingContext,
     private readonly onFps?: (fps: number) => void,
+    private readonly onView?: (state: ViewState) => void,
   ) {
     this.program = this.buildProgram();
     this.lineProgram = this.buildLineProgram();
@@ -206,12 +214,21 @@ export class ViewportRenderer {
   }
 
   /** 创建渲染器；需要 WebGL2 上下文，失败返回 null（调用方展示回退提示）。 */
-  static create(canvas: HTMLCanvasElement, onFps?: (fps: number) => void): ViewportRenderer | null {
+  static create(
+    canvas: HTMLCanvasElement,
+    onFps?: (fps: number) => void,
+    onView?: (state: ViewState) => void,
+  ): ViewportRenderer | null {
     const gl = canvas.getContext("webgl2");
     if (gl === null) {
       return null;
     }
-    return new ViewportRenderer(canvas, gl, onFps);
+    return new ViewportRenderer(canvas, gl, onFps, onView);
+  }
+
+  /** 相机变化后回报注视点（模型坐标）。 */
+  private emitViewState(): void {
+    this.onView?.({ x: this.target[0], y: this.target[1], z: this.target[2] });
   }
 
   private buildProgram(): WebGLProgram {
@@ -388,6 +405,21 @@ export class ViewportRenderer {
     this.yaw = 0.6;
     this.pitch = 0.4;
     this.distance = 3;
+    this.emitViewState();
+  }
+
+  /** 以注视点为中心缩放（factor < 1 拉近，> 1 推远），距离夹在有效区间。 */
+  zoomBy(factor: number): void {
+    this.distance = Math.min(Math.max(this.distance * factor, 0.1), 500);
+    this.emitViewState();
+  }
+
+  /** 重新适配最后上传的网格（无网格时不动）。 */
+  fitView(): void {
+    if (this.lastMesh !== null) {
+      this.fitToMesh(this.lastMesh.positions);
+    }
+    this.emitViewState();
   }
 
   /** 停止渲染循环（面板卸载时调用）。 */
@@ -446,12 +478,14 @@ export class ViewportRenderer {
         this.target[0] -= dx * 0.002 * this.distance;
         this.target[2] += dy * 0.002 * this.distance;
       }
+      this.emitViewState();
     });
     this.canvas.addEventListener(
       "wheel",
       (event) => {
         event.preventDefault();
         this.distance *= event.deltaY > 0 ? 1.1 : 0.9;
+        this.emitViewState();
       },
       { passive: false },
     );

@@ -82,6 +82,22 @@ export function useViewportPanel() {
   let playTimer: ReturnType<typeof setInterval> | null = null;
   let playIndex = 0;
 
+  // 相机注视点读数（模型坐标）：旋转 / 平移 / 缩放 / 复位时由渲染器回报。
+  const viewCenter = ref({ x: 0, y: 0, z: 0 });
+  const centerText = computed(
+    () =>
+      `X ${viewCenter.value.x.toFixed(1)} · Y ${viewCenter.value.y.toFixed(1)} · Z ${viewCenter.value.z.toFixed(1)}`,
+  );
+
+  // 视口标题：当前几何与研究（未载入网格时不显示）。
+  const title = computed(() => {
+    if (!meshLoaded.value) {
+      return "";
+    }
+    const fileName = geometry.geometries[0]?.fileName ?? "—";
+    return `${fileName} · ${project.activeStudy?.name ?? "未选择方案"}`;
+  });
+
   function stopPlay(): void {
     playing.value = false;
     if (playTimer !== null) {
@@ -130,6 +146,14 @@ export function useViewportPanel() {
     renderer?.resetView();
   }
 
+  function zoomBy(factor: number): void {
+    renderer?.zoomBy(factor);
+  }
+
+  function fitView(): void {
+    renderer?.fitView();
+  }
+
   function ensureRenderer(): void {
     if (renderer !== null) {
       return;
@@ -138,9 +162,15 @@ export function useViewportPanel() {
     if (canvas === null) {
       return;
     }
-    renderer = ViewportRenderer.create(canvas, (fps) => {
-      fpsText.value = `FPS: ${fps}`;
-    });
+    renderer = ViewportRenderer.create(
+      canvas,
+      (fps) => {
+        fpsText.value = `FPS: ${fps}`;
+      },
+      (state) => {
+        viewCenter.value = state;
+      },
+    );
     if (renderer === null) {
       emptyText.value = "当前环境不支持 WebGL2，无法渲染视口。";
       emptyError.value = true;
@@ -252,9 +282,13 @@ export function useViewportPanel() {
     playLabel,
     fpsText,
     clipOn,
+    title,
+    centerText,
     loadMesh,
     togglePlay,
     toggleClip,
     resetView,
+    zoomBy,
+    fitView,
   };
 }
