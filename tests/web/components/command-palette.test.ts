@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import type { Pinia } from "pinia";
@@ -11,8 +11,17 @@ function pressKey(key: string, modifiers: { metaKey?: boolean; ctrlKey?: boolean
   window.dispatchEvent(new KeyboardEvent("keydown", { key, ...modifiers }));
 }
 
+/** 临时替换 UA 以模拟指定平台（快捷键匹配按平台区分）。 */
+function stubPlatform(userAgent: string): void {
+  vi.stubGlobal("navigator", { userAgent });
+}
+
 describe("useCommandPalette", () => {
   let pinia: Pinia;
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
 
   beforeEach(() => {
     pinia = createPinia();
@@ -20,7 +29,8 @@ describe("useCommandPalette", () => {
     useCommandPalette().closePalette();
   });
 
-  it("⌘K / Ctrl+K 切换开合，打开时清空过滤词", () => {
+  it("macOS 上 ⌘K 切换开合，Ctrl+K 不触发，打开时清空过滤词", () => {
+    stubPlatform("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)");
     const palette = useCommandPalette();
     expect(palette.open.value).toBe(false);
 
@@ -30,11 +40,26 @@ describe("useCommandPalette", () => {
 
     palette.query.value = "报告";
     pressKey("k", { ctrlKey: true });
+    expect(palette.open.value).toBe(true);
+
+    pressKey("k", { metaKey: true });
     expect(palette.open.value).toBe(false);
 
     pressKey("k", { metaKey: true });
     expect(palette.open.value).toBe(true);
     expect(palette.query.value).toBe("");
+    palette.closePalette();
+  });
+
+  it("Windows / Linux 上 Ctrl+K 切换开合，⌘K 不触发", () => {
+    stubPlatform("Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+    const palette = useCommandPalette();
+
+    pressKey("k", { metaKey: true });
+    expect(palette.open.value).toBe(false);
+
+    pressKey("k", { ctrlKey: true });
+    expect(palette.open.value).toBe(true);
     palette.closePalette();
   });
 

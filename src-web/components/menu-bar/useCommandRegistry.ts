@@ -6,6 +6,7 @@
  */
 import { useAppStore } from "../../stores/app";
 import { runMenuAction } from "../../menu-actions";
+import { acceleratorLabel } from "../../utils/environment";
 import { STAGES } from "../stage-tabs/useStageTabs";
 
 /** 命令面板条目：label 为展示名，group 为分组名，shortcut 仅作提示。 */
@@ -32,28 +33,28 @@ export function useCommandRegistry() {
       id: "file.new",
       label: "新建项目",
       group: "文件",
-      shortcut: "⌘N",
+      shortcut: acceleratorLabel("⌘N", "Ctrl+N"),
       run: () => runMenuAction("file.new"),
     },
     {
       id: "file.open",
       label: "打开项目…",
       group: "文件",
-      shortcut: "⌘O",
+      shortcut: acceleratorLabel("⌘O", "Ctrl+O"),
       run: () => runMenuAction("file.open"),
     },
     {
       id: "file.save",
       label: "保存",
       group: "文件",
-      shortcut: "⌘S",
+      shortcut: acceleratorLabel("⌘S", "Ctrl+S"),
       run: () => runMenuAction("file.save"),
     },
     {
       id: "file.saveAs",
       label: "另存为…",
       group: "文件",
-      shortcut: "⇧⌘S",
+      shortcut: acceleratorLabel("⇧⌘S", "Ctrl+Shift+S"),
       run: () => runMenuAction("file.saveAs"),
     },
     { id: "view.theme", label: "切换主题", group: "视图", run: () => runMenuAction("view.theme") },
