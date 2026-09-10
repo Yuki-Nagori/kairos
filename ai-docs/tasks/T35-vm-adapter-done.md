@@ -57,7 +57,8 @@ README 带来的下一步关键信息（求解包进虚拟机任务用）：
    不是源码全量编译；xmake 只编译 moldingFoam 本体。
    （2026-09-09 起 Kairos 依赖面板已改为直接下载 moldingFoam release
    bundle——OpenFOAM-14 环境树 + libmoldingFoam，约 120MB，解压即用，
-   原应用内源码编译流程随之退役删除；bundle 进 VM 的传输仍待做。）
+   原应用内源码编译流程随之退役删除；bundle 部署已自动化：transfer +
+   解压 + OpenMPI 安装 + 国内 apt 镜像切换，见 T36。）
 2. macOS 仓库经 `multipass mount` 挂载 + `scripts/vm-sync.sh` 同步到 VM
    原生目录构建（挂载目录大小写不敏感，不能直接构建）；
 3. 分发形态是 `xmake run bundle` 产出的 tar.xz（OpenFOAM 官方环境树 +

@@ -399,7 +399,40 @@ pub async fn vm_deploy_bundle(app: AppHandle, progress: Channel<String>) -> Resu
         if !extract.success() {
             return Err(KairosError::io("解压失败，请确认 bundle 完整后重试。"));
         }
-        Ok("求解环境已部署。提交作业即可在虚拟机内执行。".into())
+        // 求解器运行时依赖：foamRun 链接 libmpi.so.40（真机踩坑），VM 内必须
+        // 有 OpenMPI。ubuntu 用户免密 sudo，非交互安装无阻碍。
+        let _ = progress.send("── 安装 OpenMPI 运行时（约 1 分钟）──".into());
+        // 国内时区：先切清华 apt 镜像源（与云镜像同源策略，加速 update）。
+        if vm_logic::is_china_timezone(&host_timezone()) {
+            let _ = progress.send("── 国内时区：VM 内 apt 源切换清华镜像 ──".into());
+            let _ = platform_command("multipass")
+                .args([
+                    "exec",
+                    "kairos",
+                    "--",
+                    "bash",
+                    "-lc",
+                    "sudo sed -i 's|http://archive.ubuntu.com/ubuntu|https://mirrors.tuna.tsinghua.edu.cn/ubuntu|g; s|http://security.ubuntu.com/ubuntu|https://mirrors.tuna.tsinghua.edu.cn/ubuntu|g' /etc/apt/sources.list /etc/apt/sources.list.d/*.sources 2>/dev/null || true",
+                ])
+                .status();
+        }
+        let apt = platform_command("multipass")
+            .args([
+                "exec",
+                "kairos",
+                "--",
+                "bash",
+                "-lc",
+                "sudo apt-get update -qq && sudo apt-get install -y -qq libopenmpi-dev openmpi-bin && sudo ldconfig && ldconfig -p | grep -q libmpi.so.40",
+            ])
+            .status()
+            .map_err(|e| KairosError::io(format!("apt 安装启动失败：{e}")))?;
+        if !apt.success() {
+            return Err(KairosError::io(
+                "OpenMPI 安装失败：foamRun 缺 libmpi.so.40 将无法启动，请检查 VM 网络后重试。",
+            ));
+        }
+        Ok("求解环境已部署（含 OpenMPI）。提交作业即可在虚拟机内执行。".into())
     })
     .await
     .map_err(|e| KairosError::internal(format!("部署任务失败：{e}")))?
