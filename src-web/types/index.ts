@@ -92,6 +92,12 @@ export interface Material {
   mechanics: Mechanics | null;
   dataNote: string;
 }
+
+/** 材料库：内置示例材料 + 自定义材料（详情见 T04）。 */
+export interface MaterialLibrary {
+  builtin: Material[];
+  custom: Material[];
+}
 /** 对应 `kairos-core::models::geometry::MeshIssues`。 */
 export interface MeshIssues {
   degenerate: number;
@@ -188,6 +194,12 @@ export interface ScalarField {
   values: number[];
   isMagnitude: boolean;
   complete: boolean;
+}
+
+/** 探针：节点序号的命名标记（results store 维护）。 */
+export interface Probe {
+  id: number;
+  nodeIndex: number;
 }
 /** 对应 `kairos-core::models::dependencies::LicenseKind`。 */
 export type LicenseKind = "mit" | "gpl";

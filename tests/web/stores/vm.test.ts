@@ -1,15 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  appStore,
-  initialAppState,
-  installVmAction,
-  openVmShellAction,
-  refreshVmStatus,
-  sendVmShellLine,
-  startVmAction,
-  stopVmAction,
-  stopVmShellAction,
-} from "../../../src-web/state";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createPinia, setActivePinia } from "pinia";
+import { useAppStore } from "../../../src-web/stores/app";
+import { useVmStore } from "../../../src-web/stores/vm";
 import {
   getVmStatus,
   installVm,
@@ -29,6 +21,7 @@ vi.mock("../../../src-web/api/vm", () => ({
   vmShellSend: vi.fn(),
   vmShellStop: vi.fn(),
   stopVm: vi.fn(),
+  deployVmBundle: vi.fn(),
 }));
 
 const runningStatus: VmStatus = {
@@ -39,31 +32,17 @@ const runningStatus: VmStatus = {
   hint: "虚拟机运行中，可进入 Shell。",
 };
 
-function resetMocks(): void {
-  vi.mocked(getVmStatus).mockReset();
-  vi.mocked(installVm).mockReset();
-  vi.mocked(startVm).mockReset();
-  vi.mocked(vmShellStart).mockReset();
-  vi.mocked(vmShellSend).mockReset();
-  vi.mocked(vmShellStop).mockReset();
-  vi.mocked(stopVm).mockReset();
-}
-
-describe("vm state slice", () => {
+describe("vm store", () => {
   beforeEach(() => {
-    appStore.set(initialAppState);
-    resetMocks();
-  });
-
-  afterEach(() => {
-    appStore.set(initialAppState);
-    resetMocks();
+    setActivePinia(createPinia());
+    vi.resetAllMocks();
   });
 
   it("refresh stores the probed status", async () => {
     vi.mocked(getVmStatus).mockResolvedValue(runningStatus);
-    await refreshVmStatus();
-    expect(appStore.get().vmStatus).toEqual(runningStatus);
+    const vm = useVmStore();
+    await vm.refreshVmStatus();
+    expect(vm.vmStatus).toEqual(runningStatus);
   });
 
   it("install streams logs into the shell output and rescans status", async () => {
@@ -73,36 +52,40 @@ describe("vm state slice", () => {
     });
     vi.mocked(getVmStatus).mockResolvedValue(runningStatus);
 
-    await installVmAction();
+    const vm = useVmStore();
+    await vm.installVm();
 
-    expect(appStore.get().vmShellLogs).toEqual(["brew 部署中"]);
-    expect(appStore.get().vmStatus).toEqual(runningStatus);
-    expect(appStore.get().vmBusy).toBeNull();
+    expect(vm.vmShellLogs).toEqual(["brew 部署中"]);
+    expect(vm.vmStatus).toEqual(runningStatus);
+    expect(vm.vmBusy).toBeNull();
   });
 
   it("start failures surface as errors and clear busy", async () => {
     vi.mocked(startVm).mockRejectedValue(new Error("镜像下载失败"));
 
-    await startVmAction();
+    const app = useAppStore();
+    const vm = useVmStore();
+    await vm.startVm();
 
-    expect(appStore.get().error?.message).toBe("镜像下载失败");
-    expect(appStore.get().vmBusy).toBeNull();
+    expect(app.error?.message).toBe("镜像下载失败");
+    expect(vm.vmBusy).toBeNull();
   });
 
   it("sends shell lines without manual echo (PTY echoes)", async () => {
     vi.mocked(vmShellSend).mockResolvedValue(undefined);
     vi.mocked(vmShellStart).mockResolvedValue(undefined);
 
-    await openVmShellAction();
-    await sendVmShellLine("blockMesh");
+    const vm = useVmStore();
+    await vm.openShell();
+    await vm.sendShellLine("blockMesh");
 
     // 回显由 PTY 提供，前端不重复记录
-    expect(appStore.get().vmShellLogs).toEqual([]);
+    expect(vm.vmShellLogs).toEqual([]);
     expect(vmShellSend).toHaveBeenCalledWith("blockMesh");
 
-    await stopVmShellAction();
+    await vm.stopShell();
     expect(vmShellStop).toHaveBeenCalled();
-    expect(appStore.get().vmShellLogs.at(-1)).toBe("── Shell 会话已结束 ──");
+    expect(vm.vmShellLogs.at(-1)).toBe("── Shell 会话已结束 ──");
   });
 
   it("stop stops the instance and rescans", async () => {
@@ -113,9 +96,20 @@ describe("vm state slice", () => {
       hint: "虚拟机已创建但未运行。",
     });
 
-    await stopVmAction();
+    const vm = useVmStore();
+    await vm.stopVm();
 
-    expect(appStore.get().vmStatus?.instanceState).toBe("stopped");
-    expect(appStore.get().vmBusy).toBeNull();
+    expect(vm.vmStatus?.instanceState).toBe("stopped");
+    expect(vm.vmBusy).toBeNull();
+  });
+
+  it("caps the shell log ring buffer at 500 lines", () => {
+    const vm = useVmStore();
+    for (let index = 0; index < 505; index += 1) {
+      vm.appendShellLog(`line-${index}`);
+    }
+    expect(vm.vmShellLogs).toHaveLength(500);
+    expect(vm.vmShellLogs[0]).toBe("line-5");
+    expect(vm.vmShellLogs.at(-1)).toBe("line-504");
   });
 });

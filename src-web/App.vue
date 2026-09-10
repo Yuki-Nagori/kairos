@@ -4,7 +4,7 @@
  * 各列面板按分析阶段显隐（home 显示全部）；用 v-show 保持挂载，
  * 视口渲染器、图表画布等有状态组件不因切换阶段而重建。
  */
-import { useAppState } from "./state";
+import { useAppStore } from "./stores/app";
 import AppHeader from "./components/AppHeader.vue";
 import StatusBar from "./components/StatusBar.vue";
 import LogTabs from "./components/LogTabs.vue";
@@ -23,7 +23,7 @@ import DependenciesPanel from "./views/dependencies/DependenciesPanel.vue";
 import ReportPanel from "./views/report/ReportPanel.vue";
 import JobsPanel from "./views/jobs/JobsPanel.vue";
 
-const state = useAppState();
+const app = useAppStore();
 
 const LEFT_PANELS = [
   { component: ProjectTree, stages: "home,geometry,mesh,process,solve,results,report" },
@@ -41,7 +41,7 @@ const RIGHT_PANELS = [
 ];
 
 function stageVisible(stages: string): boolean {
-  return stages.split(",").includes(state.stage);
+  return stages.split(",").includes(app.stage);
 }
 </script>
 

@@ -5,10 +5,10 @@
  * 面板本体经默认插槽注入（Phase 4 换成 VmPanel.vue）。
  */
 import { computed } from "vue";
-import { useAppState } from "../state";
+import { useVmStore } from "../stores/vm";
 
-const state = useAppState();
-const visible = computed(() => state.vmPanelVisible);
+const vm = useVmStore();
+const visible = computed(() => vm.vmPanelVisible);
 </script>
 
 <template>

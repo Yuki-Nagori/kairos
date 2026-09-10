@@ -5,8 +5,9 @@
  * （出厂默认量级只进 placeholder，不预填 value）；回填仅跟随活跃研究切换触发，
  * 其余状态变化不得覆盖用户正在编辑的表单。
  */
-import { computed, reactive, ref, watch } from "vue";
-import { appStore, useAppState } from "../../state";
+import { reactive, ref, watch } from "vue";
+import { useAppStore } from "../../stores/app";
+import { useProjectStore } from "../../stores/project";
 import type { ProcessSettings } from "../../types";
 import { checkProcess } from "../../api/process";
 import Card from "../../components/ui/UiCard.vue";
@@ -34,7 +35,8 @@ function defaultProcess(): ProcessSettings {
   };
 }
 
-const state = useAppState();
+const app = useAppStore();
+const project = useProjectStore();
 const defaults = defaultProcess();
 
 const form = reactive({
@@ -97,10 +99,6 @@ function backfill(settings: ProcessSettings): void {
   form.coolantTempC = String(settings.coolantTempC);
 }
 
-const activeStudy = computed(
-  () => state.project?.studies.find((s) => s.id === state.activeStudyId) ?? null,
-);
-
 // 校验问题（红）与成功/引导提示（灰）互斥：每次应用后整体重建，与原生 replaceChildren 一致。
 const issueLines = ref<string[]>([]);
 const notice = ref<string | null>(null);
@@ -114,15 +112,16 @@ function applyProcess(): void {
       issueLines.value = found;
       return;
     }
-    const { project, activeStudyId } = appStore.get();
-    if (project === null || activeStudyId === null) {
+    const current = project.project;
+    const activeStudyId = project.activeStudyId;
+    if (current === null || activeStudyId === null) {
       notice.value = "请先选择一个研究。";
       return;
     }
-    const studies = project.studies.map((study) =>
+    const studies = current.studies.map((study) =>
       study.id === activeStudyId ? { ...study, process: settings } : study,
     );
-    appStore.set({ project: { ...project, studies, updatedMs: Date.now() } });
+    project.project = { ...current, studies, updatedMs: Date.now() };
     notice.value = "已应用到当前研究";
   });
 }
@@ -167,9 +166,9 @@ refreshPresetSelect();
 // 仅在切换活跃研究时回填该研究的工艺设置；其他状态变化不覆盖表单
 // （watch 自带「值变化」判定，等价原生版的 filledForStudyId 哨兵；immediate 覆盖首帧）。
 watch(
-  () => state.activeStudyId,
+  () => project.activeStudyId,
   (activeStudyId) => {
-    const study = state.project?.studies.find((s) => s.id === activeStudyId) ?? null;
+    const study = project.project?.studies.find((s) => s.id === activeStudyId) ?? null;
     if (study?.process) {
       backfill(study.process);
     }
@@ -194,7 +193,7 @@ watch(
     </div>
     <UiButton
       variant="primary"
-      :disabled="activeStudy === null || state.busy !== null"
+      :disabled="project.activeStudy === null || app.busy !== null"
       @click="applyProcess"
     >
       校验并应用到研究

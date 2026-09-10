@@ -1,0 +1,136 @@
+import { defineStore } from "pinia";
+import {
+  deleteCustomMaterial,
+  exportMaterialsToFile,
+  importCustomMaterials,
+  listBuiltinMaterials,
+  listCustomMaterials,
+  upsertCustomMaterial,
+} from "../api/materials";
+import { pickExportJsonPath, pickOpenJsonPath } from "../api/dialog";
+import type { Material, MaterialLibrary } from "../types";
+import { useAppStore } from "./app";
+import { useProjectStore } from "./project";
+
+/** 材料库：内置示例材料 + 用户自定义材料的导入/导出/复制与研究登记。 */
+export const useMaterialsStore = defineStore("materials", {
+  state: () => ({
+    /** 材料库：内置示例材料 + 用户自定义材料。 */
+    materials: { builtin: [], custom: [] } as MaterialLibrary,
+  }),
+  actions: {
+    /** 拉取内置与自定义材料（bootstrap 触发；失败上抛由调用方统一处理）。 */
+    async loadMaterials(): Promise<void> {
+      const [builtin, custom] = await Promise.all([listBuiltinMaterials(), listCustomMaterials()]);
+      this.materials = { builtin, custom };
+    },
+    /** 从 JSON 文件导入自定义材料（importMaterials 的公共尾部）。 */
+    async importMaterialsFromPath(path: string): Promise<void> {
+      const app = useAppStore();
+      app.beginBusy("正在导入材料…");
+      try {
+        const custom = await importCustomMaterials(path);
+        this.materials = { ...this.materials, custom };
+      } catch (error) {
+        app.setError(error);
+      } finally {
+        app.endBusy();
+      }
+    },
+    /** 弹出对话框导入材料。 */
+    async importMaterials(): Promise<void> {
+      const path = await pickOpenJsonPath();
+      if (path) {
+        await this.importMaterialsFromPath(path);
+      }
+    },
+    /** 新增或更新一个自定义材料。 */
+    async upsertMaterial(material: Material): Promise<void> {
+      const app = useAppStore();
+      app.beginBusy("正在保存材料…");
+      try {
+        const custom = await upsertCustomMaterial(material);
+        this.materials = { ...this.materials, custom };
+      } catch (error) {
+        app.setError(error);
+      } finally {
+        app.endBusy();
+      }
+    },
+    async deleteMaterial(id: string): Promise<void> {
+      const app = useAppStore();
+      app.beginBusy("正在删除材料…");
+      try {
+        const custom = await deleteCustomMaterial(id);
+        this.materials = { ...this.materials, custom };
+      } catch (error) {
+        app.setError(error);
+      } finally {
+        app.endBusy();
+      }
+    },
+    /** 导出全部自定义材料到指定路径（exportMaterials 的公共尾部）。 */
+    async exportCustomMaterials(path: string): Promise<void> {
+      const app = useAppStore();
+      if (this.materials.custom.length === 0) {
+        app.setError("没有可导出的自定义材料。");
+        return;
+      }
+      app.beginBusy("正在导出材料…");
+      try {
+        await exportMaterialsToFile(path, this.materials.custom);
+      } catch (error) {
+        app.setError(error);
+      } finally {
+        app.endBusy();
+      }
+    },
+    /** 弹出对话框导出自定义材料。 */
+    async exportMaterials(): Promise<void> {
+      const path = await pickExportJsonPath("kairos-custom-materials");
+      if (path) {
+        await this.exportCustomMaterials(path);
+      }
+    },
+    /** 复制任一材料为自定义材料（新 id + 「副本」后缀）。 */
+    async copyMaterialToCustom(id: string): Promise<void> {
+      const app = useAppStore();
+      const source = [...this.materials.builtin, ...this.materials.custom].find((m) => m.id === id);
+      if (!source) {
+        app.setError("未找到要复制的材料。");
+        return;
+      }
+      const copy: Material = {
+        ...source,
+        id: `custom-${Date.now()}`,
+        name: `${source.name}-副本`,
+        dataNote: source.dataNote.startsWith("自定义")
+          ? source.dataNote
+          : `自定义副本。${source.dataNote}`,
+      };
+      await this.upsertMaterial(copy);
+    },
+    /** 把材料登记到活跃研究（活跃研究归属 project store）。 */
+    assignMaterial(materialId: string): void {
+      const app = useAppStore();
+      const projectStore = useProjectStore();
+      const project = projectStore.project;
+      const activeStudyId = projectStore.activeStudyId;
+      if (!project || !activeStudyId) {
+        app.setError("请先创建或选择一个研究。");
+        return;
+      }
+      const exists = [...this.materials.builtin, ...this.materials.custom].some(
+        (m) => m.id === materialId,
+      );
+      if (!exists) {
+        app.setError("材料不存在。");
+        return;
+      }
+      const studies = project.studies.map((study) =>
+        study.id === activeStudyId ? { ...study, materialId } : study,
+      );
+      projectStore.project = { ...project, studies, updatedMs: Date.now() };
+    },
+  },
+});

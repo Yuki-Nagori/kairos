@@ -1,7 +1,8 @@
 <script setup lang="ts">
 /** XY 图表面板：场分布曲线（节点序号 → 值）+ 探针管理 + CSV 导出。 */
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
-import { addProbe, exportFieldCsv, removeProbe, useAppState } from "../../state";
+import { useAppStore } from "../../stores/app";
+import { useResultsStore } from "../../stores/results";
 import type { ScalarField } from "../../types";
 import { drawLineChart } from "../../utils/chart";
 import { THEME_CHANGED_EVENT } from "../../theme";
@@ -10,21 +11,22 @@ import UiButton from "../../components/ui/UiButton.vue";
 import UiTextInput from "../../components/ui/UiTextInput.vue";
 import Card from "../../components/ui/UiCard.vue";
 
-const state = useAppState();
+const app = useAppStore();
+const results = useResultsStore();
 
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 const nodeInput = ref("");
-const working = computed(() => state.busy !== null);
+const working = computed(() => app.busy !== null);
 
 function addProbeFromInput(): void {
-  addProbe(Number(nodeInput.value));
+  results.addProbe(Number(nodeInput.value));
   nodeInput.value = "";
 }
 
 // 探针位置的值叠加为参考线（取值点单独绘制在曲线上）。
 const probeDots = computed(() =>
-  state.probes.map((probe) => {
-    const value = state.loadedField?.values[probe.nodeIndex] ?? 0;
+  results.probes.map((probe) => {
+    const value = results.loadedField?.values[probe.nodeIndex] ?? 0;
     return { probe, value };
   }),
 );
@@ -39,7 +41,7 @@ function draw(): void {
     return;
   }
   const series: Array<{ values: number[]; color: string; label: string }> = [];
-  const field: ScalarField | null = state.loadedField;
+  const field: ScalarField | null = results.loadedField;
   if (field !== null && field.values.length > 0) {
     series.push({ values: field.values, color: "#34d399", label: field.field });
   }
@@ -80,7 +82,7 @@ function draw(): void {
 }
 
 watch(
-  () => [state.loadedField, state.probes],
+  () => [results.loadedField, results.probes],
   () => draw(),
 );
 
@@ -102,21 +104,21 @@ onUnmounted(() => window.removeEventListener(THEME_CHANGED_EVENT, draw));
     <div class="flex flex-wrap items-center gap-2">
       <UiTextInput v-model="nodeInput" placeholder="节点序号" class="w-28" :disabled="working" />
       <UiButton :disabled="working" @click="addProbeFromInput()">添加探针</UiButton>
-      <UiButton :disabled="working" @click="exportFieldCsv()">导出 CSV</UiButton>
+      <UiButton :disabled="working" @click="results.exportFieldCsv()">导出 CSV</UiButton>
       <UiButton @click="draw()">重绘</UiButton>
     </div>
     <div class="space-y-1">
-      <p v-if="state.probes.length === 0" class="text-xs text-zinc-500">
+      <p v-if="results.probes.length === 0" class="text-xs text-zinc-500">
         暂无探针。输入节点序号后添加。
       </p>
       <template v-else>
         <div
-          v-for="probe in state.probes"
+          v-for="probe in results.probes"
           :key="probe.id"
           class="flex items-center justify-between rounded border border-zinc-800 px-2 py-1"
         >
           <span class="text-zinc-300">探针 #{{ probe.id }} · 节点 {{ probe.nodeIndex }}</span>
-          <UiButton variant="danger" @click="removeProbe(probe.id)">✕</UiButton>
+          <UiButton variant="danger" @click="results.removeProbe(probe.id)">✕</UiButton>
         </div>
       </template>
     </div>

@@ -4,22 +4,25 @@
  * 只读镜像——交互式输入仍在 VM 抽屉；数据全部来自 store 分片。
  */
 import { computed, ref } from "vue";
-import { useAppState } from "../state";
+import { useJobsStore } from "../stores/jobs";
+import { useGeometryStore } from "../stores/geometry";
+import { useVmStore } from "../stores/vm";
 
 const TABS = ["分析日志", "网格日志", "VM 终端"] as const;
 type Tab = (typeof TABS)[number];
 
 const active = ref<Tab>(TABS[0]);
-const state = useAppState();
+const jobsStore = useJobsStore();
+const geometry = useGeometryStore();
+const vm = useVmStore();
 
 const lines = computed(() => {
-  const { jobLogs, jobs, meshReports, vmShellLogs } = state;
   if (active.value === "分析日志") {
-    const job = jobs.at(-1);
-    return (job ? (jobLogs[job.id] ?? []) : []).slice(-40);
+    const job = jobsStore.jobs.at(-1);
+    return (job ? (jobsStore.jobLogs[job.id] ?? []) : []).slice(-40);
   }
   if (active.value === "网格日志") {
-    const report = Object.values(meshReports).at(-1);
+    const report = Object.values(geometry.meshReports).at(-1);
     return report
       ? [
           `引擎 ${report.engine} · ${report.nodeCount} 节点 / ${report.elementCount} 四面体`,
@@ -27,7 +30,7 @@ const lines = computed(() => {
         ]
       : [];
   }
-  return vmShellLogs.slice(-40);
+  return vm.vmShellLogs.slice(-40);
 });
 </script>
 

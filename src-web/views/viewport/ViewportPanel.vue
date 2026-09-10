@@ -4,7 +4,8 @@
  * 视口是工作台主角：卡片弹性充满中列剩余空间，画布随容器缩放。
  */
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
-import { loadField, useAppState } from "../../state";
+import { useGeometryStore } from "../../stores/geometry";
+import { useResultsStore } from "../../stores/results";
 import type { ScalarField } from "../../types";
 import { ViewportRenderer } from "../../render/renderer";
 import { detectRenderCapabilityInBrowser } from "../../render/capability";
@@ -13,7 +14,8 @@ import { minMax } from "../../utils/stats";
 import { getRenderMesh } from "../../api/geometry";
 import UiButton from "../../components/ui/UiButton.vue";
 
-const state = useAppState();
+const geometry = useGeometryStore();
+const results = useResultsStore();
 
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 
@@ -43,10 +45,10 @@ function updateLegend(field: { values: number[] } | null): void {
 // —— 控制条 ——
 // 启用条件按数据就绪度推导（原版按钮处于永久禁用的死接线状态，迁移时接通）：
 // 载入需已有几何；剖切/重置/播放需网格已上传；播放另需结果时间步目录。
-const loadDisabled = computed(() => state.geometries.length === 0);
+const loadDisabled = computed(() => geometry.geometries.length === 0);
 const meshReady = ref(false);
 const playDisabled = computed(() => {
-  const catalog = state.resultCatalog;
+  const catalog = results.resultCatalog;
   return !meshReady.value || catalog === null || catalog.times.length === 0;
 });
 const fpsText = ref("FPS: —");
@@ -69,13 +71,13 @@ function stopPlay(): void {
 }
 
 function startPlay(): void {
-  updateLegend(state.loadedField);
-  const catalog = state.resultCatalog;
+  updateLegend(results.loadedField);
+  const catalog = results.resultCatalog;
   if (catalog === null || catalog.times.length === 0 || renderer === null) {
     return;
   }
   const caseDir = catalog.caseDir;
-  const fieldName = state.loadedField?.field ?? "T";
+  const fieldName = results.loadedField?.field ?? "T";
   playing.value = true;
   playIndex = 0;
   playTimer = setInterval(() => {
@@ -85,8 +87,8 @@ function startPlay(): void {
     }
     const step = catalog.times[playIndex % catalog.times.length]!;
     playIndex += 1;
-    void loadField(caseDir, step.dirName, fieldName).then(() => {
-      applyField(state.loadedField);
+    void results.loadField(caseDir, step.dirName, fieldName).then(() => {
+      applyField(results.loadedField);
     });
   }, 400);
 }
@@ -127,11 +129,11 @@ function ensureRenderer(): void {
 
 function loadMesh(): void {
   ensureRenderer();
-  const geometry = state.geometries[0];
-  if (geometry === undefined || renderer === null) {
+  const first = geometry.geometries[0];
+  if (first === undefined || renderer === null) {
     return;
   }
-  void getRenderMesh(geometry.geometryId).then((data) => {
+  void getRenderMesh(first.geometryId).then((data) => {
     renderMesh = {
       positions: new Float32Array(data.positions),
       indices: new Uint32Array(data.indices),
@@ -164,7 +166,7 @@ function applyField(field: ScalarField | null): void {
 }
 
 watch(
-  () => state.loadedField,
+  () => results.loadedField,
   (field) => {
     updateLegend(field);
     applyField(field);

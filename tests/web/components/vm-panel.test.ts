@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { mount } from "@vue/test-utils";
+import { createPinia, setActivePinia } from "pinia";
+import type { Pinia } from "pinia";
 import VmPanel from "../../../src-web/views/vm/VmPanel.vue";
-import { appStore, initialAppState } from "../../../src-web/state";
+import { useVmStore } from "../../../src-web/stores/vm";
 import { getVmStatus, vmShellSend } from "../../../src-web/api/vm";
 import type { VmProvider, VmState, VmStatus } from "../../../src-web/types";
 
@@ -33,15 +35,18 @@ function findButton(wrapper: ReturnType<typeof mount>, label: string) {
 }
 
 describe("VmPanel", () => {
+  let pinia: Pinia;
+
   beforeEach(() => {
-    appStore.set(initialAppState);
+    pinia = createPinia();
+    setActivePinia(pinia);
     vi.mocked(getVmStatus).mockReset();
     vi.mocked(vmShellSend).mockReset();
     vi.mocked(getVmStatus).mockResolvedValue(runningStatus);
   });
 
   it("未探测时显示提示，Shell 动作不可用", () => {
-    const wrapper = mount(VmPanel);
+    const wrapper = mount(VmPanel, { global: { plugins: [pinia] } });
     expect(wrapper.text()).toContain("尚未探测");
     expect(findButton(wrapper, "安装虚拟机").attributes("disabled")).toBeUndefined();
     expect(findButton(wrapper, "进入 Shell").attributes("disabled")).toBeDefined();
@@ -49,8 +54,10 @@ describe("VmPanel", () => {
   });
 
   it("运行中启用 Shell 动作并渲染终端日志", () => {
-    appStore.set({ vmStatus: runningStatus, vmShellLogs: ["── Shell 会话已建立 ──"] });
-    const wrapper = mount(VmPanel);
+    const vm = useVmStore();
+    vm.vmStatus = runningStatus;
+    vm.vmShellLogs = ["── Shell 会话已建立 ──"];
+    const wrapper = mount(VmPanel, { global: { plugins: [pinia] } });
     expect(wrapper.text()).toContain("虚拟机运行中");
     expect(findButton(wrapper, "安装虚拟机").attributes("disabled")).toBeDefined();
     expect(findButton(wrapper, "进入 Shell").attributes("disabled")).toBeUndefined();
@@ -62,16 +69,15 @@ describe("VmPanel", () => {
   });
 
   it("Linux 原生环境短路虚拟机按钮", () => {
-    appStore.set({
-      vmStatus: {
-        provider: "native",
-        toolInstalled: true,
-        instanceName: "localhost",
-        instanceState: "running",
-        hint: "Linux 原生环境，无需虚拟机，可直接进入 Shell。",
-      },
-    });
-    const wrapper = mount(VmPanel);
+    const vm = useVmStore();
+    vm.vmStatus = {
+      provider: "native",
+      toolInstalled: true,
+      instanceName: "localhost",
+      instanceState: "running",
+      hint: "Linux 原生环境，无需虚拟机，可直接进入 Shell。",
+    };
+    const wrapper = mount(VmPanel, { global: { plugins: [pinia] } });
     expect(wrapper.text()).toContain("无需虚拟机");
     expect(findButton(wrapper, "安装虚拟机").attributes("disabled")).toBeDefined();
     expect(findButton(wrapper, "启动虚拟机").attributes("disabled")).toBeDefined();
@@ -81,7 +87,7 @@ describe("VmPanel", () => {
 
   it("回车发送去空白命令并清空输入框", async () => {
     vi.mocked(vmShellSend).mockResolvedValue(undefined);
-    const wrapper = mount(VmPanel);
+    const wrapper = mount(VmPanel, { global: { plugins: [pinia] } });
     const input = wrapper.find("input");
 
     await input.setValue("  ls -la  ");

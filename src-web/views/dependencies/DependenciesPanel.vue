@@ -6,14 +6,9 @@
  * （模板分支在这里算清，等价原生版每次 render 的 replaceChildren 重建）。
  */
 import { computed, ref } from "vue";
-import {
-  checkUpdateAction,
-  deployVmBundleAction,
-  downloadComponent,
-  openDependencyPageAction,
-  refreshDependencies,
-  useAppState,
-} from "../../state";
+import { useAppStore } from "../../stores/app";
+import { useVmStore } from "../../stores/vm";
+import { useDependenciesStore } from "../../stores/dependencies";
 import type { DependencyStatus } from "../../types";
 import { openDownloadsDir } from "../../api/downloads";
 import Card from "../../components/ui/UiCard.vue";
@@ -57,11 +52,13 @@ interface DependencyRow {
   savedText: string | null;
 }
 
-const state = useAppState();
+const app = useAppStore();
+const vm = useVmStore();
+const deps = useDependenciesStore();
 
 /** 取组件在当前平台的下载地址（OS 未就绪时回落 linux 源）。 */
 function updateDownloadUrl(dep: DependencyStatus): string {
-  const os = state.info?.os ?? "linux";
+  const os = app.info?.os ?? "linux";
   return dep.download === null
     ? ""
     : os === "macos"
@@ -72,14 +69,14 @@ function updateDownloadUrl(dep: DependencyStatus): string {
 }
 
 const rows = computed<DependencyRow[]>(() =>
-  state.dependencies.map((dep) => {
-    const stage = state.componentStages[dep.id];
+  deps.dependencies.map((dep) => {
+    const stage = deps.componentStages[dep.id];
     const downloading = stage?.stage === "downloading";
     const percent = stage?.stage === "downloading" ? stage.percent : 0;
-    const already = dep.id in state.savedDownloads || dep.id in state.downloadedFiles;
-    const check = state.updateChecks[dep.id];
-    const downloaded = state.downloadedFiles[dep.id];
-    const saved = state.savedDownloads[dep.id];
+    const already = dep.id in deps.savedDownloads || dep.id in deps.downloadedFiles;
+    const check = deps.updateChecks[dep.id];
+    const downloaded = deps.downloadedFiles[dep.id];
+    const saved = deps.savedDownloads[dep.id];
     const usable = dep.ready || dep.managedReady;
     const sizeMb = downloaded !== undefined ? (downloaded.sizeBytes / 1024 / 1024).toFixed(1) : "";
     return {
@@ -134,7 +131,7 @@ void import("../../api/downloads").then(async (m) => {
   downloadsDir.value = await m.getDownloadsDir();
 });
 
-void refreshDependencies();
+void deps.refreshDependencies();
 </script>
 
 <template>
@@ -142,21 +139,18 @@ void refreshDependencies();
     <template #icon>
       <ShellIcon class="h-4 w-4 text-emerald-400" />
     </template>
-    <UiButton :disabled="state.busy !== null" @click="openDownloadsDir()">打开下载目录</UiButton>
+    <UiButton :disabled="app.busy !== null" @click="openDownloadsDir()">打开下载目录</UiButton>
     <p class="text-xs text-zinc-500">下载目录：{{ downloadsDir }}</p>
-    <UiButton :disabled="state.busy !== null" @click="refreshDependencies()">重新探测</UiButton>
+    <UiButton :disabled="app.busy !== null" @click="deps.refreshDependencies()">重新探测</UiButton>
     <div class="space-y-2">
       <template v-for="row in rows" :key="row.dep.id">
         <div
           class="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-zinc-800 px-3 py-2 text-xs"
         >
-          <UiButton
-            v-if="row.dep.id === 'moldingfoam' && row.already"
-            @click="deployVmBundleAction()"
-          >
+          <UiButton v-if="row.dep.id === 'moldingfoam' && row.already" @click="vm.deployVmBundle()">
             部署到虚拟机
           </UiButton>
-          <UiButton v-if="row.dep.updatable && row.already" @click="checkUpdateAction(row.dep.id)">
+          <UiButton v-if="row.dep.updatable && row.already" @click="deps.checkUpdate(row.dep.id)">
             检查更新
           </UiButton>
           <span class="font-semibold text-zinc-200">{{ row.dep.name }}</span>
@@ -168,14 +162,14 @@ void refreshDependencies();
           </span>
           <span :class="row.readyClass">{{ row.readyText }}</span>
           <span class="text-zinc-600">{{ row.dep.required ? "必需" : "可选" }}</span>
-          <UiButton @click="openDependencyPageAction(row.dep.pageUrl)">官方页</UiButton>
+          <UiButton @click="deps.openDependencyPage(row.dep.pageUrl)">官方页</UiButton>
           <!-- 有应用内下载地址的组件：用户点击触发（官方源 + 许可展示）；下载进行中禁用。 -->
           <UiButton
             v-if="row.dep.download !== null"
             :variant="row.downloadVariant"
             :disabled="row.downloading"
             :title="row.downloadTitle"
-            @click="downloadComponent(row.dep.id, row.downloadUrl)"
+            @click="deps.downloadComponent(row.dep.id, row.downloadUrl)"
           >
             {{ row.downloadLabel }}
           </UiButton>
@@ -183,7 +177,9 @@ void refreshDependencies();
         <!-- 更新提示：发现新版（琥珀 + 更新按钮）→ 已是最新（绿）→ 版本未知（灰）。 -->
         <template v-if="row.hasUpdate">
           <p class="text-xs text-amber-400">{{ row.updateLineText }}</p>
-          <UiButton @click="downloadComponent(row.dep.id, row.downloadUrl)">更新到新版</UiButton>
+          <UiButton @click="deps.downloadComponent(row.dep.id, row.downloadUrl)"
+            >更新到新版</UiButton
+          >
         </template>
         <p v-else-if="row.checked" class="text-xs" :class="row.freshClass">{{ row.freshText }}</p>
         <!-- 阶段状态行：失败（红，附原因）→ 下载进度。 -->

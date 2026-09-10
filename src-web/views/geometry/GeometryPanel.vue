@@ -5,22 +5,17 @@
  * 初始尺寸取几何最大边的二十分之一；生成动作按引擎分派到对应服务。
  */
 import { computed, reactive, watch } from "vue";
-import {
-  generateGmshMesh,
-  generateMesh,
-  importGeometry,
-  importSampleGeometry,
-  removeGeometryById,
-  useAppState,
-} from "../../state";
+import { useAppStore } from "../../stores/app";
+import { useGeometryStore } from "../../stores/geometry";
 import type { GeometrySummary, MeshIssues, MeshingReport } from "../../types";
 import Card from "../../components/ui/UiCard.vue";
 import TextInput from "../../components/ui/UiTextInput.vue";
 import UiButton from "../../components/ui/UiButton.vue";
 
-const state = useAppState();
+const app = useAppStore();
+const geometry = useGeometryStore();
 
-const working = computed(() => state.busy !== null);
+const working = computed(() => app.busy !== null);
 
 // 每几何行的表单状态（目标尺寸 + 引擎），几何首次出现时以建议尺寸初始化，
 // 之后用户编辑独立于渲染保留（列表重建不回填默认值）。
@@ -31,7 +26,7 @@ interface MeshFormState {
 const meshForms = reactive<Record<string, MeshFormState>>({});
 
 watch(
-  () => state.geometries,
+  () => geometry.geometries,
   (geometries) => {
     for (const geometry of geometries) {
       if (meshForms[geometry.geometryId] === undefined) {
@@ -59,7 +54,7 @@ function meshForm(geometry: GeometrySummary): MeshFormState {
 }
 
 const rows = computed(() =>
-  state.geometries.map((geometry) => ({ geometry, form: meshForm(geometry) })),
+  geometry.geometries.map((geometry) => ({ geometry, form: meshForm(geometry) })),
 );
 
 function issueText(issues: MeshIssues): string {
@@ -95,12 +90,12 @@ function statsText(geometry: GeometrySummary): string {
     .join(" × ")} ${geometry.suggestedUnit}`;
 }
 
-function generate(geometry: GeometrySummary): void {
-  const form = meshForm(geometry);
+function generate(item: GeometrySummary): void {
+  const form = meshForm(item);
   const size = Number(form.size);
   void (form.engine === "gmsh"
-    ? generateGmshMesh(geometry.geometryId, size)
-    : generateMesh(geometry.geometryId, size));
+    ? geometry.generateGmshMesh(item.geometryId, size)
+    : geometry.generateMesh(item.geometryId, size));
 }
 
 function reportText(report: MeshingReport | undefined): string {
@@ -111,10 +106,10 @@ function reportText(report: MeshingReport | undefined): string {
 }
 
 function onImport(): void {
-  void importGeometry();
+  void geometry.importGeometry();
 }
 function onSample(): void {
-  void importSampleGeometry(10);
+  void geometry.importSampleGeometry(10);
 }
 </script>
 
@@ -126,7 +121,7 @@ function onSample(): void {
     </div>
 
     <div class="space-y-2">
-      <p v-if="state.geometries.length === 0" class="text-xs text-zinc-500">
+      <p v-if="geometry.geometries.length === 0" class="text-xs text-zinc-500">
         尚未导入几何。支持二进制 / ASCII STL。
       </p>
       <div
@@ -142,7 +137,7 @@ function onSample(): void {
         <UiButton
           variant="danger"
           :disabled="working"
-          @click="removeGeometryById(row.geometry.geometryId)"
+          @click="geometry.removeGeometryById(row.geometry.geometryId)"
         >
           移除
         </UiButton>
@@ -163,7 +158,7 @@ function onSample(): void {
           </select>
           <UiButton :disabled="working" @click="generate(row.geometry)">生成体积网格</UiButton>
           <p class="text-xs text-zinc-500">
-            {{ reportText(state.meshReports[row.geometry.geometryId]) }}
+            {{ reportText(geometry.meshReports[row.geometry.geometryId]) }}
           </p>
         </div>
       </div>

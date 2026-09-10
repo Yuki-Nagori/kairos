@@ -1,18 +1,20 @@
 <script setup lang="ts">
 /** 结果面板：扫描 OpenFOAM case 结果目录、查看时间步与场统计；三维视口由视口面板负责。 */
 import { computed, ref } from "vue";
-import { appStore, loadField, loadResultsCatalog, useAppState } from "../../state";
+import { useAppStore } from "../../stores/app";
+import { useResultsStore } from "../../stores/results";
 import { minMax } from "../../utils/stats";
 import UiButton from "../../components/ui/UiButton.vue";
 import Card from "../../components/ui/UiCard.vue";
 import UiTextInput from "../../components/ui/UiTextInput.vue";
 
-const state = useAppState();
+const app = useAppStore();
+const results = useResultsStore();
 
 const dirPath = ref("");
-const working = computed(() => state.busy !== null);
-const catalog = computed(() => state.resultCatalog);
-const loadedField = computed(() => state.loadedField);
+const working = computed(() => app.busy !== null);
+const catalog = computed(() => results.resultCatalog);
+const loadedField = computed(() => results.loadedField);
 
 // 原扫描按钮在加载进行中禁用——Card 的刷新按钮不外联 disabled，以守卫等价。
 function scan(): void {
@@ -21,13 +23,13 @@ function scan(): void {
   }
   const caseDir = dirPath.value.trim();
   if (caseDir) {
-    void loadResultsCatalog(caseDir);
+    void results.loadResultsCatalog(caseDir);
   }
 }
 
 // 场统计行：空场用 NaN 占位，格式化保持原样。
 const stats = computed(() => {
-  const field = state.loadedField;
+  const field = results.loadedField;
   if (field === null) {
     return null;
   }
@@ -61,15 +63,13 @@ function deriveField(): void {
     derived = range > 0 ? values.map((v) => (v - min) / range) : values.map(() => 0);
     suffix = "归一化";
   }
-  appStore.set({
-    loadedField: {
-      ...source,
-      field: `${source.field} · ${suffix}`,
-      isMagnitude: false,
-      values: derived,
-      complete: source.complete,
-    },
-  });
+  results.loadedField = {
+    ...source,
+    field: `${source.field} · ${suffix}`,
+    isMagnitude: false,
+    values: derived,
+    complete: source.complete,
+  };
 }
 </script>
 
@@ -98,7 +98,7 @@ function deriveField(): void {
               }}<button
                 type="button"
                 class="text-emerald-400 hover:underline"
-                @click="loadField(catalog.caseDir, time.dirName, 'T')"
+                @click="results.loadField(catalog.caseDir, time.dirName, 'T')"
               >
                 加载 T 场
               </button>

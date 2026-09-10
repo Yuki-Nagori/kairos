@@ -52,3 +52,13 @@ src-web/
 
 - `bun run verify` 全绿（typecheck / eslint --max-warnings 0 / 覆盖率 / knip）
 - 功能等价：所有面板、动作、快捷键与重构前一致
+
+### Phase B · 状态层 Pinia 化（已完成）
+
+- stores/ 八个 defineStore：app(info/stage/busy/error) / project(含 activeStudy
+  getter) / geometry / materials / jobs / pipeline / results / dependencies
+- busy 前后置收敛为 app store 的 beginBusy/endBusy；错误统一 app.setError
+- 跨域动作经 store 间引用（bootstrap 扇出 materials 装载、submitPipeline
+  读四个 store、assignMaterial 回写 project）
+- menu-actions / shortcuts 在处理器内懒取 store（模块加载早于 Pinia 安装）
+- 消费端 21 文件、测试 9 文件同步迁移；state/ 删除；96 测试全绿

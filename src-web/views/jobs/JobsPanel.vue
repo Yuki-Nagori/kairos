@@ -2,7 +2,8 @@
 /** 求解作业面板：列表、提交与取消（并发预算由调度器控制）。 */
 import { ref } from "vue";
 import { probeOpenfoam } from "../../api/solver";
-import { cancelJobAction, refreshJobs, submitJobAction, useAppState } from "../../state";
+import { useAppStore } from "../../stores/app";
+import { useJobsStore } from "../../stores/jobs";
 import type { Job } from "../../types";
 import Card from "../../components/ui/UiCard.vue";
 import TextInput from "../../components/ui/UiTextInput.vue";
@@ -24,7 +25,8 @@ const STATUS_CLASS: Record<Job["status"], string> = {
   cancelled: "text-zinc-500",
 };
 
-const state = useAppState();
+const app = useAppStore();
+const jobsStore = useJobsStore();
 
 const caseDir = ref("");
 const cores = ref("");
@@ -34,7 +36,7 @@ function submitJob(): void {
   if (!dir) {
     return;
   }
-  void submitJobAction(dir, Number(cores.value) || 2);
+  void jobsStore.submitJob(dir, Number(cores.value) || 2);
 }
 
 // 环境探测行：探测完成后 className 整体替换（不再带 text-xs），沿用原生版的赋值语义。
@@ -46,7 +48,7 @@ void probeOpenfoam().then((check) => {
 });
 
 function jobLogsTail(jobId: string): string[] {
-  return state.jobLogs[jobId] ?? [];
+  return jobsStore.jobLogs[jobId] ?? [];
 }
 </script>
 
@@ -61,15 +63,15 @@ function jobLogsTail(jobId: string): string[] {
         class="flex-1 min-w-48"
       />
       <TextInput v-model="cores" type="number" placeholder="2" class="w-20" min="1" />
-      <UiButton variant="primary" :disabled="state.busy !== null" @click="submitJob">
+      <UiButton variant="primary" :disabled="app.busy !== null" @click="submitJob">
         提交作业
       </UiButton>
-      <UiButton :disabled="state.busy !== null" @click="refreshJobs()">刷新</UiButton>
+      <UiButton :disabled="app.busy !== null" @click="jobsStore.refreshJobs()">刷新</UiButton>
     </div>
     <div class="space-y-2">
-      <p v-if="state.jobs.length === 0" class="text-xs text-zinc-500">暂无作业。</p>
+      <p v-if="jobsStore.jobs.length === 0" class="text-xs text-zinc-500">暂无作业。</p>
       <template v-else>
-        <template v-for="job in state.jobs" :key="job.id">
+        <template v-for="job in jobsStore.jobs" :key="job.id">
           <div
             class="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-zinc-800 px-3 py-2 text-xs"
           >
@@ -84,10 +86,8 @@ function jobLogsTail(jobId: string): string[] {
             </span>
             <UiButton
               variant="danger"
-              :disabled="
-                state.busy !== null || (job.status !== 'queued' && job.status !== 'running')
-              "
-              @click="cancelJobAction(job.id)"
+              :disabled="app.busy !== null || (job.status !== 'queued' && job.status !== 'running')"
+              @click="jobsStore.cancelJob(job.id)"
             >
               取消
             </UiButton>

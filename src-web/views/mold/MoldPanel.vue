@@ -5,14 +5,8 @@
  * 坐标输入按「起点 xyz → 终点 xyz」成组，数值统一 mm（入口温度 °C）。
  */
 import { computed, reactive, ref } from "vue";
-import {
-  addCoolingChannel,
-  addRunnerElement,
-  checkNetwork,
-  removeCoolingChannel,
-  removeRunnerElement,
-  useAppState,
-} from "../../state";
+import { useAppStore } from "../../stores/app";
+import { useProjectStore } from "../../stores/project";
 import type { CoolingChannel, RunnerElement, RunnerKind } from "../../types";
 import Card from "../../components/ui/UiCard.vue";
 import Dropdown from "../../components/ui/UiDropdown.vue";
@@ -32,13 +26,12 @@ function zeroCoords(): Record<AxisKey, string> {
   return { x: "0", y: "0", z: "0" };
 }
 
-const state = useAppState();
+const app = useAppStore();
+const project = useProjectStore();
 
-const working = computed(() => state.busy !== null);
+const working = computed(() => app.busy !== null);
 
-const study = computed(
-  () => state.project?.studies.find((s) => s.id === state.activeStudyId) ?? null,
-);
+const study = computed(() => project.activeStudy);
 
 const formDisabled = computed(() => study.value === null || working.value);
 
@@ -60,7 +53,7 @@ function xyz(values: Record<AxisKey, string>): [number, number, number] {
 }
 
 function addRunner(): void {
-  addRunnerElement(
+  project.addRunnerElement(
     runnerKind.value as RunnerKind,
     Number(runnerDiameter.value),
     xyz(runnerStart),
@@ -69,7 +62,7 @@ function addRunner(): void {
 }
 
 function addChannel(): void {
-  addCoolingChannel(
+  project.addCoolingChannel(
     Number(channelDiameter.value),
     xyz(channelStart),
     xyz(channelEnd),
@@ -78,7 +71,7 @@ function addChannel(): void {
 }
 
 function check(): void {
-  void checkNetwork();
+  void project.checkNetwork();
 }
 
 function runnerLabel(element: RunnerElement): string {
@@ -158,7 +151,7 @@ function channelLabel(channel: CoolingChannel): string {
           class="flex items-center justify-between gap-2 rounded-lg border border-zinc-800 bg-zinc-950/50 px-2.5 py-1.5 text-xs"
         >
           <span class="text-zinc-300">{{ runnerLabel(element) }}</span>
-          <UiButton variant="danger" @click="removeRunnerElement(element.id)">✕</UiButton>
+          <UiButton variant="danger" @click="project.removeRunnerElement(element.id)">✕</UiButton>
         </div>
         <p v-if="study.runnerElements.length === 0" class="text-xs text-zinc-500">尚无单元。</p>
       </template>
@@ -234,7 +227,7 @@ function channelLabel(channel: CoolingChannel): string {
           class="flex items-center justify-between gap-2 rounded-lg border border-zinc-800 bg-zinc-950/50 px-2.5 py-1.5 text-xs"
         >
           <span class="text-zinc-300">{{ channelLabel(channel) }}</span>
-          <UiButton variant="danger" @click="removeCoolingChannel(channel.id)">✕</UiButton>
+          <UiButton variant="danger" @click="project.removeCoolingChannel(channel.id)">✕</UiButton>
         </div>
         <p v-if="study.coolingChannels.length === 0" class="text-xs text-zinc-500">尚无水路。</p>
       </template>
@@ -244,12 +237,12 @@ function channelLabel(channel: CoolingChannel): string {
 
     <div
       :class="
-        state.moldIssues.length > 0
+        project.moldIssues.length > 0
           ? 'space-y-1 rounded-lg border border-red-900 bg-red-950/40 p-3'
           : 'space-y-1'
       "
     >
-      <p v-for="(issue, index) in state.moldIssues" :key="index" class="text-xs text-red-300">
+      <p v-for="(issue, index) in project.moldIssues" :key="index" class="text-xs text-red-300">
         • {{ issue }}
       </p>
     </div>

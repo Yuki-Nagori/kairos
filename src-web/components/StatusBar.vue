@@ -1,24 +1,26 @@
 <script setup lang="ts">
 /** 底部状态栏：版本/IPC、忙碌、错误三态（优先级：错误 > 忙碌 > 版本）。 */
 import { computed } from "vue";
-import { toggleVmPanel, useAppState } from "../state";
+import { useAppStore } from "../stores/app";
+import { useVmStore } from "../stores/vm";
 import ShellIcon from "./ui/ShellIcon.vue";
 
-const state = useAppState();
+const app = useAppStore();
+const vm = useVmStore();
 
 const status = computed(() => {
-  if (state.error) {
+  if (app.error) {
     return {
-      text: state.error.message,
-      class: state.error.info ? "text-zinc-400" : "text-red-400",
+      text: app.error.message,
+      class: app.error.info ? "text-zinc-400" : "text-red-400",
     };
   }
-  if (state.busy) {
-    return { text: state.busy, class: "text-amber-300" };
+  if (app.busy) {
+    return { text: app.busy, class: "text-amber-300" };
   }
-  if (state.info) {
+  if (app.info) {
     return {
-      text: `v${state.info.version} · ${state.info.os} · IPC 正常`,
+      text: `v${app.info.version} · ${app.info.os} · IPC 正常`,
       class: "text-zinc-500",
     };
   }
@@ -26,7 +28,7 @@ const status = computed(() => {
 });
 
 // Shell 环境入口：点击切换右下角虚拟机终端面板的显隐。
-const shellVisible = computed(() => state.vmPanelVisible);
+const shellVisible = computed(() => vm.vmPanelVisible);
 </script>
 
 <template>
@@ -39,7 +41,7 @@ const shellVisible = computed(() => state.vmPanelVisible);
       type="button"
       class="flex items-center gap-1.5 text-[11px] transition-colors"
       :class="shellVisible ? 'text-emerald-400' : 'text-zinc-400 hover:text-zinc-200'"
-      @click="toggleVmPanel()"
+      @click="vm.togglePanel()"
     >
       <span>{{ shellVisible ? "Shell 环境（点击收起）" : "Shell 环境" }}</span>
       <ShellIcon class="h-4 w-4" />

@@ -1,27 +1,33 @@
 <script setup lang="ts">
 /** 报告面板：汇总项目/材料/工艺/结果快照，生成自包含 HTML 报告（浏览器可打印 PDF）。 */
 import { ref } from "vue";
-import { useAppState } from "../../state";
+import { useMaterialsStore } from "../../stores/materials";
+import { useProjectStore } from "../../stores/project";
+import { useResultsStore } from "../../stores/results";
 import { buildReportHtml } from "../../utils/report";
 import { minMax } from "../../utils/stats";
 import { getSnapshotDataUrl } from "../../render/snapshot";
 import Card from "../../components/ui/UiCard.vue";
 import UiButton from "../../components/ui/UiButton.vue";
 
-const state = useAppState();
+const project = useProjectStore();
+const materials = useMaterialsStore();
+const results = useResultsStore();
 
 // 状态行三种结局：初始引导语 → 缺项目/研究 → 生成成功。
 const status = ref("生成自包含 HTML（浏览器打开后 Ctrl+P 打印为 PDF）。");
 
 function generateReport(): void {
-  const { project, activeStudyId, materials, loadedField } = state;
-  const study = project?.studies.find((s) => s.id === activeStudyId) ?? null;
-  if (project === null || study === null) {
+  const currentProject = project.project;
+  const materialsLib = materials.materials;
+  const loadedField = results.loadedField;
+  const study = project.activeStudy;
+  if (currentProject === null || study === null) {
     status.value = "请先创建项目与研究。";
     return;
   }
   const material = study.materialId
-    ? [...materials.builtin, ...materials.custom].find((m) => m.id === study.materialId)
+    ? [...materialsLib.builtin, ...materialsLib.custom].find((m) => m.id === study.materialId)
     : undefined;
   const rows: Array<[string, string]> = [
     ["材料", material ? `${material.manufacturer} · ${material.name}` : "未登记"],
@@ -46,7 +52,7 @@ function generateReport(): void {
     fieldStats = `${loadedField.field} @ ${loadedField.timeDir}s：${loadedField.values.length} 个值，min ${min.toFixed(3)} / max ${max.toFixed(3)}${loadedField.complete ? "" : "（不完整）"}`;
   }
   const html = buildReportHtml({
-    projectName: project.name,
+    projectName: currentProject.name,
     studyName: study.name,
     materialName: material?.name ?? "未登记",
     generatedAt: new Date().toLocaleString("zh-CN", { hour12: false }),

@@ -1,46 +1,37 @@
 <script setup lang="ts">
 /**
  * 虚拟机面板（浮于工作区右下角）：Multipass（macOS）/ WSL2（Windows）的
- * 一键安装、启动、应用内 Shell 与关闭。全部逻辑在 state/vm.ts 与 Rust 适配层，
+ * 一键安装、启动、应用内 Shell 与关闭。全部逻辑在 vm store 与 Rust 适配层，
  * 这里只渲染；Shell 区模拟终端外观（图标标题栏 + 提示符行内输入）。
  */
 import { computed, nextTick, onMounted, ref, watch } from "vue";
-import {
-  installVmAction,
-  openVmShellAction,
-  refreshVmStatus,
-  sendVmShellLine,
-  startVmAction,
-  stopVmAction,
-  stopVmShellAction,
-  useAppState,
-} from "../../state";
+import { useVmStore } from "../../stores/vm";
 import UiButton from "../../components/ui/UiButton.vue";
 import Card from "../../components/ui/UiCard.vue";
 import ShellIcon from "../../components/ui/ShellIcon.vue";
 
-const state = useAppState();
+const vm = useVmStore();
 
-const busy = computed(() => state.vmBusy !== null);
+const busy = computed(() => vm.vmBusy !== null);
 const statusHint = computed(
-  () => state.vmStatus?.hint ?? "尚未探测。点击「重新探测」检查虚拟机运行时。",
+  () => vm.vmStatus?.hint ?? "尚未探测。点击「重新探测」检查虚拟机运行时。",
 );
 const terminalTitle = computed(() =>
-  state.vmStatus === null ? "shell" : `shell · ${state.vmStatus.instanceName}`,
+  vm.vmStatus === null ? "shell" : `shell · ${vm.vmStatus.instanceName}`,
 );
 // Linux 原生环境无虚拟机语义：安装/启动/关闭一律短路。
-const native = computed(() => state.vmStatus?.provider === "native");
-const toolInstalled = computed(() => state.vmStatus?.toolInstalled ?? false);
-const instanceState = computed(() => state.vmStatus?.instanceState ?? "missing");
+const native = computed(() => vm.vmStatus?.provider === "native");
+const toolInstalled = computed(() => vm.vmStatus?.toolInstalled ?? false);
+const instanceState = computed(() => vm.vmStatus?.instanceState ?? "missing");
 
-const outputText = computed(() => state.vmShellLogs.join("\n"));
+const outputText = computed(() => vm.vmShellLogs.join("\n"));
 
 // 原刷新按钮在动作进行中禁用——Card 的刷新按钮不外联 disabled，以守卫等价。
 function onRefresh(): void {
   if (busy.value) {
     return;
   }
-  void refreshVmStatus();
+  void vm.refreshVmStatus();
 }
 
 // 模拟终端：深色窗口 + 输出滚动区 + 提示符行内输入。
@@ -48,9 +39,10 @@ const outputRef = ref<HTMLPreElement | null>(null);
 const promptInput = ref<HTMLInputElement | null>(null);
 const command = ref("");
 
-// 每次追加日志都是新数组：等 DOM 更新完把输出区滚到底部。
+// store 原地 push 追加日志（数组引用不变），监听长度才能感知追加：
+// 等 DOM 更新完把输出区滚到底部。
 watch(
-  () => state.vmShellLogs,
+  () => vm.vmShellLogs.length,
   async () => {
     await nextTick();
     const output = outputRef.value;
@@ -72,11 +64,11 @@ function send(): void {
     return;
   }
   command.value = "";
-  void sendVmShellLine(line);
+  void vm.sendShellLine(line);
 }
 
 onMounted(() => {
-  void refreshVmStatus();
+  void vm.refreshVmStatus();
 });
 </script>
 
@@ -86,28 +78,26 @@ onMounted(() => {
       <ShellIcon class="h-4 w-4 text-emerald-400" />
     </template>
     <div class="flex flex-wrap items-center gap-2">
-      <UiButton :disabled="busy || native || toolInstalled" @click="installVmAction()">
+      <UiButton :disabled="busy || native || toolInstalled" @click="vm.installVm()">
         安装虚拟机
       </UiButton>
       <UiButton
         :disabled="busy || native || !toolInstalled || instanceState === 'running'"
-        @click="startVmAction()"
+        @click="vm.startVm()"
       >
         启动虚拟机
       </UiButton>
       <UiButton
         :disabled="busy || !toolInstalled || instanceState === 'missing'"
-        @click="openVmShellAction()"
+        @click="vm.openShell()"
       >
         进入 Shell
       </UiButton>
-      <UiButton variant="ghost" :disabled="busy" @click="stopVmShellAction()">
-        停止 Shell
-      </UiButton>
+      <UiButton variant="ghost" :disabled="busy" @click="vm.stopShell()"> 停止 Shell </UiButton>
       <UiButton
         variant="ghost"
         :disabled="busy || native || !toolInstalled || instanceState === 'missing'"
-        @click="stopVmAction()"
+        @click="vm.stopVm()"
       >
         关闭虚拟机
       </UiButton>

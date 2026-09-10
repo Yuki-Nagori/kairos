@@ -5,31 +5,26 @@
  * 选中 id 未命中时回退首个内置材料，删除后同样回落，保证详情与动作始终有目标。
  */
 import { computed, ref, watch } from "vue";
-import {
-  assignMaterial,
-  copyMaterialToCustom,
-  deleteMaterial,
-  exportMaterials,
-  importMaterials,
-  useAppState,
-} from "../../state";
+import { useAppStore } from "../../stores/app";
+import { useMaterialsStore } from "../../stores/materials";
 import type { Material, PropertyTable } from "../../types";
 import Card from "../../components/ui/UiCard.vue";
 import UiButton from "../../components/ui/UiButton.vue";
 import LatexBlock from "../../components/LatexBlock.vue";
 
-const state = useAppState();
+const app = useAppStore();
+const materials = useMaterialsStore();
 
-const working = computed(() => state.busy !== null);
+const working = computed(() => app.busy !== null);
 
 const selectedId = ref<string | null>(null);
 
 // 目标材料：按选中 id 查找，未命中（初始 / 删除后）回退首个内置材料。
 const selected = computed<Material | undefined>(
   () =>
-    [...state.materials.builtin, ...state.materials.custom].find(
+    [...materials.materials.builtin, ...materials.materials.custom].find(
       (m) => m.id === selectedId.value,
-    ) ?? state.materials.builtin[0],
+    ) ?? materials.materials.builtin[0],
 );
 
 // 回退结果同步回选中 id：动作按钮与高亮都以 selectedId 为准（与原 render 同步一致）。
@@ -101,34 +96,34 @@ const mechanicsRows = computed<[string, string][]>(() => {
 });
 
 const importDisabled = computed(() => working.value);
-const exportDisabled = computed(() => state.materials.custom.length === 0 || working.value);
+const exportDisabled = computed(() => materials.materials.custom.length === 0 || working.value);
 const copyDisabled = computed(() => !selectedId.value || working.value);
 const deleteDisabled = computed(
   () =>
     !selectedId.value ||
-    !state.materials.custom.some((m) => m.id === selectedId.value) ||
+    !materials.materials.custom.some((m) => m.id === selectedId.value) ||
     working.value,
 );
 
 function doImport(): void {
-  void importMaterials();
+  void materials.importMaterials();
 }
 function doExport(): void {
-  void exportMaterials();
+  void materials.exportMaterials();
 }
 function doCopy(): void {
   if (selectedId.value) {
-    void copyMaterialToCustom(selectedId.value);
+    void materials.copyMaterialToCustom(selectedId.value);
   }
 }
 function doUse(): void {
   if (selectedId.value) {
-    assignMaterial(selectedId.value);
+    materials.assignMaterial(selectedId.value);
   }
 }
 function doDelete(): void {
   if (selectedId.value) {
-    void deleteMaterial(selectedId.value);
+    void materials.deleteMaterial(selectedId.value);
     selectedId.value = null;
   }
 }
@@ -149,7 +144,7 @@ function doDelete(): void {
         <p class="mb-1 text-xs font-semibold text-zinc-400">内置示例</p>
         <div class="w-44 shrink-0 space-y-1">
           <button
-            v-for="material in state.materials.builtin"
+            v-for="material in materials.materials.builtin"
             :key="material.id"
             type="button"
             class="block w-full truncate rounded-lg border border-zinc-700 px-2 py-1.5 text-left text-xs hover:border-emerald-500"
@@ -158,14 +153,16 @@ function doDelete(): void {
           >
             {{ material.family }} · {{ material.name }}
           </button>
-          <p v-if="state.materials.builtin.length === 0" class="text-xs text-zinc-500">加载中…</p>
+          <p v-if="materials.materials.builtin.length === 0" class="text-xs text-zinc-500">
+            加载中…
+          </p>
         </div>
       </div>
       <div>
         <p class="mb-1 text-xs font-semibold text-zinc-400">自定义</p>
         <div class="w-44 shrink-0 space-y-1">
           <button
-            v-for="material in state.materials.custom"
+            v-for="material in materials.materials.custom"
             :key="material.id"
             type="button"
             class="block w-full truncate rounded-lg border border-zinc-700 px-2 py-1.5 text-left text-xs hover:border-emerald-500"
@@ -174,7 +171,7 @@ function doDelete(): void {
           >
             {{ material.family }} · {{ material.name }}
           </button>
-          <p v-if="state.materials.custom.length === 0" class="text-xs text-zinc-500">
+          <p v-if="materials.materials.custom.length === 0" class="text-xs text-zinc-500">
             无自定义材料。
           </p>
         </div>

@@ -4,7 +4,7 @@
  * 读写 store.stage，各列面板按阶段显隐由布局层（Phase 4 的 App 编排）负责。
  */
 import { computed } from "vue";
-import { useAppState, appStore } from "../state";
+import { useAppStore } from "../stores/app";
 import type { Stage } from "../types";
 
 const STAGES: [Stage, string][] = [
@@ -17,8 +17,8 @@ const STAGES: [Stage, string][] = [
   ["report", "报告"],
 ];
 
-const state = useAppState();
-const active = computed(() => state.stage);
+const app = useAppStore();
+const active = computed(() => app.stage);
 </script>
 
 <template>
@@ -31,7 +31,7 @@ const active = computed(() => state.stage);
       :class="{
         'border-emerald-400 font-semibold text-emerald-400': stage === active,
       }"
-      @click="appStore.set({ stage })"
+      @click="app.stage = stage"
     >
       {{ label }}
     </button>

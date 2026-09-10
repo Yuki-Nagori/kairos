@@ -5,7 +5,12 @@
  * 物理时间（Job.lastTimeS 由 Rust 侧解析日志得到）。
  */
 import { computed, ref } from "vue";
-import { submitPipeline, useAppState } from "../../state";
+import { useAppStore } from "../../stores/app";
+import { useGeometryStore } from "../../stores/geometry";
+import { useJobsStore } from "../../stores/jobs";
+import { useMaterialsStore } from "../../stores/materials";
+import { usePipelineStore } from "../../stores/pipeline";
+import { useProjectStore } from "../../stores/project";
 import type { AnalysisStage } from "../../types";
 import { allPrerequisitesDone, evaluatePipeline } from "../../utils/pipeline";
 import Card from "../../components/ui/UiCard.vue";
@@ -13,7 +18,12 @@ import Dropdown from "../../components/ui/UiDropdown.vue";
 import TextInput from "../../components/ui/UiTextInput.vue";
 import UiButton from "../../components/ui/UiButton.vue";
 
-const state = useAppState();
+const app = useAppStore();
+const geometry = useGeometryStore();
+const jobsStore = useJobsStore();
+const materials = useMaterialsStore();
+const pipeline = usePipelineStore();
+const project = useProjectStore();
 
 // 提交表单：核数留空时按 2 核提交（与 Number("") || 2 的回退一致）。
 const stage = ref("fill");
@@ -21,20 +31,20 @@ const cores = ref("");
 
 const steps = computed(() =>
   evaluatePipeline({
-    geometries: state.geometries,
-    meshReports: state.meshReports,
-    project: state.project,
-    activeStudyId: state.activeStudyId,
-    materials: state.materials,
-    jobs: state.jobs,
+    geometries: geometry.geometries,
+    meshReports: geometry.meshReports,
+    project: project.project,
+    activeStudyId: project.activeStudyId,
+    materials: materials.materials,
+    jobs: jobsStore.jobs,
   }),
 );
 
-const submitDisabled = computed(() => !allPrerequisitesDone(steps.value) || state.busy !== null);
+const submitDisabled = computed(() => !allPrerequisitesDone(steps.value) || app.busy !== null);
 
 // 求解实时状态行：显示运行中作业的物理时间，空闲时为空串（行仍占位）。
 const liveText = computed(() => {
-  const job = state.jobs.at(-1);
+  const job = jobsStore.jobs.at(-1);
   if (job?.status === "running" && job.lastTimeS !== null) {
     return `⟳ 求解中 · T = ${job.lastTimeS.toFixed(2)} s`;
   }
@@ -42,7 +52,7 @@ const liveText = computed(() => {
 });
 
 function submit(): void {
-  void submitPipeline(Number(cores.value) || 2, stage.value as AnalysisStage);
+  void pipeline.submitPipeline(Number(cores.value) || 2, stage.value as AnalysisStage);
 }
 </script>
 
