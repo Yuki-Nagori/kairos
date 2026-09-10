@@ -133,7 +133,7 @@ pub fn vector_magnitude_gpu(vectors: &[[f32; 3]]) -> Result<Vec<f32>, KairosErro
     Ok(result)
 }
 
-// ─── 派生标量算子（T31）：线性映射（含归一化）/ 阈值掩码 / 两场差值 ───
+// ─── 派生标量算子：线性映射 / 阈值掩码 / 两场差值 ───
 
 const SCALAR_LINEAR_SHADER: &str = include_str!("../../shaders/scalar_linear.wgsl");
 const SCALAR_THRESHOLD_SHADER: &str = include_str!("../../shaders/scalar_threshold.wgsl");
@@ -341,15 +341,15 @@ pub fn operator_catalog() -> Vec<GpuOperatorInfo> {
         },
         GpuOperatorInfo {
             name: "derive_linear".into(),
-            description: "派生：线性映射（含归一化，T31）".into(),
+            description: "派生：线性映射（含归一化）".into(),
         },
         GpuOperatorInfo {
             name: "derive_threshold".into(),
-            description: "派生：常数阈值掩码（T31）".into(),
+            description: "派生：常数阈值掩码".into(),
         },
         GpuOperatorInfo {
             name: "derive_difference".into(),
-            description: "派生：两场差值（T31）".into(),
+            description: "派生：两场差值".into(),
         },
     ]
 }
@@ -392,7 +392,6 @@ mod tests {
     #[test]
     fn operator_catalog_is_non_empty() {
         assert!(!operator_catalog().is_empty());
-        // T31 派生算子已入目录
         assert!(
             operator_catalog()
                 .iter()

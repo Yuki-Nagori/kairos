@@ -325,7 +325,7 @@ fn extract_archive(archive: &Path, dest: &Path) -> Result<()> {
     if is_zip {
         // Linux / macOS：unzip <archive> -d <dest>；
         // Windows：bsdtar -xf <archive> -C <dest>——必须显式给解压模式位，
-        // 裸位置参数 bsdtar 只打用法提示不干活（Windows CI 真机踩过）。
+        // 裸位置参数 bsdtar 只打用法提示不干活，必须显式给模式位。
         if cfg!(target_os = "windows") {
             command.arg("-xf");
         }

@@ -112,10 +112,10 @@ fn spawn_run_script(
     vm_shell: Option<&str>,
 ) -> Result<Child> {
     // VM 执行：case 目录经 tar 管道复制进 VM 原生文件系统
-    // （真机验证 multipass mount 的 sshfs 权限不可用），
+    // （multipass mount 的 sshfs 权限映射不可用），
     // 环境树由 vm_deploy_bundle 预先解压在 ~/moldingfoam-env。
     if let Some(shell) = vm_shell {
-        // 真机验证：multipass mount 的 sshfs 权限映射导致子目录不可读，
+        // multipass mount 的 sshfs 权限映射导致子目录不可读，
         // 改为 tar 管道把 case 目录复制进 VM 原生文件系统（权限与性能可靠）。
         #[cfg(target_os = "macos")]
         if shell == "multipass" {

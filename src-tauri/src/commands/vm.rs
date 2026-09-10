@@ -1,5 +1,5 @@
 //! 虚拟机命令：Multipass（macOS）/ WSL2（Windows）/ 原生 bash（Linux）的
-//! 探测、一键安装、启动、应用内 Shell 与停止；应用退出时联动关闭虚拟机（T35）。
+//! 探测、一键安装、启动、应用内 Shell 与停止；应用退出时联动关闭虚拟机。
 //! 纯逻辑（参数构造 / 输出解析 / 提示文案）在 `kairos_core::services::vm`，
 //! 本模块只做进程副作用与流式回传。
 
@@ -308,7 +308,7 @@ fn ensure_vm_image(app: &AppHandle, progress: &Channel<String>) -> Result<Option
 
 /// 从单个 URL 流式下载到目标文件，按去重后的百分比回传进度。
 fn download_to_file(url: &str, dest: &Path, progress: &Channel<String>) -> Result<()> {
-    // images/ 子目录尚不存在时会 os error 2（真机踩过），先建父目录。
+    // images/ 子目录尚不存在时会 os error 2，先建父目录。
     if let Some(parent) = dest.parent() {
         std::fs::create_dir_all(parent)?;
     }
@@ -399,7 +399,7 @@ pub async fn vm_deploy_bundle(app: AppHandle, progress: Channel<String>) -> Resu
         if !extract.success() {
             return Err(KairosError::io("解压失败，请确认 bundle 完整后重试。"));
         }
-        // 求解器运行时依赖：foamRun 链接 libmpi.so.40（真机踩坑），VM 内必须
+        // 求解器运行时依赖：foamRun 链接 libmpi.so.40，VM 内必须
         // 有 OpenMPI。ubuntu 用户免密 sudo，非交互安装无阻碍。
         let _ = progress.send("── 安装 OpenMPI 运行时（约 1 分钟）──".into());
         // 国内时区：先切清华 apt 镜像源（与云镜像同源策略，加速 update）。
@@ -644,7 +644,7 @@ fn kill_session(state: &VmShellState) {
 }
 
 /// 给交互 Shell 包一层 PTY：multipass exec / bash 在非 TTY 管道下是批处理
-/// 语义（stdin 读到 EOF 才执行，无法交互——真机踩过），script 提供伪终端后
+/// 语义（stdin 读到 EOF 才执行，无法交互），script 提供伪终端后
 /// multipass 检测到 TTY 即切完整交互模式（回显/提示符/输出全通）。
 #[cfg(target_os = "macos")]
 fn wrap_pty(args: Vec<String>) -> Vec<String> {

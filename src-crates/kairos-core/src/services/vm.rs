@@ -132,7 +132,7 @@ pub fn launch_args(
                 INSTANCE_NAME.into(),
                 "--cpus".into(),
                 resources.cpus.to_string(),
-                // --mem 已被 multipass 弃用（真机警告），新脚本一律用 --memory。
+                // --mem 已被 multipass 弃用，新脚本一律用 --memory。
                 "--memory".into(),
                 format!("{}G", resources.memory_gib),
                 "--disk".into(),
@@ -516,7 +516,7 @@ mod tests {
             clean_terminal_line("frame one\rframe two\rframe three"),
             "frame three"
         );
-        // 退格重绘 + 夹 NUL（multipass 真机形态）
+        // 退格重绘 + 夹 NUL
         assert_eq!(
             clean_terminal_line("Starting kairos  0/0-0\\0|0/0"),
             "Starting kairos  0/0-0\\0|0/0"

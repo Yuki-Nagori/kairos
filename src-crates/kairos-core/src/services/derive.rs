@@ -1,5 +1,4 @@
-//! 派生结果算子（对标 moldflow-api data_transform 的「用户派生绘图」）：
-//! 对已加载结果场做标量运算生成新场。CPU 参考实现为唯一事实源；
+//! 派生结果算子：对已加载结果场做标量运算生成新场。CPU 参考实现为唯一事实源；
 //! WGSL GPU 版本与一致性测试在 src-tauri 的 gpu_ops.rs（scalar_*）。
 
 use crate::error::{KairosError, Result};

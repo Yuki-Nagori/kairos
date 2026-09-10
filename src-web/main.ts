@@ -25,7 +25,7 @@ if (!root) {
   throw new Error("Root element #app not found");
 }
 
-// CAE 三列工作台（对标 ui.html）：整页锁定不滚动，只有左右列与视口内部各自伸缩。
+// CAE 三列工作台：整页锁定不滚动，只有左右列与视口内部各自伸缩。
 root.className = "flex h-screen flex-col overflow-hidden bg-zinc-950 text-zinc-100";
 
 // 先恢复主题再创建组件，标题栏的初始主题图标才能与持久化偏好一致。
