@@ -43,7 +43,7 @@ export function useMoldPanel() {
   const channelEnd = reactive(zeroCoords());
   const inletTemp = ref("25");
 
-  // 空串按 0 处理（与 Number("") === 0 的原生行为一致）。
+  // 空输入按 0 处理（Number("") === 0），坐标允许留空。
   function xyz(values: Record<AxisKey, string>): [number, number, number] {
     return [Number(values.x ?? 0), Number(values.y ?? 0), Number(values.z ?? 0)];
   }

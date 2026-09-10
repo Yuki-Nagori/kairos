@@ -1,3 +1,4 @@
+/** 材料库状态：内置示例材料 + 用户自定义材料的导入/导出/复制与研究登记。 */
 import { defineStore } from "pinia";
 import {
   deleteCustomMaterial,
@@ -12,10 +13,8 @@ import type { Material, MaterialLibrary } from "../types";
 import { useAppStore } from "./app";
 import { useProjectStore } from "./project";
 
-/** 材料库：内置示例材料 + 用户自定义材料的导入/导出/复制与研究登记。 */
 export const useMaterialsStore = defineStore("materials", {
   state: () => ({
-    /** 材料库：内置示例材料 + 用户自定义材料。 */
     materials: { builtin: [], custom: [] } as MaterialLibrary,
   }),
   actions: {

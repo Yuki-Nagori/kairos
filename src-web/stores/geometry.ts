@@ -1,3 +1,4 @@
+/** 几何域状态：已导入的 STL 摘要列表与每个几何的体积网格报告。 */
 import { defineStore } from "pinia";
 import {
   generateGmshMesh as apiGenerateGmshMesh,
@@ -10,7 +11,6 @@ import { pickStlPath } from "../api/dialog";
 import type { GeometrySummary, MeshingReport } from "../types";
 import { useAppStore } from "./app";
 
-/** 几何：已导入的 STL 摘要列表与每个几何的体积网格报告。 */
 export const useGeometryStore = defineStore("geometry", {
   state: () => ({
     /** 已导入的几何（摘要列表，全量网格在 Rust 会话缓存）。 */

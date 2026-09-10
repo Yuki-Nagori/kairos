@@ -1,3 +1,4 @@
+/** 运行时依赖状态：就绪探测结果、受管下载清单与组件级下载/更新检查的阶段状态。 */
 import { defineStore } from "pinia";
 import {
   checkDependencyUpdate,
@@ -24,12 +25,13 @@ function toEntry(saved: SavedDownload): DownloadedEntry {
   };
 }
 
-/** 运行时依赖：就绪状态、受管下载清单与组件级下载/更新检查的阶段状态。 */
 export const useDependenciesStore = defineStore("dependencies", {
   state: () => ({
     /** 运行时依赖状态（许可分级 + 就绪探测）。 */
     dependencies: [] as DependencyStatus[],
+    /** 本次会话内下载成功的记录（key = 组件 id）；跨会话恢复走 downloadedFiles。 */
     savedDownloads: {} as Record<string, SavedDownload>,
+    /** 跨会话「已下载」清单（后端 manifest.json 快照）。 */
     downloadedFiles: {} as Record<string, DownloadedEntry>,
     /** 组件下载/编译流水线的阶段状态（key = 组件 id；成功后清除该条目）。 */
     componentStages: {} as Record<string, ComponentStageState>,

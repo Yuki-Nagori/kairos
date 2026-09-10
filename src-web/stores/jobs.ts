@@ -1,3 +1,4 @@
+/** 求解作业状态：调度器持有的作业列表与每作业日志尾部（环形缓冲）。 */
 import { Channel } from "@tauri-apps/api/core";
 import { defineStore } from "pinia";
 import { cancelJob as apiCancelJob, listJobs, submitJob as apiSubmitJob } from "../api/jobs";
@@ -8,7 +9,6 @@ import { useProjectStore } from "./project";
 /** 每作业日志的环形上限：超出后丢弃最旧行，避免长作业撑爆内存。 */
 const JOB_LOG_LIMIT = 200;
 
-/** 求解作业：调度器持有的作业列表与每作业日志尾部（环形缓冲）。 */
 export const useJobsStore = defineStore("jobs", {
   state: () => ({
     /** 求解作业列表（调度器持有的快照）。 */

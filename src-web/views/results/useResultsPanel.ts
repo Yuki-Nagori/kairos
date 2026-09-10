@@ -13,7 +13,7 @@ export function useResultsPanel() {
   const catalog = computed(() => results.resultCatalog);
   const loadedField = computed(() => results.loadedField);
 
-  // 原扫描按钮在加载进行中禁用——Card 的刷新按钮不外联 disabled，以守卫等价。
+  // Card 的刷新按钮不外联 disabled，改在扫描函数内守卫 busy。
   function scan(): void {
     if (working.value) {
       return;
@@ -24,7 +24,7 @@ export function useResultsPanel() {
     }
   }
 
-  // 场统计行：空场用 NaN 占位，格式化保持原样。
+  // 场统计行：空场（0 个值）以 NaN 占位，仍按数值格式渲染。
   const stats = computed(() => {
     const field = results.loadedField;
     if (field === null) {

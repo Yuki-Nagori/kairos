@@ -24,7 +24,7 @@ export function useMaterialsPanel() {
       ) ?? materials.materials.builtin[0],
   );
 
-  // 回退结果同步回选中 id：动作按钮与高亮都以 selectedId 为准（与原 render 同步一致）。
+  // 回退结果同步回选中 id：动作按钮与高亮都以 selectedId 为准。
   watch(selected, (material) => {
     if (material && selectedId.value !== material.id) {
       selectedId.value = material.id;

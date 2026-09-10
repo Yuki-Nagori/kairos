@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// 逻辑全部抽至同目录 useJobsPanel.ts，此处仅保留模板与解构。
+/** 求解作业面板：逻辑见 useJobsPanel。 */
 import { useJobsPanel } from "./useJobsPanel";
 import Card from "../../components/ui/UiCard.vue";
 import TextInput from "../../components/ui/UiTextInput.vue";
@@ -43,7 +43,7 @@ const {
             class="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-zinc-800 px-3 py-2 text-xs"
           >
             <span class="font-mono text-zinc-300">{{ job.id }}</span>
-            <!-- 状态行只渲染文字：原生版先挂状态圆点、再以 textContent 赋值清掉了它，等价移植同样无圆点。 -->
+            <!-- 状态行只渲染文字，无状态圆点（有意省略）。 -->
             <span class="flex items-center gap-1.5" :class="STATUS_CLASS[job.status]">
               {{ STATUS_LABEL[job.status] }}
             </span>

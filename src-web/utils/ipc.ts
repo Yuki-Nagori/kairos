@@ -1,3 +1,4 @@
+/** IPC 网关：统一运行时探测与错误归类，前端只捕获 IpcUnavailableError / CommandError。 */
 import { invoke } from "@tauri-apps/api/core";
 import { isTauriRuntime } from "./environment";
 
@@ -39,7 +40,7 @@ function normalize(rejection: unknown): Error {
   return new Error(String(rejection));
 }
 
-/** 全项目唯一的 IPC 网关：统一运行时探测、错误归类与契约转换，命令调用保持可测。 */
+/** 全项目唯一的命令调用入口。 */
 export async function invokeCommand<T>(
   command: string,
   args?: Record<string, unknown>,

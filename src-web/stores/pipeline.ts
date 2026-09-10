@@ -1,3 +1,4 @@
+/** 流水线编排（Pinia）：跨 store 读取前置条件并端到端提交，无自有状态。 */
 import { defineStore } from "pinia";
 import { defaultCaseDir } from "../api/project";
 import { generateOpenfoamCase } from "../api/solver";
@@ -8,11 +9,11 @@ import { useJobsStore } from "./jobs";
 import { useMaterialsStore } from "./materials";
 import { useProjectStore } from "./project";
 
-/** 流水线编排：跨 store 读取前置条件并端到端提交，无自有状态。 */
 export const usePipelineStore = defineStore("pipeline", {
   state: () => ({}),
   actions: {
-    /** 端到端提交：case 生成 → 作业入队（前置检查见 T11 流水线面板）。 */
+    /** 端到端提交：case 生成 → 作业入队；前置就绪提示由流水线面板的
+     * evaluatePipeline 负责，这里仍做防御校验（不满足直接报错返回）。 */
     async submitPipeline(cores: number, stage: AnalysisStage): Promise<void> {
       const app = useAppStore();
       const geometryStore = useGeometryStore();

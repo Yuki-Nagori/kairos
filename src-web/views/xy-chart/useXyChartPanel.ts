@@ -1,3 +1,4 @@
+/** XY 图表面板：场分布曲线 + 探针管理 + CSV 导出。 */
 import { computed, onMounted, onUnmounted, ref, useTemplateRef, watch } from "vue";
 import { useAppStore } from "../../stores/app";
 import { useResultsStore } from "../../stores/results";
@@ -6,7 +7,6 @@ import { drawLineChart } from "../../utils/chart";
 import { THEME_CHANGED_EVENT } from "../../composables/useTheme";
 import { registerSnapshot } from "../../render/snapshot";
 
-/** XY 图表面板逻辑：场分布曲线（节点序号 → 值）+ 探针管理 + CSV 导出。 */
 export function useXyChartPanel() {
   const app = useAppStore();
   const results = useResultsStore();
@@ -52,7 +52,7 @@ export function useXyChartPanel() {
       yLabel: field?.field ?? "",
     });
 
-    // 探针点在曲线上标注（简单竖线 + 值）。
+    // 探针点绘制在曲线上（圆点 + 值标注）；padding 需与 drawLineChart 的留白一致。
     if (field !== null && field.values.length > 0) {
       const padding = { left: 56, top: 16 };
       const plotWidth = canvas.width - padding.left - 16;

@@ -1,3 +1,4 @@
+/** 工程文档状态：项目/研究/流道与水路单元，以及最近项目与模具网络校验问题。 */
 import { defineStore } from "pinia";
 import { getSystemInfo } from "../api/system";
 import {
@@ -15,7 +16,7 @@ import { useMaterialsStore } from "./materials";
 let studySeq = 0;
 let elementSeq = 0;
 
-/** 工程文档：项目/研究/流道与水路单元，以及最近项目与模具网络校验问题。 */
+/** 结构编辑只改内存，落盘统一经保存/另存为动作（writeProject）。 */
 export const useProjectStore = defineStore("project", {
   state: () => ({
     /** 当前打开的工程文档；null 表示尚未打开（新建/打开后才有）。 */

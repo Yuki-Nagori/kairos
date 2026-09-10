@@ -1,8 +1,5 @@
 <script setup lang="ts">
-/**
- * 分析阶段选项卡（v2 设计稿）：主页/几何/网格/工艺/求解/结果/报告。
- * 读写 store.stage，各列面板按阶段显隐由布局层（Phase 4 的 App 编排）负责。
- */
+/** 分析阶段选项卡：逻辑见 useStageTabs。 */
 import { useStageTabs } from "./useStageTabs";
 
 const { STAGES, app, active } = useStageTabs();

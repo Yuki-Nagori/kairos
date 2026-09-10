@@ -1,8 +1,6 @@
 /**
  * 运行时依赖面板：许可分级、就绪状态、应用内下载与官方页引导。
  * 徽标文案与配色正交：许可定颜色（合规口径），安装策略定文案（Gmsh = GPL + 官方直链）。
- * 正文控件顺序沿用原版 DOM append 的最终排布；依赖列表整体由响应式状态一次推导
- * （模板分支在这里算清，等价原生版每次 render 的 replaceChildren 重建）。
  */
 import { computed, ref } from "vue";
 import { useAppStore } from "../../stores/app";
@@ -123,7 +121,7 @@ export function useDependenciesPanel() {
     }),
   );
 
-  // 下载目录路径异步取回；动态 import 沿用原版（探测前展示占位文案）。
+  // 下载目录路径异步取回，探测前展示占位文案。
   const downloadsDir = ref("探测中…");
   void import("../../api/downloads").then(async (m) => {
     downloadsDir.value = await m.getDownloadsDir();

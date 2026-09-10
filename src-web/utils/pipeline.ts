@@ -1,3 +1,4 @@
+/** 流水线前置检查：从应用状态快照纯函数评估五个步骤的就绪情况与下一步指引。 */
 import type { GeometrySummary, Job, Material, Project } from "../types";
 
 /** 流水线评估输入：从应用状态裁剪出的最小快照，保持函数纯净可测。 */

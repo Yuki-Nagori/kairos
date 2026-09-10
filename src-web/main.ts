@@ -1,3 +1,4 @@
+/** 应用入口：安装 Pinia、挂载根组件，拉起菜单 / 快捷键与项目 bootstrap。 */
 import "./app.css";
 import { createPinia } from "pinia";
 import { createApp } from "vue";

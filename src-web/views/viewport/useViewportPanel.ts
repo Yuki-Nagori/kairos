@@ -1,3 +1,5 @@
+/** 3D 视口面板：WebGL2 渲染与云图 / 剖切 / 时间步动画控制（WebGPU 探测提示）。
+ * 视口是工作台主角：卡片弹性充满中列剩余空间，画布随容器缩放。 */
 import { computed, onMounted, onUnmounted, ref, useTemplateRef, watch } from "vue";
 import { useGeometryStore } from "../../stores/geometry";
 import { useResultsStore } from "../../stores/results";
@@ -8,10 +10,6 @@ import { registerSnapshot } from "../../render/snapshot";
 import { minMax } from "../../utils/stats";
 import { getRenderMesh } from "../../api/geometry";
 
-/**
- * 3D 视口面板逻辑：WebGL2 渲染器 + 云图/剖切/时间步动画控制（WebGPU 探测提示）。
- * 视口是工作台主角：卡片弹性充满中列剩余空间，画布随容器缩放。
- */
 export function useViewportPanel() {
   const geometry = useGeometryStore();
   const results = useResultsStore();
@@ -27,7 +25,7 @@ export function useViewportPanel() {
   const emptyError = ref(false);
   const meshLoaded = ref(false);
 
-  // 悬浮色标图例：加载场后显示渐变标尺与 max/mid/min（自上而下）。
+  // 悬浮色标图例：数值自上而下 max/mid/min，与渐变条方向对应。
   const legendValues = ref<number[] | null>(null);
   const legendVisible = computed(() => legendValues.value !== null);
 
@@ -44,7 +42,7 @@ export function useViewportPanel() {
   }
 
   // —— 控制条 ——
-  // 启用条件按数据就绪度推导（原版按钮处于永久禁用的死接线状态，迁移时接通）：
+  // 启用条件按数据就绪度推导：
   // 载入需已有几何；剖切/重置/播放需网格已上传；播放另需结果时间步目录。
   const loadDisabled = computed(() => geometry.geometries.length === 0);
   const meshReady = ref(false);

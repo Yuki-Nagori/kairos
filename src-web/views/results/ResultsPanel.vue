@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// 逻辑全部抽至同目录 useResultsPanel.ts，此处仅保留模板与解构。
+/** 结果面板：逻辑见 useResultsPanel。 */
 import { useResultsPanel } from "./useResultsPanel";
 import UiButton from "../../components/ui/UiButton.vue";
 import Card from "../../components/ui/UiCard.vue";

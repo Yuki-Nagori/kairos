@@ -1,3 +1,4 @@
+/** 运行时依赖 IPC：依赖清单、官方指引页与组件更新检查。 */
 import { invokeCommand } from "../utils/ipc";
 import type { DependencyStatus, UpdateCheck } from "../types";
 

@@ -1,3 +1,4 @@
+/** 几何 IPC：STL 导入、体积网格生成（内置与 Gmsh 引擎）与渲染网格导出。 */
 import { invokeCommand } from "../utils/ipc";
 import type { GeometrySummary, MeshingReport } from "../types";
 
@@ -6,6 +7,7 @@ export function importStl(path: string): Promise<GeometrySummary> {
   return invokeCommand("import_stl", { path });
 }
 
+/** 移除几何并释放其会话缓存。 */
 export function removeGeometry(geometryId: string): Promise<void> {
   return invokeCommand("remove_geometry", { geometryId });
 }

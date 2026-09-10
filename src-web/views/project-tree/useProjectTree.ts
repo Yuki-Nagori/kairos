@@ -1,10 +1,10 @@
+/** 项目树面板：层级展示工程 / 几何 / 求解作业 / 运行时依赖。 */
 import { computed } from "vue";
 import { useDependenciesStore } from "../../stores/dependencies";
 import { useGeometryStore } from "../../stores/geometry";
 import { useJobsStore } from "../../stores/jobs";
 import { useProjectStore } from "../../stores/project";
 
-/** 项目树面板逻辑：层级展示工程 / 几何 / 求解作业 / 运行时依赖。 */
 export function useProjectTree() {
   const project = useProjectStore();
   const geometry = useGeometryStore();

@@ -1,3 +1,4 @@
+/** 模具网络校验 IPC：流道 / 浇口 / 冷却水路连通性。 */
 import { invokeCommand } from "../utils/ipc";
 import type { CoolingChannel, RunnerElement } from "../types";
 

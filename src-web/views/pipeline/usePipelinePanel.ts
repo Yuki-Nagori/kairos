@@ -21,7 +21,7 @@ export function usePipelinePanel() {
   const pipeline = usePipelineStore();
   const project = useProjectStore();
 
-  // 提交表单：核数留空时按 2 核提交（与 Number("") || 2 的回退一致）。
+  // 提交表单：核数留空时按 2 核提交。
   const stage = ref("fill");
   const cores = ref("");
 

@@ -1,3 +1,4 @@
+/** 文件对话框：工程 / JSON / STL 的打开与保存路径选择，取消一律返回 null。 */
 import { open, save } from "@tauri-apps/plugin-dialog";
 
 const PROJECT_FILTER = { name: "Kairos 工程", extensions: ["kairos"] };

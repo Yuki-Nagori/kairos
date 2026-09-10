@@ -93,7 +93,7 @@ export interface Material {
   dataNote: string;
 }
 
-/** 材料库：内置示例材料 + 自定义材料（详情见 T04）。 */
+/** 材料库：内置示例材料 + 自定义材料。 */
 export interface MaterialLibrary {
   builtin: Material[];
   custom: Material[];

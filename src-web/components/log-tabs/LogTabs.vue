@@ -1,8 +1,5 @@
 <script setup lang="ts">
-/**
- * 中列底部日志标签组（v2 设计稿）：分析日志 / 网格日志 / VM 终端。
- * 只读镜像——交互式输入仍在 VM 抽屉；数据全部来自 store 分片。
- */
+/** 日志标签组：逻辑见 useLogTabs。 */
 import { useLogTabs } from "./useLogTabs";
 
 const { TABS, active, lines } = useLogTabs();

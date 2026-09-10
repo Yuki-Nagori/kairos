@@ -1,3 +1,4 @@
+/** 虚拟机 IPC：状态探测、安装 / 启动 / 停止、应用内 Shell 与 bundle 部署。 */
 import { invokeCommand } from "../utils/ipc";
 import { Channel } from "@tauri-apps/api/core";
 import type { VmStatus } from "../types";

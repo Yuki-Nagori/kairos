@@ -1,3 +1,8 @@
+/**
+ * 应用级全局状态：版本/IPC 信息、分析阶段、忙碌提示与全局错误。
+ * 错误分两类——IPC 不可用是预期内的环境提示（自动消失），其余是真实失败；
+ * 统一经 setError 进入，状态栏按「错误 > 忙碌 > 版本」优先级展示。
+ */
 import { defineStore } from "pinia";
 import { IpcUnavailableError } from "../utils/ipc";
 import type { Stage, SystemInfo } from "../types";
@@ -8,11 +13,6 @@ function toMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-/**
- * 应用级状态：版本/IPC 信息、分析阶段、忙碌提示与全局错误。
- * 错误分两类——IPC 不可用是预期内的环境提示（自动消失），其余是真实失败；
- * 统一经 setError 进入，状态栏按「错误 > 忙碌 > 版本」优先级展示。
- */
 export const useAppStore = defineStore("app", {
   state: () => ({
     info: null as SystemInfo | null,

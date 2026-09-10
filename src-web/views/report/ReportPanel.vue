@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// 逻辑全部抽至同目录 useReportPanel.ts，此处仅保留模板与解构。
+/** 仿真报告面板：逻辑见 useReportPanel。 */
 import { useReportPanel } from "./useReportPanel";
 import Card from "../../components/ui/UiCard.vue";
 import UiButton from "../../components/ui/UiButton.vue";

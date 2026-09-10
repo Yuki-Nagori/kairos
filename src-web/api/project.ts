@@ -1,3 +1,4 @@
+/** 工程 IPC：项目创建、保存 / 加载、最近项目与默认 case 目录。 */
 import { invokeCommand } from "../utils/ipc";
 import type { Project, RecentProject } from "../types";
 
@@ -16,6 +17,7 @@ export function loadProjectFile(path: string): Promise<Project> {
   return invokeCommand("load_project_file", { path });
 }
 
+/** 最近打开的工程列表（跨会话）。 */
 export function listRecentProjects(): Promise<RecentProject[]> {
   return invokeCommand("list_recent_projects");
 }

@@ -1,10 +1,7 @@
 <script setup lang="ts">
 /**
- * 终端窗口图标：内联 SVG 描边继承 currentColor，深浅主题自动跟随
- * （替代旧的 <img> 引用方案——图片无法继承颜色）。
- *
- * 来源：Icons8（icons8.com）的终端图标——免费授权要求使用时署名，
- * 已在 README「致谢」标注；不得用作产品 Logo 或单独再分发图标文件。
+ * 终端窗口图标：内联 SVG 描边继承 currentColor（<img> 图片做不到），深浅主题自动跟随。
+ * 图标来自 Icons8（免费授权要求署名，见 README「致谢」）；不得用作产品 Logo 或单独再分发。
  */
 </script>
 

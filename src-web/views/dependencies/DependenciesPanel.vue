@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// 逻辑全部抽至同目录 useDependenciesPanel.ts，此处仅保留模板与解构。
+/** 运行时依赖面板：逻辑见 useDependenciesPanel。 */
 import { useDependenciesPanel } from "./useDependenciesPanel";
 import Card from "../../components/ui/UiCard.vue";
 import ShellIcon from "../../components/ui/ShellIcon.vue";
@@ -37,7 +37,6 @@ const { app, vm, deps, rows, downloadsDir, openDownloadsDir } = useDependenciesP
           <span :class="row.readyClass">{{ row.readyText }}</span>
           <span class="text-zinc-600">{{ row.dep.required ? "必需" : "可选" }}</span>
           <UiButton @click="deps.openDependencyPage(row.dep.pageUrl)">官方页</UiButton>
-          <!-- 有应用内下载地址的组件：用户点击触发（官方源 + 许可展示）；下载进行中禁用。 -->
           <UiButton
             v-if="row.dep.download !== null"
             :variant="row.downloadVariant"

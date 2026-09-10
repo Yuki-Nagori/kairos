@@ -1,4 +1,4 @@
-/** 仿真报告 HTML 生成（T17）：模板 + 转义 + 快照/参数表。 */
+/** 仿真报告 HTML 生成：模板 + 转义 + 快照/参数表。 */
 
 interface ReportSnapshot {
   title: string;
@@ -16,6 +16,7 @@ interface ReportInput {
   fieldStats: string | null;
 }
 
+/** 转义 HTML 特殊字符：报告内容含用户输入（项目/研究名等），防止破坏标记结构。 */
 export function escapeHtml(text: string): string {
   return text
     .replace(/&/g, "&amp;")

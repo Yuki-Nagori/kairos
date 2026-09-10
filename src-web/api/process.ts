@@ -1,3 +1,4 @@
+/** 工艺设置校验 IPC。 */
 import { invokeCommand } from "../utils/ipc";
 import type { ProcessSettings } from "../types";
 

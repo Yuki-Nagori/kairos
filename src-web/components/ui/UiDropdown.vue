@@ -1,7 +1,6 @@
 <script setup lang="ts">
 /**
- * 面板内紧凑下拉框：v-model 绑定选中值，<option> 由调用方经插槽填充
- * （含动态刷新场景，与原生 dropdown 工厂一致）。
+ * 面板内紧凑下拉框：v-model 绑定选中值，<option> 由调用方经插槽填充（含动态刷新场景）。
  */
 defineProps<{ modelValue: string }>();
 

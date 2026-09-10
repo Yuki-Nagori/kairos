@@ -1,7 +1,7 @@
 /**
  * 工艺设置面板：参数表单、校验、应用到活跃研究、预设（localStorage）。
- * 输入值保持字符串形态、空输入经 Number() 落为 0，与原生 input 取值语义一致
- * （出厂默认量级只进 placeholder，不预填 value）；回填仅跟随活跃研究切换触发，
+ * 输入值保持字符串形态（原生 input.value 即字符串）、空输入经 Number() 落为 0；
+ * 出厂默认量级只进 placeholder，不预填 value。回填仅跟随活跃研究切换触发，
  * 其余状态变化不得覆盖用户正在编辑的表单。
  */
 import { reactive, ref, watch } from "vue";
@@ -13,7 +13,7 @@ import { checkProcess } from "../../api/process";
 export function useProcessPanel() {
   const PRESETS_KEY = "kairos-process-presets";
 
-  /** 出厂默认工艺（量级参考通用热塑性塑料，用户可覆盖）。 */
+  /** 出厂默认工艺（量级取通用热塑性塑料的典型值，用户可覆盖）。 */
   function defaultProcess(): ProcessSettings {
     return {
       meltTempC: 230,
@@ -95,7 +95,7 @@ export function useProcessPanel() {
     form.coolantTempC = String(settings.coolantTempC);
   }
 
-  // 校验问题（红）与成功/引导提示（灰）互斥：每次应用后整体重建，与原生 replaceChildren 一致。
+  // 校验问题（红）与成功/引导提示（灰）互斥，每次应用后整体重建。
   const issueLines = ref<string[]>([]);
   const notice = ref<string | null>(null);
 
@@ -160,7 +160,7 @@ export function useProcessPanel() {
   refreshPresetSelect();
 
   // 仅在切换活跃研究时回填该研究的工艺设置；其他状态变化不覆盖表单
-  // （watch 自带「值变化」判定，等价原生版的 filledForStudyId 哨兵；immediate 覆盖首帧）。
+  // （watch 自带「值变化」判定；immediate 覆盖首帧）。
   watch(
     () => project.activeStudyId,
     (activeStudyId) => {

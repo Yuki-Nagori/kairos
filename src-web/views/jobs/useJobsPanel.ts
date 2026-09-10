@@ -36,7 +36,7 @@ export function useJobsPanel() {
     void jobsStore.submitJob(dir, Number(cores.value) || 2);
   }
 
-  // 环境探测行：探测完成后 className 整体替换（不再带 text-xs），沿用原生版的赋值语义。
+  // 环境探测行：探测完成后 className 整体替换（不再带 text-xs），是有意行为。
   const envHint = ref("正在探测 OpenFOAM 环境…");
   const envClass = ref("text-xs text-zinc-500");
   void probeOpenfoam().then((check) => {

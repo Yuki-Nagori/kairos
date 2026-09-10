@@ -1,3 +1,4 @@
+/** 受管下载 IPC：单文件直链下载（进度经 Channel 回传）与跨会话已下载清单。 */
 import { Channel } from "@tauri-apps/api/core";
 import { invokeCommand } from "../utils/ipc";
 import type { DownloadedEntry, SavedDownload } from "../types";

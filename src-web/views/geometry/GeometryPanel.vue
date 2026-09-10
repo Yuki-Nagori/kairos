@@ -48,7 +48,6 @@ const {
           移除
         </UiButton>
 
-        <!-- 网格生成区：目标尺寸输入 + 引擎选择 + 生成按钮 + 报告 -->
         <div class="flex w-full flex-wrap items-center gap-2 border-t border-zinc-800 pt-2">
           <TextInput
             v-model="row.form.size"

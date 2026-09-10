@@ -1,3 +1,4 @@
+/** 求解结果状态：结果目录清单、最近加载的场与探针列表。 */
 import { defineStore } from "pinia";
 import { listResultTimes, loadResultField } from "../api/results";
 import type { Probe, ResultCatalog, ScalarField } from "../types";
@@ -6,7 +7,6 @@ import { useAppStore } from "./app";
 
 let probeSeq = 0;
 
-/** 求解结果：结果目录清单、最近加载的场与探针列表。 */
 export const useResultsStore = defineStore("results", {
   state: () => ({
     /** 结果目录清单（扫描后填充）。 */

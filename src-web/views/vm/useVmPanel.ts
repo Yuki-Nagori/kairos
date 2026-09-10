@@ -23,7 +23,7 @@ export function useVmPanel() {
 
   const outputText = computed(() => vm.vmShellLogs.join("\n"));
 
-  // 原刷新按钮在动作进行中禁用——Card 的刷新按钮不外联 disabled，以守卫等价。
+  // Card 的刷新按钮不外联 disabled，改在函数内守卫 busy。
   function onRefresh(): void {
     if (busy.value) {
       return;
@@ -31,7 +31,6 @@ export function useVmPanel() {
     void vm.refreshVmStatus();
   }
 
-  // 模拟终端：深色窗口 + 输出滚动区 + 提示符行内输入。
   // 模板 ref 用 useTemplateRef 按名绑定（模板 ref="同名" 不变）；
   // 逻辑住 composable 后 .vue 无需再持有同名 setup 绑定。
   const outputRef = useTemplateRef<HTMLPreElement>("outputRef");
@@ -51,7 +50,6 @@ export function useVmPanel() {
     },
   );
 
-  // 点终端任意处聚焦输入行。
   function focusPrompt(): void {
     promptInput.value?.focus();
   }

@@ -1,3 +1,4 @@
+/** 虚拟机域状态：Multipass / WSL2 探测结果、应用内 Shell 会话与终端抽屉显隐。 */
 import { defineStore } from "pinia";
 import * as api from "../api/vm";
 import type { VmAction, VmStatus } from "../types";
@@ -6,7 +7,6 @@ import { useAppStore } from "./app";
 /** Shell 输出的环形上限：会话可以很长，不能让它撑爆内存。 */
 const SHELL_LOG_LIMIT = 500;
 
-/** 虚拟机运行时：Multipass / WSL2 探测结果、应用内 Shell 会话与终端抽屉显隐。 */
 export const useVmStore = defineStore("vm", {
   state: () => ({
     vmStatus: null as VmStatus | null,

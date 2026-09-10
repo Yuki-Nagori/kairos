@@ -1,3 +1,4 @@
+/** 求解器 IPC：生成 OpenFOAM case 与运行环境探测。 */
 import { invokeCommand } from "../utils/ipc";
 import type { AnalysisStage, Material, ProcessSettings } from "../types";
 

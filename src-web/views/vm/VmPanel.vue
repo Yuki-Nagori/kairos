@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// 逻辑全部抽至同目录 useVmPanel.ts，此处仅保留模板与解构。
+/** 虚拟机面板：逻辑见 useVmPanel。 */
 import { useVmPanel } from "./useVmPanel";
 import UiButton from "../../components/ui/UiButton.vue";
 import Card from "../../components/ui/UiCard.vue";

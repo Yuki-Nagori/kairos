@@ -26,7 +26,6 @@ export function useStatusBar() {
     return { text: "", class: "" };
   });
 
-  // Shell 环境入口：点击切换右下角虚拟机终端面板的显隐。
   const shellVisible = computed(() => vm.vmPanelVisible);
 
   return { app, vm, status, shellVisible };

@@ -1,3 +1,4 @@
+/** 系统 IPC：系统信息查询。 */
 import { invokeCommand } from "../utils/ipc";
 import type { SystemInfo } from "../types";
 
