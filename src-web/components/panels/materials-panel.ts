@@ -8,6 +8,7 @@ import {
 } from "../../state";
 import type { Material } from "../../types";
 import { button, card, hint, sectionLabel } from "../ui";
+import { latexBlock } from "../latex";
 
 /** 材料库面板：内置示例材料 + 自定义材料的浏览、详情、导入导出与复制。 */
 export function createMaterialsPanel(): HTMLElement {
@@ -115,6 +116,9 @@ export function createMaterialsPanel(): HTMLElement {
 
     detail.append(
       sectionLabel("Cross-WLF 黏度"),
+      latexBlock(
+        "\\eta = \\dfrac{\\eta_0}{1 + \\left(\\dfrac{\\eta_0\\dot\\gamma}{\\tau^*}\\right)^{1-n}}, \\quad \\eta_0 = D_1 e^{-\\frac{A_1(T-T^*)}{A_2+(T-T^*)}}, \\quad T^* = D_2 + D_3 p",
+      ),
       paramTable([
         ["n", String(material.rheology.n)],
         ["τ*", `${material.rheology.tauStar} Pa`],
@@ -128,6 +132,9 @@ export function createMaterialsPanel(): HTMLElement {
 
     detail.append(
       sectionLabel("Tait PVT"),
+      latexBlock(
+        "\\hat{v} = v_0(T)\\left[1 - C\\ln\\left(1 + \\frac{p}{B(T)}\\right)\\right], \\quad B(T) = b_3 e^{-b_4 T}, \\quad T_t = b_5 + b_6 p",
+      ),
       paramTable([
         ["b1m", `${material.pvt.b1m} m³/kg`],
         ["b1s", `${material.pvt.b1s} m³/kg`],

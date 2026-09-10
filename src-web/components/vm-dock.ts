@@ -7,7 +7,7 @@ import { appStore } from "../state";
 
 export function createVmDock(): HTMLElement {
   const dock = document.createElement("div");
-  dock.className = "absolute bottom-2 right-2 z-40 w-[26rem] shadow-2xl shadow-black/50";
+  dock.className = "absolute bottom-2 right-2 z-40 w-[26rem]";
   dock.append(createVmPanel());
 
   const sync = (): void => {

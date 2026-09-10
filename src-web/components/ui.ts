@@ -26,8 +26,7 @@ export function card(
   },
 ): CardHandle {
   const root = document.createElement("section");
-  root.className =
-    "min-w-0 overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 shadow-lg shadow-black/20";
+  root.className = "min-w-0 overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900";
 
   const heading = document.createElement("h2");
   heading.className =
