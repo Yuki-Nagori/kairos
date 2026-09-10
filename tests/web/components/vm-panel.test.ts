@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { mount } from "@vue/test-utils";
+import { defineComponent, h, nextTick } from "vue";
 import { createPinia, setActivePinia } from "pinia";
 import type { Pinia } from "pinia";
 import VmPanel from "../../../src-web/views/vm/VmPanel.vue";
+import { useVmPanel } from "../../../src-web/views/vm/useVmPanel";
 import { useVmStore } from "../../../src-web/stores/vm";
 import { getVmStatus, vmShellSend } from "../../../src-web/api/vm";
 import type { VmProvider, VmState, VmStatus } from "../../../src-web/types";
@@ -94,5 +96,115 @@ describe("VmPanel", () => {
     await input.trigger("keydown.enter");
     await vi.waitFor(() => expect(vmShellSend).toHaveBeenCalledWith("ls -la"));
     expect((input.element as HTMLInputElement).value).toBe("");
+  });
+
+  it("空白命令回车不发送", async () => {
+    const wrapper = mount(VmPanel, { global: { plugins: [pinia] } });
+    const input = wrapper.find("input");
+    await input.setValue("   ");
+    await input.trigger("keydown.enter");
+    await input.setValue("");
+    await input.trigger("keydown.enter");
+    expect(vmShellSend).not.toHaveBeenCalled();
+  });
+
+  it("重新探测按钮触发状态刷新，忙碌时短路", async () => {
+    const wrapper = mount(VmPanel, { global: { plugins: [pinia] } });
+    await vi.waitFor(() => expect(getVmStatus).toHaveBeenCalledTimes(1));
+    await findButton(wrapper, "重新探测").trigger("click");
+    await vi.waitFor(() => expect(getVmStatus).toHaveBeenCalledTimes(2));
+
+    const vm = useVmStore();
+    vm.vmBusy = "install";
+    await wrapper.vm.$nextTick();
+    await findButton(wrapper, "重新探测").trigger("click");
+    expect(getVmStatus).toHaveBeenCalledTimes(2);
+    vm.vmBusy = null;
+  });
+
+  it("Shell 日志追加后把输出区滚动到底部", async () => {
+    const vm = useVmStore();
+    const wrapper = mount(VmPanel, { global: { plugins: [pinia] } });
+    const output = wrapper.find("pre").element as HTMLPreElement;
+    output.scrollTop = 0;
+    vm.appendShellLog("第一行");
+    vm.appendShellLog("第二行");
+    await vi.waitFor(() => expect(output.scrollTop).toBe(output.scrollHeight));
+  });
+
+  it("点击终端区域聚焦提示符输入框", async () => {
+    const focusSpy = vi.spyOn(HTMLInputElement.prototype, "focus");
+    const wrapper = mount(VmPanel, { global: { plugins: [pinia] } });
+    await wrapper.find("pre").trigger("click");
+    expect(focusSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("工具已装但实例缺失：instanceState 保持 missing，启动可用而 Shell 入口禁用", () => {
+    const vm = useVmStore();
+    vm.vmStatus = {
+      provider: "multipass" satisfies VmProvider,
+      toolInstalled: true,
+      instanceName: "kairos",
+      instanceState: "missing" satisfies VmState,
+      hint: "工具已安装，实例尚未创建。",
+    };
+    const wrapper = mount(VmPanel, { global: { plugins: [pinia] } });
+    expect(wrapper.text()).toContain("工具已安装，实例尚未创建。");
+    expect(findButton(wrapper, "启动虚拟机").attributes("disabled")).toBeUndefined();
+    expect(findButton(wrapper, "进入 Shell").attributes("disabled")).toBeDefined();
+  });
+});
+
+describe("useVmPanel 防御分支（无输出区环境）", () => {
+  let pinia: Pinia;
+
+  beforeEach(() => {
+    pinia = createPinia();
+    setActivePinia(pinia);
+    vi.mocked(getVmStatus).mockReset();
+    vi.mocked(getVmStatus).mockResolvedValue(runningStatus);
+  });
+
+  /** 无输出区、无按钮模板：直接读 composable 暴露的 computed。 */
+  function mountPanellessHarness() {
+    let panel!: ReturnType<typeof useVmPanel>;
+    const wrapper = mount(
+      defineComponent({
+        setup() {
+          panel = useVmPanel();
+          return () => h("div");
+        },
+      }),
+      { global: { plugins: [pinia] } },
+    );
+    return { wrapper, panel };
+  }
+
+  it("输出区引用缺失时滚动 watch 安全跳过", async () => {
+    const { wrapper } = mountPanellessHarness();
+    // 无 <pre ref="outputRef">：日志追加仍触发 watch，滚动逻辑短路。
+    useVmStore().appendShellLog("一行日志");
+    await nextTick();
+    await nextTick();
+    wrapper.unmount();
+  });
+
+  it("未探测时直读 computed：状态提示与实例状态走回落分支", () => {
+    const { wrapper, panel } = mountPanellessHarness();
+    expect(panel.statusHint.value).toContain("尚未探测");
+    expect(panel.toolInstalled.value).toBe(false);
+    // 模板里该分支被 !toolInstalled 短路遮蔽，须直读才能覆盖 ?? "missing"。
+    expect(panel.instanceState.value).toBe("missing");
+    expect(panel.terminalTitle.value).toBe("shell");
+    wrapper.unmount();
+  });
+
+  it("探测后直读 computed：取真实状态而非回落值", () => {
+    const { wrapper, panel } = mountPanellessHarness();
+    useVmStore().vmStatus = runningStatus;
+    expect(panel.statusHint.value).toBe(runningStatus.hint);
+    expect(panel.instanceState.value).toBe("running");
+    expect(panel.terminalTitle.value).toBe("shell · kairos");
+    wrapper.unmount();
   });
 });

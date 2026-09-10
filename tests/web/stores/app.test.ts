@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 import { IpcUnavailableError } from "../../../src-web/utils/ipc";
 import { useAppStore } from "../../../src-web/stores/app";
@@ -6,6 +6,10 @@ import { useAppStore } from "../../../src-web/stores/app";
 describe("app store", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   describe("setError", () => {
@@ -27,6 +31,50 @@ describe("app store", () => {
       const app = useAppStore();
       app.setError("字符串错误");
       expect(app.error?.message).toBe("字符串错误");
+    });
+
+    it("auto-clears an info hint after 8 seconds", () => {
+      vi.useFakeTimers();
+      const app = useAppStore();
+      app.setError(new IpcUnavailableError());
+      vi.advanceTimersByTime(7999);
+      expect(app.error).not.toBeNull();
+      vi.advanceTimersByTime(1);
+      expect(app.error).toBeNull();
+    });
+
+    it("clears the previous hint timer when a new error arrives", () => {
+      vi.useFakeTimers();
+      const app = useAppStore();
+      app.setError(new IpcUnavailableError());
+      vi.advanceTimersByTime(4000);
+      app.setError(new IpcUnavailableError());
+      vi.advanceTimersByTime(4000);
+      // t=8000：若第一个 timer 未被清除，error 此时已被它清空。
+      expect(app.error).not.toBeNull();
+      vi.advanceTimersByTime(4000);
+      // t=12000：第二个 timer（8 秒后）到期。
+      expect(app.error).toBeNull();
+    });
+
+    it("keeps a real failure that replaced a pending hint timer", () => {
+      vi.useFakeTimers();
+      const app = useAppStore();
+      app.setError(new IpcUnavailableError());
+      app.setError("真实失败");
+      vi.advanceTimersByTime(8000);
+      expect(app.error?.message).toBe("真实失败");
+    });
+
+    it("does not resurrect an error cleared by beginBusy when the timer fires", () => {
+      vi.useFakeTimers();
+      const app = useAppStore();
+      app.setError(new IpcUnavailableError());
+      // beginBusy 清掉 error 但不清 timer：timer 触发时 message 不匹配，不应写回。
+      app.beginBusy("正在求解…");
+      vi.advanceTimersByTime(8000);
+      expect(app.error).toBeNull();
+      expect(app.busy).toBe("正在求解…");
     });
   });
 

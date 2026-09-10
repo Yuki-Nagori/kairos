@@ -69,6 +69,7 @@ const {
       <div class="flex items-center gap-1.5 px-3 pb-2 text-[11px]">
         <span class="text-amber-400">❯</span>
         <input
+          ref="promptInput"
           v-model="command"
           class="min-w-0 flex-1 border-none bg-transparent font-mono text-[11px] text-emerald-200 outline-none placeholder:text-zinc-600"
           placeholder="输入命令，回车发送…"

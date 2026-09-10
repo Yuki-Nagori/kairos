@@ -56,6 +56,25 @@ describe("LogTabs", () => {
     expect(wrapper.find("pre").text()).toBe("a\nb");
   });
 
+  it("无作业时分析日志页显示占位", () => {
+    const wrapper = mount(LogTabs, { global: { plugins: [pinia] } });
+    expect(wrapper.find("pre").text()).toBe("（暂无日志）");
+  });
+
+  it("最新作业尚无日志条目时分析日志页显示占位", () => {
+    const jobs = useJobsStore();
+    jobs.jobs = [job];
+    jobs.jobLogs = {};
+    const wrapper = mount(LogTabs, { global: { plugins: [pinia] } });
+    expect(wrapper.find("pre").text()).toBe("（暂无日志）");
+  });
+
+  it("无网格报告时网格日志页显示占位", async () => {
+    const wrapper = mount(LogTabs, { global: { plugins: [pinia] } });
+    await tabs(wrapper)[1]!.trigger("click");
+    expect(wrapper.find("pre").text()).toBe("（暂无日志）");
+  });
+
   it("网格日志展示引擎与质量摘要", async () => {
     useGeometryStore().meshReports = { "geo-1": report };
     const wrapper = mount(LogTabs, { global: { plugins: [pinia] } });

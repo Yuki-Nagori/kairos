@@ -41,6 +41,16 @@ describe("StatusBar 状态三态优先级", () => {
     const wrapper = mount(StatusBar, { global: { plugins: [pinia] } });
     expect(wrapper.find("span").text()).toBe("迭代不收敛");
   });
+
+  it("IPC 提示型错误用中性色而非错误红", () => {
+    const app = useAppStore();
+    app.info = info;
+    app.error = { message: "未连接 Tauri 运行时", info: true };
+    const wrapper = mount(StatusBar, { global: { plugins: [pinia] } });
+    expect(wrapper.find("span").text()).toBe("未连接 Tauri 运行时");
+    expect(wrapper.find("span").classes()).toContain("text-zinc-400");
+    expect(wrapper.find("span").classes()).not.toContain("text-red-400");
+  });
 });
 
 describe("StatusBar Shell 入口", () => {
