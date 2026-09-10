@@ -1,10 +1,10 @@
 <script setup lang="ts">
 /**
- * LaTeX 公式渲染（KaTeX）：renderToString 生成 HTML，v-html 注入。
- * throwOnError 关闭以保证个别公式错误不炸整个 UI；内容全部来自
- * katex 输出（非用户 HTML），颜色经 currentColor 随主题。
+ * LaTeX 公式渲染（KaTeX）：render 直接构建 DOM 节点挂进容器，
+ * 不经 HTML 字符串解析，从结构上消除注入面；个别公式错误经
+ * throwOnError 关闭不炸 UI。颜色经 currentColor 随主题。
  */
-import { computed } from "vue";
+import { onMounted, ref, watch } from "vue";
 import katex from "katex";
 import "katex/dist/katex.min.css";
 
@@ -16,17 +16,24 @@ const props = withDefaults(
   { displayMode: true },
 );
 
-const html = computed(() =>
-  katex.renderToString(props.tex, { displayMode: props.displayMode, throwOnError: false }),
-);
+const container = ref<HTMLDivElement | null>(null);
+
+function render(): void {
+  if (container.value !== null) {
+    katex.render(props.tex, container.value, {
+      displayMode: props.displayMode,
+      throwOnError: false,
+    });
+  }
+}
+
+onMounted(render);
+watch([() => props.tex, () => props.displayMode], render);
 </script>
 
 <template>
-  <!-- 内容全部来自 katex 渲染输出（非用户 HTML），XSS 面不成立。 -->
-  <!-- eslint-disable vue/no-v-html -->
   <div
+    ref="container"
     :class="{ 'overflow-x-auto text-center text-[11px] text-zinc-300': displayMode }"
-    v-html="html"
   />
-  <!-- eslint-enable vue/no-v-html -->
 </template>
