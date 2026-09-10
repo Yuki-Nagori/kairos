@@ -131,3 +131,4 @@
 - **18:4x** feat(derive): T31 完成——三算子 WGSL GPU 实现 + CPU/GPU 一致性测试 + 算子目录扩展 + 结果面板派生场 UI
 - **18:5x** feat(mesh): T30 完成——generate_gmsh_mesh 命令（STL 写出 + gmsh 子进程 + msh2 解析）、CLI gmsh 引擎分支、面板引擎选择、MeshingReport 补 engine 字段
 - **18:4x** feat(vm): 部署流程自动安装 VM 内 OpenMPI（libopenmpi-dev/openmpi-bin + ldconfig 校验），国内时区自动切清华 apt 镜像源
+- **18:5x** refactor(core): vector_magnitude CPU 参考实现归位 kairos-core（services::operators），与 T31 派生算子同住事实源层

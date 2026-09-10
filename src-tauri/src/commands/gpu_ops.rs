@@ -11,13 +11,8 @@ const VECTOR_MAGNITUDE_SHADER: &str = include_str!("../../shaders/vector_magnitu
 
 const WORKGROUP_SIZE: usize = 64;
 
-/// CPU 参考实现：矢量模量（GPU 不可用时的回退路径，也是一致性测试的基准）。
-pub fn vector_magnitude_cpu(vectors: &[[f32; 3]]) -> Vec<f32> {
-    vectors
-        .iter()
-        .map(|v| (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt())
-        .collect()
-}
+#[cfg(test)]
+use kairos_core::services::operators::vector_magnitude_cpu;
 
 fn create_device() -> Result<(wgpu::Device, wgpu::Queue), KairosError> {
     let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::default());

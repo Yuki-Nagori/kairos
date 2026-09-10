@@ -8,6 +8,7 @@ pub mod jobs;
 pub mod material;
 pub mod meshing;
 pub mod openfoam;
+pub mod operators;
 pub mod process;
 pub mod project;
 pub mod results;
