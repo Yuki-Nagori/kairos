@@ -17,8 +17,7 @@ const STAGES: [Stage, string][] = [
 
 export function createStageTabs(): HTMLElement {
   const bar = document.createElement("div");
-  bar.className =
-    "flex items-stretch gap-1 border-b border-zinc-800 bg-zinc-950/60 px-2 flex-shrink-0";
+  bar.className = "flex items-center gap-1";
 
   const buttons = STAGES.map(([stage, label]) => {
     const tab = document.createElement("button");
