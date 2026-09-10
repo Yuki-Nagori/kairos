@@ -263,3 +263,6 @@ export interface DependencyStatus {
   /** 是否来自可在线检查更新的 release 流。 */
   updatable: boolean;
 }
+
+/** 分析阶段选项卡（工作流导航；home = 总览显示全部面板）。 */
+export type Stage = "home" | "geometry" | "mesh" | "process" | "solve" | "results" | "report";

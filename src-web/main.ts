@@ -1,5 +1,6 @@
 import "./app.css";
 import { createAppHeader, createStatusBar } from "./components/app-header";
+import { createStageTabs } from "./components/stage-tabs";
 import { setupMenuActions } from "./menu-actions";
 import { createDependenciesPanel } from "./components/panels/dependencies-panel";
 import { createVmDock } from "./components/vm-dock";
@@ -16,7 +17,7 @@ import { createViewportPanel } from "./components/panels/viewport-panel";
 import { createXyChartPanel } from "./components/panels/xy-chart-panel";
 import { setupGlobalShortcuts } from "./shortcuts";
 import { initTheme } from "./theme";
-import { bootstrap } from "./state";
+import { appStore, bootstrap } from "./state";
 
 const root = document.querySelector<HTMLDivElement>("#app");
 
@@ -36,13 +37,17 @@ const leftColumn = document.createElement("div");
 leftColumn.className = "flex min-h-0 flex-col gap-3 overflow-y-auto py-1 pr-1";
 // 流程引导属工作流辅助，放左列（可折叠）；中列留给视口与图表。
 // 滚动列里的卡片必须 shrink-0：宁可列滚动，也不让卡片内容被压缩裁切。
+const stagePanel = (el: HTMLElement, stages: string): HTMLElement => {
+  el.dataset.stages = stages;
+  el.classList.add("stage-panel", "shrink-0");
+  return el;
+};
 for (const panel of [
-  createProjectTree(),
-  createPipelinePanel(),
-  createMaterialsPanel(),
-  createGeometryPanel(),
+  stagePanel(createProjectTree(), "home,geometry,mesh,process,solve,results,report"),
+  stagePanel(createPipelinePanel(), "home"),
+  stagePanel(createMaterialsPanel(), "home,process"),
+  stagePanel(createGeometryPanel(), "home,geometry,mesh"),
 ]) {
-  panel.classList.add("shrink-0");
   leftColumn.append(panel);
 }
 
@@ -53,13 +58,12 @@ centerColumn.append(createViewportPanel(), createXyChartPanel());
 const rightColumn = document.createElement("div");
 rightColumn.className = "flex min-h-0 flex-col gap-3 overflow-y-auto py-1 pl-1";
 for (const panel of [
-  createMoldPanel(),
-  createProcessPanel(),
-  createDependenciesPanel(),
-  createReportPanel(),
-  createJobsPanel(),
+  stagePanel(createMoldPanel(), "home,process"),
+  stagePanel(createProcessPanel(), "home,process"),
+  stagePanel(createDependenciesPanel(), "home,solve"),
+  stagePanel(createReportPanel(), "home,results,report"),
+  stagePanel(createJobsPanel(), "home,solve,results"),
 ]) {
-  panel.classList.add("shrink-0");
   rightColumn.append(panel);
 }
 
@@ -77,7 +81,18 @@ resultsSection.append(createResultsPanel());
 
 const statusBar = createStatusBar();
 
-root.append(header, workspace, resultsSection, statusBar);
+root.append(header, createStageTabs(), workspace, resultsSection, statusBar);
+
+// 分析阶段切换：按 data-stages 显隐面板（home 显示全部）
+const syncStages = (): void => {
+  const stage = appStore.get().stage;
+  document.querySelectorAll<HTMLElement>(".stage-panel").forEach((el) => {
+    const stages = (el.dataset.stages ?? "").split(",");
+    el.classList.toggle("hidden", !stages.includes(stage));
+  });
+};
+syncStages();
+appStore.subscribe(syncStages);
 
 setupGlobalShortcuts();
 setupMenuActions();
