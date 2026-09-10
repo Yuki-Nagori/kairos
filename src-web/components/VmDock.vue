@@ -4,19 +4,11 @@
  * 状态栏右侧 Shell 按钮与原生菜单驱动（store.vmPanelVisible）。
  * 面板本体经默认插槽注入（Phase 4 换成 VmPanel.vue）。
  */
-import { onUnmounted, ref } from "vue";
-import { select } from "../lib/store";
-import { appStore } from "../state";
+import { computed } from "vue";
+import { useAppState } from "../state";
 
-const visible = ref(appStore.get().vmPanelVisible);
-const unsubscribe = select(
-  appStore,
-  (state) => state.vmPanelVisible,
-  (value) => {
-    visible.value = value;
-  },
-);
-onUnmounted(unsubscribe);
+const state = useAppState();
+const visible = computed(() => state.vmPanelVisible);
 </script>
 
 <template>

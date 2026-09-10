@@ -3,24 +3,17 @@
  * 中列底部日志标签组（v2 设计稿）：分析日志 / 网格日志 / VM 终端。
  * 只读镜像——交互式输入仍在 VM 抽屉；数据全部来自 store 分片。
  */
-import { computed, onUnmounted, ref } from "vue";
-import { appStore } from "../state";
+import { computed, ref } from "vue";
+import { useAppState } from "../state";
 
 const TABS = ["分析日志", "网格日志", "VM 终端"] as const;
 type Tab = (typeof TABS)[number];
 
 const active = ref<Tab>(TABS[0]);
-
-// store 是普通对象（Phase 3 才换 reactive），用版本号驱动 computed 重算。
-const tick = ref(0);
-const unsubscribe = appStore.subscribe(() => {
-  tick.value += 1;
-});
-onUnmounted(unsubscribe);
+const state = useAppState();
 
 const lines = computed(() => {
-  void tick.value;
-  const { jobLogs, jobs, meshReports, vmShellLogs } = appStore.get();
+  const { jobLogs, jobs, meshReports, vmShellLogs } = state;
   if (active.value === "分析日志") {
     const job = jobs.at(-1);
     return (job ? (jobLogs[job.id] ?? []) : []).slice(-40);

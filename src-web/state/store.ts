@@ -1,4 +1,4 @@
-import { createStore } from "../lib/store";
+import { reactive } from "vue";
 import { IpcUnavailableError } from "../lib/ipc";
 import type {
   ComponentStageState,
@@ -32,7 +32,7 @@ export interface Probe {
   nodeIndex: number;
 }
 
-/** 全局应用状态：组件经 select/subscribe 订阅，只能通过各分片的动作函数修改。 */
+/** 全局应用状态：Vue 组件经 useAppState 响应式读取，原生组件经 select/subscribe 订阅；只能通过各分片的动作函数修改。 */
 export interface AppState {
   /** 应用信息，bootstrap 成功后填充；非 null 即代表 IPC 链路通畅。 */
   info: SystemInfo | null;
@@ -115,7 +115,34 @@ export const initialAppState: AppState = {
   error: null,
 };
 
-export const appStore = createStore<AppState>(initialAppState);
+// 状态本体是 Vue reactive 对象：Vue 组件的 computed/模板直接跟踪；
+// set 仍是同步浅合并 + 手动全量通知，一次 set 恰好一次回调的既有语义不变。
+const state = reactive({ ...initialAppState });
+
+const listeners = new Set<(state: AppState) => void>();
+
+export const appStore = {
+  get: (): AppState => state,
+  /** 浅合并 patch 并全量通知订阅者。 */
+  set: (patch: Partial<AppState>): void => {
+    Object.assign(state, patch);
+    for (const listener of listeners) {
+      listener(state);
+    }
+  },
+  /** 全量订阅：每次 set 都会通知（无论是否涉及相关切片）。返回取消订阅函数。 */
+  subscribe: (listener: (state: AppState) => void): (() => void) => {
+    listeners.add(listener);
+    return () => {
+      listeners.delete(listener);
+    };
+  },
+};
+
+/** Vue 组合式入口：setup 里取一次即得响应式状态，模板与 computed 直接跟踪。 */
+export function useAppState(): AppState {
+  return state;
+}
 
 let errorTimer: ReturnType<typeof setTimeout> | undefined;
 

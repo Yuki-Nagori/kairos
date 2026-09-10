@@ -44,9 +44,11 @@
 - VmDock.vue（虚拟机终端抽屉）
 - typecheck 切换 vue-tsc；vitest 挂 Vue 插件；knip 跟踪 .vue
 
-### Phase 3 · 状态迁移
+### Phase 3 · 状态迁移（已完成）
 
-- 自定义 store → Vue reactive composables（useProjectStore / useVmStore / …）
+- appStore 状态本体换成 Vue `reactive`：set 仍同步浅合并 + 手动全量通知，
+  既有 get/set/subscribe 语义不变——原生组件零改动
+- 新增 `useAppState()` 组合式入口；Phase 2 组件改用 computed 直接跟踪
 - services 层零改动（IPC 封装框架无关）
 - kairos-core 零改动
 

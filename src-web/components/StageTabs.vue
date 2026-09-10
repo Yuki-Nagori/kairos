@@ -3,9 +3,8 @@
  * 分析阶段选项卡（v2 设计稿）：主页/几何/网格/工艺/求解/结果/报告。
  * 读写 store.stage，各列面板按阶段显隐由布局层（Phase 4 的 App 编排）负责。
  */
-import { onUnmounted, ref } from "vue";
-import { select } from "../lib/store";
-import { appStore } from "../state";
+import { computed } from "vue";
+import { useAppState, appStore } from "../state";
 import type { Stage } from "../types";
 
 const STAGES: [Stage, string][] = [
@@ -18,15 +17,8 @@ const STAGES: [Stage, string][] = [
   ["report", "报告"],
 ];
 
-const active = ref<Stage>(appStore.get().stage);
-const unsubscribe = select(
-  appStore,
-  (state) => state.stage,
-  (stage) => {
-    active.value = stage;
-  },
-);
-onUnmounted(unsubscribe);
+const state = useAppState();
+const active = computed(() => state.stage);
 </script>
 
 <template>
