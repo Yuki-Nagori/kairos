@@ -2,6 +2,7 @@ import { cycleTheme, getActiveTheme, THEME_CHANGED_EVENT } from "../theme";
 import { select } from "../lib/store";
 import { appStore, toggleVmPanel } from "../state";
 import { createShellIcon } from "./icons";
+import { createStageTabs } from "./stage-tabs";
 
 /** 应用标题栏：品牌信息 + 主题切换（全局状态展示在底部状态栏）。 */
 export function createAppHeader(): HTMLElement {
@@ -25,6 +26,9 @@ export function createAppHeader(): HTMLElement {
   const spacer = document.createElement("span");
   spacer.className = "flex-1";
 
+  // 分析阶段选项卡与品牌同行：logo | Kairos CAE 仿真 | [选项卡] | ... | 主题
+  const stageTabs = createStageTabs();
+
   const themeButton = document.createElement("button");
   themeButton.type = "button";
   themeButton.className =
@@ -47,7 +51,7 @@ export function createAppHeader(): HTMLElement {
   window.addEventListener(THEME_CHANGED_EVENT, syncThemeIcon);
 
   syncThemeIcon();
-  root.append(logo, title, subtitle, spacer, themeButton);
+  root.append(logo, title, subtitle, spacer, stageTabs, themeButton);
   return root;
 }
 
