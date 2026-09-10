@@ -42,7 +42,7 @@ export async function newProject(name: string): Promise<void> {
 }
 
 /** 打开指定路径的工程文件。 */
-export async function openProjectAtPath(path: string): Promise<void> {
+async function openProjectAtPath(path: string): Promise<void> {
   appStore.set({ busy: "正在打开项目…", error: null });
   try {
     const project = await loadProjectFile(path);
@@ -149,25 +149,7 @@ export function addStudy(name: string): void {
   appStore.set({ project: updated, activeStudyId: study.id });
 }
 
-export function removeStudy(studyId: string): void {
-  const { project } = appStore.get();
-  if (!project || !project.studies.some((study) => study.id === studyId)) {
-    return;
-  }
-  appStore.set({
-    project: {
-      ...project,
-      studies: project.studies.filter((study) => study.id !== studyId),
-      updatedMs: Date.now(),
-    },
-  });
-}
-
-/** 选择活跃研究；传 null 取消选择。 */
-export function selectStudy(studyId: string | null): void {
-  appStore.set({ activeStudyId: studyId, moldIssues: [] });
-}
-
+/** 当前活跃研究对象（未选择或不存在时为 null）。 */
 function activeStudy(state: AppState): Study | null {
   return state.project?.studies.find((study) => study.id === state.activeStudyId) ?? null;
 }

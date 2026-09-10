@@ -7,7 +7,7 @@
 | 目录                | 内容                                                                    | 跑法                                      |
 | ------------------- | ----------------------------------------------------------------------- | ----------------------------------------- |
 | `web/lib/`          | 纯逻辑单元测试（chart / ipc / pipeline / report / store / environment） | `bunx vitest run tests/web/lib`           |
-| `web/components/`   | UI 组件测试（app-header / project-bar）                                 | `bunx vitest run tests/web/components`    |
+| `web/components/`   | UI 组件测试（AppHeader/StatusBar/VmPanel 及 ui 基础组件）               | `bunx vitest run tests/web/components`    |
 | `web/state.test.ts` | 全局状态容器与动作分片                                                  | `bunx vitest run tests/web/state.test.ts` |
 | `web/render/`       | 渲染数学工具（mat4 等）                                                 | `bunx vitest run tests/web/render`        |
 

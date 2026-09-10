@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createVmPanel } from "../../../src-web/components/panels/vm-panel";
+import { mount } from "@vue/test-utils";
+import VmPanel from "../../../src-web/components/panels/VmPanel.vue";
 import { appStore, initialAppState } from "../../../src-web/state";
 import { getVmStatus, vmShellSend } from "../../../src-web/services/vm";
 import type { VmProvider, VmState, VmStatus } from "../../../src-web/types";
@@ -12,6 +13,7 @@ vi.mock("../../../src-web/services/vm", () => ({
   vmShellSend: vi.fn(),
   vmShellStop: vi.fn(),
   stopVm: vi.fn(),
+  deployVmBundle: vi.fn(),
 }));
 
 const runningStatus: VmStatus = {
@@ -22,17 +24,15 @@ const runningStatus: VmStatus = {
   hint: "虚拟机运行中，可进入 Shell。",
 };
 
-function findButton(root: HTMLElement, label: string): HTMLButtonElement {
-  const found = [...root.querySelectorAll("button")].find(
-    (candidate) => candidate.textContent === label,
-  );
+function findButton(wrapper: ReturnType<typeof mount>, label: string) {
+  const found = wrapper.findAll("button").find((candidate) => candidate.text() === label);
   if (found === undefined) {
     throw new Error(`找不到按钮：${label}`);
   }
   return found;
 }
 
-describe("vm panel", () => {
+describe("VmPanel", () => {
   beforeEach(() => {
     appStore.set(initialAppState);
     vi.mocked(getVmStatus).mockReset();
@@ -40,28 +40,28 @@ describe("vm panel", () => {
     vi.mocked(getVmStatus).mockResolvedValue(runningStatus);
   });
 
-  it("renders hint and disables shell actions before probing", () => {
-    const root = createVmPanel();
-    expect(root.textContent).toContain("尚未探测");
-    expect(findButton(root, "安装虚拟机").disabled).toBe(false);
-    expect(findButton(root, "进入 Shell").disabled).toBe(true);
-    expect(findButton(root, "关闭虚拟机").disabled).toBe(true);
+  it("未探测时显示提示，Shell 动作不可用", () => {
+    const wrapper = mount(VmPanel);
+    expect(wrapper.text()).toContain("尚未探测");
+    expect(findButton(wrapper, "安装虚拟机").attributes("disabled")).toBeUndefined();
+    expect(findButton(wrapper, "进入 Shell").attributes("disabled")).toBeDefined();
+    expect(findButton(wrapper, "关闭虚拟机").attributes("disabled")).toBeDefined();
   });
 
-  it("enables shell actions and renders logs when running", () => {
+  it("运行中启用 Shell 动作并渲染终端日志", () => {
     appStore.set({ vmStatus: runningStatus, vmShellLogs: ["── Shell 会话已建立 ──"] });
-    const root = createVmPanel();
-    expect(root.textContent).toContain("虚拟机运行中");
-    expect(findButton(root, "安装虚拟机").disabled).toBe(true);
-    expect(findButton(root, "进入 Shell").disabled).toBe(false);
-    expect(findButton(root, "关闭虚拟机").disabled).toBe(false);
-    expect(root.querySelector("pre")?.textContent).toContain("Shell 会话已建立");
-    // 模拟终端：shell.svg 以图片资源方式出现在面板 logo 与终端标题栏。
-    expect(root.querySelectorAll('img[src="/shell.svg"]').length).toBeGreaterThanOrEqual(2);
-    expect(root.textContent).toContain("shell · kairos");
+    const wrapper = mount(VmPanel);
+    expect(wrapper.text()).toContain("虚拟机运行中");
+    expect(findButton(wrapper, "安装虚拟机").attributes("disabled")).toBeDefined();
+    expect(findButton(wrapper, "进入 Shell").attributes("disabled")).toBeUndefined();
+    expect(findButton(wrapper, "关闭虚拟机").attributes("disabled")).toBeUndefined();
+    expect(wrapper.find("pre").text()).toContain("Shell 会话已建立");
+    // 模拟终端：内联 SVG 图标出现在面板 logo 与终端标题栏。
+    expect(wrapper.findAll("svg").length).toBeGreaterThanOrEqual(2);
+    expect(wrapper.text()).toContain("shell · kairos");
   });
 
-  it("short-circuits vm buttons on native Linux", () => {
+  it("Linux 原生环境短路虚拟机按钮", () => {
     appStore.set({
       vmStatus: {
         provider: "native",
@@ -71,22 +71,22 @@ describe("vm panel", () => {
         hint: "Linux 原生环境，无需虚拟机，可直接进入 Shell。",
       },
     });
-    const root = createVmPanel();
-    expect(root.textContent).toContain("无需虚拟机");
-    expect(findButton(root, "安装虚拟机").disabled).toBe(true);
-    expect(findButton(root, "启动虚拟机").disabled).toBe(true);
-    expect(findButton(root, "关闭虚拟机").disabled).toBe(true);
-    expect(findButton(root, "进入 Shell").disabled).toBe(false);
+    const wrapper = mount(VmPanel);
+    expect(wrapper.text()).toContain("无需虚拟机");
+    expect(findButton(wrapper, "安装虚拟机").attributes("disabled")).toBeDefined();
+    expect(findButton(wrapper, "启动虚拟机").attributes("disabled")).toBeDefined();
+    expect(findButton(wrapper, "关闭虚拟机").attributes("disabled")).toBeDefined();
+    expect(findButton(wrapper, "进入 Shell").attributes("disabled")).toBeUndefined();
   });
 
-  it("sends trimmed input on Enter and clears the field", async () => {
+  it("回车发送去空白命令并清空输入框", async () => {
     vi.mocked(vmShellSend).mockResolvedValue(undefined);
-    const root = createVmPanel();
-    const input = root.querySelector("input") as HTMLInputElement;
+    const wrapper = mount(VmPanel);
+    const input = wrapper.find("input");
 
-    input.value = "  ls -la  ";
-    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
+    await input.setValue("  ls -la  ");
+    await input.trigger("keydown.enter");
     await vi.waitFor(() => expect(vmShellSend).toHaveBeenCalledWith("ls -la"));
-    expect(input.value).toBe("");
+    expect((input.element as HTMLInputElement).value).toBe("");
   });
 });

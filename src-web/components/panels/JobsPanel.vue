@@ -1,0 +1,104 @@
+<script setup lang="ts">
+/** 求解作业面板：列表、提交与取消（并发预算由调度器控制）。 */
+import { ref } from "vue";
+import { probeOpenfoam } from "../../services/solver";
+import { cancelJobAction, refreshJobs, submitJobAction, useAppState } from "../../state";
+import type { Job } from "../../types";
+import Card from "../ui/Card.vue";
+import TextInput from "../ui/TextInput.vue";
+import UiButton from "../ui/Button.vue";
+
+const STATUS_LABEL: Record<Job["status"], string> = {
+  queued: "排队中",
+  running: "运行中",
+  done: "已完成",
+  failed: "失败",
+  cancelled: "已取消",
+};
+
+const STATUS_CLASS: Record<Job["status"], string> = {
+  queued: "text-zinc-400",
+  running: "text-amber-300",
+  done: "text-emerald-400",
+  failed: "text-red-400",
+  cancelled: "text-zinc-500",
+};
+
+const state = useAppState();
+
+const caseDir = ref("");
+const cores = ref("");
+
+function submitJob(): void {
+  const dir = caseDir.value.trim();
+  if (!dir) {
+    return;
+  }
+  void submitJobAction(dir, Number(cores.value) || 2);
+}
+
+// 环境探测行：探测完成后 className 整体替换（不再带 text-xs），沿用原生版的赋值语义。
+const envHint = ref("正在探测 OpenFOAM 环境…");
+const envClass = ref("text-xs text-zinc-500");
+void probeOpenfoam().then((check) => {
+  envHint.value = check.hint;
+  envClass.value = check.openfoam && check.solver ? "text-emerald-400" : "text-amber-400";
+});
+
+function jobLogsTail(jobId: string): string[] {
+  return state.jobLogs[jobId] ?? [];
+}
+</script>
+
+<template>
+  <Card title="求解作业">
+    <p :class="envClass">{{ envHint }}</p>
+    <div class="flex flex-wrap items-center gap-2">
+      <TextInput
+        v-model="caseDir"
+        type="text"
+        placeholder="case 目录路径"
+        class="flex-1 min-w-48"
+      />
+      <TextInput v-model="cores" type="number" placeholder="2" class="w-20" min="1" />
+      <UiButton variant="primary" :disabled="state.busy !== null" @click="submitJob">
+        提交作业
+      </UiButton>
+      <UiButton :disabled="state.busy !== null" @click="refreshJobs()">刷新</UiButton>
+    </div>
+    <div class="space-y-2">
+      <p v-if="state.jobs.length === 0" class="text-xs text-zinc-500">暂无作业。</p>
+      <template v-else>
+        <template v-for="job in state.jobs" :key="job.id">
+          <div
+            class="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-zinc-800 px-3 py-2 text-xs"
+          >
+            <span class="font-mono text-zinc-300">{{ job.id }}</span>
+            <!-- 状态行只渲染文字：原生版先挂状态圆点、再以 textContent 赋值清掉了它，等价移植同样无圆点。 -->
+            <span class="flex items-center gap-1.5" :class="STATUS_CLASS[job.status]">
+              {{ STATUS_LABEL[job.status] }}
+            </span>
+            <span class="truncate text-zinc-500">{{ job.caseDir }}</span>
+            <span class="text-zinc-500">
+              {{ job.lastTimeS !== null ? `t = ${job.lastTimeS.toFixed(2)} s` : "" }}
+            </span>
+            <UiButton
+              variant="danger"
+              :disabled="
+                state.busy !== null || (job.status !== 'queued' && job.status !== 'running')
+              "
+              @click="cancelJobAction(job.id)"
+            >
+              取消
+            </UiButton>
+          </div>
+          <!-- 求解日志尾部（环形缓冲的最后 8 行），运行中与结束后都可查看。 -->
+          <pre
+            v-if="jobLogsTail(job.id).length > 0"
+            class="max-h-32 overflow-y-auto whitespace-pre-wrap break-all rounded border border-zinc-800 bg-zinc-950 px-2 py-1 text-[10px] leading-4 text-zinc-500"
+            >{{ jobLogsTail(job.id).slice(-8).join("\n") }}</pre>
+        </template>
+      </template>
+    </div>
+  </Card>
+</template>

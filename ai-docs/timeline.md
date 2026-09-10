@@ -148,3 +148,4 @@
 - **19:7x** refactor: 全仓注释规范化——去除任务编号/真机叙事/对标引用/商标字样，新增 ai-docs/comment-style.md
 - **20:00** feat(ui): Vue 3 核心组件 SFC——Card/Button/TextInput/Dropdown/ShellIcon/StageTabs/LatexBlock/LogTabs/VmDock + @vue/test-utils 测试 + typecheck 切 vue-tsc（T37 Phase 2）
 - **20:05** feat(state): appStore 状态本体换 Vue reactive + useAppState 入口，同步订阅语义保持原生组件零改动（T37 Phase 3）
+- **20:50** feat(ui): 13 个面板全量迁移 Vue SFC + App.vue 组合根 + main.ts 挂载切换，删除原生组件层（T37 Phase 4）
