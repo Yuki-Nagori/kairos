@@ -95,6 +95,7 @@ export function useMaterialsPanel() {
   const importDisabled = computed(() => working.value);
   const exportDisabled = computed(() => materials.materials.custom.length === 0 || working.value);
   const copyDisabled = computed(() => !selectedId.value || working.value);
+  const useDisabled = computed(() => !selectedId.value || working.value);
   const deleteDisabled = computed(
     () =>
       !selectedId.value ||
@@ -118,11 +119,14 @@ export function useMaterialsPanel() {
       materials.assignMaterial(selectedId.value);
     }
   }
-  function doDelete(): void {
-    if (selectedId.value) {
-      void materials.deleteMaterial(selectedId.value);
-      selectedId.value = null;
+  async function doDelete(): Promise<void> {
+    const id = selectedId.value;
+    if (!id) {
+      return;
     }
+    // 删除失败（材料仍在清单）时保留选中，便于用户直接重试；
+    // 成功后的回落由 selected 的 watch 自动完成。
+    await materials.deleteMaterial(id);
   }
 
   return {
@@ -139,6 +143,7 @@ export function useMaterialsPanel() {
     importDisabled,
     exportDisabled,
     copyDisabled,
+    useDisabled,
     deleteDisabled,
     doImport,
     doExport,

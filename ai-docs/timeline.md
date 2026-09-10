@@ -169,3 +169,4 @@
 - **23:40** docs: icon-design 英文用词修正 Hyper-modern → Ultramodern（超现代的规范译名）
 - **23:50** test: 覆盖率口径扩至逻辑层全量（stores/composables/views useXxx），新增 31 个测试文件，前端测试 96→336，四维 100%；修复 VmPanel 提示符 ref 丢失回归
 - **00:10** docs: AGENTS 与测试地图的覆盖率口径同步为逻辑层全量
+- **00:20** fix(ui): 材料面板两处 UX 缺陷——「用于当前研究」忙碌时禁用；删除失败保留选中便于重试

@@ -287,7 +287,7 @@ describe("MaterialsPanel", () => {
     expect(project.project?.studies[0]?.materialId).toBe("mat-pp");
   });
 
-  it("删除自定义材料：复位选中；失败后重选回落，成功后回落首个内置材料", async () => {
+  it("删除自定义材料：失败保留选中便于重试，成功后回落首个内置材料", async () => {
     const materials = useMaterialsStore();
     materials.materials = {
       builtin: [materialFixture()],
@@ -303,14 +303,11 @@ describe("MaterialsPanel", () => {
     await flushPromises();
     expect(useAppStore().error?.message).toBe("删除失败");
     expect(deleteCustomMaterial).toHaveBeenCalledWith("custom-1");
-    // 选中在动作发出时立即复位；回退 watch 直接落到首个内置材料
-    // （即使删除失败、自定义材料仍在清单里也不会回到它——见行为疑点）。
-    expect(isSelected(listButtons(wrapper)[0])).toBe(true);
-    expect(findButton(wrapper, "删除").attributes("disabled")).toBeDefined();
-
-    // 重新选中自定义材料再删除：成功后 custom 清空，选中回落首个内置材料。
-    await listButtons(wrapper)[1]?.trigger("click");
+    // 删除失败材料仍在清单：选中保留，便于用户直接重试。
+    expect(isSelected(listButtons(wrapper)[1])).toBe(true);
     expect(findButton(wrapper, "删除").attributes("disabled")).toBeUndefined();
+
+    // 重试成功：custom 清空，选中回落首个内置材料。
     vi.mocked(deleteCustomMaterial).mockResolvedValue([]);
     await findButton(wrapper, "删除").trigger("click");
     await flushPromises();
@@ -335,7 +332,7 @@ describe("MaterialsPanel", () => {
 
     app.beginBusy("正在导入材料…");
     await nextTick();
-    for (const label of ["导入 JSON", "导出自定义", "复制为自定义", "删除"]) {
+    for (const label of ["导入 JSON", "导出自定义", "复制为自定义", "用于当前研究", "删除"]) {
       expect(findButton(wrapper, label).attributes("disabled")).toBeDefined();
     }
   });
