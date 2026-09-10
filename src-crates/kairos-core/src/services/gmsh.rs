@@ -230,4 +230,21 @@ $EndElements
                 .is_err()
         );
     }
+    #[test]
+    fn tetrahedralize_args_orders_gmsh_command() {
+        let args = tetrahedralize_args(Path::new("part.stl"), Path::new("out.msh"));
+        assert_eq!(
+            args,
+            vec![
+                "part.stl".to_string(),
+                "-3".to_string(),
+                "-format".to_string(),
+                "msh2".to_string(),
+                "-order".to_string(),
+                "1".to_string(),
+                "-o".to_string(),
+                "out.msh".to_string(),
+            ]
+        );
+    }
 }

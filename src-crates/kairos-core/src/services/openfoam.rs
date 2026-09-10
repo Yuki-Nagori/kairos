@@ -580,4 +580,48 @@ mod tests {
         assert!(fill.contains(&"alpha.melt"));
         assert!(fill.iter().all(|f| cool.contains(f)));
     }
+    #[test]
+    fn table_value_at_interpolates_and_clamps_endpoints() {
+        let table = [(300.0, 2.0), (400.0, 4.0)];
+        assert_eq!(table_value_at(&table, 250.0), Some(2.0));
+        assert_eq!(table_value_at(&table, 350.0), Some(3.0));
+        assert_eq!(table_value_at(&table, 999.0), Some(4.0));
+        assert_eq!(table_value_at(&[], 300.0), None);
+    }
+
+    #[test]
+    fn parse_time_line_reads_solver_progress() {
+        assert_eq!(parse_time_line("Time = 0.05"), Some(0.05));
+        assert_eq!(parse_time_line("  Time = 1.25 s"), Some(1.25));
+        assert_eq!(parse_time_line("Flow time = 0.5"), None);
+        assert_eq!(parse_time_line("Time = abc"), None);
+        assert_eq!(parse_time_line(""), None);
+    }
+
+    #[test]
+    fn case_generation_covers_pack_cool_dicts() {
+        let dir = std::env::temp_dir().join(format!("kairos-packcool-{}", std::process::id()));
+        let case = dir.join("case");
+        generate_case(
+            &case,
+            &two_tet_mesh(),
+            &crate::services::material::builtin_materials().unwrap()[0],
+            &process(),
+            &crate::models::solver::AnalysisStage::FillPackCool,
+            4,
+        )
+        .unwrap();
+
+        for path in [
+            "constant/momentumTransport",
+            "constant/phaseProperties",
+            "constant/g",
+            "constant/fvModels",
+            "constant/physicalProperties.melt",
+            "constant/physicalProperties.air",
+        ] {
+            assert!(case.join(path).exists(), "缺少 {path}");
+        }
+        fs::remove_dir_all(&dir).ok();
+    }
 }

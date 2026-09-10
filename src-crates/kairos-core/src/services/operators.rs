@@ -8,3 +8,16 @@ pub fn vector_magnitude_cpu(vectors: &[[f32; 3]]) -> Vec<f32> {
         .map(|v| (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt())
         .collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn magnitudes_match_pythagoras() {
+        assert_eq!(vector_magnitude_cpu(&[[3.0, 4.0, 0.0]]), [5.0]);
+        assert_eq!(vector_magnitude_cpu(&[[1.0, 2.0, 2.0]]), [3.0]);
+        assert_eq!(vector_magnitude_cpu(&[[0.0, 0.0, 0.0]]), [0.0]);
+        assert!(vector_magnitude_cpu(&[]).is_empty());
+    }
+}

@@ -303,4 +303,15 @@ boundaryField
         assert!((u.values[0] - 5.0).abs() < 1e-12);
         fs::remove_dir_all(&dir).ok();
     }
+    #[test]
+    fn scan_times_skips_plain_files() {
+        let dir = std::env::temp_dir().join(format!("kairos-t13file-{}", std::process::id()));
+        let time_dir = dir.join("0");
+        fs::create_dir_all(&time_dir).unwrap();
+        fs::write(time_dir.join("T"), SCALAR_UNIFORM).unwrap();
+        fs::write(dir.join("README.md"), "不是时间步目录").unwrap();
+        let catalog = scan_times(&dir).unwrap();
+        assert_eq!(catalog.times.len(), 1);
+        fs::remove_dir_all(&dir).ok();
+    }
 }

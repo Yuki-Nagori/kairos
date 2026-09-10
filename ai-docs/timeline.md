@@ -172,3 +172,5 @@
 - **00:20** fix(ui): 材料面板两处 UX 缺陷——「用于当前研究」忙碌时禁用；删除失败保留选中便于重试
 - **00:40** fix(ui): 材料面板布局重排——列表改两列网格、详情整宽在下，修复左列窄栏下详情区被挤成 0 宽不可见
 - **00:50** fix(tauri): 主窗口固定不可拖拽缩放（resizable: false），移除随之失效的最小尺寸约束
+- **01:00** test(core): 补齐 Rust 覆盖率缺口（operators/gmsh/geometry/openfoam/solver/results/vm），修复 write_stl_binary 按 f64 落盘导致 Gmsh 输入错位的真 bug，行覆盖 96.98%→98.84%
+- **01:00** test(core): 补齐 Rust 覆盖率缺口（operators/gmsh/geometry/openfoam/solver/results/vm），修复 write_stl_binary 按 f64 落盘导致 Gmsh 输入错位的真 bug，行覆盖 96.98%→98.84%

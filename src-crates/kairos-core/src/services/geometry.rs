@@ -234,14 +234,16 @@ pub fn write_stl_binary(mesh: &TriangleMesh, path: &Path) -> Result<()> {
         .and_then(|_| file.write_all(&(mesh.triangles.len() as u32).to_le_bytes()))
         .map_err(|e| KairosError::io(format!("STL 头写入失败：{e}")))?;
     for tri in &mesh.triangles {
-        // 法向取自 STL 解析时保存的三角形法向（只读记录，不参与几何）
+        // 二进制 STL 记录固定 50 字节：法向 3×f32 + 顶点 9×f32 + 属性 u16。
+        // 顶点内部是 f64，必须收窄为 f32——按 f64 落盘会把记录写成 86 字节，
+        // Gmsh 按标准 50 字节解析必然错位。
         let mut record = Vec::with_capacity(50);
         for v in &tri.normal {
-            record.extend_from_slice(&v.to_le_bytes());
+            record.extend_from_slice(&(*v as f32).to_le_bytes());
         }
         for vertex in [&tri.a, &tri.b, &tri.c] {
             for component in vertex {
-                record.extend_from_slice(&component.to_le_bytes());
+                record.extend_from_slice(&(*component as f32).to_le_bytes());
             }
         }
         record.extend_from_slice(&0u16.to_le_bytes());
@@ -455,5 +457,24 @@ mod tests {
         assert_eq!(summary.suggested_unit, "mm");
         assert_eq!(summary.triangle_count, 12);
         assert_eq!(summary.issues.degenerate, 0);
+    }
+    #[test]
+    fn write_stl_binary_roundtrips_via_parser() {
+        let mesh = TriangleMesh {
+            triangles: unit_cube(),
+        };
+        let path = std::env::temp_dir().join(format!("kairos-stl-{}.bin", std::process::id()));
+        write_stl_binary(&mesh, &path).unwrap();
+        // 记录必须是标准 50 字节（f32），否则 Gmsh 引擎读入错位
+        let bytes = std::fs::read(&path).unwrap();
+        assert_eq!(bytes.len(), 84 + 50 * mesh.triangle_count());
+        let parsed = parse_stl_file(&path).unwrap();
+        assert_eq!(parsed.triangle_count(), mesh.triangle_count());
+        let issues = check_mesh(&parsed);
+        assert!(
+            issues.is_clean(),
+            "二进制 STL 回读应为封闭一致网格：{issues:?}"
+        );
+        std::fs::remove_file(&path).ok();
     }
 }

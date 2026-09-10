@@ -26,3 +26,15 @@ impl AnalysisStage {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn end_time_s_follows_stage() {
+        assert_eq!(AnalysisStage::Fill.end_time_s(1.0, 8.0, 15.0), 2.0);
+        assert_eq!(AnalysisStage::FillPack.end_time_s(1.0, 8.0, 15.0), 10.0);
+        assert_eq!(AnalysisStage::FillPackCool.end_time_s(1.0, 8.0, 15.0), 24.0);
+    }
+}

@@ -560,4 +560,14 @@ mod tests {
             );
         }
     }
+    #[test]
+    fn image_mirror_urls_skip_unsupported_arch() {
+        assert!(image_mirror_urls("riscv64").is_empty());
+    }
+
+    #[test]
+    fn terminal_line_cleaner_skips_non_csi_escape() {
+        // ESC 后跟非 '[' 的单字符转义：连同转义符一起丢弃
+        assert_eq!(clean_terminal_line("a\u{1b}Xb"), "ab");
+    }
 }
