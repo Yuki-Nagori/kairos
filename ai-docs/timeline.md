@@ -175,3 +175,4 @@
 - **01:00** test(core): 补齐 Rust 覆盖率缺口（operators/gmsh/geometry/openfoam/solver/results/vm），修复 write_stl_binary 按 f64 落盘导致 Gmsh 输入错位的真 bug，行覆盖 96.98%→98.84%
 - **01:00** test(core): 补齐 Rust 覆盖率缺口（operators/gmsh/geometry/openfoam/solver/results/vm），修复 write_stl_binary 按 f64 落盘导致 Gmsh 输入错位的真 bug，行覆盖 96.98%→98.84%
 - **01:45** feat(ui): v2 顶栏三行骨架——菜单栏（品牌+七个一级下拉菜单+⌘K 命令面板，命令与原生菜单共用动作注册表）+ 分析阶段选项卡独立成行，删除旧 AppHeader
+- **02:05** feat(ui): 阶段功能工具条 StageRibbon——按分析阶段切换命令分组（主页文件/检查、几何导入、工艺校验、求解刷新、结果导出/重扫），无工具阶段渲染引导文案；结果 store 增 rescanCatalog

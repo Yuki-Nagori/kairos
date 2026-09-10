@@ -7,6 +7,7 @@
 import { useAppStore } from "./stores/app";
 import MenuBar from "./components/menu-bar/MenuBar.vue";
 import StageTabs from "./components/stage-tabs/StageTabs.vue";
+import StageRibbon from "./components/stage-ribbon/StageRibbon.vue";
 import CommandPalette from "./components/command-palette/CommandPalette.vue";
 import StatusBar from "./components/status-bar/StatusBar.vue";
 import LogTabs from "./components/log-tabs/LogTabs.vue";
@@ -55,6 +56,7 @@ function stageVisible(stages: string): boolean {
     <nav class="flex h-9 shrink-0 items-stretch border-b border-zinc-800 bg-zinc-900 px-2">
       <StageTabs />
     </nav>
+    <StageRibbon />
     <main
       class="relative grid min-h-0 flex-1 grid-cols-[280px_minmax(0,1fr)_320px] gap-3 overflow-hidden px-3 py-2"
     >

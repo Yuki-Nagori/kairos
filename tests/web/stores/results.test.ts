@@ -70,6 +70,27 @@ describe("results store", () => {
     });
   });
 
+  describe("rescanCatalog", () => {
+    it("没有目录时引导先去结果面板扫描", async () => {
+      const app = useAppStore();
+      const results = useResultsStore();
+      await results.rescanCatalog();
+
+      expect(listResultTimes).not.toHaveBeenCalled();
+      expect(app.error?.message).toBe("请先在结果面板填写 case 目录并扫描。");
+    });
+
+    it("用上次扫描的目录重扫", async () => {
+      vi.mocked(listResultTimes).mockResolvedValue(catalog);
+      const results = useResultsStore();
+      await results.loadResultsCatalog("/case/run");
+      vi.mocked(listResultTimes).mockClear();
+
+      await results.rescanCatalog();
+      expect(listResultTimes).toHaveBeenCalledWith("/case/run");
+    });
+  });
+
   describe("loadField", () => {
     it("stores the loaded field and clears busy", async () => {
       const field = makeField();

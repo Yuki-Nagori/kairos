@@ -29,6 +29,15 @@ export const useResultsStore = defineStore("results", {
         app.endBusy();
       }
     },
+    /** 用上次扫描的目录重扫（工具条入口）；尚无目录时引导先在结果面板扫描。 */
+    async rescanCatalog(): Promise<void> {
+      const catalog = this.resultCatalog;
+      if (catalog === null) {
+        useAppStore().setError("请先在结果面板填写 case 目录并扫描。");
+        return;
+      }
+      await this.loadResultsCatalog(catalog.caseDir);
+    },
     /** 加载指定时间步的场数据（供视口与图表）。 */
     async loadField(caseDir: string, timeDir: string, field: string): Promise<void> {
       const app = useAppStore();
