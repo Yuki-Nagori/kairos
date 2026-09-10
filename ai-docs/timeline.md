@@ -168,3 +168,4 @@
 - **23:30** docs: AGENTS.md 速查新增「文档图表优先 mermaid」约定，DTO 镜像路径修正为 types/index.ts
 - **23:40** docs: icon-design 英文用词修正 Hyper-modern → Ultramodern（超现代的规范译名）
 - **23:50** test: 覆盖率口径扩至逻辑层全量（stores/composables/views useXxx），新增 31 个测试文件，前端测试 96→336，四维 100%；修复 VmPanel 提示符 ref 丢失回归
+- **00:10** docs: AGENTS 与测试地图的覆盖率口径同步为逻辑层全量

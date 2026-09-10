@@ -11,7 +11,7 @@
 | `web/components/` | UI 组件测试（AppHeader/StatusBar/VmPanel 及 ui 基础组件）               | `bunx vitest run tests/web/components` |
 | `web/render/`     | 渲染数学工具（mat4 等）                                                 | `bunx vitest run tests/web/render`     |
 
-- 覆盖率门槛（100%，四维）：`bun run test:coverage`（口径 = `src-web/utils/**`，见 vitest.config.ts）。
+- 覆盖率门槛（100%，四维）：`bun run test:coverage`（口径 = `src-web/utils/**` + `stores/**` + `composables/**` + 各 `use*.ts`，见 vitest.config.ts）。
 
 ## Rust（cargo test --workspace）
 
