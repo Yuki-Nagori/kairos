@@ -1,5 +1,7 @@
 # Kairos 架构约定
 
+> 模块完成度清单（分支勾选状态）见 [architecture-status.md](architecture-status.md)。
+
 本文是 Kairos（注塑成型 CAE 仿真软件）的架构权威文档。所有新代码必须遵守这里的分层与契约；与 README 冲突时以本文为准。
 
 ## 1. 总览与依赖方向（铁律）
