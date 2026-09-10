@@ -157,3 +157,4 @@
 - **21:30** refactor(web): 目录分层对齐——services→api、lib→utils、types.ts→types/、panels→views/<module>/，配置与 AGENTS.md 契约同步（T38 Phase A）
 - **21:50** refactor(state): 状态层迁移 Pinia——八个领域 defineStore，消费端/测试全量切换，删除自定义 reactive store（T38 Phase B）
 - **22:00** refactor(views): 13 个面板逻辑全部抽 useXxx.ts（.vue 只写 UI），共享组件改文件夹+composable，theme 升级全局 useTheme（T38 Phase C）
+- **22:10** docs(web): 新增 ai-docs/web-conventions.md——前端职责边界/通信解耦/反模式清单，挂入 AGENTS.md 文档路由
