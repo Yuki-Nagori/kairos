@@ -20,7 +20,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost https://releases.kairos.example; img-src 'self' data:; style-src 'self' 'unsafe-inline'",
+      "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost; img-src 'self' data:; style-src 'self' 'unsafe-inline'",
       "devCsp": null
     }
   },
@@ -34,11 +34,5 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
-  },
-  "plugins": {
-    "updater": {
-      "endpoints": ["https://releases.kairos.example/latest.json"],
-      "pubkey": "REPLACE_WITH_TAURI_SIGNER_PUBLIC_KEY"
-    }
   }
 }
