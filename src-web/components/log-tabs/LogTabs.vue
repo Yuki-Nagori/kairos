@@ -6,7 +6,7 @@ const { TABS, active, lines } = useLogTabs();
 </script>
 
 <template>
-  <div class="mt-2 flex h-44 flex-col overflow-hidden rounded-lg border border-zinc-800 bg-black">
+  <div class="mt-2 flex h-50 flex-col overflow-hidden rounded-lg border border-zinc-800 bg-black">
     <div
       class="flex items-center gap-2 border-b border-zinc-800 bg-zinc-900 px-3 py-1.5 text-[10px] text-zinc-400"
     >
