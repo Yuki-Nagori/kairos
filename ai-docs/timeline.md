@@ -140,3 +140,4 @@
 - **19:2x** feat(ui): v2 对齐三件套——流水线求解实时物理时间、视口悬浮色标图例（min/mid/max）、中列底部日志标签组（分析/网格/VM 终端）
 - **19:3x** fix(ui): 色标图例 replaceChildren 统一填充（noUncheckedIndexedAccess 收窄）
 - **19:4x** fix(ui): 移除 main 中残留的独立阶段选项卡条（顶栏已内嵌，双渲染重复）
+- **19:4x** fix(gpu): run_scalar_pipeline 多余闭括号导致解析错误（真机反馈整理时发现）

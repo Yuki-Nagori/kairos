@@ -173,12 +173,18 @@ fn run_scalar_pipeline(
     let input_b = inputs
         .get(1)
         .map(|data| make_buffer(&format!("{label}_in_b"), bytemuck::cast_slice(data), false));
-    // 参数按 16 字节打包（WGSL struct 对齐要求）
-    let params_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some(&format!("{label}_params")),
-        contents: bytemuck::cast_slice(params),
-        usage: wgpu::BufferUsages::STORAGE,
-    });
+    // 参数缓冲：非空时创建（差值算子等无参着色器跳过，避免无用分配）
+    let params_buffer = if params.is_empty() {
+        None
+    } else {
+        Some(
+            device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some(&format!("{label}_params")),
+                contents: bytemuck::cast_slice(params),
+                usage: wgpu::BufferUsages::STORAGE,
+            }),
+        )
+    };
     let output_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: Some(&format!("{label}_out")),
         contents: vec![0u8; len * 4].as_slice(),
@@ -200,23 +206,26 @@ fn run_scalar_pipeline(
 
     // 两种绑定布局：带参数（线性/阈值：in@0, params@1, out@2）
     // 与双输入（差值：a@0, b@1, out@2，无参数缓冲）。
-    // 两种绑定布局：带参数（线性/阈值：in@0, params@1, out@2）
-    // 与双输入（差值：a@0, b@1, out@2，无参数缓冲）。
     let entries: Vec<wgpu::BindGroupEntry> = match &input_b {
-        None => vec![
-            wgpu::BindGroupEntry {
-                binding: 0,
-                resource: input_a.as_entire_binding(),
-            },
-            wgpu::BindGroupEntry {
-                binding: 1,
-                resource: params_buffer.as_entire_binding(),
-            },
-            wgpu::BindGroupEntry {
-                binding: 2,
-                resource: output_buffer.as_entire_binding(),
-            },
-        ],
+        None => {
+            let pb = params_buffer
+                .as_ref()
+                .ok_or_else(|| KairosError::internal("带参着色器缺少参数缓冲"))?;
+            vec![
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: input_a.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: pb.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: output_buffer.as_entire_binding(),
+                },
+            ]
+        }
         Some(b) => vec![
             wgpu::BindGroupEntry {
                 binding: 0,
