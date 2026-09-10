@@ -3,7 +3,7 @@ import { computed } from "vue";
 import { useAppStore } from "../../stores/app";
 import type { Stage } from "../../types";
 
-const STAGES: [Stage, string][] = [
+export const STAGES: [Stage, string][] = [
   ["home", "主页"],
   ["geometry", "几何"],
   ["mesh", "网格"],

@@ -5,7 +5,9 @@
  * 视口渲染器、图表画布等有状态组件不因切换阶段而重建。
  */
 import { useAppStore } from "./stores/app";
-import AppHeader from "./components/app-header/AppHeader.vue";
+import MenuBar from "./components/menu-bar/MenuBar.vue";
+import StageTabs from "./components/stage-tabs/StageTabs.vue";
+import CommandPalette from "./components/command-palette/CommandPalette.vue";
 import StatusBar from "./components/status-bar/StatusBar.vue";
 import LogTabs from "./components/log-tabs/LogTabs.vue";
 import VmDock from "./components/vm-dock/VmDock.vue";
@@ -48,7 +50,11 @@ function stageVisible(stages: string): boolean {
 <template>
   <!-- 整页锁定不滚动，只有左右列与视口内部各自伸缩 -->
   <div class="flex h-screen flex-col overflow-hidden bg-zinc-950 text-zinc-100">
-    <AppHeader />
+    <MenuBar />
+    <!-- 分析阶段选项卡独立成行：按工作流排序，切换各列面板显隐 -->
+    <nav class="flex h-9 shrink-0 items-stretch border-b border-zinc-800 bg-zinc-900 px-2">
+      <StageTabs />
+    </nav>
     <main
       class="relative grid min-h-0 flex-1 grid-cols-[280px_minmax(0,1fr)_320px] gap-3 overflow-hidden px-3 py-2"
     >
@@ -89,5 +95,6 @@ function stageVisible(stages: string): boolean {
       <ResultsPanel />
     </section>
     <StatusBar />
+    <CommandPalette />
   </div>
 </template>

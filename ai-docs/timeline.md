@@ -174,3 +174,4 @@
 - **00:50** fix(tauri): 主窗口固定不可拖拽缩放（resizable: false），移除随之失效的最小尺寸约束
 - **01:00** test(core): 补齐 Rust 覆盖率缺口（operators/gmsh/geometry/openfoam/solver/results/vm），修复 write_stl_binary 按 f64 落盘导致 Gmsh 输入错位的真 bug，行覆盖 96.98%→98.84%
 - **01:00** test(core): 补齐 Rust 覆盖率缺口（operators/gmsh/geometry/openfoam/solver/results/vm），修复 write_stl_binary 按 f64 落盘导致 Gmsh 输入错位的真 bug，行覆盖 96.98%→98.84%
+- **01:45** feat(ui): v2 顶栏三行骨架——菜单栏（品牌+七个一级下拉菜单+⌘K 命令面板，命令与原生菜单共用动作注册表）+ 分析阶段选项卡独立成行，删除旧 AppHeader

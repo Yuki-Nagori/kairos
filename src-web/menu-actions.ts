@@ -40,3 +40,8 @@ export function setupMenuActions(): void {
     menuActions[event.payload]?.();
   }).catch(() => undefined);
 }
+
+/** 按动作 id 直接触发：窗口内菜单栏 / 命令面板与原生菜单共用同一动作集。 */
+export function runMenuAction(id: string): void {
+  menuActions[id]?.();
+}
