@@ -15,8 +15,7 @@
         "title": "Kairos",
         "width": 1440,
         "height": 900,
-        "minWidth": 1080,
-        "minHeight": 720
+        "resizable": false
       }
     ],
     "security": {
