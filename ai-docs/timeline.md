@@ -134,3 +134,4 @@
 - **18:5x** refactor(core): vector_magnitude CPU 参考实现归位 kairos-core（services::operators），与 T31 派生算子同住事实源层
 - **18:6x** refactor(ui): card() 工厂参数化——icon/statusHint/onRefresh 集中「标题图标 + 状态行 + 刷新按钮」共用模式，三个面板去除手写样板
 - **18:7x** feat(ui): 材料面板本构方程 LaTeX 渲染（KaTeX）+ card/dock 去阴影（扁平化视觉）
+- **18:8x** docs(ui): ui.html v2 设计稿——对标 Moldflow Insight：分析阶段选项卡/方案任务 checklist/层管理/色标视口/内嵌 VM 终端，扁平深色三列工作台
