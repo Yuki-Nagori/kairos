@@ -4,7 +4,7 @@
 
 当前处于框架搭建阶段：技术栈与工程化设施全部就位，项目管理、材料数据库、STL 几何导入（健康检查）、3D 体积网格生成（体素 + 5-四面体保形分解）、浇口流道与冷却水路、成型工艺设置、OpenFOAM 原生求解集成（foamRun 模块化求解器，作业调度 + 进度流）、结果读取与统计、3D 视口（WebGL2）、XY 曲线与探针、报告导出、GPU 探测与算子（wgpu 跨厂商）已落地。
 
-技术栈：Tauri 2 + Bun + TypeScript + Vite + Tailwind CSS v4；Rust 侧为 Cargo 工作区（领域层 + Tauri 适配层）。架构与开发约定见 [AGENTS.md](AGENTS.md) 及 [ai-docs/](ai-docs/)。
+技术栈：Tauri 2 + Bun + TypeScript + Vue 3（Composition API + Pinia）+ Vite + Tailwind CSS v4；Rust 侧为 Cargo 工作区（领域层 + Tauri 适配层）。架构与开发约定见 [AGENTS.md](AGENTS.md) 及 [ai-docs/](ai-docs/)。
 
 ## 无头 CLI（T32）
 
@@ -48,9 +48,9 @@ bun run dev           # Vite 开发服务器（http://localhost:1420）
 | ----------------------------------------------- | -------------------------------------------------------------------- |
 | `bun run dev`                                   | 仅启动前端（Vite，端口 1420，固定端口防止 Tauri 错连）               |
 | `bun run build`                                 | 类型检查 + 前端生产构建（输出 `dist/`）                              |
-| `bun run tauri dev`                             | 启动 Tauri 桌面应用                                                  |
-| `bun run tauri build`                           | 打包桌面应用                                                         |
-| `bun run typecheck`                             | TypeScript 类型检查（`tsc --noEmit`）                                |
+| `bun run tauri dev`（`tauri:dev`）              | 启动 Tauri 桌面应用                                                  |
+| `bun run tauri build`（`tauri:build`）          | 打包桌面应用                                                         |
+| `bun run typecheck`                             | TypeScript 类型检查（vue-tsc，覆盖 `.vue` SFC）                      |
 | `bun run typecheck:rust`                        | Rust 编译检查（`cargo check --workspace`）                           |
 | `bun run lint` / `lint:fix` / `lint:rust`       | ESLint 检查 / 自动修复 / cargo clippy（Rust warning 视为错误）       |
 | `bun run format` / `format:check`               | Prettier 格式化 / 校验                                               |
@@ -58,6 +58,7 @@ bun run dev           # Vite 开发服务器（http://localhost:1420）
 | `bun run test` / `test:watch` / `test:coverage` | Vitest 单测                                                          |
 | `bun run test:rust`                             | Rust 单测（`cargo test`）                                            |
 | `bun run bench` / `cargo bench`                 | 性能基准（预算见 `ai-docs/perf-budget.md`）                          |
+| `bun run analyze`                               | 前端构建 + 体积分析报告（输出 `dist/stats.html`）                    |
 | `bun run knip`                                  | 检测未使用的文件、导出、依赖                                         |
 | `bun run verify`                                | 一键全量门禁：前端 + Rust 的 typecheck → lint → format → test → knip |
 

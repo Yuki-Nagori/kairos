@@ -8,26 +8,31 @@
 
 ```
 ┌─────────────────────────── WebView (TypeScript) ───────────────────────────┐
-│  components/   仅订阅 state、调用 services，不直接 invoke                   │
+│  views/        页面级面板：Xxx.vue 只写模板，逻辑在同位 useXxx.ts composable │
+│  components/   可复用 UI（ui/ 基础件 + 共享组件），同样「.vue + useXxx」     │
 │      ↓                                                                       │
-│  state.ts      全局状态容器 + 业务动作（bootstrap / setError / 各领域动作）  │
+│  stores/       按领域 defineStore（Pinia）：state + getters + actions       │
 │      ↓                                                                       │
-│  services/     Tauri 命令的领域化封装，写明返回类型                          │
+│  api/          Tauri 命令的领域化封装，写明返回类型                         │
 │      ↓                                                                       │
-│  lib/          ipc 网关（运行时探测、错误契约还原）、store、环境探测          │
-└──────────────────────────────┬─────────────────────────────────────────────-┘
+│  utils/        ipc 网关（运行时探测、错误契约还原）、图表/统计等纯函数       │
+└──────────────────────────────┬─────────────────────────────────────────────┘
                         invoke / Channel（IPC 契约）
-┌──────────────────────────────┴─────────────────────────────────────────────-┐
+┌──────────────────────────────┴─────────────────────────────────────────────┐
 │  src-tauri（适配层）  commands/ 只做装配：参数校验 → 调 core → 返回 DTO       │
 │      ↓ 不反向依赖                                                            │
 │  kairos-core（领域层） models/ DTO · services/ 领域逻辑 · error/ 统一错误     │
-│                       纯 Rust，不依赖 tauri，可独立测试、可复用给 CLI/脚本    │
-└────────────────────────────────────────────────────────────────────────────-┘
+│                       纯 Rust，不依赖 tauri，可独立测试、可复用给 CLI/脚本   │
+└────────────────────────────────────────────────────────────────────────────┘
 ```
+
+职责边界的判定标准（去掉 Vue 还能测就进 `.ts`、必须依赖 Vue API 才成立就进
+composable、只描述 DOM 就留 `.vue`）与反模式清单见
+[web-conventions.md](web-conventions.md)。
 
 两条铁律：
 
-1. **依赖只能向下**：`components → state → services → lib`；Rust 侧 `src-tauri → kairos-core`。`kairos-core` 出现 `use tauri` 即为架构破坏（CI 的 clippy 不会拦，靠 review 把关）。
+1. **依赖只能向下**：`views / components → stores → api → utils`；Rust 侧 `src-tauri → kairos-core`。`kairos-core` 出现 `use tauri` 即为架构破坏（CI 的 clippy 不会拦，靠 review 把关）。
 2. **业务逻辑只住 core**：`src-tauri` 的 commands 不写业务逻辑，只做「参数 → core 调用 → DTO 返回」的装配。这样所有领域代码都能脱离 Tauri 做单元测试，未来也能直接复用给批处理 CLI、Wasm 模块。
 
 ## 2. Rust 工作区
@@ -63,7 +68,7 @@ src-tauri/               # Tauri 适配层 crate
 { "code": "validation", "message": "参数超出量程" }
 ```
 
-`code` 取值固定为 `validation / not_found / io / solver / internal`（`ErrorKind`）。前端 `lib/ipc.ts` 把它还原为 `CommandError`（带 `.code` 字段）；UI 按 code 分支，**禁止对 message 做文本匹配**。
+`code` 取值固定为 `validation / not_found / io / solver / internal`（`ErrorKind`）。前端 `utils/ipc.ts` 把它还原为 `CommandError`（带 `.code` 字段）；UI 按 code 分支，**禁止对 message 做文本匹配**。
 
 ### 传输选型
 
@@ -102,7 +107,7 @@ fn solve_case(case_id: String, progress: Channel<SolveProgress>) -> Result<Solve
 import { Channel, invoke } from "@tauri-apps/api/core";
 
 const channel = new Channel<SolveProgress>();
-channel.onmessage = (progress) => appStore.set({ progress });
+channel.onmessage = (progress) => jobs.appendJobLog(jobId, `进度 ${progress}%`);
 await invoke<SolveResult>("solve_case", { caseId, progress: channel });
 ```
 
@@ -111,8 +116,9 @@ await invoke<SolveResult>("solve_case", { caseId, progress: channel });
 1. core：`models/` 定义 DTO → `services/` 写领域函数（`Result<T, KairosError>`）→ 补单测；
 2. 契约：`src-crates/kairos-core/tests/contract.rs` 补序列化断言；
 3. 适配：`src-tauri/src/commands/<领域>.rs` 写薄命令；`lib.rs` 的 `generate_handler![]` 注册；
-4. 前端：`types.ts` 镜像 DTO → `services/` 封装 → `state.ts` 加动作 → 组件只调 state 动作；
-5. 前端测试：`state.test.ts` 用 `vi.mock` 覆盖成功/失败两条路径。
+4. 前端：`types/index.ts` 镜像 DTO → `api/` 封装 → `stores/<域>` 加 action
+   （失败经 `app.setError`，busy 用 `beginBusy/endBusy` 配对）→ composable 消费；
+5. 前端测试：`tests/web/stores/<域>.test.ts` 用 `vi.mock` 覆盖成功/失败两条路径。
 
 ## 5. 状态管理
 
@@ -124,8 +130,10 @@ await invoke<SolveResult>("solve_case", { caseId, progress: channel });
 
 ### 前端
 
-- 单一全局 Store（`state.ts`），动作函数是唯一写入口，组件不自改状态；
-- 大状态到来后用 `select(store, selector, listener)` 做切片订阅（`Object.is` 去重），避免无关重渲染；
+- 按领域 defineStore（app / project / geometry / materials / jobs / pipeline / results /
+  dependencies / vm）：action 是状态的唯一写入口，组件不自改领域状态；
+- 响应式追踪由 Pinia 细粒度完成；跨域动作在 action 内引用其他 store；
+  `menu-actions.ts` / `shortcuts.ts` 在处理器内懒取 store（模块加载早于 `createPinia()`）；
 - IPC 不可用（浏览器预览）是预期场景：`IpcUnavailableError` 显示为中性提示并自动消失，与真实失败（红色）区分。
 
 ## 6. 测试策略

@@ -4,14 +4,14 @@
 
 ## 前端（web 前端，vitest + happy-dom；与 src-web 镜像）
 
-| 目录                | 内容                                                                    | 跑法                                      |
-| ------------------- | ----------------------------------------------------------------------- | ----------------------------------------- |
-| `web/lib/`          | 纯逻辑单元测试（chart / ipc / pipeline / report / store / environment） | `bunx vitest run tests/web/utils`         |
-| `web/components/`   | UI 组件测试（AppHeader/StatusBar/VmPanel 及 ui 基础组件）               | `bunx vitest run tests/web/components`    |
-| `web/state.test.ts` | 全局状态容器与动作分片                                                  | `bunx vitest run tests/web/state.test.ts` |
-| `web/render/`       | 渲染数学工具（mat4 等）                                                 | `bunx vitest run tests/web/render`        |
+| 目录              | 内容                                                                    | 跑法                                   |
+| ----------------- | ----------------------------------------------------------------------- | -------------------------------------- |
+| `web/utils/`      | 纯逻辑单元测试（chart / ipc / pipeline / report / stats / environment） | `bunx vitest run tests/web/utils`      |
+| `web/stores/`     | Pinia store 测试（app / project / vm / dependencies）                   | `bunx vitest run tests/web/stores`     |
+| `web/components/` | UI 组件测试（AppHeader/StatusBar/VmPanel 及 ui 基础组件）               | `bunx vitest run tests/web/components` |
+| `web/render/`     | 渲染数学工具（mat4 等）                                                 | `bunx vitest run tests/web/render`     |
 
-- 覆盖率门槛（100%，四维）：`bun run test:coverage`（口径 = `src-web/lib/**`，见 vitest.config.ts）。
+- 覆盖率门槛（100%，四维）：`bun run test:coverage`（口径 = `src-web/utils/**`，见 vitest.config.ts）。
 
 ## Rust（cargo test --workspace）
 
