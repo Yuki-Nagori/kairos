@@ -10,6 +10,7 @@
     "isolatedModules": true,
     "useDefineForClassFields": true,
     "resolveJsonModule": true,
+    "jsx": "preserve",
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
@@ -19,5 +20,12 @@
     "noEmit": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src-web", "tests/web", "vite.config.ts", "vitest.config.ts"]
+  "include": [
+    "src-web/**/*.ts",
+    "src-web/**/*.vue",
+    "src-web/env.d.ts",
+    "tests/web",
+    "vite.config.ts",
+    "vitest.config.ts"
+  ]
 }

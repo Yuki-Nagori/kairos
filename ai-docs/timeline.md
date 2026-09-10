@@ -143,3 +143,4 @@
 - **19:4x** fix(gpu): run_scalar_pipeline 多余闭括号导致解析错误（真机反馈整理时发现）
 - **19:5x** docs(reviews): M6 评审收尾——八项清单全过，T32 流式日志回流记录
 - **19:6x** refactor(ui): stage-tabs 条嵌入顶栏后去掉独立边框/背景，选项卡改为圆角背景高亮
+- **19:6x** feat(ui): Vue 3 基础设施——@vitejs/plugin-vue + vue-tsc + env.d.ts + tsconfig SFC 支持（T37 Phase 1）

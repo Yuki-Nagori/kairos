@@ -1,9 +1,10 @@
 import tailwindcss from "@tailwindcss/vite";
+import vue from "@vitejs/plugin-vue";
 import { defineConfig } from "vite";
 
 // Tauri 要求固定开发端口，生产构建产物需落在 dist/。
 export default defineConfig({
-  plugins: [tailwindcss()],
+  plugins: [tailwindcss(), vue()],
   clearScreen: false,
   server: {
     port: 1420,

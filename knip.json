@@ -2,5 +2,5 @@
   "$schema": "./node_modules/knip/schema.json",
   "entry": ["index.html", "tests/web/**/*.test.ts", "src-web/lib/bench/*.ts"],
   "project": ["src-web/**/*.ts"],
-  "ignoreDependencies": ["tailwindcss"]
+  "ignoreDependencies": ["tailwindcss", "@vue/test-utils", "vue-tsc"]
 }
