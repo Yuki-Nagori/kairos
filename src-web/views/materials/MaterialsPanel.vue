@@ -39,10 +39,11 @@ const {
       <UiButton variant="danger" :disabled="deleteDisabled" @click="doDelete">删除</UiButton>
     </div>
 
-    <div class="flex gap-4">
-      <div>
+    <!-- 左列仅 ~280px：横排三栏会把详情区挤成 0 宽，列表收两列网格、详情整宽在下 -->
+    <div class="grid grid-cols-2 gap-2">
+      <div class="min-w-0">
         <p class="mb-1 text-xs font-semibold text-zinc-400">内置示例</p>
-        <div class="w-44 shrink-0 space-y-1">
+        <div class="space-y-1">
           <button
             v-for="material in materials.materials.builtin"
             :key="material.id"
@@ -58,9 +59,9 @@ const {
           </p>
         </div>
       </div>
-      <div>
+      <div class="min-w-0">
         <p class="mb-1 text-xs font-semibold text-zinc-400">自定义</p>
-        <div class="w-44 shrink-0 space-y-1">
+        <div class="space-y-1">
           <button
             v-for="material in materials.materials.custom"
             :key="material.id"
@@ -77,7 +78,7 @@ const {
         </div>
       </div>
 
-      <div class="min-w-0 flex-1 space-y-2">
+      <div class="min-w-0 space-y-2">
         <template v-if="selected">
           <p class="text-sm font-semibold text-zinc-200">
             {{ selected.name }}（{{ selected.manufacturer }}）
