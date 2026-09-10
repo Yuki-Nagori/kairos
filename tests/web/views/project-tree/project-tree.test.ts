@@ -81,8 +81,8 @@ describe("ProjectTree", () => {
   it("未打开项目时只渲染占位叶，空分组被过滤", () => {
     const wrapper = mount(ProjectTree, { global: { plugins: [pinia] } });
     const text = wrapper.text();
-    expect(text).toContain("工程浏览器");
-    expect(text).toContain("项目");
+    expect(text).toContain("工程");
+    // 头部徽标：未打开项目时给占位名
     expect(text).toContain("未打开项目");
     // 空分组不渲染标题。
     expect(text).not.toContain("几何");

@@ -2,7 +2,9 @@
  * 视口是工作台主角：卡片弹性充满中列剩余空间，画布随容器缩放。 */
 import { computed, onMounted, onUnmounted, ref, useTemplateRef, watch } from "vue";
 import { useGeometryStore } from "../../stores/geometry";
+import { useProjectStore } from "../../stores/project";
 import { useResultsStore } from "../../stores/results";
+import { useViewportStore } from "../../stores/viewport";
 import type { ScalarField } from "../../types";
 import { ViewportRenderer } from "../../render/renderer";
 import { detectRenderCapabilityInBrowser } from "../../render/capability";
@@ -10,9 +12,28 @@ import { registerSnapshot } from "../../render/snapshot";
 import { minMax } from "../../utils/stats";
 import { getRenderMesh } from "../../api/geometry";
 
+/** 叠加层配色：浇口红、流道琥珀、冷却水路蓝（深色视口下高对比）。 */
+const GATE_COLOR: [number, number, number] = [0.95, 0.32, 0.3];
+const RUNNER_COLOR: [number, number, number] = [0.95, 0.62, 0.12];
+const COOLING_COLOR: [number, number, number] = [0.3, 0.6, 0.95];
+
+/** 端点对压平成线段坐标（长度 = 6 × 段数）。 */
+function flattenSegments(
+  elements: { start: [number, number, number]; end: [number, number, number] }[],
+): Float32Array {
+  const positions = new Float32Array(elements.length * 6);
+  elements.forEach((element, index) => {
+    positions.set(element.start, index * 6);
+    positions.set(element.end, index * 6 + 3);
+  });
+  return positions;
+}
+
 export function useViewportPanel() {
   const geometry = useGeometryStore();
   const results = useResultsStore();
+  const project = useProjectStore();
+  const viewport = useViewportStore();
 
   // 模板 ref 经 useTemplateRef 按名绑定（静态 ref="canvasRef" 不算 setup 变量读取，
   // 解构返回会触发 noUnusedLocals）。
@@ -143,10 +164,44 @@ export function useViewportPanel() {
         indices: renderMesh.indices,
         faceCells: renderMesh.faceCells,
       });
+      uploadOverlays();
+      applyLayerVisibility();
       meshLoaded.value = true;
       meshReady.value = true;
     });
   }
+
+  /** 把当前研究的浇注系统 / 冷却水路上传为线段叠加层。 */
+  function uploadOverlays(): void {
+    const study = project.activeStudy;
+    if (study === null || renderer === null) {
+      return;
+    }
+    const gates = study.runnerElements.filter((element) => element.kind === "gate");
+    const runners = study.runnerElements.filter((element) => element.kind === "runner");
+    renderer.uploadOverlay("gates", { positions: flattenSegments(gates), color: GATE_COLOR });
+    renderer.uploadOverlay("runners", { positions: flattenSegments(runners), color: RUNNER_COLOR });
+    renderer.uploadOverlay("cooling", {
+      positions: flattenSegments(study.coolingChannels),
+      color: COOLING_COLOR,
+    });
+  }
+
+  /** 把图层可见性意图同步到渲染器（层管理面板与视口的桥）。 */
+  function applyLayerVisibility(): void {
+    if (renderer === null) {
+      return;
+    }
+    renderer.setMeshVisible(viewport.layers.mesh);
+    renderer.setOverlayVisible("gates", viewport.layers.gates);
+    renderer.setOverlayVisible("runners", viewport.layers.runners);
+    renderer.setOverlayVisible("cooling", viewport.layers.cooling);
+  }
+
+  watch(
+    () => viewport.layers,
+    () => applyLayerVisibility(),
+  );
 
   // 场数据加载后自动开启云图着色（值域取自场 min/max），并热更新每面值。
   function applyField(field: ScalarField | null): void {

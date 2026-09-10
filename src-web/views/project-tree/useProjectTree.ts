@@ -28,5 +28,8 @@ export function useProjectTree() {
     return sections.filter((section) => section.leaves.length > 0);
   });
 
-  return { groups };
+  /** 头部徽标：当前项目名（未打开时给占位）。 */
+  const projectName = computed(() => project.project?.name ?? "未打开项目");
+
+  return { groups, projectName };
 }

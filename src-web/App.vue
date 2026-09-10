@@ -17,6 +17,7 @@ import ViewportPanel from "./views/viewport/ViewportPanel.vue";
 import XyChartPanel from "./views/xy-chart/XyChartPanel.vue";
 import ResultsPanel from "./views/results/ResultsPanel.vue";
 import ProjectTree from "./views/project-tree/ProjectTree.vue";
+import LayersPanel from "./views/layers/LayersPanel.vue";
 import PipelinePanel from "./views/pipeline/PipelinePanel.vue";
 import MaterialsPanel from "./views/materials/MaterialsPanel.vue";
 import GeometryPanel from "./views/geometry/GeometryPanel.vue";
@@ -30,6 +31,7 @@ const app = useAppStore();
 
 const LEFT_PANELS = [
   { component: ProjectTree, stages: "home,geometry,mesh,process,solve,results,report" },
+  { component: LayersPanel, stages: "home,geometry,mesh,process,solve,results,report" },
   { component: PipelinePanel, stages: "home" },
   { component: MaterialsPanel, stages: "home,process" },
   { component: GeometryPanel, stages: "home,geometry,mesh" },

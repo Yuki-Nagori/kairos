@@ -24,6 +24,14 @@ interface RenderMesh {
   faceCells?: Uint32Array;
 }
 
+/** 线段叠加层（浇口 / 流道 / 冷却水路）：成对端点的扁平坐标。 */
+interface OverlayLayer {
+  /** 成对端点坐标（长度 = 6 × 线段数）。 */
+  positions: Float32Array;
+  /** RGB 颜色（0..1）。 */
+  color: [number, number, number];
+}
+
 /** 每顶点法向（按三角形面法向展开，非索引共享）。 */
 function computeNormals(positions: Float32Array, indices: Uint32Array): Float32Array {
   const normals = new Float32Array(positions.length);
@@ -103,13 +111,41 @@ void main() {
 }
 `;
 
-/** WebGL2 渲染器：轨道相机 + Lambert 着色 + 场云图 + 剖切 + FPS 埋点。 */
+const LINE_VERTEX_SHADER = `#version 300 es
+layout(location=0) in vec3 a_pos;
+uniform mat4 u_mvp;
+void main() {
+  gl_Position = u_mvp * vec4(a_pos, 1.0);
+}
+`;
+
+const LINE_FRAGMENT_SHADER = `#version 300 es
+precision highp float;
+uniform vec3 u_color;
+out vec4 outColor;
+void main() {
+  outColor = vec4(u_color, 1.0);
+}
+`;
+
+/** WebGL2 渲染器：轨道相机 + Lambert 着色 + 场云图 + 剖切 + 线段叠加层 + FPS 埋点。 */
 export class ViewportRenderer {
   private program: WebGLProgram;
   private vao: WebGLVertexArrayObject | null = null;
   private valueBuffer: WebGLBuffer | null = null;
   private indexCount = 0;
   private indexType = 0;
+
+  /** 线段叠加层：独立着色程序与 VAO，键为图层 id。 */
+  private lineProgram: WebGLProgram;
+  private overlays = new Map<
+    string,
+    { vao: WebGLVertexArrayObject; count: number; color: [number, number, number] }
+  >();
+  /** 叠加层源数据缓存：上下文恢复时按它重建 GL 资源。 */
+  private lastOverlayData = new Map<string, OverlayLayer>();
+  private overlayVisible = new Map<string, boolean>();
+  private meshVisible = true;
 
   private yaw = 0.6;
   private pitch = 0.4;
@@ -145,6 +181,13 @@ export class ViewportRenderer {
     } else {
       this.indexCount = 0;
     }
+    // 叠加层 GL 资源随上下文一起失效，按缓存源数据重建。
+    for (const [id, layer] of this.lastOverlayData) {
+      const visible = this.overlayVisible.get(id) ?? true;
+      this.overlayVisible.delete(id);
+      this.uploadOverlay(id, layer);
+      this.overlayVisible.set(id, visible);
+    }
     this.startLoop();
   };
 
@@ -154,6 +197,7 @@ export class ViewportRenderer {
     private readonly onFps?: (fps: number) => void,
   ) {
     this.program = this.buildProgram();
+    this.lineProgram = this.buildLineProgram();
     this.attachControls();
     this.attachContextHandlers();
     this.refreshClearColor();
@@ -199,10 +243,80 @@ export class ViewportRenderer {
     return program;
   }
 
+  /** 线段叠加层的极简着色程序：MVP 变换 + 纯色输出。 */
+  private buildLineProgram(): WebGLProgram {
+    const gl = this.gl;
+    const compile = (type: number, source: string): WebGLShader => {
+      const shader = gl.createShader(type);
+      if (shader === null) {
+        throw new Error("无法创建着色器");
+      }
+      gl.shaderSource(shader, source);
+      gl.compileShader(shader);
+      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+        throw new Error(`着色器编译失败：${gl.getShaderInfoLog(shader) ?? ""}`);
+      }
+      const program = gl.createProgram();
+      if (program === null) {
+        throw new Error("无法创建着色程序");
+      }
+      gl.attachShader(program, shader);
+      gl.attachShader(program, compile(gl.FRAGMENT_SHADER, LINE_FRAGMENT_SHADER));
+      gl.linkProgram(program);
+      if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+        throw new Error(`着色程序链接失败：${gl.getProgramInfoLog(program) ?? ""}`);
+      }
+      return program;
+    };
+    return compile(gl.VERTEX_SHADER, LINE_VERTEX_SHADER);
+  }
+
   /** 上传渲染网格：扁平顶点 + 三角形索引（可选每面单元索引用于云图）。 */
   uploadMesh(mesh: RenderMesh): void {
     this.lastMesh = mesh;
     this.uploadGlResources(mesh);
+  }
+
+  /** 上传 / 替换线段叠加层（浇口 / 流道 / 冷却水路），空线段 = 清除该层。 */
+  uploadOverlay(id: string, layer: OverlayLayer): void {
+    const existing = this.overlays.get(id);
+    if (existing !== undefined) {
+      this.gl.deleteVertexArray(existing.vao);
+      this.overlays.delete(id);
+    }
+    if (layer.positions.length === 0) {
+      return;
+    }
+    const gl = this.gl;
+    const vao = gl.createVertexArray();
+    gl.bindVertexArray(vao);
+
+    const buffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+    gl.bufferData(gl.ARRAY_BUFFER, layer.positions, gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
+    gl.bindVertexArray(null);
+
+    this.lastOverlayData.set(id, { positions: layer.positions, color: layer.color });
+    this.overlays.set(id, {
+      vao: vao!,
+      count: layer.positions.length / 3,
+      color: layer.color,
+    });
+    if (!this.overlayVisible.has(id)) {
+      this.overlayVisible.set(id, true);
+    }
+  }
+
+  /** 设置叠加层可见性（未上传过的 id 仅记录，待上传后生效）。 */
+  setOverlayVisible(id: string, visible: boolean): void {
+    this.overlayVisible.set(id, visible);
+  }
+
+  /** 设置制品网格本体可见性（叠加层不受影响）。 */
+  setMeshVisible(visible: boolean): void {
+    this.meshVisible = visible;
   }
 
   /** 重建全部 GL 资源（首次上传与上下文恢复共用路径）。 */
@@ -382,11 +496,15 @@ export class ViewportRenderer {
     const [clearR, clearG, clearB] = this.clearColor;
     gl.clearColor(clearR, clearG, clearB, 1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-    if (this.indexCount === 0) {
-      return;
-    }
-
     const aspect = this.canvas.width / Math.max(this.canvas.height, 1);
+    if (this.indexCount > 0 && this.meshVisible) {
+      this.drawMesh(aspect);
+    }
+    this.drawOverlays(aspect);
+  }
+
+  private drawMesh(aspect: number): void {
+    const gl = this.gl;
     const projection = mat4Perspective(Math.PI / 4, aspect, 0.01, 100);
     const eye: Vec3 = [
       this.target[0] + this.distance * Math.cos(this.pitch) * Math.sin(this.yaw),
@@ -411,6 +529,39 @@ export class ViewportRenderer {
     gl.bindVertexArray(this.vao);
     gl.drawElements(gl.TRIANGLES, this.indexCount, this.indexType, 0);
     gl.bindVertexArray(null);
+  }
+
+  /** 逐层绘制可见线段叠加层（剖切对线段不生效：浇注系统在制品外侧）。 */
+  private drawOverlays(aspect: number): void {
+    if (this.overlays.size === 0) {
+      return;
+    }
+    const gl = this.gl;
+    const projection = mat4Perspective(Math.PI / 4, aspect, 0.01, 100);
+    const eye: Vec3 = [
+      this.target[0] + this.distance * Math.cos(this.pitch) * Math.sin(this.yaw),
+      this.target[1] + this.distance * Math.sin(this.pitch),
+      this.target[2] + this.distance * Math.cos(this.pitch) * Math.cos(this.yaw),
+    ];
+    const view = mat4LookAt(eye, this.target, [0, 1, 0]);
+    const mvp = mat4Multiply(projection, view);
+
+    gl.useProgram(this.lineProgram);
+    gl.uniformMatrix4fv(gl.getUniformLocation(this.lineProgram, "u_mvp"), false, mvp);
+    for (const [id, overlay] of this.overlays) {
+      if (this.overlayVisible.get(id) !== true) {
+        continue;
+      }
+      gl.uniform3f(
+        gl.getUniformLocation(this.lineProgram, "u_color"),
+        overlay.color[0],
+        overlay.color[1],
+        overlay.color[2],
+      );
+      gl.bindVertexArray(overlay.vao);
+      gl.drawArrays(gl.LINES, 0, overlay.count);
+      gl.bindVertexArray(null);
+    }
   }
 
   private fitToMesh(positions: Float32Array): void {

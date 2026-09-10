@@ -25,16 +25,19 @@ export function usePipelinePanel() {
   const stage = ref("fill");
   const cores = ref("");
 
-  const steps = computed(() =>
-    evaluatePipeline({
+  const steps = computed(() => {
+    const list = evaluatePipeline({
       geometries: geometry.geometries,
       meshReports: geometry.meshReports,
       project: project.project,
       activeStudyId: project.activeStudyId,
       materials: materials.materials,
       jobs: jobsStore.jobs,
-    }),
-  );
+    });
+    // 三态清单：首个未完成步骤即「进行中」（⟳ 高亮），其余未完成步骤为待办。
+    const doingIndex = list.findIndex((step) => !step.done);
+    return list.map((step, index) => ({ ...step, doing: index === doingIndex }));
+  });
 
   const submitDisabled = computed(() => !allPrerequisitesDone(steps.value) || app.busy !== null);
 
