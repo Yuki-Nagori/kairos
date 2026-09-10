@@ -121,6 +121,8 @@ export interface MeshQuality {
 
 /** 对应 `kairos-core::models::mesh::MeshingReport`。 */
 export interface MeshingReport {
+  /** 生成引擎标识（voxel / gmsh）。 */
+  engine: string;
   nodeCount: number;
   elementCount: number;
   surfaceFaceCount: number;

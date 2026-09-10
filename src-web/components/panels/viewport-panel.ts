@@ -28,6 +28,39 @@ export function createViewportPanel(): HTMLElement {
   emptyHint.textContent =
     "导入几何并生成网格后，点击「载入网格到视口」查看 3D 模型（WebGPU 可用时自动启用）";
   canvasWrap.append(canvas, emptyHint);
+  // 悬浮色标图例：加载场后显示渐变标尺与 min/max 值（v2 设计稿对齐）。
+  const legend = document.createElement("div");
+  legend.className =
+    "absolute left-3 top-3 z-10 flex items-center gap-2 rounded-md border border-zinc-800 bg-zinc-950/80 px-2 py-1.5";
+  const legendScale = document.createElement("div");
+  legendScale.className = "h-16 w-2 rounded-sm";
+  legendScale.style.background = "linear-gradient(180deg, #f59e0b, #22c55e, #3b82f6)";
+  const legendLabels = document.createElement("div");
+  legendLabels.className = "flex h-16 flex-col justify-between font-mono text-[10px] text-zinc-400";
+  legend.append(legendScale, legendLabels);
+  legend.style.display = "none";
+  canvasWrap.append(legend);
+
+  // 色标数值随加载场更新（max / mid / min 自上而下）
+  function updateLegend(field: { values: number[] } | null): void {
+    if (field === null || field.values.length === 0) {
+      legend.style.display = "none";
+      return;
+    }
+    legend.style.display = "flex";
+    const sorted = [...field.values].sort((a, b) => a - b);
+    const max = sorted[sorted.length - 1] ?? 0;
+    const mid = sorted[Math.floor(sorted.length / 2)] ?? 0;
+    const min = sorted[0] ?? 0;
+    const values = [max, mid, min];
+    legendLabels.replaceChildren(
+      ...values.map((v) => {
+        const s = document.createElement("span");
+        s.textContent = v.toFixed(2);
+        return s;
+      }),
+    );
+  }
 
   const controls = document.createElement("div");
   controls.className = "flex shrink-0 flex-wrap items-center gap-2";
@@ -55,6 +88,7 @@ export function createViewportPanel(): HTMLElement {
 
   function startPlay(): void {
     const { resultCatalog, loadedField } = appStore.get();
+    updateLegend(loadedField);
     if (resultCatalog === null || resultCatalog.times.length === 0 || renderer === null) {
       return;
     }

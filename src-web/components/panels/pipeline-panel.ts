@@ -83,9 +83,21 @@ export function createPipelinePanel(): HTMLElement {
     });
 
     submitButton.disabled = !allDone || appStore.get().busy !== null;
+
+    // 求解实时进度：运行中作业的物理时间（Job.lastTimeS 由 Rust 侧解析日志）
+    const job = appStore.get().jobs.at(-1);
+    if (job?.status === "running" && job.lastTimeS !== null) {
+      liveLine.textContent = `⟳ 求解中 · T = ${job.lastTimeS.toFixed(2)} s`;
+    } else {
+      liveLine.textContent = "";
+    }
   }
 
-  body.append(stepsBox, submitRow);
+  // 求解实时状态行：显示运行中作业的物理时间（来自日志 Time 解析）
+  const liveLine = document.createElement("p");
+  liveLine.className = "text-[11px] tabular-nums text-amber-400";
+
+  body.append(stepsBox, liveLine, submitRow);
   render();
   appStore.subscribe(render);
   return root;

@@ -137,3 +137,5 @@
 - **18:8x** docs(ui): ui.html v2 设计稿——对标 Moldflow Insight：分析阶段选项卡/方案任务 checklist/层管理/色标视口/内嵌 VM 终端，扁平深色三列工作台
 - **19:0x** feat(ui): 分析阶段选项卡落地（v2 设计稿核心）——主页/几何/网格/工艺/求解/结果/报告，按阶段显隐各列面板
 - **19:1x** refactor(ui): 分析阶段选项卡上移顶栏——与「Kairos CAE 仿真」品牌同行（logo|标题|弹性|选项卡|主题），去除独立条
+- **19:2x** feat(ui): v2 对齐三件套——流水线求解实时物理时间、视口悬浮色标图例（min/mid/max）、中列底部日志标签组（分析/网格/VM 终端）
+- **19:3x** fix(ui): 色标图例 replaceChildren 统一填充（noUncheckedIndexedAccess 收窄）

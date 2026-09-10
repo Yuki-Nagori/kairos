@@ -13,6 +13,7 @@ import { createProcessPanel } from "./components/panels/process-panel";
 import { createProjectTree } from "./components/panels/project-tree";
 import { createReportPanel } from "./components/panels/report-panel";
 import { createResultsPanel } from "./components/panels/results-panel";
+import { createLogTabs } from "./components/log-tabs";
 import { createViewportPanel } from "./components/panels/viewport-panel";
 import { createXyChartPanel } from "./components/panels/xy-chart-panel";
 import { setupGlobalShortcuts } from "./shortcuts";
@@ -53,7 +54,7 @@ for (const panel of [
 
 const centerColumn = document.createElement("div");
 centerColumn.className = "flex min-h-0 min-w-0 flex-col gap-3 overflow-hidden";
-centerColumn.append(createViewportPanel(), createXyChartPanel());
+centerColumn.append(createViewportPanel(), createXyChartPanel(), createLogTabs());
 
 const rightColumn = document.createElement("div");
 rightColumn.className = "flex min-h-0 flex-col gap-3 overflow-y-auto py-1 pl-1";
