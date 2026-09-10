@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { mount } from "@vue/test-utils";
-import LatexBlock from "../../../src-web/components/LatexBlock.vue";
+import LatexBlock from "../../../src-web/components/latex-block/LatexBlock.vue";
 
 describe("LatexBlock", () => {
   it("行间模式渲染 katex 公式并带展示态样式", () => {

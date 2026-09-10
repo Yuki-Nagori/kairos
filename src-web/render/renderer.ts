@@ -1,5 +1,5 @@
 import { mat4Identity, mat4LookAt, mat4Multiply, mat4Perspective, type Vec3 } from "./math";
-import { THEME_CHANGED_EVENT } from "../theme";
+import { THEME_CHANGED_EVENT } from "../composables/useTheme";
 
 /** 视口清屏色的深色缺省（CSS 变量缺失时的兜底）。 */
 const FALLBACK_CLEAR: [number, number, number] = [0.06, 0.07, 0.09];

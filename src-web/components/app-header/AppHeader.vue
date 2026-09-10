@@ -1,18 +1,9 @@
 <script setup lang="ts">
 /** 应用标题栏：品牌信息 + 阶段选项卡 + 主题切换（全局状态展示在底部状态栏）。 */
-import { onMounted, onUnmounted, ref } from "vue";
-import { THEME_CHANGED_EVENT, cycleTheme, getActiveTheme } from "../theme";
-import StageTabs from "./StageTabs.vue";
+import StageTabs from "../stage-tabs/StageTabs.vue";
+import { useAppHeader } from "./useAppHeader";
 
-const theme = ref(getActiveTheme());
-
-function syncThemeIcon(): void {
-  theme.value = getActiveTheme();
-}
-
-// cycleTheme 广播 THEME_CHANGED_EVENT，图标经监听同步。
-onMounted(() => window.addEventListener(THEME_CHANGED_EVENT, syncThemeIcon));
-onUnmounted(() => window.removeEventListener(THEME_CHANGED_EVENT, syncThemeIcon));
+const { theme, cycleTheme } = useAppHeader();
 </script>
 
 <template>

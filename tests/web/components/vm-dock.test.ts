@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import type { Pinia } from "pinia";
-import VmDock from "../../../src-web/components/VmDock.vue";
+import VmDock from "../../../src-web/components/vm-dock/VmDock.vue";
 import { useVmStore } from "../../../src-web/stores/vm";
 
 describe("VmDock", () => {

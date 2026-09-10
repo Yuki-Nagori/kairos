@@ -1,0 +1,207 @@
+import { computed, onMounted, onUnmounted, ref, useTemplateRef, watch } from "vue";
+import { useGeometryStore } from "../../stores/geometry";
+import { useResultsStore } from "../../stores/results";
+import type { ScalarField } from "../../types";
+import { ViewportRenderer } from "../../render/renderer";
+import { detectRenderCapabilityInBrowser } from "../../render/capability";
+import { registerSnapshot } from "../../render/snapshot";
+import { minMax } from "../../utils/stats";
+import { getRenderMesh } from "../../api/geometry";
+
+/**
+ * 3D 视口面板逻辑：WebGL2 渲染器 + 云图/剖切/时间步动画控制（WebGPU 探测提示）。
+ * 视口是工作台主角：卡片弹性充满中列剩余空间，画布随容器缩放。
+ */
+export function useViewportPanel() {
+  const geometry = useGeometryStore();
+  const results = useResultsStore();
+
+  // 模板 ref 经 useTemplateRef 按名绑定（静态 ref="canvasRef" 不算 setup 变量读取，
+  // 解构返回会触发 noUnusedLocals）。
+  const canvasRef = useTemplateRef<HTMLCanvasElement>("canvasRef");
+
+  // 空态提示：载入网格前视口不应是一片空白；WebGPU 探测备注与失败文案动态替换。
+  const emptyText = ref(
+    "导入几何并生成网格后，点击「载入网格到视口」查看 3D 模型（WebGPU 可用时自动启用）",
+  );
+  const emptyError = ref(false);
+  const meshLoaded = ref(false);
+
+  // 悬浮色标图例：加载场后显示渐变标尺与 max/mid/min（自上而下）。
+  const legendValues = ref<number[] | null>(null);
+  const legendVisible = computed(() => legendValues.value !== null);
+
+  function updateLegend(field: { values: number[] } | null): void {
+    if (field === null || field.values.length === 0) {
+      legendValues.value = null;
+      return;
+    }
+    const sorted = [...field.values].sort((a, b) => a - b);
+    const max = sorted[sorted.length - 1] ?? 0;
+    const mid = sorted[Math.floor(sorted.length / 2)] ?? 0;
+    const min = sorted[0] ?? 0;
+    legendValues.value = [max, mid, min];
+  }
+
+  // —— 控制条 ——
+  // 启用条件按数据就绪度推导（原版按钮处于永久禁用的死接线状态，迁移时接通）：
+  // 载入需已有几何；剖切/重置/播放需网格已上传；播放另需结果时间步目录。
+  const loadDisabled = computed(() => geometry.geometries.length === 0);
+  const meshReady = ref(false);
+  const playDisabled = computed(() => {
+    const catalog = results.resultCatalog;
+    return !meshReady.value || catalog === null || catalog.times.length === 0;
+  });
+  const fpsText = ref("FPS: —");
+  const clipOn = ref(false);
+  const playing = ref(false);
+  const playLabel = computed(() => (playing.value ? "停止动画" : "播放动画"));
+
+  let renderer: ViewportRenderer | null = null;
+  let renderMesh: { positions: Float32Array; indices: Uint32Array; faceCells: Uint32Array } | null =
+    null;
+  let playTimer: ReturnType<typeof setInterval> | null = null;
+  let playIndex = 0;
+
+  function stopPlay(): void {
+    playing.value = false;
+    if (playTimer !== null) {
+      clearInterval(playTimer);
+      playTimer = null;
+    }
+  }
+
+  function startPlay(): void {
+    updateLegend(results.loadedField);
+    const catalog = results.resultCatalog;
+    if (catalog === null || catalog.times.length === 0 || renderer === null) {
+      return;
+    }
+    const caseDir = catalog.caseDir;
+    const fieldName = results.loadedField?.field ?? "T";
+    playing.value = true;
+    playIndex = 0;
+    playTimer = setInterval(() => {
+      if (!playing.value) {
+        stopPlay();
+        return;
+      }
+      const step = catalog.times[playIndex % catalog.times.length]!;
+      playIndex += 1;
+      void results.loadField(caseDir, step.dirName, fieldName).then(() => {
+        applyField(results.loadedField);
+      });
+    }, 400);
+  }
+
+  function togglePlay(): void {
+    if (playing.value) {
+      stopPlay();
+    } else {
+      startPlay();
+    }
+  }
+
+  function toggleClip(): void {
+    clipOn.value = !clipOn.value;
+    renderer?.setClip(clipOn.value, 0);
+  }
+
+  function resetView(): void {
+    renderer?.resetView();
+  }
+
+  function ensureRenderer(): void {
+    if (renderer !== null) {
+      return;
+    }
+    const canvas = canvasRef.value;
+    if (canvas === null) {
+      return;
+    }
+    renderer = ViewportRenderer.create(canvas, (fps) => {
+      fpsText.value = `FPS: ${fps}`;
+    });
+    if (renderer === null) {
+      emptyText.value = "当前环境不支持 WebGL2，无法渲染视口。";
+      emptyError.value = true;
+    }
+  }
+
+  function loadMesh(): void {
+    ensureRenderer();
+    const first = geometry.geometries[0];
+    if (first === undefined || renderer === null) {
+      return;
+    }
+    void getRenderMesh(first.geometryId).then((data) => {
+      renderMesh = {
+        positions: new Float32Array(data.positions),
+        indices: new Uint32Array(data.indices),
+        faceCells: new Uint32Array(data.faceCells),
+      };
+      renderer?.uploadMesh({
+        positions: renderMesh.positions,
+        indices: renderMesh.indices,
+        faceCells: renderMesh.faceCells,
+      });
+      meshLoaded.value = true;
+      meshReady.value = true;
+    });
+  }
+
+  // 场数据加载后自动开启云图着色（值域取自场 min/max），并热更新每面值。
+  function applyField(field: ScalarField | null): void {
+    if (field === null || renderer === null || field.values.length === 0) {
+      return;
+    }
+    if (renderMesh !== null) {
+      const perFace = new Float32Array(renderMesh.faceCells.length);
+      for (let face = 0; face < perFace.length; face += 1) {
+        perFace[face] = field.values[renderMesh.faceCells[face] ?? 0] ?? 0;
+      }
+      renderer.setFaceValues(perFace);
+    }
+    const { min, max } = minMax(field.values);
+    renderer.setFieldRange(min, max);
+  }
+
+  watch(
+    () => results.loadedField,
+    (field) => {
+      updateLegend(field);
+      applyField(field);
+    },
+  );
+
+  onMounted(() => {
+    const canvas = canvasRef.value;
+    if (canvas !== null) {
+      registerSnapshot("viewport", canvas);
+    }
+    void detectRenderCapabilityInBrowser().then((capability) => {
+      if (capability.backend === "webgl2") {
+        emptyText.value = `${emptyText.value}（${capability.note}）`;
+      }
+    });
+  });
+  onUnmounted(stopPlay);
+
+  return {
+    emptyText,
+    emptyError,
+    meshLoaded,
+    legendVisible,
+    legendValues,
+    loadDisabled,
+    meshReady,
+    playDisabled,
+    playLabel,
+    fpsText,
+    clipOn,
+    loadMesh,
+    togglePlay,
+    toggleClip,
+    resetView,
+  };
+}

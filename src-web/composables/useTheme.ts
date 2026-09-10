@@ -5,14 +5,15 @@
  * 新增主题 = 丢一个 CSS 文件进来，无需改任何代码。
  * CSS 通过 `[data-theme="名称"]` 选择器定义变量，`<html data-theme="...">` 激活。
  */
+import { onUnmounted, ref } from "vue";
 
 /** 主题名 → CSS 原文（构建期从 theme/*.css 提取）；按文件名排序注入，后注入者覆盖先注入者。 */
 const THEME_STYLES: [string, string][] = Object.entries(
-  import.meta.glob("./theme/*.css", { eager: true, query: "?raw", import: "default" }),
+  import.meta.glob("../theme/*.css", { eager: true, query: "?raw", import: "default" }),
 )
   .map(
     ([path, css]) =>
-      [path.replace("./theme/", "").replace(".css", ""), css as string] as [string, string],
+      [path.replace("../theme/", "").replace(".css", ""), css as string] as [string, string],
   )
   .sort(([a], [b]) => a.localeCompare(b));
 
@@ -61,4 +62,15 @@ export function cycleTheme(): string {
   setTheme(next);
   window.dispatchEvent(new CustomEvent(THEME_CHANGED_EVENT));
   return next;
+}
+
+/** 组合式入口：组件内拿到响应式当前主题名；切换广播经事件监听同步，卸载时清理监听。 */
+export function useTheme() {
+  const theme = ref(getActiveTheme());
+  const sync = (): void => {
+    theme.value = getActiveTheme();
+  };
+  window.addEventListener(THEME_CHANGED_EVENT, sync);
+  onUnmounted(() => window.removeEventListener(THEME_CHANGED_EVENT, sync));
+  return { theme, cycleTheme };
 }

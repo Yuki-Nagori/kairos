@@ -5,10 +5,10 @@
  * 视口渲染器、图表画布等有状态组件不因切换阶段而重建。
  */
 import { useAppStore } from "./stores/app";
-import AppHeader from "./components/AppHeader.vue";
-import StatusBar from "./components/StatusBar.vue";
-import LogTabs from "./components/LogTabs.vue";
-import VmDock from "./components/VmDock.vue";
+import AppHeader from "./components/app-header/AppHeader.vue";
+import StatusBar from "./components/status-bar/StatusBar.vue";
+import LogTabs from "./components/log-tabs/LogTabs.vue";
+import VmDock from "./components/vm-dock/VmDock.vue";
 import VmPanel from "./views/vm/VmPanel.vue";
 import ViewportPanel from "./views/viewport/ViewportPanel.vue";
 import XyChartPanel from "./views/xy-chart/XyChartPanel.vue";

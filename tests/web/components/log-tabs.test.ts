@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import type { Pinia } from "pinia";
-import LogTabs from "../../../src-web/components/LogTabs.vue";
+import LogTabs from "../../../src-web/components/log-tabs/LogTabs.vue";
 import { useGeometryStore } from "../../../src-web/stores/geometry";
 import { useJobsStore } from "../../../src-web/stores/jobs";
 import { useVmStore } from "../../../src-web/stores/vm";

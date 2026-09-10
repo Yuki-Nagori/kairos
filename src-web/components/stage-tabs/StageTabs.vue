@@ -3,22 +3,9 @@
  * 分析阶段选项卡（v2 设计稿）：主页/几何/网格/工艺/求解/结果/报告。
  * 读写 store.stage，各列面板按阶段显隐由布局层（Phase 4 的 App 编排）负责。
  */
-import { computed } from "vue";
-import { useAppStore } from "../stores/app";
-import type { Stage } from "../types";
+import { useStageTabs } from "./useStageTabs";
 
-const STAGES: [Stage, string][] = [
-  ["home", "主页"],
-  ["geometry", "几何"],
-  ["mesh", "网格"],
-  ["process", "工艺"],
-  ["solve", "求解"],
-  ["results", "结果"],
-  ["report", "报告"],
-];
-
-const app = useAppStore();
-const active = computed(() => app.stage);
+const { STAGES, app, active } = useStageTabs();
 </script>
 
 <template>

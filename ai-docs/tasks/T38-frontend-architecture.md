@@ -1,6 +1,6 @@
 # T38 · 前端架构重构：views / composables / Pinia 分层
 
-- 阶段：进行中
+- 阶段：已完成
 - 依赖：T37（Vue 3 迁移完成）
 - 优先级：P1
 
@@ -62,3 +62,14 @@ src-web/
   读四个 store、assignMaterial 回写 project）
 - menu-actions / shortcuts 在处理器内懒取 store（模块加载早于 Pinia 安装）
 - 消费端 21 文件、测试 9 文件同步迁移；state/ 删除；96 测试全绿
+
+### Phase C · composables 抽取（已完成）
+
+- 13 个 views 各抽 useXxxPanel.ts：store 消费、computed、事件处理、watch、
+  生命周期与命令式集成（渲染器/画布）全部入 composable，.vue 只剩模板 +
+  一行 setup 解构
+- 共享组件改「文件夹 + composable」：app-header/status-bar/stage-tabs/
+  log-tabs/latex-block 各有 useXxx；vm-dock 纯包装不设
+- theme.ts 升级 composables/useTheme.ts 并新增 useTheme() 组合式入口
+- 模板 ref 经 useTemplateRef 在 composable 内按名绑定（静态 ref 字符串
+  不算 setup 变量读取，避免 noUnusedLocals 误报）

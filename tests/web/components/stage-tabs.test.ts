@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import type { Pinia } from "pinia";
-import StageTabs from "../../../src-web/components/StageTabs.vue";
+import StageTabs from "../../../src-web/components/stage-tabs/StageTabs.vue";
 import { useAppStore } from "../../../src-web/stores/app";
 
 const LABELS = ["主页", "几何", "网格", "工艺", "求解", "结果", "报告"];

@@ -2,11 +2,11 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import type { Pinia } from "pinia";
-import StatusBar from "../../../src-web/components/StatusBar.vue";
-import AppHeader from "../../../src-web/components/AppHeader.vue";
+import StatusBar from "../../../src-web/components/status-bar/StatusBar.vue";
+import AppHeader from "../../../src-web/components/app-header/AppHeader.vue";
 import { useAppStore } from "../../../src-web/stores/app";
 import { useVmStore } from "../../../src-web/stores/vm";
-import { getActiveTheme } from "../../../src-web/theme";
+import { getActiveTheme } from "../../../src-web/composables/useTheme";
 import type { SystemInfo } from "../../../src-web/types";
 
 const info: SystemInfo = { name: "kairos", version: "0.1.0", os: "macos" };

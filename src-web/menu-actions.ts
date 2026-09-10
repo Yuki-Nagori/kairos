@@ -4,7 +4,7 @@
  * store 在处理器内现取：模块加载早于 main.ts 安装 Pinia，不能在顶层实例化。
  */
 import { listen } from "@tauri-apps/api/event";
-import { cycleTheme } from "./theme";
+import { cycleTheme } from "./composables/useTheme";
 import { useProjectStore } from "./stores/project";
 import { useResultsStore } from "./stores/results";
 import { useDependenciesStore } from "./stores/dependencies";
