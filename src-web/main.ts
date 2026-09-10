@@ -1,6 +1,5 @@
 import "./app.css";
 import { createAppHeader, createStatusBar } from "./components/app-header";
-import { createStageTabs } from "./components/stage-tabs";
 import { setupMenuActions } from "./menu-actions";
 import { createDependenciesPanel } from "./components/panels/dependencies-panel";
 import { createVmDock } from "./components/vm-dock";
@@ -82,7 +81,7 @@ resultsSection.append(createResultsPanel());
 
 const statusBar = createStatusBar();
 
-root.append(header, createStageTabs(), workspace, resultsSection, statusBar);
+root.append(header, workspace, resultsSection, statusBar);
 
 // 分析阶段切换：按 data-stages 显隐面板（home 显示全部）
 const syncStages = (): void => {
