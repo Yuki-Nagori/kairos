@@ -111,7 +111,8 @@ fn spawn_run_script(
     managed_path: Option<&str>,
     vm_shell: Option<&str>,
 ) -> Result<Child> {
-    // VM 执行：宿主 case 目录 1:1 挂载进虚拟机（路径不变，脚本零翻译），
+    // VM 执行：case 目录经 tar 管道复制进 VM 原生文件系统
+    // （真机验证 multipass mount 的 sshfs 权限不可用），
     // 环境树由 vm_deploy_bundle 预先解压在 ~/moldingfoam-env。
     if let Some(shell) = vm_shell {
         // 真机验证：multipass mount 的 sshfs 权限映射导致子目录不可读，
