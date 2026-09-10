@@ -17,9 +17,10 @@
 | 纯业务算法、校验     | 领域 `.ts`，无 Vue 依赖 | `utils/`（如 pipeline 前置校验）、`render/`（图形算法）                |
 | 类型定义             | `types/`                | `types/index.ts` 统一出口，前后端契约以 contract 测试锁定              |
 
-图标组件统一放 `components/ui/icons/`：24 网格自绘几何、描边继承
-currentColor 跟随主题；**不引入第三方图标素材**（项目不使用第三方专有
-代码或数据，自绘可同时免除署名与再分发合规负担）。
+图标组件统一放 `components/ui/icons/`，设计语言、双轨分类（Mono 按钮
+图标 / Art 彩色图示）与强制参数见 [icon-design.md](icon-design.md)；
+**不引入第三方图标素材**（项目不使用第三方专有代码或数据，自绘可同时
+免除署名与再分发合规负担）。
 
 ## 判断标准
 

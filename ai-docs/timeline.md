@@ -164,3 +164,4 @@
 - **22:50** refactor(ui): ShellIcon 自绘原创几何替换 Icons8 素材，迁入 ui/icons/ 专用目录，撤下 Icons8 致谢
 - **23:00** fix(ui): ShellIcon 提示符上移收小，消除与窗体下边框的贴边
 - **23:10** docs: ARCHITECTURE 分层图改 mermaid flowchart、Channel 回传补 sequenceDiagram，web-conventions 增依赖方向图
+- **23:20** docs+ui: 新增 ai-docs/icon-design.md 图标设计规范（超现代双轨：Mono 按钮 / Art 彩色图示），ShellIcon 窗体改正方形并缩小提示符

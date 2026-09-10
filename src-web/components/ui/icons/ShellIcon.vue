@@ -16,9 +16,9 @@
     aria-hidden="true"
     class="inline-block"
   >
-    <rect x="3.5" y="4.5" width="17" height="15" rx="2.5" />
-    <path d="M3.5 9.5h17" />
-    <path d="M8 12l3 2.25-3 2.25" />
-    <path d="M13.5 16.5H17" />
+    <rect x="3.5" y="3.5" width="17" height="17" rx="2.5" />
+    <path d="M3.5 8.5h17" />
+    <path d="M8.5 12.5l2.5 2-2.5 2" />
+    <path d="M13 16.5h2.5" />
   </svg>
 </template>
