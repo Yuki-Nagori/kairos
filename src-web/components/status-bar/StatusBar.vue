@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /** 底部状态栏：版本/IPC、忙碌、错误三态（优先级：错误 > 忙碌 > 版本）。 */
-import ShellIcon from "../ui/ShellIcon.vue";
+import ShellIcon from "../ui/icons/ShellIcon.vue";
 import { useStatusBar } from "./useStatusBar";
 
 const { vm, status, shellVisible } = useStatusBar();

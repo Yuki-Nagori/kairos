@@ -19,7 +19,6 @@ $ cargo run -p kairos-cli -- results list --case-dir kairos-case
 
 ## 致谢
 
-- 界面部分图标来自 [Icons8](https://icons8.com)（免费授权，已署名）；
 - CFD 求解基座基于 [OpenFOAM](https://openfoam.org)（GPL-3.0）；
 - 注塑求解模块由 [moldingFoam](https://github.com/Yuki-Nagori/moldingFoam) 项目提供（GPL-3.0）。
 

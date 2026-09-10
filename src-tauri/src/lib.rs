@@ -80,13 +80,13 @@ pub fn run() {
                 .item(&action("tools.vmStop", "关闭虚拟机", None)?)
                 .build()?;
 
-            // 关于对话框：致谢 Icons8（界面图标）与 OpenFOAM / moldingFoam（求解基座）
+            // 关于对话框：致谢 OpenFOAM / moldingFoam（求解基座）
             let about = AboutMetadata {
                 name: Some("Kairos".into()),
                 version: Some(_app.package_info().version.to_string()),
                 copyright: Some("Copyright © 2026 Yuki".into()),
                 credits: Some(
-                    "感谢 Icons8 (icons8.com) 提供界面图标\n感谢 OpenFOAM (openfoam.org) 提供 CFD 求解基座\n感谢 moldingFoam 项目提供注塑求解模块"
+                    "感谢 OpenFOAM (openfoam.org) 提供 CFD 求解基座\n感谢 moldingFoam 项目提供注塑求解模块"
                         .into(),
                 ),
                 ..Default::default()

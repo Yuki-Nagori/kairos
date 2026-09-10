@@ -2,7 +2,7 @@
 /** 运行时依赖面板：逻辑见 useDependenciesPanel。 */
 import { useDependenciesPanel } from "./useDependenciesPanel";
 import Card from "../../components/ui/UiCard.vue";
-import ShellIcon from "../../components/ui/ShellIcon.vue";
+import ShellIcon from "../../components/ui/icons/ShellIcon.vue";
 import UiButton from "../../components/ui/UiButton.vue";
 
 const { app, vm, deps, rows, downloadsDir, openDownloadsDir } = useDependenciesPanel();

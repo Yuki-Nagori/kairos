@@ -3,7 +3,7 @@
 import { useVmPanel } from "./useVmPanel";
 import UiButton from "../../components/ui/UiButton.vue";
 import Card from "../../components/ui/UiCard.vue";
-import ShellIcon from "../../components/ui/ShellIcon.vue";
+import ShellIcon from "../../components/ui/icons/ShellIcon.vue";
 
 // 模板 ref（outputRef/promptInput）在 composable 内按名绑定，此处无需解构。
 const {

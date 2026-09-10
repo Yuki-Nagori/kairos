@@ -161,3 +161,4 @@
 - **22:20** style(web): 注释规范化清扫——清任务编号/迁移叙事/对标引用，补 28 个文件职责头，comment-style 文件头条款对齐仓库事实
 - **22:30** build: 依赖优化——移除未启用的 updater 插件与冗余文件（vite-env.d.ts/shell.svg），接入 rollup-plugin-visualizer 体积分析，发布产物关 sourcemap（3.4M→1.6M）
 - **22:40** docs: README 技术栈补 Vue 3 + Pinia、命令表更新（vue-tsc/analyze/tauri 别名），ARCHITECTURE 分层图与命令 recipe 对齐 stores/api/utils 新结构，测试地图登记 stores 目录
+- **22:50** refactor(ui): ShellIcon 自绘原创几何替换 Icons8 素材，迁入 ui/icons/ 专用目录，撤下 Icons8 致谢

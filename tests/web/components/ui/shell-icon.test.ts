@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { mount } from "@vue/test-utils";
-import ShellIcon from "../../../../src-web/components/ui/ShellIcon.vue";
+import ShellIcon from "../../../../src-web/components/ui/icons/ShellIcon.vue";
 
 describe("ShellIcon", () => {
   it("内联 SVG 且描边继承 currentColor（主题跟随）", () => {
@@ -8,6 +8,7 @@ describe("ShellIcon", () => {
     const svg = wrapper.find("svg");
     expect(svg.exists()).toBe(true);
     expect(svg.attributes("stroke")).toBe("currentColor");
+    expect(svg.attributes("viewBox")).toBe("0 0 24 24");
     expect(svg.attributes("aria-hidden")).toBe("true");
     expect(svg.classes()).toContain("h-4");
   });
