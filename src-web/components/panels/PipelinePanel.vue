@@ -53,7 +53,7 @@ function submit(): void {
         <!-- 竖直连接线（最后一项不画） -->
         <span
           v-if="index < steps.length - 1"
-          class="absolute left-[7px] top-5 bottom-0 w-px bg-zinc-800"
+          class="absolute left-1.75 top-5 bottom-0 w-px bg-zinc-800"
         />
         <span
           class="relative z-10 mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border text-[9px] font-semibold"

@@ -12,7 +12,7 @@ const visible = computed(() => state.vmPanelVisible);
 </script>
 
 <template>
-  <div v-show="visible" class="absolute right-2 bottom-2 z-40 w-[26rem]">
+  <div v-show="visible" class="absolute right-2 bottom-2 z-40 w-104">
     <slot />
   </div>
 </template>

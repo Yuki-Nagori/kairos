@@ -151,3 +151,4 @@
 - **20:50** feat(ui): 13 个面板全量迁移 Vue SFC + App.vue 组合根 + main.ts 挂载切换，删除原生组件层（T37 Phase 4）
 - **21:00** chore: 删除 lib/store 自定义容器与基准（Vue reactive 接管）、tinybench 依赖与 bench:web 脚本，perf-budget 标注退役基线（T37 Phase 5）
 - **21:20** bench(web): 状态层基准按 Vue reactive 语义重建（tinybench，用例与旧 store 基线一一对应），重测基线并回填 perf-budget（T37 迁移后重标定）
+- **21:30** style(ui): 任意值类换 canonical spacing 刻度——w-104 / min-h-70 / left-1.75，编译产物与原值等价

@@ -188,7 +188,7 @@ onUnmounted(stopPlay);
 <template>
   <!-- 卡片结构内联：root/body 需要追加 flex 撑满中列的类，超出通用 Card 的插槽能力 -->
   <section
-    class="flex min-h-[280px] min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900"
+    class="flex min-h-70 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900"
   >
     <div
       class="flex items-center gap-2 border-b border-zinc-800 bg-zinc-950/40 px-4 py-2.5 text-xs font-semibold tracking-wide text-zinc-200 select-none"
