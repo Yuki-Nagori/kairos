@@ -146,3 +146,4 @@
 - **19:6x** feat(ui): Vue 3 基础设施——@vitejs/plugin-vue + vue-tsc + env.d.ts + tsconfig SFC 支持（T37 Phase 1）
 - **19:7x** feat(ui): Vue 3 迁移启动——App.vue + Card.vue + 基础设施（T37 Phase 1/2 起步）
 - **19:7x** refactor: 全仓注释规范化——去除任务编号/真机叙事/对标引用/商标字样，新增 ai-docs/comment-style.md
+- **20:00** feat(ui): Vue 3 核心组件 SFC——Card/Button/TextInput/Dropdown/ShellIcon/StageTabs/LatexBlock/LogTabs/VmDock + @vue/test-utils 测试 + typecheck 切 vue-tsc（T37 Phase 2）

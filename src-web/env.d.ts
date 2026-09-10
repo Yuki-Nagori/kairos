@@ -1,7 +1,2 @@
 /// <reference types="vite/client" />
-
-declare module "*.vue" {
-  import type { DefineComponent } from "vue";
-  const component: DefineComponent<Record<string, never>, Record<string, never>, unknown>;
-  export default component;
-}
+// SFC 类型由 vue-tsc 原生解析（不再需要 *.vue 通配声明——那会抹掉 props 类型）。

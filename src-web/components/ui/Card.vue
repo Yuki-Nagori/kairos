@@ -1,17 +1,23 @@
-/** * 通用卡片 Vue 组件：标题/图标/状态行/刷新按钮/折叠。 */
 <script setup lang="ts">
+/**
+ * 通用卡片：标题/图标插槽/状态提示行/刷新按钮/折叠（折叠偏好存 localStorage）。
+ * 「探测 → 反馈」模式：statusHint 显示状态，提供 refreshLabel 则在正文顶部渲染刷新按钮。
+ */
 import { ref } from "vue";
+import UiButton from "./Button.vue";
 
 const props = withDefaults(
   defineProps<{
     title: string;
     collapsible?: boolean;
     statusHint?: string;
+    /** 提供则在正文顶部渲染刷新按钮（点击发 refresh 事件）。 */
+    refreshLabel?: string;
   }>(),
-  { collapsible: false, statusHint: "" },
+  { collapsible: false, statusHint: "", refreshLabel: "" },
 );
 
-const emit = defineEmits<{ refresh: [] }>();
+defineEmits<{ refresh: [] }>();
 
 const collapsed = ref(
   props.collapsible ? localStorage.getItem(`kairos-panel:${props.title}`) === "1" : false,
@@ -31,12 +37,11 @@ function toggleCollapse(): void {
       @click="collapsible && toggleCollapse()"
     >
       <slot name="icon" />
-      <span>{{ title }}</span>
-      <span v-if="collapsible" class="ml-auto text-zinc-500" style="font-size: 14px">
-        {{ collapsed ? "▸" : "▾" }}
-      </span>
+      <h2>{{ title }}</h2>
+      <span v-if="collapsible" class="ml-auto text-zinc-500">{{ collapsed ? "▸" : "▾" }}</span>
     </div>
     <div class="min-w-0 space-y-3 overflow-x-hidden px-4 py-3.5" :class="{ hidden: collapsed }">
+      <UiButton v-if="refreshLabel" @click="$emit('refresh')">{{ refreshLabel }}</UiButton>
       <p v-if="statusHint" class="text-xs text-zinc-500">{{ statusHint }}</p>
       <slot />
     </div>

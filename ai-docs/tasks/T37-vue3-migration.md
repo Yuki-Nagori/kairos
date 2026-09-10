@@ -33,7 +33,7 @@
 - tsconfig.json 加 Vue SFC 支持
 - 建立 src-web/components/ Vue 组件目录结构
 
-### Phase 2 · 核心组件
+### Phase 2 · 核心组件（已完成）
 
 - Card.vue（通用卡片：标题/图标/状态行/刷新/折叠）
 - Button.vue / TextInput.vue / Dropdown.vue（基础控件）
@@ -42,6 +42,7 @@
 - LatexBlock.vue（KaTeX 公式渲染）
 - LogTabs.vue（日志标签组）
 - VmDock.vue（虚拟机终端抽屉）
+- typecheck 切换 vue-tsc；vitest 挂 Vue 插件；knip 跟踪 .vue
 
 ### Phase 3 · 状态迁移
 
