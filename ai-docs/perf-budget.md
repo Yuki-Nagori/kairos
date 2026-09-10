@@ -17,7 +17,7 @@
 
 | 套件 | 命令                                    | 当前覆盖                                                       |
 | ---- | --------------------------------------- | -------------------------------------------------------------- |
-| 前端 | `bun run bench`（vitest bench）         | 状态容器（store 批量通知、select 切片订阅）                    |
+| 前端 | —（状态容器基准已随 Vue 3 迁移退役）    | —                                                              |
 | Rust | `cargo bench`（criterion，kairos-core） | IPC DTO 序列化（SystemInfo / KairosError，命令层往返的热路径） |
 
 - 数字以本机环境为准，横向比较须同机器同资产；
@@ -33,10 +33,12 @@
 
 | 基准                                   | 基线                                |
 | -------------------------------------- | ----------------------------------- |
-| 前端 store：set × 10 订阅者            | ~95 ns/次（中位 83 ns）             |
-| 前端 store：set × 5 select（切片未变） | ~59 ns/次                           |
-| 前端 store：set × 5 select（切片已变） | ~69 ns/次                           |
-| 前端 store：快照读                     | ~30 ns/次                           |
-| 前端 store：subscribe + unsubscribe    | ~41 ns/次                           |
+| 前端 store：set × 10 订阅者            | ~95 ns/次（中位 83 ns）※ 已退役     |
+| 前端 store：set × 5 select（切片未变） | ~59 ns/次 ※ 已退役                  |
+| 前端 store：set × 5 select（切片已变） | ~69 ns/次 ※ 已退役                  |
+| 前端 store：快照读                     | ~30 ns/次 ※ 已退役                  |
+| 前端 store：subscribe + unsubscribe    | ~41 ns/次 ※ 已退役                  |
 | Rust SystemInfo 序列化（serde_json）   | ~86 ns/次                           |
 | Rust KairosError 序列化（serde_json）  | ~80 ns/次量级（criterion 报告为准） |
+
+※ 前端状态层已迁移 Vue reactive（T37），自定义 store 及其基准随之删除；行保留作历史对照，新状态层若需基准再重建。

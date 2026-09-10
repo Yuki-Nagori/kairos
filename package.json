@@ -18,14 +18,13 @@
     "format:rust": "cargo fmt --all",
     "format:rust:check": "cargo fmt --all --check",
     "test": "vitest run",
-    "bench": "bun run bench:web && cargo bench",
+    "bench": "cargo bench",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "coverage:rust": "cargo llvm-cov -p kairos-core --lib --summary-only --fail-under-lines 98",
     "test:rust": "cargo test --workspace",
     "knip": "knip",
-    "verify": "bun run typecheck && bun run typecheck:rust && bun run lint && bun run lint:rust && bun run format:check && bun run format:rust:check && bun run test && bun run test:rust && bun run knip",
-    "bench:web": "bun src-web/lib/bench/store.ts"
+    "verify": "bun run typecheck && bun run typecheck:rust && bun run lint && bun run lint:rust && bun run format:check && bun run format:rust:check && bun run test && bun run test:rust && bun run knip"
   },
   "devDependencies": {
     "@eslint/js": "^9",
@@ -41,7 +40,6 @@
     "knip": "^5",
     "prettier": "^3",
     "tailwindcss": "^4",
-    "tinybench": "^6.1.6",
     "typescript": "^5",
     "typescript-eslint": "^8",
     "vite": "^7",

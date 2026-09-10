@@ -1,6 +1,6 @@
 # T37 · 前端迁移 Vue 3 + Composition API
 
-- 阶段：进行中
+- 阶段：已完成
 - 依赖：T34/T35/T36（现有功能已闭环）
 - 优先级：P1
 
@@ -52,16 +52,19 @@
 - services 层零改动（IPC 封装框架无关）
 - kairos-core 零改动
 
-### Phase 4 · 面板迁移（13 个）
+### Phase 4 · 面板迁移（13 个，已完成）
 
-按依赖顺序：ProjectTree → Pipeline → Materials → Geometry → Mold →
-Process → Dependencies → Report → Jobs → VmPanel → Results → Viewport → XyChart
+ProjectTree → Pipeline → Materials → Geometry → Mold → Process →
+Dependencies → Report → Jobs → VmPanel → Results → Viewport → XyChart，
+全部迁移 `<script setup>` SFC；App.vue 成为组合根（三列工作台 + 阶段显隐），
+main.ts 缩减为挂载与全局接线。原生组件层同步删除。
 
-### Phase 5 · 清理
+### Phase 5 · 清理（已完成）
 
-- 删除旧 .ts 组件文件
-- 删除自定义 store
-- 测试全部迁移 @vue/test-utils
+- 删除 lib/store（createStore/select）及其基准与测试——状态层已 reactive 化
+- 移除 tinybench 依赖与 bench:web 脚本（cargo bench 保留）
+- app-header / vm-panel 测试迁移 @vue/test-utils；project-bar（死代码）连同测试删除
+- 移除无消费者的 removeStudy / selectStudy 状态动作
 
 ## 非目标
 
