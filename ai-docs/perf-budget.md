@@ -15,10 +15,10 @@
 
 ## 基准与运行方式
 
-| 套件 | 命令                                    | 当前覆盖                                                       |
-| ---- | --------------------------------------- | -------------------------------------------------------------- |
-| 前端 | —（状态容器基准已随 Vue 3 迁移退役）    | —                                                              |
-| Rust | `cargo bench`（criterion，kairos-core） | IPC DTO 序列化（SystemInfo / KairosError，命令层往返的热路径） |
+| 套件 | 命令                                    | 当前覆盖                                                         |
+| ---- | --------------------------------------- | ---------------------------------------------------------------- |
+| 前端 | `bun run bench:web`（tinybench）        | 状态层（Vue reactive 写入通知、computed 切片追踪、订阅生命周期） |
+| Rust | `cargo bench`（criterion，kairos-core） | IPC DTO 序列化（SystemInfo / KairosError，命令层往返的热路径）   |
 
 - 数字以本机环境为准，横向比较须同机器同资产；
 - CI 在 Ubuntu 作业的基准步骤运行基准并上传报告（见 T02），只记录趋势、不作为卡点。
@@ -31,14 +31,27 @@
 
 首次测量于 T01（2026-09-07，M 系列开发机）。基准均为基础设施热路径；网格 / 结果 / 视口类基准随对应任务落地回填。后续里程碑由 T21 评审对照更新此表。
 
+**Vue 3 状态层基线**（2026-09-10 重测，同机；T37 迁移后重建，用例与旧 store 基线一一对应）：
+
+| 基准                                     | 基线        |
+| ---------------------------------------- | ----------- |
+| 前端 reactive：写入 × 10 同步 watcher    | ~5.9 µs/次  |
+| 前端 reactive：写被追踪切片 × 5 computed | ~0.7 µs/次  |
+| 前端 reactive：写无关切片 × 5 computed   | ~97 ns/次   |
+| 前端 reactive：属性读                    | ~34 ns/次   |
+| 前端 reactive：watch + stop              | ~0.87 µs/次 |
+
+Vue 的依赖追踪通知比裸 pub-sub 贵一个量级以上（写入传播 µs 级 vs 旧 ~95 ns），但全部远低于
+50 ms 主线程阻塞预算；组件更新由调度器按需批处理，实际 UI 路径不逐条走同步 watcher。
+
+**历史基线**（自定义 store，T37 迁移后删除，保留作对照）：
+
 | 基准                                   | 基线                                |
 | -------------------------------------- | ----------------------------------- |
-| 前端 store：set × 10 订阅者            | ~95 ns/次（中位 83 ns）※ 已退役     |
-| 前端 store：set × 5 select（切片未变） | ~59 ns/次 ※ 已退役                  |
-| 前端 store：set × 5 select（切片已变） | ~69 ns/次 ※ 已退役                  |
-| 前端 store：快照读                     | ~30 ns/次 ※ 已退役                  |
-| 前端 store：subscribe + unsubscribe    | ~41 ns/次 ※ 已退役                  |
+| 前端 store：set × 10 订阅者            | ~95 ns/次（中位 83 ns）             |
+| 前端 store：set × 5 select（切片未变） | ~59 ns/次                           |
+| 前端 store：set × 5 select（切片已变） | ~69 ns/次                           |
+| 前端 store：快照读                     | ~30 ns/次                           |
+| 前端 store：subscribe + unsubscribe    | ~41 ns/次                           |
 | Rust SystemInfo 序列化（serde_json）   | ~86 ns/次                           |
 | Rust KairosError 序列化（serde_json）  | ~80 ns/次量级（criterion 报告为准） |
-
-※ 前端状态层已迁移 Vue reactive（T37），自定义 store 及其基准随之删除；行保留作历史对照，新状态层若需基准再重建。
