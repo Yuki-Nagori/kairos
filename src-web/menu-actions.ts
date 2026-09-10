@@ -5,6 +5,7 @@
  */
 import { listen } from "@tauri-apps/api/event";
 import { cycleTheme } from "./composables/useTheme";
+import { useAppStore } from "./stores/app";
 import { useProjectStore } from "./stores/project";
 import { useResultsStore } from "./stores/results";
 import { useDependenciesStore } from "./stores/dependencies";
@@ -19,6 +20,8 @@ const menuActions: Record<string, () => void> = {
   "analysis.checkNetwork": () => void useProjectStore().checkNetwork(),
   "results.exportCsv": () => void useResultsStore().exportFieldCsv(),
   "tools.refreshDeps": () => void useDependenciesStore().refreshDependencies(),
+  // 报告：直达报告工作台
+  "report.open": () => (useAppStore().stage = "report"),
   // 虚拟机：面板入口展开抽屉，动作直接走 vm store
   "tools.vmPanel": () => {
     const vm = useVmStore();

@@ -1,10 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
-import type { Pinia } from "pinia";
-import {
-  ABOUT_EVENT,
-  useCommandRegistry,
-} from "../../../src-web/components/menu-bar/useCommandRegistry";
+import { useCommandRegistry } from "../../../src-web/components/menu-bar/useCommandRegistry";
 import { useAppStore } from "../../../src-web/stores/app";
 
 vi.mock("../../../src-web/menu-actions", () => ({
@@ -13,66 +9,46 @@ vi.mock("../../../src-web/menu-actions", () => ({
 
 import { runMenuAction } from "../../../src-web/menu-actions";
 
-const GROUP_LABELS = ["文件", "视图", "分析", "工具", "结果", "报告", "帮助"];
-
 describe("useCommandRegistry", () => {
-  let pinia: Pinia;
-
   beforeEach(() => {
-    pinia = createPinia();
-    setActivePinia(pinia);
+    setActivePinia(createPinia());
     vi.mocked(runMenuAction).mockClear();
   });
 
-  it("七个一级菜单分组齐全", () => {
-    const { menuGroups } = useCommandRegistry();
-    expect(menuGroups.map((group) => group.label)).toEqual(GROUP_LABELS);
+  it("全量命令 = 七个阶段切换 + 菜单命令，均带分组名", () => {
+    const { allCommands } = useCommandRegistry();
+    const stageCommands = allCommands.filter((command) => command.group === "分析阶段");
+    expect(stageCommands.map((command) => command.label)).toEqual([
+      "主页",
+      "几何",
+      "网格",
+      "工艺",
+      "求解",
+      "结果",
+      "报告",
+    ]);
+    // 菜单命令分组与原生菜单结构一致（设计稿：文件/视图/工具/结果/报告）
+    const groups = [...new Set(allCommands.map((command) => command.group))];
+    expect(groups).toEqual(["分析阶段", "文件", "视图", "工具", "结果", "报告"]);
   });
 
-  it("菜单命令触发对应动作 id", () => {
-    const { menuGroups } = useCommandRegistry();
-    for (const group of menuGroups) {
-      for (const command of group.commands) {
-        if (command.id.startsWith("stage.") || command.id === "app.about") {
-          continue;
-        }
-        command.run();
-        expect(runMenuAction).toHaveBeenCalledWith(command.id);
-      }
+  it("菜单命令触发对应的原生菜单动作 id", () => {
+    const { allCommands } = useCommandRegistry();
+    for (const command of allCommands.filter((item) => item.group !== "分析阶段")) {
+      command.run();
+      expect(runMenuAction).toHaveBeenCalledWith(command.id);
     }
   });
 
-  it("报告命令切换到报告阶段", () => {
-    const { menuGroups } = useCommandRegistry();
-    const report = menuGroups
-      .find((group) => group.label === "报告")!
-      .commands.find((command) => command.id === "stage.report")!;
+  it("报告命令与原生菜单同走 report.open 动作", () => {
+    const { allCommands } = useCommandRegistry();
+    const report = allCommands.find((command) => command.label === "打开报告工作台")!;
+    expect(report.group).toBe("报告");
     report.run();
-    expect(useAppStore().stage).toBe("report");
+    expect(runMenuAction).toHaveBeenCalledWith("report.open");
   });
 
-  it("关于命令广播 ABOUT_EVENT", () => {
-    const { menuGroups } = useCommandRegistry();
-    const about = menuGroups
-      .find((group) => group.label === "帮助")!
-      .commands.find((command) => command.id === "app.about")!;
-
-    const listener = vi.fn();
-    window.addEventListener(ABOUT_EVENT, listener);
-    about.run();
-    window.removeEventListener(ABOUT_EVENT, listener);
-    expect(listener).toHaveBeenCalledOnce();
-  });
-
-  it("全量命令 = 阶段切换 + 菜单命令，且带分组名", () => {
-    const { menuGroups, allCommands } = useCommandRegistry();
-    const menuCount = menuGroups.reduce((sum, group) => sum + group.commands.length, 0);
-    expect(allCommands.length).toBe(7 + menuCount);
-    expect(allCommands[0]!.group).toBe("分析阶段");
-    expect(allCommands.filter((command) => command.id === "stage.home").length).toBe(1);
-  });
-
-  it("阶段切换命令覆盖七个阶段并写入 store", () => {
+  it("阶段切换命令写入 store 且与阶段一一对应", () => {
     const { allCommands } = useCommandRegistry();
     const app = useAppStore();
     for (const command of allCommands.filter((item) => item.group === "分析阶段")) {

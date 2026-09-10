@@ -38,6 +38,30 @@ pub fn run() {
                 item.build(_app)
             };
 
+            let version = _app.package_info().version.to_string();
+            let credits = "感谢 OpenFOAM (openfoam.org) 提供 CFD 求解基座\n感谢 moldingFoam 项目提供注塑求解模块";
+            let about_metadata = |version: &str| AboutMetadata {
+                name: Some("Kairos".into()),
+                version: Some(version.into()),
+                copyright: Some("Copyright © 2026 Yuki".into()),
+                credits: Some(credits.into()),
+                ..Default::default()
+            };
+
+            // macOS 规范：首个子菜单是应用菜单（关于 / 服务 / 隐藏 / 退出），
+            // 没有它 ⌘Q 退出与「关于」入口都会缺席。
+            #[cfg(target_os = "macos")]
+            let app_menu = SubmenuBuilder::new(_app, "Kairos")
+                .about(Some(about_metadata(&version)))
+                .services()
+                .separator()
+                .hide()
+                .hide_others()
+                .show_all()
+                .separator()
+                .quit()
+                .build()?;
+
             let file = SubmenuBuilder::new(_app, "文件")
                 .item(&action("file.new", "新建项目", Some("CmdOrCtrl+N"))?)
                 .item(&action("file.open", "打开项目…", Some("CmdOrCtrl+O"))?)
@@ -65,13 +89,10 @@ pub fn run() {
             let view = SubmenuBuilder::new(_app, "视图")
                 .item(&action("view.theme", "切换主题", None)?)
                 .build()?;
-            let analysis = SubmenuBuilder::new(_app, "分析")
-                .item(&action("analysis.checkNetwork", "校验模具网络", None)?)
-                .build()?;
-            let results = SubmenuBuilder::new(_app, "结果")
-                .item(&action("results.exportCsv", "导出当前场为 CSV", None)?)
-                .build()?;
+
+            // 工具聚合校验与依赖 / 虚拟机管理（设计稿菜单结构：文件 编辑 视图 工具 结果 报告 帮助）
             let tools = SubmenuBuilder::new(_app, "工具")
+                .item(&action("analysis.checkNetwork", "校验模具网络", None)?)
                 .item(&action("tools.refreshDeps", "探测运行时依赖", None)?)
                 .separator()
                 .item(&action("tools.vmPanel", "虚拟机面板", None)?)
@@ -80,30 +101,32 @@ pub fn run() {
                 .item(&action("tools.vmStop", "关闭虚拟机", None)?)
                 .build()?;
 
-            // 关于对话框：致谢 OpenFOAM / moldingFoam（求解基座）
-            let about = AboutMetadata {
-                name: Some("Kairos".into()),
-                version: Some(_app.package_info().version.to_string()),
-                copyright: Some("Copyright © 2026 Yuki".into()),
-                credits: Some(
-                    "感谢 OpenFOAM (openfoam.org) 提供 CFD 求解基座\n感谢 moldingFoam 项目提供注塑求解模块"
-                        .into(),
-                ),
-                ..Default::default()
-            };
-            let help = SubmenuBuilder::new(_app, "帮助")
-                .about(Some(about))
+            let results = SubmenuBuilder::new(_app, "结果")
+                .item(&action("results.exportCsv", "导出当前场为 CSV", None)?)
                 .build()?;
 
-            let menu = MenuBuilder::new(_app)
-                .item(&file)
-                .item(&edit)
-                .item(&view)
-                .item(&analysis)
-                .item(&results)
-                .item(&tools)
-                .item(&help)
+            let report = SubmenuBuilder::new(_app, "报告")
+                .item(&action("report.open", "打开报告工作台", None)?)
                 .build()?;
+
+            let help = SubmenuBuilder::new(_app, "帮助")
+                .about(Some(about_metadata(&version)))
+                .build()?;
+
+            let menu = {
+                let builder = MenuBuilder::new(_app);
+                #[cfg(target_os = "macos")]
+                let builder = builder.item(&app_menu);
+                builder
+                    .item(&file)
+                    .item(&edit)
+                    .item(&view)
+                    .item(&tools)
+                    .item(&results)
+                    .item(&report)
+                    .item(&help)
+                    .build()?
+            };
             _app.set_menu(menu)?;
             Ok(())
         })

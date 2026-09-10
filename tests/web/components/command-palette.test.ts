@@ -98,6 +98,15 @@ describe("useCommandPalette", () => {
     expect(palette.open.value).toBe(false);
   });
 
+  it("面板关闭时普通按键直接早退", () => {
+    const palette = useCommandPalette();
+    expect(palette.open.value).toBe(false);
+    const event = new KeyboardEvent("keydown", { key: "a", cancelable: true });
+    window.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(false);
+    expect(palette.open.value).toBe(false);
+  });
+
   it("面板打开时其余按键不拦截（无 preventDefault）", () => {
     const palette = useCommandPalette();
     palette.openPalette();
