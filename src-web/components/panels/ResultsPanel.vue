@@ -3,9 +3,9 @@
 import { computed, ref } from "vue";
 import { appStore, loadField, loadResultsCatalog, useAppState } from "../../state";
 import { minMax } from "../../lib/stats";
-import UiButton from "../ui/Button.vue";
-import Card from "../ui/Card.vue";
-import UiTextInput from "../ui/TextInput.vue";
+import UiButton from "../ui/UiButton.vue";
+import Card from "../ui/UiCard.vue";
+import UiTextInput from "../ui/UiTextInput.vue";
 
 const state = useAppState();
 

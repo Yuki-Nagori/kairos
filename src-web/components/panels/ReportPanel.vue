@@ -5,8 +5,8 @@ import { useAppState } from "../../state";
 import { buildReportHtml } from "../../lib/report";
 import { minMax } from "../../lib/stats";
 import { getSnapshotDataUrl } from "../../render/snapshot";
-import Card from "../ui/Card.vue";
-import UiButton from "../ui/Button.vue";
+import Card from "../ui/UiCard.vue";
+import UiButton from "../ui/UiButton.vue";
 
 const state = useAppState();
 

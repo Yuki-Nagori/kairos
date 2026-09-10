@@ -9,10 +9,10 @@ import { computed, reactive, ref, watch } from "vue";
 import { appStore, useAppState } from "../../state";
 import type { ProcessSettings } from "../../types";
 import { checkProcess } from "../../services/process";
-import Card from "../ui/Card.vue";
-import Dropdown from "../ui/Dropdown.vue";
-import TextInput from "../ui/TextInput.vue";
-import UiButton from "../ui/Button.vue";
+import Card from "../ui/UiCard.vue";
+import Dropdown from "../ui/UiDropdown.vue";
+import TextInput from "../ui/UiTextInput.vue";
+import UiButton from "../ui/UiButton.vue";
 
 const PRESETS_KEY = "kairos-process-presets";
 

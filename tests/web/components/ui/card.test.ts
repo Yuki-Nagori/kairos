@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { mount } from "@vue/test-utils";
-import Card from "../../../../src-web/components/ui/Card.vue";
+import Card from "../../../../src-web/components/ui/UiCard.vue";
 
 describe("Card", () => {
   beforeEach(() => {

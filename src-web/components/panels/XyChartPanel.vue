@@ -6,9 +6,9 @@ import type { ScalarField } from "../../types";
 import { drawLineChart } from "../../lib/chart";
 import { THEME_CHANGED_EVENT } from "../../theme";
 import { registerSnapshot } from "../../render/snapshot";
-import UiButton from "../ui/Button.vue";
-import UiTextInput from "../ui/TextInput.vue";
-import Card from "../ui/Card.vue";
+import UiButton from "../ui/UiButton.vue";
+import UiTextInput from "../ui/UiTextInput.vue";
+import Card from "../ui/UiCard.vue";
 
 const state = useAppState();
 

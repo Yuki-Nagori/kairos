@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { mount } from "@vue/test-utils";
-import Dropdown from "../../../../src-web/components/ui/Dropdown.vue";
+import Dropdown from "../../../../src-web/components/ui/UiDropdown.vue";
 
 describe("Dropdown", () => {
   it("渲染插槽选项并回显当前值", () => {

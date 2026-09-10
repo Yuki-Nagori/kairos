@@ -22,8 +22,11 @@ const html = computed(() =>
 </script>
 
 <template>
+  <!-- 内容全部来自 katex 渲染输出（非用户 HTML），XSS 面不成立。 -->
+  <!-- eslint-disable vue/no-v-html -->
   <div
     :class="{ 'overflow-x-auto text-center text-[11px] text-zinc-300': displayMode }"
     v-html="html"
   />
+  <!-- eslint-enable vue/no-v-html -->
 </template>

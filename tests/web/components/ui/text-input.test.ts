@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { mount } from "@vue/test-utils";
-import TextInput from "../../../../src-web/components/ui/TextInput.vue";
+import TextInput from "../../../../src-web/components/ui/UiTextInput.vue";
 
 describe("TextInput", () => {
   it("渲染 value / placeholder / type 并透传 class", () => {

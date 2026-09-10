@@ -14,9 +14,9 @@ import {
   useAppState,
 } from "../../state";
 import type { GeometrySummary, MeshIssues, MeshingReport } from "../../types";
-import Card from "../ui/Card.vue";
-import TextInput from "../ui/TextInput.vue";
-import UiButton from "../ui/Button.vue";
+import Card from "../ui/UiCard.vue";
+import TextInput from "../ui/UiTextInput.vue";
+import UiButton from "../ui/UiButton.vue";
 
 const state = useAppState();
 

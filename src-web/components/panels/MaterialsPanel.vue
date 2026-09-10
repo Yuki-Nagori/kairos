@@ -14,8 +14,8 @@ import {
   useAppState,
 } from "../../state";
 import type { Material, PropertyTable } from "../../types";
-import Card from "../ui/Card.vue";
-import UiButton from "../ui/Button.vue";
+import Card from "../ui/UiCard.vue";
+import UiButton from "../ui/UiButton.vue";
 import LatexBlock from "../LatexBlock.vue";
 
 const state = useAppState();

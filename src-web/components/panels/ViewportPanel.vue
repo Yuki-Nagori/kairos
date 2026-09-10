@@ -11,7 +11,7 @@ import { detectRenderCapabilityInBrowser } from "../../render/capability";
 import { registerSnapshot } from "../../render/snapshot";
 import { minMax } from "../../lib/stats";
 import { getRenderMesh } from "../../services/geometry";
-import UiButton from "../ui/Button.vue";
+import UiButton from "../ui/UiButton.vue";
 
 const state = useAppState();
 

@@ -16,9 +16,9 @@ import {
 } from "../../state";
 import type { DependencyStatus } from "../../types";
 import { openDownloadsDir } from "../../services/downloads";
-import Card from "../ui/Card.vue";
+import Card from "../ui/UiCard.vue";
 import ShellIcon from "../ui/ShellIcon.vue";
-import UiButton from "../ui/Button.vue";
+import UiButton from "../ui/UiButton.vue";
 
 /** 徽标：许可定颜色（合规口径），安装策略定文案——两者正交（Gmsh = GPL + 官方直链）。 */
 const LICENSE_CLASS: Record<string, string> = {

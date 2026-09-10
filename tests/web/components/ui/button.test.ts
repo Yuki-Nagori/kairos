@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { mount } from "@vue/test-utils";
-import UiButton from "../../../../src-web/components/ui/Button.vue";
+import UiButton from "../../../../src-web/components/ui/UiButton.vue";
 
 describe("UiButton", () => {
   it("默认 ghost 描边样式并渲染插槽文案", () => {

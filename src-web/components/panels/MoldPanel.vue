@@ -14,10 +14,10 @@ import {
   useAppState,
 } from "../../state";
 import type { CoolingChannel, RunnerElement, RunnerKind } from "../../types";
-import Card from "../ui/Card.vue";
-import Dropdown from "../ui/Dropdown.vue";
-import TextInput from "../ui/TextInput.vue";
-import UiButton from "../ui/Button.vue";
+import Card from "../ui/UiCard.vue";
+import Dropdown from "../ui/UiDropdown.vue";
+import TextInput from "../ui/UiTextInput.vue";
+import UiButton from "../ui/UiButton.vue";
 
 // 坐标按 XYZ 键值存储（键为字面量联合，索引访问不引入 undefined）。
 const AXES = [

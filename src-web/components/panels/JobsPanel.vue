@@ -4,9 +4,9 @@ import { ref } from "vue";
 import { probeOpenfoam } from "../../services/solver";
 import { cancelJobAction, refreshJobs, submitJobAction, useAppState } from "../../state";
 import type { Job } from "../../types";
-import Card from "../ui/Card.vue";
-import TextInput from "../ui/TextInput.vue";
-import UiButton from "../ui/Button.vue";
+import Card from "../ui/UiCard.vue";
+import TextInput from "../ui/UiTextInput.vue";
+import UiButton from "../ui/UiButton.vue";
 
 const STATUS_LABEL: Record<Job["status"], string> = {
   queued: "排队中",

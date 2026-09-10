@@ -15,8 +15,8 @@ import {
   stopVmShellAction,
   useAppState,
 } from "../../state";
-import UiButton from "../ui/Button.vue";
-import Card from "../ui/Card.vue";
+import UiButton from "../ui/UiButton.vue";
+import Card from "../ui/UiCard.vue";
 import ShellIcon from "../ui/ShellIcon.vue";
 
 const state = useAppState();

@@ -8,10 +8,10 @@ import { computed, ref } from "vue";
 import { submitPipeline, useAppState } from "../../state";
 import type { AnalysisStage } from "../../types";
 import { allPrerequisitesDone, evaluatePipeline } from "../../lib/pipeline";
-import Card from "../ui/Card.vue";
-import Dropdown from "../ui/Dropdown.vue";
-import TextInput from "../ui/TextInput.vue";
-import UiButton from "../ui/Button.vue";
+import Card from "../ui/UiCard.vue";
+import Dropdown from "../ui/UiDropdown.vue";
+import TextInput from "../ui/UiTextInput.vue";
+import UiButton from "../ui/UiButton.vue";
 
 const state = useAppState();
 

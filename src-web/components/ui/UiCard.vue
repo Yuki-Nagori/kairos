@@ -4,7 +4,7 @@
  * 「探测 → 反馈」模式：statusHint 显示状态，提供 refreshLabel 则在正文顶部渲染刷新按钮。
  */
 import { ref } from "vue";
-import UiButton from "./Button.vue";
+import UiButton from "./UiButton.vue";
 
 const props = withDefaults(
   defineProps<{
