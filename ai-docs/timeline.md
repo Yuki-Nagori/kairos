@@ -163,3 +163,4 @@
 - **22:40** docs: README 技术栈补 Vue 3 + Pinia、命令表更新（vue-tsc/analyze/tauri 别名），ARCHITECTURE 分层图与命令 recipe 对齐 stores/api/utils 新结构，测试地图登记 stores 目录
 - **22:50** refactor(ui): ShellIcon 自绘原创几何替换 Icons8 素材，迁入 ui/icons/ 专用目录，撤下 Icons8 致谢
 - **23:00** fix(ui): ShellIcon 提示符上移收小，消除与窗体下边框的贴边
+- **23:10** docs: ARCHITECTURE 分层图改 mermaid flowchart、Channel 回传补 sequenceDiagram，web-conventions 增依赖方向图

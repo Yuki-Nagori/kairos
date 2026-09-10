@@ -30,6 +30,19 @@ currentColor 跟随主题；**不引入第三方图标素材**（项目不使用
 三个问题依次问，命中即停。`.vue` 里写 `if (值 > 100)` 这类判断逻辑、composable 里写
 `querySelector` 这类 DOM 查询，都是边界失守的信号。
 
+## 依赖方向
+
+```mermaid
+flowchart LR
+    VC["views / components<br>（composable + 模板）"]
+    ST["stores<br>（Pinia 领域 store）"]
+    A["api<br>（IPC 封装）"]
+    B["utils / render<br>（纯 TS 底座）"]
+    VC --> ST --> A --> B
+```
+
+依赖只能向下，禁止反向与跨层（如 composable 绕过 store 直接 import api）。
+
 ## 通信与解耦约定
 
 1. **composable 返回「绑定 + 方法」**，`.vue` 直接解构使用：模板需要的每个名字都在返回对象里，

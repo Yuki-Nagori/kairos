@@ -6,24 +6,27 @@
 
 ## 1. 总览与依赖方向（铁律）
 
-```
-┌─────────────────────────── WebView (TypeScript) ───────────────────────────┐
-│  views/        页面级面板：Xxx.vue 只写模板，逻辑在同位 useXxx.ts composable │
-│  components/   可复用 UI（ui/ 基础件 + 共享组件），同样「.vue + useXxx」     │
-│      ↓                                                                       │
-│  stores/       按领域 defineStore（Pinia）：state + getters + actions       │
-│      ↓                                                                       │
-│  api/          Tauri 命令的领域化封装，写明返回类型                         │
-│      ↓                                                                       │
-│  utils/        ipc 网关（运行时探测、错误契约还原）、图表/统计等纯函数       │
-└──────────────────────────────┬─────────────────────────────────────────────┘
-                        invoke / Channel（IPC 契约）
-┌──────────────────────────────┴─────────────────────────────────────────────┐
-│  src-tauri（适配层）  commands/ 只做装配：参数校验 → 调 core → 返回 DTO       │
-│      ↓ 不反向依赖                                                            │
-│  kairos-core（领域层） models/ DTO · services/ 领域逻辑 · error/ 统一错误     │
-│                       纯 Rust，不依赖 tauri，可独立测试、可复用给 CLI/脚本   │
-└────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph web ["WebView（TypeScript）"]
+        direction TB
+        VC["views / components<br>.vue 只写模板与交互，逻辑在同位 useXxx.ts composable"]
+        ST["stores<br>按领域 defineStore（Pinia）：state + getters + actions"]
+        API["api<br>Tauri 命令的领域化封装，写明返回类型"]
+        UT["utils<br>ipc 网关（运行时探测、错误契约还原）、图表 / 统计等纯函数"]
+        R["render<br>WebGL2 视口渲染（图形专用层，与 utils 同属纯 TS 底座）"]
+        VC --> ST
+        ST --> API
+        API --> UT
+        VC -. "视口 / 图表直接调用" .-> R
+    end
+    subgraph rust ["Rust"]
+        direction TB
+        CMD["src-tauri（适配层）<br>commands/ 只做装配：参数校验 → 调 core → 返回 DTO"]
+        CORE["kairos-core（领域层）<br>models/ DTO · services/ 领域逻辑 · error/ 统一错误<br>纯 Rust，不依赖 tauri，可独立测试、可复用给 CLI / 脚本"]
+        CMD -- "不反向依赖" --> CORE
+    end
+    API -- "invoke / Channel（IPC 契约）" --> CMD
 ```
 
 职责边界的判定标准（去掉 Vue 还能测就进 `.ts`、必须依赖 Vue API 才成立就进
@@ -109,6 +112,23 @@ import { Channel, invoke } from "@tauri-apps/api/core";
 const channel = new Channel<SolveProgress>();
 channel.onmessage = (progress) => jobs.appendJobLog(jobId, `进度 ${progress}%`);
 await invoke<SolveResult>("solve_case", { caseId, progress: channel });
+```
+
+```mermaid
+sequenceDiagram
+    participant V as 视图（composable）
+    participant S as jobs store
+    participant R as src-tauri 命令
+    participant C as kairos-core 求解
+    V->>S: submitJob(caseDir, cores)
+    S->>R: invoke solve_case + progress Channel
+    R->>C: solve(&case_id, &|p| progress.send(p))
+    loop 求解循环
+        C-->>R: 进度回调 p
+        R-->>S: Channel 有序回传
+        S->>S: appendJobLog（环形缓冲）
+    end
+    R-->>S: Result<SolveResult>
 ```
 
 ### 新增一个命令的流程
