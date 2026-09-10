@@ -3,26 +3,28 @@ import { button, card, hint, textInput } from "../ui";
 import { minMax } from "../../lib/stats";
 /** 结果面板：扫描 case 结果目录、查看时间步与场统计（完整视口见 T14）。 */
 export function createResultsPanel(): HTMLElement {
-  const { root, body } = card("结果");
-
+  const dirInput = textInput("OpenFOAM case 目录路径", "flex-1 min-w-48");
+  const shell = card("结果", {
+    statusHint: "",
+    onRefresh: () => {
+      const caseDir = dirInput.value.trim();
+      if (caseDir) {
+        void loadResultsCatalog(caseDir);
+      }
+    },
+    refreshLabel: "扫描结果",
+  });
+  const scanButton = shell.refreshButton as HTMLButtonElement;
+  const { root, body } = shell;
   const scanForm = document.createElement("div");
   scanForm.className = "flex flex-wrap items-center gap-2";
-  const dirInput = textInput("OpenFOAM case 目录路径", "flex-1 min-w-48");
-  const scanButton = button("扫描结果", "primary");
-  scanForm.append(dirInput, scanButton);
+  scanForm.append(dirInput);
 
   const timesBox = document.createElement("div");
   timesBox.className = "space-y-1";
 
   const statsBox = document.createElement("div");
   statsBox.className = "space-y-1";
-
-  scanButton.addEventListener("click", () => {
-    const caseDir = dirInput.value.trim();
-    if (caseDir) {
-      void loadResultsCatalog(caseDir);
-    }
-  });
 
   function render(): void {
     const { busy, loadedField } = appStore.get();

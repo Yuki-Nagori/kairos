@@ -9,18 +9,20 @@ import {
   stopVmShellAction,
 } from "../../state";
 import { createShellIcon } from "../icons";
-import { button, card, hint } from "../ui";
+import { button, card } from "../ui";
 
 /** 虚拟机面板（浮于工作区右下角）：Multipass（macOS）/ WSL2（Windows）的
  * 一键安装、启动、应用内 Shell 与关闭。全部逻辑在 state/vm.ts 与 Rust 适配层，
  * 这里只渲染；Shell 区模拟终端外观（图标标题栏 + 提示符行内输入）。 */
 export function createVmPanel(): HTMLElement {
-  const { root, body } = card("虚拟机");
-  // 面板 logo：终端窗口图标（颜色随主题 currentColor）。
-  root.querySelector("h2")?.prepend(createShellIcon("h-4 w-4 text-emerald-400"));
-
-  const refreshButton = button("重新探测", "ghost");
-  const statusLine = hint("探测中…");
+  const shell = card("虚拟机", {
+    icon: createShellIcon("h-4 w-4 text-emerald-400"),
+    statusHint: "探测中…",
+    onRefresh: () => void refreshVmStatus(),
+    refreshLabel: "重新探测",
+  });
+  const { root, body, statusLine } = shell;
+  const refreshButton = shell.refreshButton as HTMLButtonElement;
 
   const installButton = button("安装虚拟机");
   const startButton = button("启动虚拟机");
@@ -60,9 +62,8 @@ export function createVmPanel(): HTMLElement {
   // 点终端任意处聚焦输入行。
   terminal.addEventListener("click", () => input.focus());
 
-  body.append(refreshButton, statusLine, buttons, terminal);
+  body.append(buttons, terminal);
 
-  refreshButton.addEventListener("click", () => void refreshVmStatus());
   installButton.addEventListener("click", () => void installVmAction());
   startButton.addEventListener("click", () => void startVmAction());
   shellButton.addEventListener("click", () => void openVmShellAction());

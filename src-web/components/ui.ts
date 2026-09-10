@@ -3,11 +3,28 @@
  * 主题切换基于 Tailwind v4 的 CSS 变量色板（theme/*.css 覆盖 --color-zinc-*）。
  */
 
-/** 面板卡片：着色头部条 + 内容区；collapsible 时点击头部折叠（状态入 localStorage）。 */
+/** 面板卡片句柄：root/body 之外暴露状态行与刷新按钮（共用「探测 → 反馈」模式）。 */
+interface CardHandle {
+  root: HTMLElement;
+  body: HTMLElement;
+  statusLine: HTMLParagraphElement;
+  refreshButton: HTMLButtonElement | null;
+}
+
 export function card(
   title: string,
-  options?: { collapsible?: boolean },
-): { root: HTMLElement; body: HTMLElement } {
+  options?: {
+    collapsible?: boolean;
+    /** 标题图标（如 createShellIcon 产物）。 */
+    icon?: HTMLElement;
+    /** 状态提示行初始文案。 */
+    statusHint?: string;
+    /** 提供则生成顶部刷新按钮（点击回调）。 */
+    onRefresh?: () => void;
+    /** 刷新按钮文案（默认「重新探测」）。 */
+    refreshLabel?: string;
+  },
+): CardHandle {
   const root = document.createElement("section");
   root.className =
     "min-w-0 overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 shadow-lg shadow-black/20";
@@ -15,10 +32,23 @@ export function card(
   const heading = document.createElement("h2");
   heading.className =
     "flex items-center gap-2 border-b border-zinc-800 bg-zinc-950/40 px-4 py-2.5 text-xs font-semibold tracking-wide text-zinc-200 select-none";
-  heading.textContent = title;
+  if (options?.icon) {
+    heading.append(options.icon);
+  }
+  heading.append(Object.assign(document.createElement("span"), { textContent: title }));
 
   const body = document.createElement("div");
   body.className = "min-w-0 space-y-3 overflow-x-hidden px-4 py-3.5";
+
+  // 状态提示行 + 刷新按钮：依赖/虚拟机/结果面板共用的「探测 → 反馈」模式。
+  const statusLine = hint(options?.statusHint ?? "");
+  let refreshButton: HTMLButtonElement | null = null;
+  if (options?.onRefresh) {
+    refreshButton = button(options.refreshLabel ?? "重新探测", "ghost");
+    refreshButton.addEventListener("click", () => options?.onRefresh?.());
+    body.append(refreshButton);
+  }
+  body.append(statusLine);
 
   if (options?.collapsible === true) {
     const storageKey = `kairos-panel:${title}`;
@@ -27,18 +57,18 @@ export function card(
     heading.classList.toggle("cursor-pointer");
     const chevron = document.createElement("span");
     chevron.className = "ml-auto text-zinc-500";
-    chevron.textContent = collapsed ? "\u25b8" : "\u25be";
+    chevron.textContent = collapsed ? "▸" : "▾";
     heading.append(chevron);
     heading.addEventListener("click", () => {
       const nowCollapsed = !body.classList.contains("hidden");
       body.classList.toggle("hidden", nowCollapsed);
-      chevron.textContent = nowCollapsed ? "\u25b8" : "\u25be";
+      chevron.textContent = nowCollapsed ? "▸" : "▾";
       localStorage.setItem(storageKey, nowCollapsed ? "1" : "0");
     });
   }
 
   root.append(heading, body);
-  return { root, body };
+  return { root, body, statusLine, refreshButton };
 }
 
 /** 弱提示行。 */

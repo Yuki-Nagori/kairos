@@ -7,6 +7,7 @@ import {
   refreshDependencies,
 } from "../../state";
 import { openDownloadsDir } from "../../services/downloads";
+import { createShellIcon } from "../icons";
 import { button, card, hint, progressBar } from "../ui";
 
 /** 徽标：许可定颜色（合规口径），安装策略定文案——两者正交（Gmsh = GPL + 官方直链）。 */
@@ -36,7 +37,10 @@ function updateDownloadUrl(dep: {
 
 /** 运行时依赖面板：许可分级、就绪状态、应用内下载与官方页引导。 */
 export function createDependenciesPanel(): HTMLElement {
-  const { root, body } = card("运行时依赖");
+  const { root, body } = card("运行时依赖", {
+    icon: createShellIcon("h-4 w-4 text-emerald-400"),
+    statusHint: "尚未探测。点击「重新探测」检查 OpenFOAM 环境。",
+  });
 
   const refreshButton = button("重新探测");
   const openDirButton = button("打开下载目录");
@@ -61,7 +65,6 @@ export function createDependenciesPanel(): HTMLElement {
 
     listBox.replaceChildren();
     if (dependencies.length === 0) {
-      listBox.append(hint("尚未探测。点击「重新探测」检查 OpenFOAM 环境。"));
       return;
     }
     for (const dep of dependencies) {
