@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { mount } from "@vue/test-utils";
-import VmPanel from "../../../src-web/components/panels/VmPanel.vue";
+import VmPanel from "../../../src-web/views/vm/VmPanel.vue";
 import { appStore, initialAppState } from "../../../src-web/state";
-import { getVmStatus, vmShellSend } from "../../../src-web/services/vm";
+import { getVmStatus, vmShellSend } from "../../../src-web/api/vm";
 import type { VmProvider, VmState, VmStatus } from "../../../src-web/types";
 
-vi.mock("../../../src-web/services/vm", () => ({
+vi.mock("../../../src-web/api/vm", () => ({
   getVmStatus: vi.fn(),
   installVm: vi.fn(),
   startVm: vi.fn(),

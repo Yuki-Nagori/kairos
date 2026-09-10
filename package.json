@@ -19,7 +19,7 @@
     "format:rust:check": "cargo fmt --all --check",
     "test": "vitest run",
     "bench": "bun run bench:web && cargo bench",
-    "bench:web": "bun src-web/lib/bench/state.ts",
+    "bench:web": "bun src-web/utils/bench/state.ts",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "coverage:rust": "cargo llvm-cov -p kairos-core --lib --summary-only --fail-under-lines 98",

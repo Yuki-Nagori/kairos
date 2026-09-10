@@ -1,12 +1,12 @@
-import { getSystemInfo } from "../services/system";
+import { getSystemInfo } from "../api/system";
 import {
   createProject,
   listRecentProjects,
   loadProjectFile,
   saveProjectFile,
-} from "../services/project";
-import { pickOpenProjectPath, pickSaveProjectPath } from "../services/dialog";
-import { checkMoldNetwork } from "../services/mold";
+} from "../api/project";
+import { pickOpenProjectPath, pickSaveProjectPath } from "../api/dialog";
+import { checkMoldNetwork } from "../api/mold";
 import type { Project, RunnerKind, Study } from "../types";
 import { appStore, setError, type AppState } from "./store";
 import { loadMaterials } from "./materials";

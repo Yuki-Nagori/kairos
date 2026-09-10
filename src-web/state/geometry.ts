@@ -4,8 +4,8 @@ import {
   importSampleBox,
   importStl,
   removeGeometry,
-} from "../services/geometry";
-import { pickStlPath } from "../services/dialog";
+} from "../api/geometry";
+import { pickStlPath } from "../api/dialog";
 import { appStore, setError } from "./store";
 
 /** 导入 STL：弹出文件对话框，解析检查后入列表。 */

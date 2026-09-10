@@ -1,5 +1,5 @@
-import { defaultCaseDir } from "../services/project";
-import { generateOpenfoamCase } from "../services/solver";
+import { defaultCaseDir } from "../api/project";
+import { generateOpenfoamCase } from "../api/solver";
 import type { AnalysisStage } from "../types";
 import { appStore, setError } from "./store";
 import { submitJobAction } from "./jobs";

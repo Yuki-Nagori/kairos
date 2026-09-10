@@ -1,5 +1,5 @@
 import { reactive } from "vue";
-import { IpcUnavailableError } from "../lib/ipc";
+import { IpcUnavailableError } from "../utils/ipc";
 import type {
   ComponentStageState,
   DependencyStatus,

@@ -7,7 +7,7 @@ import {
   vmShellStart as apiVmShellStart,
   vmShellStop as apiVmShellStop,
   deployVmBundle as apiDeployVmBundle,
-} from "../services/vm";
+} from "../api/vm";
 import type { VmAction } from "../types";
 import { appStore, setError } from "./store";
 

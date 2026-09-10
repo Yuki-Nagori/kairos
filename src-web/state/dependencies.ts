@@ -2,8 +2,8 @@ import {
   checkDependencyUpdate,
   listRuntimeDependencies,
   openDependencyPage as apiOpenDependencyPage,
-} from "../services/dependencies";
-import { downloadComponentFile, listDownloads } from "../services/downloads";
+} from "../api/dependencies";
+import { downloadComponentFile, listDownloads } from "../api/downloads";
 import type { ComponentStageState, DownloadedEntry, SavedDownload } from "../types";
 import { appStore, setError } from "./store";
 

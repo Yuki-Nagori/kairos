@@ -18,10 +18,10 @@ import {
   vmShellSend,
   vmShellStart,
   vmShellStop,
-} from "../../../src-web/services/vm";
+} from "../../../src-web/api/vm";
 import type { VmStatus } from "../../../src-web/types";
 
-vi.mock("../../../src-web/services/vm", () => ({
+vi.mock("../../../src-web/api/vm", () => ({
   getVmStatus: vi.fn(),
   installVm: vi.fn(),
   startVm: vi.fn(),

@@ -5,8 +5,8 @@ import {
   listBuiltinMaterials,
   listCustomMaterials,
   upsertCustomMaterial,
-} from "../services/materials";
-import { pickExportJsonPath, pickOpenJsonPath } from "../services/dialog";
+} from "../api/materials";
+import { pickExportJsonPath, pickOpenJsonPath } from "../api/dialog";
 import type { Material } from "../types";
 import { appStore, setError } from "./store";
 

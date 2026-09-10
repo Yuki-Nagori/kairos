@@ -1,5 +1,5 @@
 import { Channel } from "@tauri-apps/api/core";
-import { cancelJob as apiCancelJob, listJobs, submitJob as apiSubmitJob } from "../services/jobs";
+import { cancelJob as apiCancelJob, listJobs, submitJob as apiSubmitJob } from "../api/jobs";
 import { appStore, setError } from "./store";
 
 /** 每作业日志的环形上限：超出后丢弃最旧行，避免长作业撑爆内存。 */

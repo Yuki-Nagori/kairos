@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { IpcUnavailableError } from "../../src-web/lib/ipc";
+import { IpcUnavailableError } from "../../src-web/utils/ipc";
 import {
   addStudy,
   appStore,
@@ -10,28 +10,25 @@ import {
   newProject,
   setError,
 } from "../../src-web/state";
-import { getSystemInfo } from "../../src-web/services/system";
-import { createProject, listRecentProjects } from "../../src-web/services/project";
-import { listBuiltinMaterials, listCustomMaterials } from "../../src-web/services/materials";
-import {
-  checkDependencyUpdate,
-  listRuntimeDependencies,
-} from "../../src-web/services/dependencies";
-import { downloadComponentFile, listDownloads } from "../../src-web/services/downloads";
+import { getSystemInfo } from "../../src-web/api/system";
+import { createProject, listRecentProjects } from "../../src-web/api/project";
+import { listBuiltinMaterials, listCustomMaterials } from "../../src-web/api/materials";
+import { checkDependencyUpdate, listRuntimeDependencies } from "../../src-web/api/dependencies";
+import { downloadComponentFile, listDownloads } from "../../src-web/api/downloads";
 import type { SavedDownload, UpdateCheck } from "../../src-web/types";
 
-vi.mock("../../src-web/services/system", () => ({ getSystemInfo: vi.fn() }));
-vi.mock("../../src-web/services/project", () => ({
+vi.mock("../../src-web/api/system", () => ({ getSystemInfo: vi.fn() }));
+vi.mock("../../src-web/api/project", () => ({
   createProject: vi.fn(),
   listRecentProjects: vi.fn(),
   loadProjectFile: vi.fn(),
   saveProjectFile: vi.fn(),
 }));
-vi.mock("../../src-web/services/geometry", () => ({
+vi.mock("../../src-web/api/geometry", () => ({
   importStl: vi.fn(),
   removeGeometry: vi.fn(),
 }));
-vi.mock("../../src-web/services/materials", () => ({
+vi.mock("../../src-web/api/materials", () => ({
   listBuiltinMaterials: vi.fn(),
   listCustomMaterials: vi.fn(),
   importCustomMaterials: vi.fn(),
@@ -39,12 +36,12 @@ vi.mock("../../src-web/services/materials", () => ({
   deleteCustomMaterial: vi.fn(),
   exportMaterialsToFile: vi.fn(),
 }));
-vi.mock("../../src-web/services/dependencies", () => ({
+vi.mock("../../src-web/api/dependencies", () => ({
   checkDependencyUpdate: vi.fn(),
   listRuntimeDependencies: vi.fn(),
   openDependencyPage: vi.fn(),
 }));
-vi.mock("../../src-web/services/downloads", () => ({
+vi.mock("../../src-web/api/downloads", () => ({
   downloadComponentFile: vi.fn(),
   listDownloads: vi.fn(),
   getDownloadsDir: vi.fn(),
