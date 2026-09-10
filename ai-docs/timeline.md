@@ -141,3 +141,4 @@
 - **19:3x** fix(ui): 色标图例 replaceChildren 统一填充（noUncheckedIndexedAccess 收窄）
 - **19:4x** fix(ui): 移除 main 中残留的独立阶段选项卡条（顶栏已内嵌，双渲染重复）
 - **19:4x** fix(gpu): run_scalar_pipeline 多余闭括号导致解析错误（真机反馈整理时发现）
+- **19:5x** docs(reviews): M6 评审收尾——八项清单全过，T32 流式日志回流记录
