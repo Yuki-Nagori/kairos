@@ -165,3 +165,4 @@
 - **23:00** fix(ui): ShellIcon 提示符上移收小，消除与窗体下边框的贴边
 - **23:10** docs: ARCHITECTURE 分层图改 mermaid flowchart、Channel 回传补 sequenceDiagram，web-conventions 增依赖方向图
 - **23:20** docs+ui: 新增 ai-docs/icon-design.md 图标设计规范（超现代双轨：Mono 按钮 / Art 彩色图示），ShellIcon 窗体改正方形并缩小提示符
+- **23:30** docs: AGENTS.md 速查新增「文档图表优先 mermaid」约定，DTO 镜像路径修正为 types/index.ts

@@ -19,13 +19,14 @@ Kairos：注塑成型 CAE 仿真软件，对标行业领先的同类产品（自
 - **目录职责**：`src-web/` 前端（TypeScript）；`src-crates/` Rust 领域层 crate；`src-tauri/` Tauri 桌面适配层。各目录内部的 `src/` 是 Rust crate 固定结构，勿混淆。
 - **依赖方向**：前端 `views / components → stores → api → utils / render`；Rust `src-tauri → kairos-core`。`kairos-core` 禁止依赖 tauri；命令层不写业务逻辑，业务只住 core。
 - **错误契约**：命令一律返回 `Result<T, KairosError>`，跨 IPC 序列化为 `{ code, message }`；`code ∈ validation / not_found / io / solver / internal`。前端按 `code` 分支，禁止文本匹配 message。
-- **DTO 双端镜像**：Rust `models/` ↔ `src-web/types.ts`，任何改动必须同步两处并让契约测试（`src-crates/kairos-core/tests/contract.rs`）通过。
+- **DTO 双端镜像**：Rust `models/` ↔ `src-web/types/index.ts`，任何改动必须同步两处并让契约测试（`src-crates/kairos-core/tests/contract.rs`）通过。
 - **线程模型**：同步 Tauri 命令跑在主线程，重计算必须异步 / 另起线程；进度回传用 `tauri::ipc::Channel`；大体积数据用 `tauri::ipc::Response`。
 - **覆盖率门槛**：`kairos-core` 行覆盖 ≥ 98%（`cargo llvm-cov -p kairos-core --lib --summary-only --fail-under-lines 98`）、前端 `utils/` 覆盖率 100%（vitest coverage thresholds，行/函数/语句/分支全 100）；api / render 薄适配层不计入门槛。
 - **GPU 计算**：统一经 wgpu 抽象层覆盖 NVIDIA / AMD / Intel / Apple（Vulkan/DX12/Metal），禁止引入 CUDA 等单厂商 SDK；无 GPU 环境必须自动回退 CPU（T19/T20）。
 - **锁文件**：根 `Cargo.lock` 与 `bun.lock` 必须提交、保持同步（整个工作区只有根目录这一份 Cargo.lock）。
 - **提交前门禁**：仓库根 `bun run verify`（typecheck + clippy -D warnings + format + test + knip，前端与 Rust 全量），通过才算完成。
 - **时间线**：每完成一个任务，在 [ai-docs/timeline.md](ai-docs/timeline.md) 末尾追加一行（时间 + 阶段 + 内容），**一行对应一个 commit**，随该任务的提交一并入库。
+- **文档图表**：md 里的架构图 / 流程图 / 时序图优先用 mermaid 代码块（GitHub 与主流编辑器原生渲染），不用 ASCII 字符画；目录树保持纯文本代码块。新写图表后须经渲染校验（如 mermaid.ink）再入库。
 - **里程碑评审**：每个里程碑结束强制执行 [T21 整体评审与优化](ai-docs/tasks/T21-milestone-review.md)（架构 / 性能 / 质量 / 文档 / 安全八项清单），发现按「立即修 / 回流任务 / 接受并记录」闭环，未通过不得开启下一里程碑。
 
 详细理由与代码模板见 [ai-docs/ARCHITECTURE.md](ai-docs/ARCHITECTURE.md)。
