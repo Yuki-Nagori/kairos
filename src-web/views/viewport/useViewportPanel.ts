@@ -11,6 +11,7 @@ import { pickCell, rayFromPointer, type PickMesh } from "../../render/picking";
 import { buildOverlayLayers, OVERLAY_IDS } from "../../render/overlays";
 import { detectRenderCapabilityInBrowser } from "../../render/capability";
 import { registerSnapshot } from "../../render/snapshot";
+import { clipPlaneFromFraction } from "../../render/math";
 import { minMax } from "../../utils/stats";
 import { getRenderMesh } from "../../api/geometry";
 
@@ -58,6 +59,9 @@ export function useViewportPanel() {
   });
   const fpsText = ref("FPS: —");
   const clipOn = ref(false);
+  const clipAxis = ref<"x" | "y" | "z">("y");
+  const clipPosition = ref(0.5);
+  const clipInvert = ref(false);
   const playing = ref(false);
   const playLabel = computed(() => (playing.value ? "停止动画" : "播放动画"));
 
@@ -157,9 +161,24 @@ export function useViewportPanel() {
     }
   }
 
+  function applyClip(): void {
+    const bounds = renderer?.getMeshBounds();
+    if (bounds == null) {
+      return;
+    }
+    const plane = clipPlaneFromFraction(
+      bounds.min,
+      bounds.max,
+      clipAxis.value,
+      clipPosition.value,
+      clipInvert.value,
+    );
+    renderer?.setClipPlane(clipOn.value, plane.normal, plane.offset);
+  }
+
   function toggleClip(): void {
     clipOn.value = !clipOn.value;
-    renderer?.setClip(clipOn.value, 0);
+    applyClip();
   }
 
   function resetView(): void {
@@ -251,6 +270,8 @@ export function useViewportPanel() {
     () => applyLayerVisibility(),
   );
 
+  watch([clipAxis, clipPosition, clipInvert], () => applyClip());
+
   // 场数据加载后自动开启云图着色（值域取自场 min/max），并热更新每面值。
   function applyField(field: ScalarField | null): void {
     if (field === null || renderer === null || field.values.length === 0) {
@@ -301,11 +322,15 @@ export function useViewportPanel() {
     playLabel,
     fpsText,
     clipOn,
+    clipAxis,
+    clipPosition,
+    clipInvert,
     title,
     centerText,
     loadMesh,
     togglePlay,
     toggleClip,
+    applyClip,
     resetView,
     zoomBy,
     fitView,

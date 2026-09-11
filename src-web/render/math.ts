@@ -100,3 +100,21 @@ export function mat4RotateX(radians: number): Mat4 {
   const s = Math.sin(radians);
   return new Float32Array([1, 0, 0, 0, 0, c, s, 0, 0, -s, c, 0, 0, 0, 0, 1]);
 }
+
+/** 剖切平面：按轴与 0..1 位置分数生成（法向 ±单位轴向量）与平面偏移。 */
+export function clipPlaneFromFraction(
+  min: Vec3,
+  max: Vec3,
+  axis: "x" | "y" | "z",
+  fraction: number,
+  invert: boolean,
+): { normal: Vec3; offset: number } {
+  const axisIndex = axis === "x" ? 0 : axis === "y" ? 1 : 2;
+  const sign = invert ? -1 : 1;
+  const normal: Vec3 = [0, 0, 0];
+  normal[axisIndex] = sign;
+  const span = max[axisIndex] - min[axisIndex];
+  const position = min[axisIndex] + Math.min(Math.max(fraction, 0), 1) * span;
+  const offset = normal[axisIndex] * position;
+  return { normal, offset };
+}

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  clipPlaneFromFraction,
   cross,
   type Mat4,
   dot,
@@ -12,6 +13,7 @@ import {
   normalize,
   sub,
 } from "../../../src-web/render/math";
+import type { Vec3 } from "../../../src-web/render/math";
 
 describe("math", () => {
   it("identity leaves points unchanged", () => {
@@ -68,5 +70,20 @@ describe("math", () => {
     expect(lenX).toBeCloseTo(1, 6);
     const lenY = Math.hypot(rotX[4] ?? 0, rotX[5] ?? 0, rotX[6] ?? 0);
     expect(lenY).toBeCloseTo(1, 6);
+  });
+
+  it("clipPlaneFromFraction maps fraction to plane offset along axis", () => {
+    const min: Vec3 = [0, 0, 0];
+    const max: Vec3 = [10, 20, 30];
+    const plane = clipPlaneFromFraction(min, max, "y", 0.25, false);
+    expect(plane.normal).toEqual([0, 1, 0]);
+    expect(plane.offset).toBeCloseTo(5, 9);
+    // 反向：法向翻转，保留另一侧。
+    const inverted = clipPlaneFromFraction(min, max, "y", 0.25, true);
+    expect(inverted.normal).toEqual([0, -1, 0]);
+    expect(inverted.offset).toBeCloseTo(-5, 9);
+    // 分数越界被夹取到 0..1。
+    expect(clipPlaneFromFraction(min, max, "z", 2, false).offset).toBeCloseTo(30, 9);
+    expect(clipPlaneFromFraction(min, max, "z", -1, false).offset).toBeCloseTo(0, 9);
   });
 });

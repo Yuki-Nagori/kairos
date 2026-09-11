@@ -15,6 +15,10 @@ const {
   playLabel,
   fpsText,
   clipOn,
+  clipAxis,
+  clipPosition,
+  clipInvert,
+  applyClip,
   title,
   centerText,
   loadMesh,
@@ -109,6 +113,17 @@ const VIEW_TOOLS = [
         <UiButton :disabled="!meshReady" @click="toggleClip()">
           剖切：{{ clipOn ? "开" : "关" }}
         </UiButton>
+        <template v-if="clipOn">
+          <select v-model="clipAxis" class="text-xs" @change="applyClip()">
+            <option value="x">X</option>
+            <option value="y">Y</option>
+            <option value="z">Z</option>
+          </select>
+          <input v-model.number="clipPosition" type="range" min="0" max="1" step="0.01" />
+          <label class="flex items-center gap-1 text-xs text-zinc-400">
+            <input v-model="clipInvert" type="checkbox" /> 反向
+          </label>
+        </template>
         <p class="text-xs text-zinc-500">{{ fpsText }}</p>
         <p class="text-xs text-zinc-500">点击模型表面：拾取单元加入探针（XY 图表显示数值）</p>
       </div>

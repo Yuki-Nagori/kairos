@@ -1,4 +1,4 @@
-import { mat4Identity, mat4LookAt, mat4Multiply, mat4Perspective, type Vec3 } from "./math";
+import { dot, mat4Identity, mat4LookAt, mat4Multiply, mat4Perspective, type Vec3 } from "./math";
 import type { CameraSnapshot } from "./picking";
 
 /** 垂直视场角：渲染循环与拾取共用同一常量。 */
@@ -101,10 +101,11 @@ uniform float u_valueMin;
 uniform float u_valueMax;
 uniform int u_useField;
 uniform int u_clipEnabled;
-uniform float u_clipY;
+uniform vec3 u_clipNormal;
+uniform float u_clipOffset;
 out vec4 outColor;
 void main() {
-  if (u_clipEnabled == 1 && v_world.y > u_clipY) { discard; }
+  if (u_clipEnabled == 1 && dot(v_world, u_clipNormal) > u_clipOffset) { discard; }
   vec3 n = normalize(v_normal);
   float diff = max(dot(n, normalize(u_lightDir)), 0.0);
   float t = clamp((v_value - u_valueMin) / max(u_valueMax - u_valueMin, 1e-6), 0.0, 1.0);
@@ -155,7 +156,8 @@ export class ViewportRenderer {
   private pitch = 0.4;
   private distance = 3;
   private target: Vec3 = [0, 0, 0];
-  private clipY = 0;
+  private clipNormal: Vec3 = [0, 1, 0];
+  private clipOffset = 0;
 
   private useField = 0;
   private valueMin = 0;
@@ -392,10 +394,35 @@ export class ViewportRenderer {
     this.useField = 0;
   }
 
-  /** 剖切：丢弃 y > clipY 的片段。 */
-  setClip(enabled: boolean, clipY: number): void {
+  /** 剖切：丢弃 dot(p, normal) > offset 的片段（normal 取 ±单位轴向量）。 */
+  setClipPlane(enabled: boolean, normal: Vec3, offset: number): void {
     this.clipEnabled = enabled ? 1 : 0;
-    this.clipY = clipY;
+    this.clipNormal = normal;
+    this.clipOffset = offset;
+  }
+
+  /** 网格包围盒（剖切位置滑块的世界坐标映射）；未载入网格返回 null。 */
+  getMeshBounds(): { min: Vec3; max: Vec3 } | null {
+    if (this.lastMesh === null) {
+      return null;
+    }
+    const { positions } = this.lastMesh;
+    const min: Vec3 = [Infinity, Infinity, Infinity];
+    const max: Vec3 = [-Infinity, -Infinity, -Infinity];
+    for (let i = 0; i < positions.length; i += 3) {
+      for (let axis = 0; axis < 3; axis += 1) {
+        // i + 2 必然在界内（positions 按三顶点成面上传）。
+        const value = positions[i + axis] as number;
+        // 初始化值恒存在（Infinity 哨兵），索引访问按非空处理。
+        if (value < (min[axis] as number)) {
+          min[axis] = value;
+        }
+        if (value > (max[axis] as number)) {
+          max[axis] = value;
+        }
+      }
+    }
+    return { min, max };
   }
 
   resetView(): void {
@@ -572,7 +599,13 @@ export class ViewportRenderer {
     gl.uniform1f(gl.getUniformLocation(this.program, "u_valueMax"), this.valueMax);
     gl.uniform1i(gl.getUniformLocation(this.program, "u_useField"), this.useField);
     gl.uniform1i(gl.getUniformLocation(this.program, "u_clipEnabled"), this.clipEnabled);
-    gl.uniform1f(gl.getUniformLocation(this.program, "u_clipY"), this.clipY);
+    gl.uniform3f(
+      gl.getUniformLocation(this.program, "u_clipNormal"),
+      this.clipNormal[0],
+      this.clipNormal[1],
+      this.clipNormal[2],
+    );
+    gl.uniform1f(gl.getUniformLocation(this.program, "u_clipOffset"), this.clipOffset);
 
     gl.bindVertexArray(this.vao);
     gl.drawElements(gl.TRIANGLES, this.indexCount, this.indexType, 0);
@@ -622,7 +655,9 @@ export class ViewportRenderer {
     const span = Math.max(max - min, 1e-6);
     this.distance = span * 2.5;
     this.target = [min + span / 2, min + span / 2, min + span / 2];
-    this.clipY = min + span / 2;
+    // 视角重置后剖切面回到过包围盒中心（沿当前剖切法向）。
+    const center: Vec3 = [min + span / 2, min + span / 2, min + span / 2];
+    this.clipOffset = dot(center, this.clipNormal);
   }
 }
 
