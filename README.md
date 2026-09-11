@@ -22,6 +22,21 @@ $ cargo run -p kairos-cli -- results list --case-dir kairos-case
 - CFD 求解基座基于 [OpenFOAM](https://openfoam.org)（GPL-3.0）；
 - 注塑求解模块由 [moldingFoam](https://github.com/Yuki-Nagori/moldingFoam) 项目提供（GPL-3.0）。
 
+## 内置材料数据说明
+
+内置参考牌号（PP / ABS / PC / PP-CP / PA66 / POM / PMMA / PA66-GF30 共 8 个）
+的 Cross-WLF 黏度、Tait PVT 与热物性参数为**常见聚合物族的典型量级整理**：
+按各族公开资料中普遍引用的特征温度（熔点 / Tg）、密度、比热与导热范围校准，
+保证物理自洽、可直接驱动仿真流程。
+
+两点边界需要明确：
+
+- 数值是「典型量级」而非某篇可指明文献的逐项摘录，也不是任何商业牌号的
+  实测或厂商拟合数据（后者属厂商专有资产，本项目依 AGENTS.md 约定不引入）；
+- 因此仅供功能演示、教学与量级参考。生产级仿真请使用厂商 datasheet、
+  实测拟合或已授权的商业材料数据库数据，并通过材料面板的 CSV / JSON
+  批量导入替换内置值。
+
 ## 环境要求
 
 - [Bun](https://bun.sh) ≥ 1.2
