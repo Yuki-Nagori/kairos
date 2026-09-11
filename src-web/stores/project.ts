@@ -55,15 +55,10 @@ export const useProjectStore = defineStore("project", {
     /** 新建空项目（仅内存，保存时才落盘）。 */
     async newProject(name: string): Promise<void> {
       const app = useAppStore();
-      app.beginBusy("正在创建项目…");
-      try {
+      await app.withBusy("正在创建项目…", async () => {
         this.project = await createProject(name);
         this.projectPath = null;
-      } catch (error) {
-        app.setError(error);
-      } finally {
-        app.endBusy();
-      }
+      });
     },
     /** 弹出文件对话框选择并打开工程。 */
     async openProject(): Promise<void> {
@@ -75,15 +70,10 @@ export const useProjectStore = defineStore("project", {
     /** 打开指定路径的工程文件。 */
     async openProjectAtPath(path: string): Promise<void> {
       const app = useAppStore();
-      app.beginBusy("正在打开项目…");
-      try {
+      await app.withBusy("正在打开项目…", async () => {
         this.project = await loadProjectFile(path);
         this.projectPath = path;
-      } catch (error) {
-        app.setError(error);
-      } finally {
-        app.endBusy();
-      }
+      });
     },
     /** 保存工程：已有路径直接保存，否则走另存为。 */
     async saveProject(): Promise<void> {
@@ -110,16 +100,11 @@ export const useProjectStore = defineStore("project", {
     /** 落盘 + 刷新最近项目（保存与另存为的公共尾部）。 */
     async writeProject(path: string): Promise<void> {
       const app = useAppStore();
-      app.beginBusy("正在保存项目…");
-      try {
+      await app.withBusy("正在保存项目…", async () => {
         await saveProjectFile(path, this.project!);
         this.projectPath = path;
         await this.refreshRecents();
-      } catch (error) {
-        app.setError(error);
-      } finally {
-        app.endBusy();
-      }
+      });
     },
     /** 刷新最近项目列表（保存/打开后由内部调用）。 */
     async refreshRecents(): Promise<void> {

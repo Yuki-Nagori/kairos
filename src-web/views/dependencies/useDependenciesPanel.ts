@@ -2,12 +2,11 @@
  * 运行时依赖面板：许可分级、就绪状态、应用内下载与官方页引导。
  * 徽标文案与配色正交：许可定颜色（合规口径），安装策略定文案（Gmsh = GPL + 官方直链）。
  */
-import { computed, ref } from "vue";
+import { computed } from "vue";
 import { useAppStore } from "../../stores/app";
 import { useVmStore } from "../../stores/vm";
 import { useDependenciesStore } from "../../stores/dependencies";
 import type { DependencyStatus } from "../../types";
-import { openDownloadsDir } from "../../api/downloads";
 
 /** 单行依赖的展示模型：模板分支与文案集中此处算清，避免模板里重复取值。 */
 interface DependencyRow {
@@ -121,13 +120,11 @@ export function useDependenciesPanel() {
     }),
   );
 
-  // 下载目录路径异步取回，探测前展示占位文案。
-  const downloadsDir = ref("探测中…");
-  void import("../../api/downloads").then(async (m) => {
-    downloadsDir.value = await m.getDownloadsDir();
-  });
+  // 下载目录路径经依赖 store 取回（错误进全局管道），探测前展示占位文案。
+  const downloadsDir = computed(() => deps.downloadsDir ?? "探测中…");
+  void deps.refreshDownloadsDir();
 
   void deps.refreshDependencies();
 
-  return { app, vm, deps, rows, downloadsDir, openDownloadsDir };
+  return { app, vm, deps, rows, downloadsDir, openDownloadsDir: deps.openDownloadsDir };
 }

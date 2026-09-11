@@ -26,15 +26,10 @@ export const useMaterialsStore = defineStore("materials", {
     /** 从 JSON 文件导入自定义材料（importMaterials 的公共尾部）。 */
     async importMaterialsFromPath(path: string): Promise<void> {
       const app = useAppStore();
-      app.beginBusy("正在导入材料…");
-      try {
+      await app.withBusy("正在导入材料…", async () => {
         const custom = await importCustomMaterials(path);
         this.materials = { ...this.materials, custom };
-      } catch (error) {
-        app.setError(error);
-      } finally {
-        app.endBusy();
-      }
+      });
     },
     /** 弹出对话框导入材料。 */
     async importMaterials(): Promise<void> {
@@ -46,27 +41,17 @@ export const useMaterialsStore = defineStore("materials", {
     /** 新增或更新一个自定义材料。 */
     async upsertMaterial(material: Material): Promise<void> {
       const app = useAppStore();
-      app.beginBusy("正在保存材料…");
-      try {
+      await app.withBusy("正在保存材料…", async () => {
         const custom = await upsertCustomMaterial(material);
         this.materials = { ...this.materials, custom };
-      } catch (error) {
-        app.setError(error);
-      } finally {
-        app.endBusy();
-      }
+      });
     },
     async deleteMaterial(id: string): Promise<void> {
       const app = useAppStore();
-      app.beginBusy("正在删除材料…");
-      try {
+      await app.withBusy("正在删除材料…", async () => {
         const custom = await deleteCustomMaterial(id);
         this.materials = { ...this.materials, custom };
-      } catch (error) {
-        app.setError(error);
-      } finally {
-        app.endBusy();
-      }
+      });
     },
     /** 导出全部自定义材料到指定路径（exportMaterials 的公共尾部）。 */
     async exportCustomMaterials(path: string): Promise<void> {
@@ -75,14 +60,9 @@ export const useMaterialsStore = defineStore("materials", {
         app.setError("没有可导出的自定义材料。");
         return;
       }
-      app.beginBusy("正在导出材料…");
-      try {
+      await app.withBusy("正在导出材料…", async () => {
         await exportMaterialsToFile(path, this.materials.custom);
-      } catch (error) {
-        app.setError(error);
-      } finally {
-        app.endBusy();
-      }
+      });
     },
     /** 弹出对话框导出自定义材料。 */
     async exportMaterials(): Promise<void> {

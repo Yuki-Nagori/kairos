@@ -5,6 +5,7 @@ import {
   generateGmshMesh as apiGenerateGmshMesh,
   generateMidplaneMesh as apiGenerateMidplane,
   generateVolumeMesh,
+  getRenderMesh,
   importIges as apiImportIges,
   importSampleBox,
   importStl,
@@ -19,6 +20,7 @@ import type {
   MeshingReport,
   MeshRefinement,
   MidplaneReport,
+  RenderMeshData,
   RepairReport,
 } from "../types";
 import { useAppStore } from "./app";
@@ -45,8 +47,7 @@ export const useGeometryStore = defineStore("geometry", {
       if (!path) {
         return;
       }
-      app.beginBusy("正在导入几何…");
-      try {
+      await app.withBusy("正在导入几何…", async () => {
         const extension = path.split(".").pop()?.toLowerCase();
         const summary =
           extension === "step" || extension === "stp"
@@ -55,11 +56,7 @@ export const useGeometryStore = defineStore("geometry", {
               ? await apiImportIges(path)
               : await importStl(path);
         this.geometries = [...this.geometries, summary];
-      } catch (error) {
-        app.setError(error);
-      } finally {
-        app.endBusy();
-      }
+      });
     },
     /** 从列表与会话缓存移除几何。 */
     async removeGeometryById(geometryId: string): Promise<void> {
@@ -78,15 +75,10 @@ export const useGeometryStore = defineStore("geometry", {
         app.setError("目标网格尺寸必须为正数。");
         return;
       }
-      app.beginBusy("正在生成 Gmsh 网格…");
-      try {
+      await app.withBusy("正在生成 Gmsh 网格…", async () => {
         const report = await apiGenerateGmshMesh(geometryId, targetSize);
         this.meshReports = { ...this.meshReports, [geometryId]: report };
-      } catch (error) {
-        app.setError(error);
-      } finally {
-        app.endBusy();
-      }
+      });
     },
     /** 为几何生成 3D 体积网格（体素 + 5-四面体保形分解），可选分级加密。 */
     async generateMesh(
@@ -99,49 +91,33 @@ export const useGeometryStore = defineStore("geometry", {
         app.setError("目标网格尺寸必须为正数。");
         return;
       }
-      app.beginBusy("正在生成网格…");
-      try {
+      await app.withBusy("正在生成网格…", async () => {
         const report = await generateVolumeMesh(geometryId, targetSize, refinement);
         this.meshReports = { ...this.meshReports, [geometryId]: report };
-      } catch (error) {
-        app.setError(error);
-      } finally {
-        app.endBusy();
-      }
+      });
     },
     /** 为几何生成双域网格：表面厚度配对 + 当前方案杆系（流道/浇口）耦合。 */
     async generateDualDomain(geometryId: string): Promise<void> {
       const app = useAppStore();
       const runners = useProjectStore().activeStudy?.runnerElements ?? [];
-      app.beginBusy("正在生成双域网格…");
-      try {
+      await app.withBusy("正在生成双域网格…", async () => {
         const report = await apiGenerateDualDomain(geometryId, runners);
         this.dualDomainReports = { ...this.dualDomainReports, [geometryId]: report };
-      } catch (error) {
-        app.setError(error);
-      } finally {
-        app.endBusy();
-      }
+      });
     },
     /** 为几何生成中面网格：顶点配对法，杆系梁耦合中面节点。 */
     async generateMidplane(geometryId: string): Promise<void> {
       const app = useAppStore();
       const runners = useProjectStore().activeStudy?.runnerElements ?? [];
-      app.beginBusy("正在生成中面网格…");
-      try {
+      await app.withBusy("正在生成中面网格…", async () => {
         const report = await apiGenerateMidplane(geometryId, runners);
         this.midplaneReports = { ...this.midplaneReports, [geometryId]: report };
-      } catch (error) {
-        app.setError(error);
-      } finally {
-        app.endBusy();
-      }
+      });
     },
     /** 修复几何：焊接 / 去退化 / 填孔 / 一致化，刷新摘要并作废体积网格。 */
     async repairGeometryById(geometryId: string): Promise<void> {
       const app = useAppStore();
-      app.beginBusy("正在修复几何…");
-      try {
+      await app.withBusy("正在修复几何…", async () => {
         const { summary, report } = await apiRepairGeometry(geometryId);
         this.geometries = this.geometries.map((geometry) =>
           geometry.geometryId === geometryId ? summary : geometry,
@@ -157,23 +133,23 @@ export const useGeometryStore = defineStore("geometry", {
         const midplaneReports = { ...this.midplaneReports };
         delete midplaneReports[geometryId];
         this.midplaneReports = midplaneReports;
-      } catch (error) {
-        app.setError(error);
-      } finally {
-        app.endBusy();
-      }
+      });
     },
     /** 导入内置样例立方体（首次使用引导）。 */
     async importSampleGeometry(size = 10): Promise<void> {
       const app = useAppStore();
-      app.beginBusy("正在导入样例…");
-      try {
+      await app.withBusy("正在导入样例…", async () => {
         const summary = await importSampleBox(size);
         this.geometries = [...this.geometries, summary];
+      });
+    },
+    /** 导出视口渲染网格（体积边界面优先，否则 STL 表面）；失败进全局错误。 */
+    async fetchRenderMesh(geometryId: string): Promise<RenderMeshData | undefined> {
+      const app = useAppStore();
+      try {
+        return await getRenderMesh(geometryId);
       } catch (error) {
         app.setError(error);
-      } finally {
-        app.endBusy();
       }
     },
   },

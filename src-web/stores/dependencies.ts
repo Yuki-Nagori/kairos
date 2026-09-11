@@ -5,7 +5,12 @@ import {
   listRuntimeDependencies,
   openDependencyPage as apiOpenDependencyPage,
 } from "../api/dependencies";
-import { downloadComponentFile, listDownloads } from "../api/downloads";
+import {
+  downloadComponentFile,
+  getDownloadsDir,
+  listDownloads,
+  openDownloadsDir as apiOpenDownloadsDir,
+} from "../api/downloads";
 import type {
   ComponentStageState,
   DependencyStatus,
@@ -37,8 +42,28 @@ export const useDependenciesStore = defineStore("dependencies", {
     componentStages: {} as Record<string, ComponentStageState>,
     /** 组件在线更新检查结果（key = 组件 id；重新下载成功后清除）。 */
     updateChecks: {} as Record<string, UpdateCheck>,
+    /** 受管下载目录路径（面板展示「文件存放在哪里」；null = 未取回）。 */
+    downloadsDir: null as string | null,
   }),
   actions: {
+    /** 取下载目录路径（面板启动时触发一次）。 */
+    async refreshDownloadsDir(): Promise<void> {
+      const app = useAppStore();
+      try {
+        this.downloadsDir = await getDownloadsDir();
+      } catch (error) {
+        app.setError(error);
+      }
+    },
+    /** 在系统文件管理器中打开下载目录。 */
+    async openDownloadsDir(): Promise<void> {
+      const app = useAppStore();
+      try {
+        await apiOpenDownloadsDir();
+      } catch (error) {
+        app.setError(error);
+      }
+    },
     /** 刷新运行时依赖就绪状态，并恢复跨会话的「已下载」清单。 */
     async refreshDependencies(): Promise<void> {
       const app = useAppStore();

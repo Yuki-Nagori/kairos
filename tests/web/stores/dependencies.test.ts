@@ -7,7 +7,12 @@ import {
   listRuntimeDependencies,
   openDependencyPage,
 } from "../../../src-web/api/dependencies";
-import { downloadComponentFile, listDownloads } from "../../../src-web/api/downloads";
+import {
+  downloadComponentFile,
+  getDownloadsDir,
+  listDownloads,
+  openDownloadsDir,
+} from "../../../src-web/api/downloads";
 import type { SavedDownload, UpdateCheck } from "../../../src-web/types";
 
 vi.mock("../../../src-web/api/dependencies", () => ({
@@ -216,5 +221,39 @@ describe("dependencies store", () => {
 
     deps.setStage("gmsh", null);
     expect(deps.componentStages.gmsh).toBeUndefined();
+  });
+
+  describe("downloadsDir", () => {
+    it("refreshDownloadsDir 取回目录路径", async () => {
+      vi.mocked(getDownloadsDir).mockResolvedValue("/data/downloads");
+      const deps = useDependenciesStore();
+      await deps.refreshDownloadsDir();
+      expect(deps.downloadsDir).toBe("/data/downloads");
+      expect(useAppStore().error).toBeNull();
+    });
+
+    it("取回失败进全局错误，状态保持 null", async () => {
+      vi.mocked(getDownloadsDir).mockRejectedValue(new Error("目录不可用"));
+      const app = useAppStore();
+      const deps = useDependenciesStore();
+      await deps.refreshDownloadsDir();
+      expect(deps.downloadsDir).toBeNull();
+      expect(app.error?.message).toBe("目录不可用");
+    });
+
+    it("openDownloadsDir 成功无错误", async () => {
+      vi.mocked(openDownloadsDir).mockResolvedValue("/data/downloads");
+      const deps = useDependenciesStore();
+      await deps.openDownloadsDir();
+      expect(useAppStore().error).toBeNull();
+    });
+
+    it("openDownloadsDir 失败进全局错误", async () => {
+      vi.mocked(openDownloadsDir).mockRejectedValue(new Error("无法打开"));
+      const app = useAppStore();
+      const deps = useDependenciesStore();
+      await deps.openDownloadsDir();
+      expect(app.error?.message).toBe("无法打开");
+    });
   });
 });

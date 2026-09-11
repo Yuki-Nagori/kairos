@@ -1,6 +1,6 @@
 /** 求解器 IPC：生成 OpenFOAM case 与运行环境探测。 */
 import { invokeCommand } from "../utils/ipc";
-import type { AnalysisStage, Material, ProcessSettings } from "../types";
+import type { AnalysisStage, EnvironmentCheck, Material, ProcessSettings } from "../types";
 
 interface GenerateCaseInput {
   geometryId: string;
@@ -21,13 +21,6 @@ export function generateOpenfoamCase(input: GenerateCaseInput): Promise<string> 
     stage: input.stage,
     cores: input.cores,
   });
-}
-
-/** OpenFOAM 环境探测结果（solver = foamRun 模块化运行器，11+ 才有）。 */
-interface EnvironmentCheck {
-  openfoam: boolean;
-  solver: boolean;
-  hint: string;
 }
 
 /** 探测 OpenFOAM 运行时是否就绪（工具链 + foamRun 模块化求解器）。 */

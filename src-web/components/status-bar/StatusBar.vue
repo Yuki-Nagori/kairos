@@ -10,7 +10,14 @@ const { vm, status, solveProgress, versionText, shellVisible } = useStatusBar();
   <footer
     class="flex shrink-0 items-center gap-4 border-t border-zinc-800 bg-zinc-900 px-4 py-1.5 select-none"
   >
-    <span class="text-[11px]" :class="status.class">{{ status.text }}</span>
+    <span class="text-[11px]" :class="status.class">
+      <span
+        v-if="status.code"
+        class="mr-1 rounded bg-zinc-800 px-1 font-mono text-[10px] text-zinc-400"
+        >{{ status.code }}</span
+      >{{ status.text }}</span
+    >
+    <span v-if="status.hint" class="text-[11px] text-zinc-500">{{ status.hint }}</span>
     <span v-if="solveProgress" class="text-[11px] tabular-nums text-zinc-400">{{
       solveProgress
     }}</span>

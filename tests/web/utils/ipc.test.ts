@@ -44,4 +44,17 @@ describe("invokeCommand", () => {
     expect(error).not.toBeInstanceOf(CommandError);
     expect((error as Error).message).toContain("42");
   });
+
+  it("preserves all five contract codes on CommandError", async () => {
+    // 错误契约：code ∈ validation / not_found / io / solver / internal（kairos-core error.rs）
+    for (const code of ["validation", "not_found", "io", "solver", "internal"]) {
+      invokeMock.mockRejectedValueOnce({ code, message: `msg-${code}` });
+      const error = (await invokeCommand("system_info").catch(
+        (rejection: unknown) => rejection,
+      )) as CommandError;
+      expect(error).toBeInstanceOf(CommandError);
+      expect(error.code).toBe(code);
+      expect(error.message).toBe(`msg-${code}`);
+    }
+  });
 });

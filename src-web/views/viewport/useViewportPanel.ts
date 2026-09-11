@@ -14,7 +14,6 @@ import { detectRenderCapabilityInBrowser } from "../../render/capability";
 import { registerSnapshot } from "../../render/snapshot";
 import { clipPlaneFromFraction } from "../../render/math";
 import { minMax } from "../../utils/stats";
-import { getRenderMesh } from "../../api/geometry";
 
 interface ViewportSlot {
   id: number;
@@ -306,7 +305,11 @@ export function useViewportPanel() {
     if (first === undefined) {
       return;
     }
-    const data = await getRenderMesh(first.geometryId);
+    // 渲染网格经 geometry store（错误进全局管道）；无数据（失败）则跳过上传。
+    const data = await geometry.fetchRenderMesh(first.geometryId);
+    if (data === undefined) {
+      return;
+    }
     sharedMesh = {
       positions: new Float32Array(data.positions),
       indices: new Uint32Array(data.indices),

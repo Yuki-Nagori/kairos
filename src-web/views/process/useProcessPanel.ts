@@ -6,9 +6,9 @@
  */
 import { reactive, ref, watch } from "vue";
 import { useAppStore } from "../../stores/app";
+import { useProcessStore } from "../../stores/process";
 import { useProjectStore } from "../../stores/project";
 import type { ProcessSettings } from "../../types";
-import { checkProcess } from "../../api/process";
 
 export function useProcessPanel() {
   const PRESETS_KEY = "kairos-process-presets";
@@ -32,6 +32,7 @@ export function useProcessPanel() {
   }
 
   const app = useAppStore();
+  const processStore = useProcessStore();
   const project = useProjectStore();
   const defaults = defaultProcess();
 
@@ -101,23 +102,22 @@ export function useProcessPanel() {
 
   function applyProcess(): void {
     const settings = collectSettings();
-    void checkProcess(settings).then((found) => {
-      issueLines.value = [];
+    // 校验经 process store（check_process 命令），应用经 touchActiveStudy
+    // （不可变更新 + updatedMs 盖章统一走 project store 入口）。
+    void processStore.checkProcess(settings).then((clean) => {
       notice.value = null;
-      if (found.length > 0) {
-        issueLines.value = found;
+      if (!clean) {
+        issueLines.value = [...processStore.issues];
         return;
       }
-      const current = project.project;
-      const activeStudyId = project.activeStudyId;
-      if (current === null || activeStudyId === null) {
+      issueLines.value = [];
+      if (project.project === null || project.activeStudyId === null) {
         notice.value = "请先选择一个研究。";
         return;
       }
-      const studies = current.studies.map((study) =>
-        study.id === activeStudyId ? { ...study, process: settings } : study,
-      );
-      project.project = { ...current, studies, updatedMs: Date.now() };
+      project.touchActiveStudy((study) => {
+        study.process = settings;
+      });
       notice.value = "已应用到当前研究";
     });
   }

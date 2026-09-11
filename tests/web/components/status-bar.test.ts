@@ -54,19 +54,44 @@ describe("StatusBar 左侧状态三态优先级", () => {
     const app = useAppStore();
     app.info = info;
     app.busy = "正在求解…";
-    app.error = { message: "迭代不收敛", info: false };
+    app.error = { message: "迭代不收敛", info: false, code: "solver" };
     const wrapper = mount(StatusBar, { global: { plugins: [pinia] } });
-    expect(wrapper.find("span").text()).toBe("迭代不收敛");
+    // 徽章（code）与消息同处一个状态 span
+    expect(wrapper.find("span").text()).toBe("solver迭代不收敛");
+    expect(wrapper.find("span").classes()).toContain("text-red-400");
   });
 
   it("IPC 提示型错误用中性色而非错误红", () => {
     const app = useAppStore();
     app.info = info;
-    app.error = { message: "未连接 Tauri 运行时", info: true };
+    app.error = { message: "未连接 Tauri 运行时", info: true, code: null };
     const wrapper = mount(StatusBar, { global: { plugins: [pinia] } });
     expect(wrapper.find("span").text()).toBe("未连接 Tauri 运行时");
     expect(wrapper.find("span").classes()).toContain("text-zinc-400");
     expect(wrapper.find("span").classes()).not.toContain("text-red-400");
+  });
+
+  it("错误带 code 时渲染徽章与按 code 的处置提示", () => {
+    const app = useAppStore();
+    app.info = info;
+    app.error = { message: "case 目录复制进虚拟机失败。", info: false, code: "io" };
+    const wrapper = mount(StatusBar, { global: { plugins: [pinia] } });
+    expect(wrapper.text()).toContain("io");
+    expect(wrapper.text()).toContain("case 目录复制进虚拟机失败。");
+    expect(wrapper.text()).toContain("检查依赖与路径后可重试");
+  });
+
+  it("未知 code 不渲染处置提示，忙碌与空闲态无徽章", async () => {
+    const app = useAppStore();
+    app.error = { message: "神秘错误", info: false, code: "future_code" };
+    const wrapper = mount(StatusBar, { global: { plugins: [pinia] } });
+    expect(wrapper.text()).toContain("神秘错误");
+    expect(wrapper.text()).not.toContain("请修正参数后重试");
+
+    app.error = null;
+    app.busy = "正在求解…";
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find("span").text()).toBe("正在求解…");
   });
 
   it("尚未拿到 system info 时右侧不渲染版本", () => {

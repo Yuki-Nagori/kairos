@@ -1,6 +1,5 @@
 /** 求解作业面板：列表、提交与取消（并发预算由调度器控制）。 */
-import { ref } from "vue";
-import { probeOpenfoam } from "../../api/solver";
+import { computed, ref } from "vue";
 import { useAppStore } from "../../stores/app";
 import { useJobsStore } from "../../stores/jobs";
 import type { Job } from "../../types";
@@ -36,12 +35,15 @@ export function useJobsPanel() {
     void jobsStore.submitJob(dir, Number(cores.value) || 2);
   }
 
-  // 环境探测行：探测完成后 className 整体替换（不再带 text-xs），是有意行为。
-  const envHint = ref("正在探测 OpenFOAM 环境…");
-  const envClass = ref("text-xs text-zinc-500");
-  void probeOpenfoam().then((check) => {
-    envHint.value = check.hint;
-    envClass.value = check.openfoam && check.solver ? "text-emerald-400" : "text-amber-400";
+  // 环境探测行：探测经 jobs store（错误进全局管道），完成后整体替换样式。
+  void jobsStore.probeOpenfoam();
+  const envHint = computed(() => jobsStore.envCheck?.hint ?? "正在探测 OpenFOAM 环境…");
+  const envClass = computed(() => {
+    const check = jobsStore.envCheck;
+    if (!check) {
+      return "text-xs text-zinc-500";
+    }
+    return check.openfoam && check.solver ? "text-emerald-400" : "text-amber-400";
   });
 
   function jobLogsTail(jobId: string): string[] {

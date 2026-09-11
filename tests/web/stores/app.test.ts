@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
-import { IpcUnavailableError } from "../../../src-web/utils/ipc";
+import { CommandError, IpcUnavailableError } from "../../../src-web/utils/ipc";
 import { useAppStore } from "../../../src-web/stores/app";
 
 describe("app store", () => {
@@ -25,6 +25,14 @@ describe("app store", () => {
       app.setError(new Error("boom"));
       expect(app.error?.info).toBe(false);
       expect(app.error?.message).toBe("boom");
+      expect(app.error?.code).toBeNull();
+    });
+
+    it("keeps the contract code of CommandError for code-based branching", () => {
+      const app = useAppStore();
+      app.setError(new CommandError("io", "读取文件失败"));
+      expect(app.error?.code).toBe("io");
+      expect(app.error?.info).toBe(false);
     });
 
     it("accepts plain string failures", () => {
@@ -87,6 +95,34 @@ describe("app store", () => {
       expect(app.error).toBeNull();
       app.endBusy();
       expect(app.busy).toBeNull();
+    });
+  });
+
+  describe("withBusy", () => {
+    it("wraps a successful run: busy lifecycle plus transparent return value", async () => {
+      const app = useAppStore();
+      const result = await app.withBusy("正在计算…", async () => 42);
+      expect(result).toBe(42);
+      expect(app.busy).toBeNull();
+      expect(app.error).toBeNull();
+    });
+
+    it("routes failures into the global error state and returns undefined", async () => {
+      const app = useAppStore();
+      const result = await app.withBusy("正在计算…", async () => {
+        throw new Error("计算失败");
+      });
+      expect(result).toBeUndefined();
+      expect(app.busy).toBeNull();
+      expect(app.error?.message).toBe("计算失败");
+    });
+
+    it("clears the previous error when entering busy (beginBusy semantics)", async () => {
+      const app = useAppStore();
+      app.setError("上次的错误");
+      await app.withBusy("正在计算…", async () => undefined);
+      // withBusy 结束后错误仍为空（过程中无新错误）
+      expect(app.error).toBeNull();
     });
   });
 });

@@ -8,6 +8,7 @@ import {
   generateGmshMesh,
   generateMidplaneMesh,
   generateVolumeMesh,
+  getRenderMesh,
   importIges,
   importSampleBox,
   importStl,
@@ -36,6 +37,7 @@ vi.mock("../../../src-web/api/geometry", () => ({
   generateGmshMesh: vi.fn(),
   generateDualDomainMesh: vi.fn(),
   generateMidplaneMesh: vi.fn(),
+  getRenderMesh: vi.fn(),
 }));
 vi.mock("../../../src-web/api/dialog", () => ({
   pickOpenProjectPath: vi.fn(),
@@ -193,6 +195,25 @@ describe("geometry store", () => {
       expect(app.error?.message).toBe("STL 解析失败");
       expect(geometry.geometries).toEqual([]);
       expect(app.busy).toBeNull();
+    });
+  });
+
+  describe("fetchRenderMesh", () => {
+    it("透传渲染网格数据", async () => {
+      const data = { positions: [0, 0, 0], indices: [0, 1, 2], faceCells: [0] };
+      vi.mocked(getRenderMesh).mockResolvedValue(data);
+      const geometry = useGeometryStore();
+      await expect(geometry.fetchRenderMesh("g-1")).resolves.toEqual(data);
+      expect(getRenderMesh).toHaveBeenCalledWith("g-1");
+      expect(useAppStore().error).toBeNull();
+    });
+
+    it("失败进全局错误并返回 undefined", async () => {
+      vi.mocked(getRenderMesh).mockRejectedValue(new Error("几何不存在"));
+      const app = useAppStore();
+      const geometry = useGeometryStore();
+      await expect(geometry.fetchRenderMesh("g-x")).resolves.toBeUndefined();
+      expect(app.error?.message).toBe("几何不存在");
     });
   });
 
