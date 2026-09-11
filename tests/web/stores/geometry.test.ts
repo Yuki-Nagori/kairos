@@ -459,7 +459,7 @@ describe("geometry store", () => {
       });
       await geometry.generateMesh("g-1", 2);
 
-      expect(generateVolumeMesh).toHaveBeenCalledWith("g-1", 2);
+      expect(generateVolumeMesh).toHaveBeenCalledWith("g-1", 2, undefined);
       expect(geometry.meshReports["g-1"]).toEqual(report);
       expect(busyDuring).toEqual(["正在生成网格…"]);
       expect(app.busy).toBeNull();
@@ -475,6 +475,19 @@ describe("geometry store", () => {
       expect(app.error?.message).toBe("网格生成失败");
       expect(geometry.meshReports["g-1"]).toBeUndefined();
       expect(app.busy).toBeNull();
+    });
+
+    it("passes refinement option through to the IPC layer", async () => {
+      vi.mocked(generateVolumeMesh).mockResolvedValue(makeReport());
+      const geometry = useGeometryStore();
+
+      await geometry.generateMesh("g-1", 2, { mode: "boundaryLayers", layers: 2, ratio: 0.5 });
+
+      expect(generateVolumeMesh).toHaveBeenCalledWith("g-1", 2, {
+        mode: "boundaryLayers",
+        layers: 2,
+        ratio: 0.5,
+      });
     });
   });
 

@@ -233,7 +233,10 @@ $EndElements
         let _ = mesh; // 体素网格 → msh → 解析回读
         let volume = crate::services::meshing::generate(
             &mesh,
-            &crate::services::meshing::VolumeMeshParams { target_size: 0.5 },
+            &crate::services::meshing::VolumeMeshParams {
+                refinement: None,
+                target_size: 0.5,
+            },
         )
         .unwrap();
         let roundtrip = from_volume_mesh(&volume, "roundtrip").unwrap();

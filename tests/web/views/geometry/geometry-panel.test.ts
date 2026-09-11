@@ -226,11 +226,29 @@ describe("GeometryPanel", () => {
     await findButton(wrapper, "生成体积网格").trigger("click");
     await flushPromises();
 
-    expect(generateVolumeMesh).toHaveBeenCalledWith("geo-1", 2.5);
+    expect(generateVolumeMesh).toHaveBeenCalledWith("geo-1", 2.5, undefined);
     expect(geometry.meshReports["geo-1"]).toBeDefined();
     expect(wrapper.text()).toContain(
       "节点 8 · 四面体 12 · 表面 6 · 体积 1000.000 · 质量比 min 0.70 / avg 0.85 / max 0.99",
     );
+  });
+
+  it("体素引擎填写边界层数后透传分级加密选项", async () => {
+    const geometry = useGeometryStore();
+    geometry.geometries = [geometryFixture()];
+    vi.mocked(generateVolumeMesh).mockResolvedValue(meshReportFixture());
+    const wrapper = mount(GeometryPanel, { global: { plugins: [pinia] } });
+
+    const layersInput = wrapper.findAll("input")[1]!;
+    await layersInput.setValue("2");
+    await findButton(wrapper, "生成体积网格").trigger("click");
+    await flushPromises();
+
+    expect(generateVolumeMesh).toHaveBeenCalledWith("geo-1", 1.5, {
+      mode: "boundaryLayers",
+      layers: 2,
+      ratio: 0.5,
+    });
   });
 
   it("切换 Gmsh 引擎后按引擎分派生成", async () => {

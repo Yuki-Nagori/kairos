@@ -13,7 +13,13 @@ import {
   repairGeometry as apiRepairGeometry,
 } from "../api/geometry";
 import { pickOpenGeometryPath } from "../api/dialog";
-import type { DualDomainReport, GeometrySummary, MeshingReport, MidplaneReport } from "../types";
+import type {
+  DualDomainReport,
+  GeometrySummary,
+  MeshingReport,
+  MeshRefinement,
+  MidplaneReport,
+} from "../types";
 import { useAppStore } from "./app";
 import { useProjectStore } from "./project";
 
@@ -79,8 +85,12 @@ export const useGeometryStore = defineStore("geometry", {
         app.endBusy();
       }
     },
-    /** 为几何生成 3D 体积网格（体素 + 5-四面体保形分解）。 */
-    async generateMesh(geometryId: string, targetSize: number): Promise<void> {
+    /** 为几何生成 3D 体积网格（体素 + 5-四面体保形分解），可选分级加密。 */
+    async generateMesh(
+      geometryId: string,
+      targetSize: number,
+      refinement?: MeshRefinement,
+    ): Promise<void> {
       const app = useAppStore();
       if (!(targetSize > 0)) {
         app.setError("目标网格尺寸必须为正数。");
@@ -88,7 +98,7 @@ export const useGeometryStore = defineStore("geometry", {
       }
       app.beginBusy("正在生成网格…");
       try {
-        const report = await generateVolumeMesh(geometryId, targetSize);
+        const report = await generateVolumeMesh(geometryId, targetSize, refinement);
         this.meshReports = { ...this.meshReports, [geometryId]: report };
       } catch (error) {
         app.setError(error);

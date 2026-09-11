@@ -326,7 +326,10 @@ fn meshing_rejects_target_size_that_yields_no_voxels() {
     triangles.extend(shifted.triangles);
     let hollow = TriangleMesh { triangles };
 
-    let params = meshing::VolumeMeshParams { target_size: 5.0 };
+    let params = meshing::VolumeMeshParams {
+        refinement: None,
+        target_size: 5.0,
+    };
     let error = meshing::generate(&hollow, &params).unwrap_err();
     assert!(error.message().contains("未生成任何体素"));
 }
@@ -528,7 +531,10 @@ fn runner_check_flags_nan_coordinates() {
 fn generate_case_reports_write_failure_when_target_is_directory() {
     let dir = std::env::temp_dir().join(format!("kairos-case-{}", std::process::id()));
     std::fs::create_dir_all(dir.join("system").join("fvSchemes")).unwrap();
-    let params = meshing::VolumeMeshParams { target_size: 2.5 };
+    let params = meshing::VolumeMeshParams {
+        refinement: None,
+        target_size: 2.5,
+    };
     let volume_mesh = meshing::generate(&sample_mesh(), &params).unwrap();
     let error = openfoam::generate_case(
         &dir,
@@ -547,7 +553,10 @@ fn generate_case_reports_write_failure_when_target_is_directory() {
 fn generate_case_reports_write_failure_at_constant_dictionaries() {
     // 逐个把 constant 下的字典文件预埋成目录，验证各 write()? 的失败传播：
     // momentumTransport / physicalProperties.melt / physicalProperties.air。
-    let params = meshing::VolumeMeshParams { target_size: 2.5 };
+    let params = meshing::VolumeMeshParams {
+        refinement: None,
+        target_size: 2.5,
+    };
     let volume_mesh = meshing::generate(&sample_mesh(), &params).unwrap();
     for target in [
         "constant/momentumTransport",

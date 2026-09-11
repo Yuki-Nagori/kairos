@@ -4,6 +4,7 @@ import type {
   DualDomainReport,
   GeometrySummary,
   MeshingReport,
+  MeshRefinement,
   MidplaneReport,
   RunnerElement,
 } from "../types";
@@ -18,9 +19,13 @@ export function removeGeometry(geometryId: string): Promise<void> {
   return invokeCommand("remove_geometry", { geometryId });
 }
 
-/** 对已导入几何生成 3D 体积网格，返回统计报告。 */
-export function generateVolumeMesh(geometryId: string, targetSize: number): Promise<MeshingReport> {
-  return invokeCommand("generate_volume_mesh", { geometryId, targetSize });
+/** 对已导入几何生成 3D 体积网格，返回统计报告。refinement 仅体素引擎支持。 */
+export function generateVolumeMesh(
+  geometryId: string,
+  targetSize: number,
+  refinement?: MeshRefinement,
+): Promise<MeshingReport> {
+  return invokeCommand("generate_volume_mesh", { geometryId, targetSize, refinement });
 }
 
 /** 导入内置样例立方体（首次使用引导）。 */

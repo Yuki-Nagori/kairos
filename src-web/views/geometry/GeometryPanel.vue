@@ -67,6 +67,16 @@ const {
             <option value="voxel">体素</option>
             <option value="gmsh">Gmsh</option>
           </select>
+          <TextInput
+            v-if="row.form.engine === 'voxel'"
+            v-model="row.form.boundaryLayers"
+            type="number"
+            placeholder="边界层数"
+            class="w-24"
+            step="1"
+            min="1"
+            max="4"
+          />
           <UiButton :disabled="working" @click="generate(row.geometry)">生成体积网格</UiButton>
           <UiButton
             :disabled="working"

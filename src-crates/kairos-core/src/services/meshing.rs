@@ -3,25 +3,29 @@
 //! v1 策略（对接 OpenFOAM 的 3D 求解）：
 //! 1. 沿 x 轴做射线奇偶测试标记体内体素（扫描线按行求交，复杂度 O(行数 × 三角形)）；
 //! 2. 每个体素按角点奇偶性选择「偶角点」或「奇角点」四面体 + 体心切成 5 个四面体，
-//!    相邻体素共享面上的对角线自动一致（标准保形分解）；
+//!    相邻体素共享面上的对角线由全局索引奇偶决定，与单元尺寸无关——
+//!    因此非均匀（分级）体素网格同样保形（标准保形分解的推广）；
 //! 3. 只出现一次的四面体面即边界面。
 //!
-//! 局部加密与边界层尚未实现（见任务 T06 说明）。
+//! 分级加密（T43）：边界层模式沿三轴在包围盒面附近聚集单元；
+//! 区域模式对与区域盒相交的轴区间逐级对半细分。过渡单元各向异性，
+//! 质量指标在报告中如实呈现。
 
 use std::collections::HashMap;
 
 use crate::error::{KairosError, Result};
 use crate::models::geometry::TriangleMesh;
-use crate::models::mesh::{MeshQuality, MeshingReport, VolumeMesh};
+use crate::models::mesh::{MeshQuality, MeshRefinement, MeshingReport, VolumeMesh};
 
 /// 单轴最大体素数与总体素上限：防御性上限，避免误填尺寸导致内存爆炸。
 const MAX_CELLS_PER_AXIS: usize = 200;
 const MAX_TOTAL_CELLS: usize = 2_000_000;
 
-/// 网格化参数（v1）：目标体素尺寸（与几何同单位）。
-#[derive(Debug, Clone, Copy, PartialEq)]
+/// 网格化参数：目标体素尺寸（与几何同单位）+ 可选分级加密。
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct VolumeMeshParams {
     pub target_size: f64,
+    pub refinement: Option<MeshRefinement>,
 }
 
 impl VolumeMeshParams {
@@ -29,7 +33,36 @@ impl VolumeMeshParams {
         if !self.target_size.is_finite() || self.target_size <= 0.0 {
             return Err(KairosError::validation("目标网格尺寸必须为正数。"));
         }
-        Ok(())
+        match self.refinement {
+            None => Ok(()),
+            Some(MeshRefinement::BoundaryLayers { layers, ratio }) => {
+                if layers == 0 || layers > 4 {
+                    return Err(KairosError::validation("边界层层数必须在 1..=4 之间。"));
+                }
+                if !ratio.is_finite() || !(0.2..=0.9).contains(&ratio) {
+                    return Err(KairosError::validation(
+                        "边界层宽度比必须在 0.2..=0.9 之间。",
+                    ));
+                }
+                Ok(())
+            }
+            Some(MeshRefinement::Region { region, levels }) => {
+                if levels == 0 || levels > 2 {
+                    return Err(KairosError::validation("区域加密级数必须在 1..=2 之间。"));
+                }
+                if region
+                    .min
+                    .iter()
+                    .zip(region.max.iter())
+                    .any(|(lo, hi)| lo > hi)
+                {
+                    return Err(KairosError::validation(
+                        "加密区域包围盒无效：min 分量不得大于 max 分量。",
+                    ));
+                }
+                Ok(())
+            }
+        }
     }
 }
 
@@ -44,37 +77,51 @@ pub fn generate(mesh: &TriangleMesh, params: &VolumeMeshParams) -> Result<Volume
         ));
     }
     let h = params.target_size;
-    let counts: Vec<usize> = size
+    let base_counts: Vec<usize> = size
         .iter()
         .map(|s| (*s / h).ceil() as usize)
         .map(|n| n.clamp(1, MAX_CELLS_PER_AXIS))
         .collect();
+
+    // 各轴坐标线：默认均匀；按加密选项做边界层 / 区域细分。
+    let axes: Vec<Vec<f64>> = (0..3)
+        .map(|axis| match params.refinement {
+            None => uniform_axis(min[axis], size[axis], base_counts[axis]),
+            Some(MeshRefinement::BoundaryLayers { layers, ratio }) => {
+                boundary_layer_axis(min[axis], size[axis], base_counts[axis], layers, ratio)
+            }
+            Some(MeshRefinement::Region { region, levels }) => refined_axis(
+                min[axis],
+                size[axis],
+                base_counts[axis],
+                region.min[axis],
+                region.max[axis],
+                levels,
+            ),
+        })
+        .collect();
+    let counts: Vec<usize> = axes.iter().map(|coords| coords.len() - 1).collect();
     if counts[0] * counts[1] * counts[2] > MAX_TOTAL_CELLS {
         return Err(KairosError::validation(format!(
             "目标尺寸过小：体素数超过上限 {MAX_TOTAL_CELLS}，请调大目标网格尺寸。"
         )));
     }
-    // 夹取后的实际步长（各轴独立，保证覆盖整个包围盒）。
-    let hs = [
-        size[0] / counts[0] as f64,
-        size[1] / counts[1] as f64,
-        size[2] / counts[2] as f64,
-    ];
 
     // 扫描线：对每一行 (y, z) 求射线交点并标记内部体素。
     let mut inside: Vec<Vec<bool>> = Vec::with_capacity(counts[1] * counts[2]);
     for j in 0..counts[1] {
         for k in 0..counts[2] {
+            let hy = axes[1][j + 1] - axes[1][j];
             // 轻微抖动 y，避免射线恰好穿过三角形边的歧义。
-            let jitter = (k as f64 + 0.5) * hs[1] * 1e-6;
-            let y = min[1] + (j as f64 + 0.5) * hs[1] + jitter;
-            let z = min[2] + (k as f64 + 0.5) * hs[2];
+            let jitter = hy * 1e-6;
+            let y = (axes[1][j] + axes[1][j + 1]) * 0.5 + jitter;
+            let z = (axes[2][k] + axes[2][k + 1]) * 0.5;
             let crossings = row_crossings(mesh, y, z);
-            inside.push(fill_row(&crossings, min[0], hs[0], counts[0]));
+            inside.push(fill_row(&crossings, &axes[0]));
         }
     }
 
-    let mut builder = TetBuilder::new(min, hs);
+    let mut builder = TetBuilder::new([axes[0].clone(), axes[1].clone(), axes[2].clone()]);
     // 行主序展开：cell_index = i + nx × (k + nz × j)
     for (row_index, row) in inside.iter().enumerate() {
         let j = row_index / counts[2];
@@ -95,20 +142,94 @@ pub fn generate(mesh: &TriangleMesh, params: &VolumeMeshParams) -> Result<Volume
     Ok(volume_mesh)
 }
 
-/// 体素 → 5 四面体的构建器：节点按网格角点 / 体心去重。
+/// 均匀轴坐标线（count 个区间，count+1 条线）。
+fn uniform_axis(min: f64, size: f64, count: usize) -> Vec<f64> {
+    let step = size / count as f64;
+    (0..=count).map(|i| min + i as f64 * step).collect()
+}
+
+/// 边界层轴坐标线：两端各 layers 层按 ratio 几何变薄，中部等宽，
+/// 总长归一化到轴长。
+fn boundary_layer_axis(min: f64, size: f64, count: usize, layers: u32, ratio: f64) -> Vec<f64> {
+    let weight = |i: usize| -> f64 {
+        // 距最近端点的层数（封顶 layers）：越靠端越薄。
+        let from_edge = i.min(count - 1 - i).min(layers as usize);
+        ratio.powi((layers as usize - from_edge) as i32)
+    };
+    let weights: Vec<f64> = (0..count).map(weight).collect();
+    graded_axis_from_weights(min, size, weights)
+}
+
+/// 区域轴坐标线：与区域相交的基础区间按 levels 逐级对半细分。
+fn refined_axis(
+    min: f64,
+    size: f64,
+    count: usize,
+    region_min: f64,
+    region_max: f64,
+    levels: u32,
+) -> Vec<f64> {
+    let step = size / count as f64;
+    let mut coords = vec![min];
+    for i in 0..count {
+        let start = min + i as f64 * step;
+        subdivided_interval(
+            start,
+            start + step,
+            region_min,
+            region_max,
+            levels,
+            &mut coords,
+        );
+    }
+    coords
+}
+
+/// 递归细分与区域相交的区间，把生成的坐标线追加到 coords（升序）。
+fn subdivided_interval(
+    start: f64,
+    end: f64,
+    region_min: f64,
+    region_max: f64,
+    remaining: u32,
+    coords: &mut Vec<f64>,
+) {
+    let intersects = start < region_max && end > region_min;
+    if remaining == 0 || !intersects {
+        coords.push(end);
+        return;
+    }
+    let middle = (start + end) * 0.5;
+    subdivided_interval(start, middle, region_min, region_max, remaining - 1, coords);
+    subdivided_interval(middle, end, region_min, region_max, remaining - 1, coords);
+}
+
+/// 按权重（区间宽度比例）生成归一化轴坐标线。
+fn graded_axis_from_weights(min: f64, size: f64, weights: Vec<f64>) -> Vec<f64> {
+    let total: f64 = weights.iter().sum();
+    let mut coords = vec![min];
+    let mut traveled = 0.0f64;
+    for weight in &weights {
+        traveled += weight / total * size;
+        coords.push(min + traveled);
+    }
+    let last = coords.len() - 1;
+    coords[last] = min + size;
+    coords
+}
+
+/// 体素 → 5 四面体的构建器：节点按网格角点（非均匀坐标）去重。
 struct TetBuilder {
-    min: [f64; 3],
-    hs: [f64; 3],
+    axes: [Vec<f64>; 3],
     node_map: HashMap<(usize, usize, usize), usize>,
     nodes: Vec<[f64; 3]>,
     tets: Vec<[usize; 4]>,
 }
 
 impl TetBuilder {
-    fn new(min: [f64; 3], hs: [f64; 3]) -> Self {
+    fn new(axes: [Vec<f64>; 3]) -> Self {
         Self {
-            min,
-            hs,
+            axes,
             node_map: HashMap::new(),
             nodes: Vec::new(),
             tets: Vec::new(),
@@ -117,11 +238,8 @@ impl TetBuilder {
 
     fn node(&mut self, i: usize, j: usize, k: usize) -> usize {
         *self.node_map.entry((i, j, k)).or_insert_with(|| {
-            self.nodes.push([
-                self.min[0] + i as f64 * self.hs[0],
-                self.min[1] + j as f64 * self.hs[1],
-                self.min[2] + k as f64 * self.hs[2],
-            ]);
+            self.nodes
+                .push([self.axes[0][i], self.axes[1][j], self.axes[2][k]]);
             self.nodes.len() - 1
         })
     }
@@ -261,12 +379,12 @@ fn row_crossings(mesh: &TriangleMesh, y: f64, z: f64) -> Vec<f64> {
 }
 
 /// 按奇偶规则把交点区间翻译成该行的内部体素标记。
-fn fill_row(crossings: &[f64], x_min: f64, h: f64, count: usize) -> Vec<bool> {
-    let mut row = vec![false; count];
+fn fill_row(crossings: &[f64], axis: &[f64]) -> Vec<bool> {
+    let mut row = vec![false; axis.len() - 1];
     let mut inside = false;
     let mut next = 0usize;
     for (i, row_cell) in row.iter_mut().enumerate() {
-        let center = x_min + (i as f64 + 0.5) * h;
+        let center = (axis[i] + axis[i + 1]) * 0.5;
         while next < crossings.len() && crossings[next] < center {
             next += 1;
             inside = !inside;
@@ -369,14 +487,42 @@ mod tests {
 
     #[test]
     fn params_must_be_positive() {
-        assert!(VolumeMeshParams { target_size: 0.0 }.validate().is_err());
-        assert!(VolumeMeshParams { target_size: -1.0 }.validate().is_err());
-        assert!(VolumeMeshParams { target_size: 0.25 }.validate().is_ok());
+        assert!(
+            VolumeMeshParams {
+                refinement: None,
+                target_size: 0.0
+            }
+            .validate()
+            .is_err()
+        );
+        assert!(
+            VolumeMeshParams {
+                refinement: None,
+                target_size: -1.0
+            }
+            .validate()
+            .is_err()
+        );
+        assert!(
+            VolumeMeshParams {
+                refinement: None,
+                target_size: 0.25
+            }
+            .validate()
+            .is_ok()
+        );
     }
 
     #[test]
     fn unit_cube_voxelize_volume_and_conformity() {
-        let volume = generate(&unit_cube_mesh(), &VolumeMeshParams { target_size: 0.25 }).unwrap();
+        let volume = generate(
+            &unit_cube_mesh(),
+            &VolumeMeshParams {
+                refinement: None,
+                target_size: 0.25,
+            },
+        )
+        .unwrap();
         let report = report(&volume);
         // 4×4×4 全内部：体积精确等于 1
         assert!(
@@ -394,7 +540,14 @@ mod tests {
 
     #[test]
     fn tet_faces_are_conforming() {
-        let volume = generate(&unit_cube_mesh(), &VolumeMeshParams { target_size: 0.34 }).unwrap();
+        let volume = generate(
+            &unit_cube_mesh(),
+            &VolumeMeshParams {
+                refinement: None,
+                target_size: 0.34,
+            },
+        )
+        .unwrap();
         let mut face_count: HashMap<[usize; 3], usize> = HashMap::new();
         for tet in &volume.tets {
             for face in [
@@ -415,16 +568,50 @@ mod tests {
     #[test]
     fn rejects_degenerate_bounds_and_huge_grids() {
         let empty = TriangleMesh::default();
-        assert!(generate(&empty, &VolumeMeshParams { target_size: 0.1 }).is_err());
+        assert!(
+            generate(
+                &empty,
+                &VolumeMeshParams {
+                    refinement: None,
+                    target_size: 0.1
+                }
+            )
+            .is_err()
+        );
         let mesh = unit_cube_mesh();
-        assert!(generate(&mesh, &VolumeMeshParams { target_size: 0.0 }).is_err());
+        assert!(
+            generate(
+                &mesh,
+                &VolumeMeshParams {
+                    refinement: None,
+                    target_size: 0.0
+                }
+            )
+            .is_err()
+        );
         // 目标尺寸极小 → 触发总体素上限错误，不 panic、不爆内存
-        assert!(generate(&mesh, &VolumeMeshParams { target_size: 1e-9 }).is_err());
+        assert!(
+            generate(
+                &mesh,
+                &VolumeMeshParams {
+                    refinement: None,
+                    target_size: 1e-9
+                }
+            )
+            .is_err()
+        );
     }
 
     #[test]
     fn report_counts_nodes_and_surface() {
-        let volume = generate(&unit_cube_mesh(), &VolumeMeshParams { target_size: 0.5 }).unwrap();
+        let volume = generate(
+            &unit_cube_mesh(),
+            &VolumeMeshParams {
+                refinement: None,
+                target_size: 0.5,
+            },
+        )
+        .unwrap();
         let report = report(&volume);
         // 纯角点 5-四面体分解：2×2×2 体素使用全部 3³ = 27 个网格角点
         assert_eq!(report.node_count, 27);
@@ -434,5 +621,165 @@ mod tests {
             "total={}",
             report.total_volume
         );
+    }
+
+    #[test]
+    fn params_validate_refinement_options() {
+        let bad_layers = VolumeMeshParams {
+            refinement: Some(MeshRefinement::BoundaryLayers {
+                layers: 5,
+                ratio: 0.5,
+            }),
+            target_size: 1.0,
+        };
+        assert!(bad_layers.validate().is_err());
+        let bad_ratio = VolumeMeshParams {
+            refinement: Some(MeshRefinement::BoundaryLayers {
+                layers: 2,
+                ratio: 1.0,
+            }),
+            target_size: 1.0,
+        };
+        assert!(bad_ratio.validate().is_err());
+        let bad_region = VolumeMeshParams {
+            refinement: Some(MeshRefinement::Region {
+                region: crate::models::mesh::RefineRegion {
+                    min: [1., 0., 0.],
+                    max: [0., 1., 1.],
+                },
+                levels: 1,
+            }),
+            target_size: 1.0,
+        };
+        assert!(bad_region.validate().is_err());
+        let bad_levels = VolumeMeshParams {
+            refinement: Some(MeshRefinement::Region {
+                region: crate::models::mesh::RefineRegion {
+                    min: [0.; 3],
+                    max: [1.; 3],
+                },
+                levels: 3,
+            }),
+            target_size: 1.0,
+        };
+        assert!(bad_levels.validate().is_err());
+        let ok = VolumeMeshParams {
+            refinement: Some(MeshRefinement::BoundaryLayers {
+                layers: 2,
+                ratio: 0.5,
+            }),
+            target_size: 1.0,
+        };
+        assert!(ok.validate().is_ok());
+    }
+
+    #[test]
+    fn boundary_layer_axis_thins_cells_near_both_ends() {
+        let coords = boundary_layer_axis(0.0, 10.0, 6, 2, 0.5);
+        assert_eq!(coords.first(), Some(&0.0));
+        assert_eq!(coords.last(), Some(&10.0));
+        let widths: Vec<f64> = coords.windows(2).map(|pair| pair[1] - pair[0]).collect();
+        // 端部层薄、中部厚，两端对称。
+        assert!(widths[0] < widths[3]);
+        assert!(widths[5] < widths[3]);
+        // 顺序累加引入低阶舍入，对称性按宽松容差断言。
+        assert!((widths[0] - widths[5]).abs() < 1e-9);
+        assert!((widths[1] - widths[4]).abs() < 1e-9);
+        assert!((widths.iter().sum::<f64>() - 10.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn refined_axis_splits_only_intervals_touching_region() {
+        // 基础线 0,2.5,5,7.5,10；区域 [4,6]：(2.5,5) 与 (5,7.5) 各细分一级。
+        let coords = refined_axis(0.0, 10.0, 4, 4.0, 6.0, 1);
+        assert_eq!(coords, vec![0.0, 2.5, 3.75, 5.0, 6.25, 7.5, 10.0]);
+        // 不相交区域：坐标退化为均匀。
+        let plain = refined_axis(0.0, 10.0, 4, 100.0, 200.0, 2);
+        assert_eq!(plain, vec![0.0, 2.5, 5.0, 7.5, 10.0]);
+    }
+
+    #[test]
+    fn subdivided_interval_recurses_only_inside_region() {
+        let mut coords = Vec::new();
+        subdivided_interval(0.0, 4.0, 1.0, 3.0, 2, &mut coords);
+        // (0,4) 相交细分：(0,1)/(3,4) 不相交直接落点，(1,2)/(2,3) 相交继续细分。
+        assert_eq!(coords, vec![1.0, 2.0, 3.0, 4.0]);
+    }
+
+    #[test]
+    fn region_refinement_keeps_volume_and_conformity() {
+        let mesh = TriangleMesh::sample_box(10.0);
+        let plain = generate(
+            &mesh,
+            &VolumeMeshParams {
+                refinement: None,
+                target_size: 2.5,
+            },
+        )
+        .unwrap();
+        let refined = generate(
+            &mesh,
+            &VolumeMeshParams {
+                refinement: Some(MeshRefinement::Region {
+                    region: crate::models::mesh::RefineRegion {
+                        min: [4.; 3],
+                        max: [6.; 3],
+                    },
+                    levels: 1,
+                }),
+                target_size: 2.5,
+            },
+        )
+        .unwrap();
+        // 区域加密产生更多单元，体积不变（体素剖分覆盖满包围盒内的体）。
+        assert!(refined.tets.len() > plain.tets.len());
+        let plain_report = report(&plain);
+        let refined_report = report(&refined);
+        assert!((plain_report.total_volume - refined_report.total_volume).abs() < 1e-6);
+        assert!((refined_report.total_volume - 1000.0).abs() < 1e-6);
+        // 保形：不存在被 3 个以上四面体共享的面。
+        let mut counts: HashMap<[usize; 3], usize> = HashMap::new();
+        for tet in &refined.tets {
+            for face in [
+                [tet[0], tet[1], tet[2]],
+                [tet[0], tet[1], tet[3]],
+                [tet[0], tet[2], tet[3]],
+                [tet[1], tet[2], tet[3]],
+            ] {
+                let mut key = face;
+                key.sort_unstable();
+                *counts.entry(key).or_insert(0) += 1;
+            }
+        }
+        assert!(counts.values().all(|&count| count <= 2));
+    }
+
+    #[test]
+    fn boundary_layer_refinement_generates_thinner_wall_cells() {
+        let mesh = TriangleMesh::sample_box(10.0);
+        let volume = generate(
+            &mesh,
+            &VolumeMeshParams {
+                refinement: Some(MeshRefinement::BoundaryLayers {
+                    layers: 1,
+                    ratio: 0.5,
+                }),
+                target_size: 2.5,
+            },
+        )
+        .unwrap();
+        let refined_report = report(&volume);
+        assert!((refined_report.total_volume - 1000.0).abs() < 1e-6);
+        assert!(refined_report.quality.min_volume > 0.0);
+        // 分级后最小边比低于均匀网格（过渡单元各向异性），但仍是有效正体积网格。
+        let uniform = generate(
+            &mesh,
+            &VolumeMeshParams {
+                refinement: None,
+                target_size: 2.5,
+            },
+        )
+        .unwrap();
+        assert!(report(&volume).quality.min_edge_ratio <= report(&uniform).quality.min_edge_ratio);
     }
 }

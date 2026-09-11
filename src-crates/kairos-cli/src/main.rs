@@ -247,7 +247,10 @@ fn run_mesh(action: MeshAction, json: bool) -> kairos_core::error::Result<()> {
                 let content = std::fs::read_to_string(&out_msh)?;
                 kairos_core::services::gmsh::parse_msh_v2(&content)?
             } else {
-                let params = meshing::VolumeMeshParams { target_size };
+                let params = meshing::VolumeMeshParams {
+                    target_size,
+                    refinement: None,
+                };
                 params.validate()?;
                 meshing::generate(&mesh, &params)?
             };
@@ -351,7 +354,13 @@ fn run_pipeline(
         )),
     }?;
     // 2. 网格
-    let volume = meshing::generate(&mesh_tri, &meshing::VolumeMeshParams { target_size: 1.0 })?;
+    let volume = meshing::generate(
+        &mesh_tri,
+        &meshing::VolumeMeshParams {
+            refinement: None,
+            target_size: 1.0,
+        },
+    )?;
     // 3. case（首个内置材料 + 默认工艺 + 填充阶段）
     let material = services::material::builtin_materials()[0].clone();
     openfoam::generate_case(

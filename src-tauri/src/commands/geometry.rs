@@ -9,7 +9,8 @@ use serde::Serialize;
 use kairos_core::error::{KairosError, Result};
 use kairos_core::models::geometry::{GeometrySummary, TriangleMesh};
 use kairos_core::models::mesh::{
-    DualDomainMesh, DualDomainReport, MeshingReport, MidplaneMesh, MidplaneReport, VolumeMesh,
+    DualDomainMesh, DualDomainReport, MeshRefinement, MeshingReport, MidplaneMesh, MidplaneReport,
+    VolumeMesh,
 };
 use kairos_core::models::runners::RunnerElement;
 use kairos_core::services::dualdomain::{self, DualDomainParams};
@@ -197,13 +198,18 @@ pub async fn generate_midplane_mesh(
 }
 
 /// 对已导入几何生成 3D 体积网格，返回统计报告（网格保留在会话缓存中）。
+/// refinement 为可选分级加密（边界层 / 区域盒，仅体素引擎支持）。
 #[tauri::command]
 pub async fn generate_volume_mesh(
     store: State<'_, GeometryStore>,
     geometry_id: String,
     target_size: f64,
+    refinement: Option<MeshRefinement>,
 ) -> Result<MeshingReport> {
-    let params = VolumeMeshParams { target_size };
+    let params = VolumeMeshParams {
+        target_size,
+        refinement,
+    };
     params.validate()?;
     let store = store.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {

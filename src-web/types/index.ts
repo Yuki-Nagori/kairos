@@ -166,6 +166,17 @@ export interface DualDomainReport {
   thicknessAvg: number;
 }
 
+/** 对应 `kairos-core::models::mesh::RefineRegion`。 */
+export interface RefineRegion {
+  min: [number, number, number];
+  max: [number, number, number];
+}
+
+/** 对应 `kairos-core::models::mesh::MeshRefinement`（体素引擎分级加密）。 */
+export type MeshRefinement =
+  | { mode: "boundaryLayers"; layers: number; ratio: number }
+  | { mode: "region"; region: RefineRegion; levels: number };
+
 /** 对应 `kairos-core::models::mesh::MidplaneReport`。 */
 export interface MidplaneReport {
   nodeCount: number;

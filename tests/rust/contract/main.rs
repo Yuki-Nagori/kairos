@@ -8,7 +8,9 @@ use kairos_core::services::system;
 use serde_json::json;
 
 use kairos_core::models::material::Material;
-use kairos_core::models::mesh::{DualDomainReport, MeshQuality, MeshingReport, MidplaneReport};
+use kairos_core::models::mesh::{
+    DualDomainReport, MeshQuality, MeshRefinement, MeshingReport, MidplaneReport, RefineRegion,
+};
 use kairos_core::models::project::{Project, Study};
 use kairos_core::models::results::{ResultCatalog, ScalarField, TimeStepMeta};
 use kairos_core::services::{geometry, material};
@@ -263,4 +265,30 @@ fn update_check_serializes_with_camel_case() {
             "updateAvailable": true,
         })
     );
+}
+
+/// MeshRefinement 的形状：内部标记 tag = mode，字段 camelCase，
+/// 前端以可辨识联合类型与之对应。
+#[test]
+fn mesh_refinement_serializes_with_mode_tag() {
+    let layers = MeshRefinement::BoundaryLayers {
+        layers: 2,
+        ratio: 0.5,
+    };
+    assert_eq!(
+        serde_json::to_value(layers).unwrap(),
+        json!({ "mode": "boundaryLayers", "layers": 2, "ratio": 0.5 })
+    );
+    let region = MeshRefinement::Region {
+        region: RefineRegion {
+            min: [0.0, 0.0, 0.0],
+            max: [4.0, 4.0, 4.0],
+        },
+        levels: 2,
+    };
+    let json = serde_json::to_value(region).unwrap();
+    assert_eq!(json["mode"], "region");
+    assert_eq!(json["levels"], 2);
+    assert_eq!(json["region"]["min"], json!([0.0, 0.0, 0.0]));
+    assert_eq!(json["region"]["max"], json!([4.0, 4.0, 4.0]));
 }

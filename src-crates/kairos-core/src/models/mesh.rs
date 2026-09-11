@@ -1,7 +1,7 @@
 //! 体积网格模型：节点 + 四面体 + 表面三角面，网格化报告 DTO，
-//! 以及双域网格（表面 + 杆系耦合）模型与报告。
+//! 以及双域网格（表面 + 杆系耦合）与中面网格模型、报告。
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use super::runners::RunnerKind;
 
@@ -92,6 +92,29 @@ pub struct MeshingReport {
     /// 网格总体积（与制品体积对比可评估占用率）。
     pub total_volume: f64,
     pub quality: MeshQuality,
+}
+
+/// 加密区域包围盒（模型单位）；min/max 分量对应，min ≤ max。
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RefineRegion {
+    pub min: [f64; 3],
+    pub max: [f64; 3],
+}
+
+/// 体素引擎的分级加密选项（保形由奇偶对角分解按构造保证）。
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "mode", rename_all = "camelCase")]
+pub enum MeshRefinement {
+    /// 边界层：沿三轴在包围盒面附近聚集单元（各向同性近似的壁面分级）。
+    BoundaryLayers {
+        /// 每个面一侧的分级层数（1..=4）。
+        layers: u32,
+        /// 相邻层宽度比（0.2..=0.9，越小越薄）。
+        ratio: f64,
+    },
+    /// 区域加密：包围盒内的单元沿三轴逐级细分（1..=2 级）。
+    Region { region: RefineRegion, levels: u32 },
 }
 
 /// 双域网格报告：返回给前端的统计信息。

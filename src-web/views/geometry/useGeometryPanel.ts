@@ -25,6 +25,8 @@ export function useGeometryPanel() {
   interface MeshFormState {
     size: string;
     engine: string;
+    /** 体素引擎可选边界层层数；空串 = 不分级。 */
+    boundaryLayers: string;
   }
   const meshForms = reactive<Record<string, MeshFormState>>({});
 
@@ -36,6 +38,7 @@ export function useGeometryPanel() {
           meshForms[geometry.geometryId] = {
             size: (Math.max(...geometry.size) / 20).toPrecision(3),
             engine: "voxel",
+            boundaryLayers: "",
           };
         }
       }
@@ -51,6 +54,7 @@ export function useGeometryPanel() {
     const created: MeshFormState = {
       size: (Math.max(...geometry.size) / 20).toPrecision(3),
       engine: "voxel",
+      boundaryLayers: "",
     };
     meshForms[geometry.geometryId] = created;
     return created;
@@ -96,9 +100,16 @@ export function useGeometryPanel() {
   function generate(item: GeometrySummary): void {
     const form = meshForm(item);
     const size = Number(form.size);
-    void (form.engine === "gmsh"
-      ? geometry.generateGmshMesh(item.geometryId, size)
-      : geometry.generateMesh(item.geometryId, size));
+    if (form.engine === "gmsh") {
+      void geometry.generateGmshMesh(item.geometryId, size);
+      return;
+    }
+    const layers = Number(form.boundaryLayers);
+    const refinement =
+      form.engine === "voxel" && layers >= 1
+        ? ({ mode: "boundaryLayers", layers, ratio: 0.5 } as const)
+        : undefined;
+    void geometry.generateMesh(item.geometryId, size, refinement);
   }
 
   function reportText(report: MeshingReport | undefined): string {
