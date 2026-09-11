@@ -9,6 +9,7 @@
  * 变量避让，不硬编码按钮宽度。
  */
 import { useShell } from "../../composables/useShell";
+import LogoIcon from "../ui/icons/LogoIcon.vue";
 import AboutDialog from "./AboutDialog.vue";
 import { useAboutDialog } from "./useAboutDialog";
 import { useMenuBar } from "./useMenuBar";
@@ -30,7 +31,7 @@ const { openPalette } = useCommandPalette();
       paddingRight: shell.titleBarPaddingRight,
     }"
   >
-    <img src="/icon.svg" alt="Kairos" data-tauri-drag-region class="mr-1.5 size-4 shrink-0" />
+    <LogoIcon data-tauri-drag-region class="mr-1.5 size-4 shrink-0" />
     <h1 data-tauri-drag-region class="text-xs font-semibold text-emerald-400">Kairos</h1>
     <span data-tauri-drag-region class="text-xs text-zinc-600">CAE 仿真</span>
 

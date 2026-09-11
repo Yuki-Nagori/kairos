@@ -199,3 +199,4 @@
 - **12:10** feat(core+ui): B1-C1 STEP 镶嵌网格导入（AP242 TRIANGULATED_FACE_SET / POLY_LOOP 子集解析器 + import_step 命令 + 导入按扩展名分发）；几何修复工具落地（repair_mesh：焊接/去退化/填孔/法向 BFS 一致化/自交检测 + 面板修复按钮）；architecture-status 刷新
 - **12:20** fix(ui): 窗口拖拽范围收尾——App 根容器显式 data-tauri-drag-region="false"（子树默认禁止，防深层误挂）、body 全局 -webkit-app-region: no-drag 兜底，拖拽仅限标题栏行
 - **12:30** fix(ui): 禁用 macOS 触控板双指滚动的整页橡皮筋回弹——html/body overflow hidden + overscroll-behavior none（工作台页面本身不可滚动，双指晃动是 WKWebView 弹性滚动而非窗口拖拽）
+- **13:00** fix(ui): 标题栏 logo 改为内联 LogoIcon 组件——消除 Windows CI 上 happy-dom 加载 /icon.svg 触发 fileURLToPath 的路径错误（file:///icon.svg 无盘符），测试不再依赖外部图标资源
