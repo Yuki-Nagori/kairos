@@ -110,6 +110,7 @@ const VIEW_TOOLS = [
           剖切：{{ clipOn ? "开" : "关" }}
         </UiButton>
         <p class="text-xs text-zinc-500">{{ fpsText }}</p>
+        <p class="text-xs text-zinc-500">点击模型表面：拾取单元加入探针（XY 图表显示数值）</p>
       </div>
     </div>
   </section>

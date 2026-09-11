@@ -1,4 +1,8 @@
 import { mat4Identity, mat4LookAt, mat4Multiply, mat4Perspective, type Vec3 } from "./math";
+import type { CameraSnapshot } from "./picking";
+
+/** 垂直视场角：渲染循环与拾取共用同一常量。 */
+const FOV_Y = Math.PI / 4;
 import type { OverlayLayer } from "./overlays";
 import { THEME_CHANGED_EVENT } from "../composables/useTheme";
 
@@ -416,6 +420,23 @@ export class ViewportRenderer {
   }
 
   /** 停止渲染循环（面板卸载时调用）。 */
+  /** 相机快照：供点击拾取把指针坐标换算为世界射线。 */
+  getCamera(): CameraSnapshot {
+    const eye: Vec3 = [
+      this.target[0] + this.distance * Math.cos(this.pitch) * Math.sin(this.yaw),
+      this.target[1] + this.distance * Math.sin(this.pitch),
+      this.target[2] + this.distance * Math.cos(this.pitch) * Math.cos(this.yaw),
+    ];
+    return {
+      eye,
+      target: [this.target[0], this.target[1], this.target[2]],
+      fovY: FOV_Y,
+      aspect: this.canvas.width / Math.max(this.canvas.height, 1),
+      width: this.canvas.width,
+      height: this.canvas.height,
+    };
+  }
+
   dispose(): void {
     this.disposed = true;
     cancelAnimationFrame(this.rafHandle);
@@ -532,7 +553,7 @@ export class ViewportRenderer {
 
   private drawMesh(aspect: number): void {
     const gl = this.gl;
-    const projection = mat4Perspective(Math.PI / 4, aspect, 0.01, 100);
+    const projection = mat4Perspective(FOV_Y, aspect, 0.01, 100);
     const eye: Vec3 = [
       this.target[0] + this.distance * Math.cos(this.pitch) * Math.sin(this.yaw),
       this.target[1] + this.distance * Math.sin(this.pitch),
@@ -564,7 +585,7 @@ export class ViewportRenderer {
       return;
     }
     const gl = this.gl;
-    const projection = mat4Perspective(Math.PI / 4, aspect, 0.01, 100);
+    const projection = mat4Perspective(FOV_Y, aspect, 0.01, 100);
     const eye: Vec3 = [
       this.target[0] + this.distance * Math.cos(this.pitch) * Math.sin(this.yaw),
       this.target[1] + this.distance * Math.sin(this.pitch),

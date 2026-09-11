@@ -216,3 +216,4 @@
 - **02:10** docs(arch): B1 前处理收官校准——architecture-status 状态截至 2026-09-12，C1/C2 全项 [x]（IGES、双域、中面、局部加密/边界层），里程碑对照 B1 ~75% → ~95%（余缺口：双域/中面的求解消费、精确 B-rep 导入）
 - **02:40** refactor(core+ui): B1 新增模块整体 review——删除 IGES 只有测试消费的 ImportStats/parse_iges_with_stats 死 API（与 STEP 解析器口径对齐）；DualDomainBeam 更名 ShellBeam（双域/中面共用，原名误导）；提取 dualdomain::weld_surface 复用双域/中面重复的焊接+退化剔除闭包；中面自由节点索引算术拆直；MeshSession 文档补中面缓存与存储理由；面板测试改按 placeholder 定位输入框
 - **02:20** feat(core+ui): B3-C7 派生算子产品管线补全（T44）——DeriveRequest 可辨识 DTO（normalize/threshold/linear/difference）+ derive_scalar_field 改造与 derive_difference（长度校验、命名、完整性取与）+ ResultSession 双槽（主场/对比场）+ load_result_field slot 参数 + derive_difference 命令 + 结果面板线性参数输入/槽位选择/差值按钮；契约锁定 kind 标签；T21 八项清单评审入 ai-docs/reviews/T44-review.md
+- **02:50** feat(ui): B3-C7 视口空间拾取与探针场关联（T45）——render/picking 纯函数（轨道相机指针射线 + Möller–Trumbore 逐面求交，拾取 faceCells 单元索引与场值同域）+ renderer.getCamera 快照（FOV_Y 常量提取）+ 视口 pointerdown/up 位移阈值点击判定 → 探针自动入列 → XY 图表数值随场刷新

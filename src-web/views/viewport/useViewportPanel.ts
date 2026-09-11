@@ -7,6 +7,7 @@ import { useResultsStore } from "../../stores/results";
 import { useViewportStore } from "../../stores/viewport";
 import type { ScalarField } from "../../types";
 import { ViewportRenderer } from "../../render/renderer";
+import { pickCell, rayFromPointer, type PickMesh } from "../../render/picking";
 import { buildOverlayLayers, OVERLAY_IDS } from "../../render/overlays";
 import { detectRenderCapabilityInBrowser } from "../../render/capability";
 import { registerSnapshot } from "../../render/snapshot";
@@ -61,10 +62,45 @@ export function useViewportPanel() {
   const playLabel = computed(() => (playing.value ? "停止动画" : "播放动画"));
 
   let renderer: ViewportRenderer | null = null;
-  let renderMesh: { positions: Float32Array; indices: Uint32Array; faceCells: Uint32Array } | null =
-    null;
+  let renderMesh: PickMesh | null = null;
   let playTimer: ReturnType<typeof setInterval> | null = null;
   let playIndex = 0;
+
+  // —— 空间拾取 ——
+  // pointerdown/up 位移小于阈值视为点击（大于阈值是旋转拖拽），命中单元加入探针。
+  const PICK_SLOP_PIXELS = 4;
+  let downPosition: { x: number; y: number } | null = null;
+  const probeHits = ref(0);
+
+  function onPointerDown(event: PointerEvent): void {
+    downPosition = { x: event.clientX, y: event.clientY };
+  }
+
+  function onPointerUp(event: PointerEvent): void {
+    const start = downPosition;
+    downPosition = null;
+    if (start === null || renderer === null || renderMesh === null) {
+      return;
+    }
+    const moved = Math.hypot(event.clientX - start.x, event.clientY - start.y);
+    if (moved > PICK_SLOP_PIXELS) {
+      return;
+    }
+    const rect = canvasRef.value?.getBoundingClientRect();
+    if (rect === undefined) {
+      return;
+    }
+    const ray = rayFromPointer(
+      renderer.getCamera(),
+      event.clientX - rect.left,
+      event.clientY - rect.top,
+    );
+    const hit = pickCell(renderMesh, ray);
+    if (hit !== null) {
+      results.addProbe(hit.cell);
+      probeHits.value += 1;
+    }
+  }
 
   // 相机注视点读数（模型坐标）：旋转 / 平移 / 缩放 / 复位时由渲染器回报。
   const viewCenter = ref({ x: 0, y: 0, z: 0 });
@@ -155,6 +191,8 @@ export function useViewportPanel() {
         viewCenter.value = state;
       },
     );
+    canvas.addEventListener("pointerdown", onPointerDown);
+    canvas.addEventListener("pointerup", onPointerUp);
     if (renderer === null) {
       emptyText.value = "当前环境不支持 WebGL2，无法渲染视口。";
       emptyError.value = true;
@@ -254,6 +292,7 @@ export function useViewportPanel() {
     emptyText,
     emptyError,
     meshLoaded,
+    probeHits,
     legendVisible,
     legendValues,
     loadDisabled,
