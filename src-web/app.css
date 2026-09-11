@@ -1,5 +1,16 @@
 @import "tailwindcss";
 
+/* macOS 触控板双指滚动会触发 WKWebView 的橡皮筋弹性回弹（整页晃动），
+   工作台页面本身不可滚动，在文档层显式禁掉滚动与回弹。 */
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 /* 插件内嵌窗口控制按钮按此高度对齐（与 MenuBar 行高 h-9 一致） */
 :root {
   --tauri-plugin-decoration-titlebar-height: 36px;
