@@ -12,6 +12,7 @@ import type {
   MeshIssues,
   MeshingReport,
   MidplaneReport,
+  RepairReport,
 } from "../../types";
 
 export function useGeometryPanel() {
@@ -134,6 +135,28 @@ export function useGeometryPanel() {
     return `单元 ${report.elementCount} · 节点 ${report.nodeCount} · 厚度 ${report.thicknessMin.toFixed(2)} ~ ${report.thicknessMax.toFixed(2)}（avg ${report.thicknessAvg.toFixed(2)}）· 丢弃 ${report.droppedElements} · 梁 ${report.beamCount}（耦合 ${report.couplingCount}）`;
   }
 
+  /** 修复报告：只列非零修复项；自交为纯检测项，始终展示计数。 */
+  function repairReportText(report: RepairReport | undefined): string {
+    if (!report) {
+      return "尚未修复。";
+    }
+    const parts: string[] = [];
+    if (report.mergedVertices > 0) {
+      parts.push(`焊接顶点 ${report.mergedVertices}`);
+    }
+    if (report.removedDegenerate > 0) {
+      parts.push(`去退化 ${report.removedDegenerate}`);
+    }
+    if (report.filledHoles > 0) {
+      parts.push(`填孔 ${report.filledHoles}（+${report.filledTriangles} 面）`);
+    }
+    if (report.flippedFaces > 0) {
+      parts.push(`翻转法向 ${report.flippedFaces}`);
+    }
+    parts.push(`自交 ${report.selfIntersections}`);
+    return `修复：${parts.join(" · ")}`;
+  }
+
   /** 中面网格：按当前方案流道/浇口做杆系耦合。 */
   function generateMid(item: GeometrySummary): void {
     void geometry.generateMidplane(item.geometryId);
@@ -169,6 +192,7 @@ export function useGeometryPanel() {
     generate,
     reportText,
     dualReportText,
+    repairReportText,
     generateDual,
     midplaneReportText,
     generateMid,

@@ -17,8 +17,9 @@ const {
   repairDisabled,
   reportText,
   dualReportText,
-  generateDual,
   midplaneReportText,
+  repairReportText,
+  generateDual,
   generateMid,
   onImport,
   onSample,
@@ -107,6 +108,9 @@ const {
           </p>
           <p class="text-xs text-zinc-500">
             {{ midplaneReportText(geometry.midplaneReports[row.geometry.geometryId]) }}
+          </p>
+          <p class="text-xs text-zinc-500">
+            {{ repairReportText(geometry.repairReports[row.geometry.geometryId]) }}
           </p>
         </div>
       </div>

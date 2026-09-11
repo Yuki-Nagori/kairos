@@ -197,9 +197,17 @@ describe("geometry store", () => {
   });
 
   describe("repairGeometryById", () => {
-    it("刷新几何摘要、作废体积网格并清 busy", async () => {
+    it("刷新几何摘要、记录修复报告、作废体积网格并清 busy", async () => {
       const repaired = makeSummary("g-1");
-      vi.mocked(repairGeometry).mockResolvedValue(repaired);
+      const repairReport = {
+        mergedVertices: 3,
+        removedDegenerate: 1,
+        filledHoles: 2,
+        filledTriangles: 4,
+        flippedFaces: 5,
+        selfIntersections: 0,
+      };
+      vi.mocked(repairGeometry).mockResolvedValue({ summary: repaired, report: repairReport });
 
       const geometry = useGeometryStore();
       const app = useAppStore();
@@ -220,6 +228,7 @@ describe("geometry store", () => {
       // 非目标几何不受影响
       expect(geometry.geometries.map((g) => g.geometryId)).toEqual(["g-1", "g-2"]);
       expect(geometry.meshReports["g-1"]).toBeUndefined();
+      expect(geometry.repairReports["g-1"]).toEqual(repairReport);
       expect(app.busy).toBeNull();
     });
 
@@ -258,7 +267,17 @@ describe("geometry store", () => {
       const geometry = useGeometryStore();
       geometry.geometries = [makeSummary("g-1")];
       geometry.dualDomainReports["g-1"] = makeDualReport();
-      vi.mocked(repairGeometry).mockResolvedValue(makeSummary("g-1"));
+      vi.mocked(repairGeometry).mockResolvedValue({
+        summary: makeSummary("g-1"),
+        report: {
+          mergedVertices: 0,
+          removedDegenerate: 0,
+          filledHoles: 0,
+          filledTriangles: 0,
+          flippedFaces: 0,
+          selfIntersections: 0,
+        },
+      });
 
       await geometry.repairGeometryById("g-1");
 

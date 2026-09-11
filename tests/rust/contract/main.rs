@@ -100,6 +100,38 @@ fn geometry_summary_serializes_with_camel_case() {
     assert_eq!(json["issues"]["openEdges"], 3);
 }
 
+/// RepairOutcome 的形状：summary + report 两级 camelCase，前端修复面板与之对应。
+#[test]
+fn repair_outcome_serializes_with_camel_case() {
+    let triangles = vec![Triangle {
+        a: [0.0, 0.0, 0.0],
+        b: [1.0, 0.0, 0.0],
+        c: [0.0, 1.0, 0.0],
+        normal: [0.0, 0.0, 1.0],
+    }];
+    let summary = geometry::summarize("g-1".into(), "demo.stl".into(), &TriangleMesh { triangles });
+    let outcome = kairos_core::models::repair::RepairOutcome {
+        summary,
+        report: kairos_core::models::repair::RepairReport {
+            merged_vertices: 3,
+            removed_degenerate: 1,
+            filled_holes: 2,
+            filled_triangles: 4,
+            flipped_faces: 5,
+            self_intersections: 0,
+        },
+    };
+    let json = serde_json::to_value(&outcome).unwrap();
+    assert_eq!(json["summary"]["geometryId"], "g-1");
+    assert_eq!(json["summary"]["issues"]["openEdges"], 3);
+    assert_eq!(json["report"]["mergedVertices"], 3);
+    assert_eq!(json["report"]["removedDegenerate"], 1);
+    assert_eq!(json["report"]["filledHoles"], 2);
+    assert_eq!(json["report"]["filledTriangles"], 4);
+    assert_eq!(json["report"]["flippedFaces"], 5);
+    assert_eq!(json["report"]["selfIntersections"], 0);
+}
+
 /// MeshingReport 的形状：统计字段 camelCase，前端网格面板与之对应。
 #[test]
 fn meshing_report_serializes_with_camel_case() {

@@ -232,20 +232,14 @@ fn run_mesh(action: MeshAction, json: bool) -> kairos_core::error::Result<()> {
         } => {
             let mesh = geometry::parse_stl_file(Path::new(&stl))?;
             let volume = if engine == "gmsh" {
-                let stl_path = Path::new(&stl);
+                // 子进程编排复用 core 服务（与桌面命令层同一路径）。
                 let out_msh = Path::new(&stl).with_extension("msh");
-                let _ = std::fs::remove_file(&out_msh);
-                let status = std::process::Command::new("gmsh")
-                    .args(kairos_core::services::gmsh::tetrahedralize_args(
-                        stl_path, &out_msh,
-                    ))
-                    .status()
-                    .map_err(|e| KairosError::io(format!("gmsh 启动失败：{e}")))?;
-                if !status.success() {
-                    return Err(KairosError::io("gmsh 网格化失败。"));
-                }
-                let content = std::fs::read_to_string(&out_msh)?;
-                kairos_core::services::gmsh::parse_msh_v2(&content)?
+                kairos_core::services::gmsh::tetrahedralize(
+                    Path::new("gmsh"),
+                    Path::new(&stl),
+                    &out_msh,
+                    Some(target_size),
+                )?
             } else {
                 let params = meshing::VolumeMeshParams {
                     target_size,
@@ -261,7 +255,7 @@ fn run_mesh(action: MeshAction, json: bool) -> kairos_core::error::Result<()> {
                 }));
             } else {
                 println!(
-                    "体素网格完成：{} 节点 / {} 四面体",
+                    "网格完成（{engine}）：{} 节点 / {} 四面体",
                     volume.nodes.len(),
                     volume.tets.len()
                 );

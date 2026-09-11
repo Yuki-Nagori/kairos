@@ -19,6 +19,7 @@ import type {
   MeshingReport,
   MeshRefinement,
   MidplaneReport,
+  RepairReport,
 } from "../types";
 import { useAppStore } from "./app";
 import { useProjectStore } from "./project";
@@ -33,6 +34,8 @@ export const useGeometryStore = defineStore("geometry", {
     dualDomainReports: {} as Record<string, DualDomainReport>,
     /** 每个几何的中面网格报告（key = geometryId）。 */
     midplaneReports: {} as Record<string, MidplaneReport>,
+    /** 每个几何最近一次修复的报告（key = geometryId）。 */
+    repairReports: {} as Record<string, RepairReport>,
   }),
   actions: {
     /** 导入 STL：弹出文件对话框，解析检查后入列表。 */
@@ -139,10 +142,11 @@ export const useGeometryStore = defineStore("geometry", {
       const app = useAppStore();
       app.beginBusy("正在修复几何…");
       try {
-        const summary = await apiRepairGeometry(geometryId);
+        const { summary, report } = await apiRepairGeometry(geometryId);
         this.geometries = this.geometries.map((geometry) =>
           geometry.geometryId === geometryId ? summary : geometry,
         );
+        this.repairReports = { ...this.repairReports, [geometryId]: report };
         // 修复改变了表面网格：体积与双域网格一并作废。
         const meshReports = { ...this.meshReports };
         delete meshReports[geometryId];

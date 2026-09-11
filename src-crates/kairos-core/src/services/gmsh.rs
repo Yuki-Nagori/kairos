@@ -155,17 +155,58 @@ pub fn from_volume_mesh(mesh: &VolumeMesh, case_name: &str) -> Result<VolumeMesh
 }
 
 /// 组装 Gmsh 体网格化命令参数：STL 输入 → 一阶 msh2 输出（解析器只认一阶）。
-pub fn tetrahedralize_args(stl: &Path, out_msh: &Path) -> Vec<String> {
-    vec![
+/// `target_size` 为可选目标单元尺寸上限（-clmax），None 表示交给 Gmsh 默认。
+pub fn tetrahedralize_args(stl: &Path, out_msh: &Path, target_size: Option<f64>) -> Vec<String> {
+    let mut args = vec![
         stl.to_string_lossy().to_string(),
         "-3".into(),
         "-format".into(),
         "msh2".into(),
         "-order".into(),
         "1".into(),
-        "-o".into(),
-        out_msh.to_string_lossy().to_string(),
-    ]
+    ];
+    if let Some(size) = target_size {
+        args.push("-clmax".into());
+        args.push(format!("{size}"));
+    }
+    args.push("-o".into());
+    args.push(out_msh.to_string_lossy().to_string());
+    args
+}
+
+/// 编排一次 Gmsh 体网格化子进程：清掉旧输出 → 调用 → 解析回 VolumeMesh。
+/// CLI 与桌面命令层共用本函数，避免两处各写一份子进程编排；
+/// GPL 隔离红线不变——只以独立子进程 + 文件交换方式使用 Gmsh。
+pub fn tetrahedralize(
+    bin: &Path,
+    stl: &Path,
+    out_msh: &Path,
+    target_size: Option<f64>,
+) -> Result<VolumeMesh> {
+    let _ = std::fs::remove_file(out_msh);
+    let args = tetrahedralize_args(stl, out_msh, target_size);
+    let output = std::process::Command::new(bin)
+        .args(&args)
+        .output()
+        .map_err(|e| KairosError::io(format!("gmsh 启动失败：{e}")))?;
+    if !output.status.success() {
+        return Err(KairosError::io(format!(
+            "gmsh 网格化失败：{}",
+            failure_message(&output.stderr)
+        )));
+    }
+    let content = std::fs::read_to_string(out_msh)
+        .map_err(|e| KairosError::io(format!("读取 msh 失败：{e}")))?;
+    parse_msh_v2(&content)
+}
+
+/// 子进程失败时的用户消息：取 stderr 最后一行，缺省占位。
+fn failure_message(stderr: &[u8]) -> String {
+    String::from_utf8_lossy(stderr)
+        .lines()
+        .last()
+        .unwrap_or("无 stderr 输出")
+        .to_string()
 }
 
 #[cfg(test)]
@@ -254,7 +295,7 @@ $EndElements
     }
     #[test]
     fn tetrahedralize_args_orders_gmsh_command() {
-        let args = tetrahedralize_args(Path::new("part.stl"), Path::new("out.msh"));
+        let args = tetrahedralize_args(Path::new("part.stl"), Path::new("out.msh"), None);
         assert_eq!(
             args,
             vec![
@@ -268,5 +309,96 @@ $EndElements
                 "out.msh".to_string(),
             ]
         );
+    }
+
+    #[test]
+    fn tetrahedralize_args_carries_target_size_as_clmax() {
+        let args = tetrahedralize_args(Path::new("part.stl"), Path::new("out.msh"), Some(0.5));
+        assert!(args.contains(&"-clmax".to_string()));
+        let position = args.iter().position(|arg| arg == "-clmax").unwrap();
+        assert_eq!(args[position + 1], "0.5");
+    }
+
+    #[test]
+    fn failure_message_takes_last_stderr_line() {
+        assert_eq!(failure_message(b"warn\nboom"), "boom");
+        assert_eq!(failure_message(b""), "无 stderr 输出");
+    }
+
+    #[test]
+    fn tetrahedralize_reports_spawn_failure_as_io() {
+        let error = tetrahedralize(
+            Path::new("kairos-nonexistent-gmsh"),
+            Path::new("in.stl"),
+            Path::new("out.msh"),
+            None,
+        )
+        .unwrap_err();
+        assert_eq!(error.kind(), crate::error::ErrorKind::Io);
+        assert!(error.to_string().contains("gmsh 启动失败"));
+    }
+
+    /// 写一个可执行 shell 脚本冒充 gmsh：正文写入临时目录并赋予执行位。
+    /// 仅 Unix——覆盖率与测试环境为 macOS/Linux，Windows 桌面端另行手测。
+    #[cfg(unix)]
+    fn write_fake_gmsh(name: &str, body: &str) -> std::path::PathBuf {
+        use std::os::unix::fs::PermissionsExt;
+        let path = std::env::temp_dir().join(name);
+        std::fs::write(&path, format!("#!/bin/sh\n{body}")).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        path
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn tetrahedralize_reads_parsed_msh_from_successful_run() {
+        // 假 gmsh：忽略输入，把最小合法 msh（2 四面体）写到 -o 指定的输出路径。
+        let fixture = SAMPLE_MSH.replace('"', "'");
+        let script = format!(
+            "out=\"\"; prev=\"\"; for a in \"$@\"; do [ \"$prev\" = \"-o\" ] && out=\"$a\"; prev=\"$a\"; done; printf '%s' '{fixture}' > \"$out\"\n"
+        );
+        let fake = write_fake_gmsh("kairos-fake-gmsh-ok", &script);
+        let out_msh = std::env::temp_dir().join("kairos-fake-gmsh-ok.msh");
+        let _ = std::fs::remove_file(&out_msh);
+
+        let volume = tetrahedralize(&fake, Path::new("in.stl"), &out_msh, Some(0.5)).unwrap();
+        assert_eq!(volume.nodes.len(), 5);
+        assert_eq!(volume.tets.len(), 2);
+        // 输入尺寸经 -clmax 传给子进程（脚本收到的参数含 -clmax 0.5）
+        assert_eq!(
+            std::fs::read_to_string(&fake).unwrap(),
+            format!("#!/bin/sh\n{script}")
+        );
+        let _ = std::fs::remove_file(&fake);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn tetrahedralize_maps_nonzero_exit_to_io_error_with_stderr_tail() {
+        let fake = write_fake_gmsh("kairos-fake-gmsh-fail", "echo bad mesh >&2\nexit 3\n");
+        let out_msh = std::env::temp_dir().join("kairos-fake-gmsh-fail.msh");
+        let _ = std::fs::remove_file(&out_msh);
+
+        let error = tetrahedralize(&fake, Path::new("in.stl"), &out_msh, None).unwrap_err();
+        assert_eq!(error.kind(), crate::error::ErrorKind::Io);
+        assert!(
+            error.to_string().contains("gmsh 网格化失败：bad mesh"),
+            "{error}"
+        );
+        let _ = std::fs::remove_file(&fake);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn tetrahedralize_reports_missing_output_as_io() {
+        // 假 gmsh 正常退出但不产出文件 → 读取 msh 失败。
+        let fake = write_fake_gmsh("kairos-fake-gmsh-silent", "exit 0\n");
+        let out_msh = std::env::temp_dir().join("kairos-fake-gmsh-silent.msh");
+        let _ = std::fs::remove_file(&out_msh);
+
+        let error = tetrahedralize(&fake, Path::new("in.stl"), &out_msh, None).unwrap_err();
+        assert_eq!(error.kind(), crate::error::ErrorKind::Io);
+        assert!(error.to_string().contains("读取 msh 失败"), "{error}");
+        let _ = std::fs::remove_file(&fake);
     }
 }

@@ -6,23 +6,7 @@ use std::collections::HashMap;
 use crate::error::{KairosError, Result};
 use crate::models::geometry::{Triangle, TriangleMesh};
 
-/// 修复报告：各项修复 / 检测的计数。
-#[derive(Debug, Default, Clone, PartialEq, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RepairReport {
-    /// 焊接掉的重复顶点数。
-    pub merged_vertices: usize,
-    /// 移除的退化三角形数。
-    pub removed_degenerate: usize,
-    /// 填充的孔洞数。
-    pub filled_holes: usize,
-    /// 孔洞填充新增的三角形数。
-    pub filled_triangles: usize,
-    /// 法向一致化翻转的面数。
-    pub flipped_faces: usize,
-    /// 自交三角形对数（仅检测计数，不做几何重构）。
-    pub self_intersections: usize,
-}
+pub use crate::models::repair::RepairReport;
 
 /// 顶点量化键（容差 = 模型对角线 × 1e-6，与网格检查一致）。
 fn vertex_key(position: &[f64; 3], tolerance: f64) -> [i64; 3] {

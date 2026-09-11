@@ -6,6 +6,7 @@ import type {
   MeshingReport,
   MeshRefinement,
   MidplaneReport,
+  RepairOutcome,
   RunnerElement,
 } from "../types";
 
@@ -43,8 +44,8 @@ export function importIges(path: string): Promise<GeometrySummary> {
   return invokeCommand("import_iges", { path });
 }
 
-/** 修复几何（顶点焊接 / 孔洞填充 / 法向一致化），返回更新后的摘要。 */
-export function repairGeometry(geometryId: string): Promise<GeometrySummary> {
+/** 修复几何（顶点焊接 / 孔洞填充 / 法向一致化），返回更新后的摘要与修复报告。 */
+export function repairGeometry(geometryId: string): Promise<RepairOutcome> {
   return invokeCommand("repair_geometry", { geometryId });
 }
 

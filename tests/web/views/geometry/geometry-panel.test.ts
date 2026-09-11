@@ -174,6 +174,26 @@ describe("GeometryPanel", () => {
     expect(wrapper.text()).toContain("退化三角形 5");
   });
 
+  it("修复报告行：无报告显示占位，翻转法向等非零项全列", async () => {
+    const geometry = useGeometryStore();
+    geometry.geometries = [
+      geometryFixture({ geometryId: "geo-a" }),
+      geometryFixture({ geometryId: "geo-b", fileName: "other.stl" }),
+    ];
+    geometry.repairReports["geo-a"] = {
+      mergedVertices: 0,
+      removedDegenerate: 0,
+      filledHoles: 0,
+      filledTriangles: 0,
+      flippedFaces: 2,
+      selfIntersections: 1,
+    };
+    const wrapper = mount(GeometryPanel, { global: { plugins: [pinia] } });
+    expect(wrapper.text()).toContain("修复：翻转法向 2 · 自交 1");
+    // 无修复记录的几何行显示占位文案
+    expect(wrapper.text()).toContain("尚未修复。");
+  });
+
   it("修复：不健康几何按钮可用并调用 IPC，健康几何禁用", async () => {
     const geometry = useGeometryStore();
     geometry.geometries = [
@@ -190,8 +210,8 @@ describe("GeometryPanel", () => {
     ];
     const wrapper = mount(GeometryPanel, { global: { plugins: [pinia] } });
 
-    vi.mocked(repairGeometry).mockResolvedValue(
-      geometryFixture({
+    vi.mocked(repairGeometry).mockResolvedValue({
+      summary: geometryFixture({
         geometryId: "geo-bad",
         fileName: "bad.stl",
         issues: {
@@ -201,7 +221,15 @@ describe("GeometryPanel", () => {
           normalInconsistentEdges: 0,
         },
       }),
-    );
+      report: {
+        mergedVertices: 2,
+        removedDegenerate: 1,
+        filledHoles: 1,
+        filledTriangles: 3,
+        flippedFaces: 0,
+        selfIntersections: 0,
+      },
+    });
 
     const buttons = wrapper.findAll("button");
     const repairButton = buttons.find((button) => button.text() === "修复")!;
@@ -211,8 +239,9 @@ describe("GeometryPanel", () => {
     await flushPromises();
     expect(repairGeometry).toHaveBeenCalledWith("geo-bad");
 
-    // 修复后摘要刷新（不健康问题清零）→ 按钮转为禁用
+    // 修复后摘要刷新（不健康问题清零）→ 按钮转为禁用；修复报告行渲染计数
     expect(wrapper.text()).toContain("网格健康");
+    expect(wrapper.text()).toContain("修复：焊接顶点 2 · 去退化 1 · 填孔 1（+3 面） · 自交 0");
     expect(repairButton.attributes("disabled")).toBeDefined();
   });
 

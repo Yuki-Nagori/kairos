@@ -12,6 +12,7 @@ use kairos_core::models::mesh::{
     DualDomainMesh, DualDomainReport, MeshRefinement, MeshingReport, MidplaneMesh, MidplaneReport,
     VolumeMesh,
 };
+use kairos_core::models::repair::RepairOutcome;
 use kairos_core::models::runners::RunnerElement;
 use kairos_core::services::dualdomain::{self, DualDomainParams};
 use kairos_core::services::geometry as geometry_service;
@@ -86,7 +87,7 @@ fn store_import(store: &GeometryStore, path: &str, mesh: TriangleMesh) -> Geomet
 pub async fn repair_geometry(
     store: State<'_, GeometryStore>,
     geometry_id: String,
-) -> Result<GeometrySummary> {
+) -> Result<RepairOutcome> {
     let store = store.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         let mesh = {
@@ -109,14 +110,10 @@ pub async fn repair_geometry(
             session.mesh = repaired;
             session.volume = None;
         }
-        Ok((summary, report))
+        Ok(RepairOutcome { summary, report })
     })
     .await
     .map_err(|e| KairosError::internal(format!("修复任务失败：{e}")))?
-    .map(|(summary, report)| {
-        let _ = report;
-        summary
-    })
 }
 
 /// 导入 STEP 镶嵌网格（AP242 TRIANGULATED_FACE_SET / POLY_LOOP 子集）。
@@ -234,7 +231,8 @@ pub async fn generate_volume_mesh(
 }
 
 /// 生成 Gmsh 引擎网格：定位应用内下载的 gmsh 可执行文件，写临时 STL 后
-/// 子进程调用（GPL 隔离红线），解析 msh2 回 VolumeMesh。
+/// 子进程调用（GPL 隔离红线），解析 msh2 回 VolumeMesh。target_size 作为
+/// 目标单元尺寸上限（-clmax）传入 Gmsh。
 #[tauri::command]
 pub async fn generate_gmsh_mesh(
     app: tauri::AppHandle,
@@ -242,7 +240,9 @@ pub async fn generate_gmsh_mesh(
     geometry_id: String,
     target_size: f64,
 ) -> Result<MeshingReport> {
-    let _ = target_size;
+    if !target_size.is_finite() || target_size <= 0.0 {
+        return Err(KairosError::validation("目标网格尺寸必须为正数。"));
+    }
     // 定位 gmsh 可执行文件：受管 bin 目录优先，其次 PATH。
     let mut gmsh_path: Option<std::path::PathBuf> = None;
     for dir in super::downloads::managed_bin_dirs(&app) {
@@ -268,26 +268,14 @@ pub async fn generate_gmsh_mesh(
         };
         let temp = std::env::temp_dir().join(format!("kairos-gmsh-{geometry_id}.stl"));
         let out_msh = std::env::temp_dir().join(format!("kairos-gmsh-{geometry_id}.msh"));
-        let _ = std::fs::remove_file(&out_msh);
         kairos_core::services::geometry::write_stl_binary(&mesh, &temp)?;
 
-        let args = kairos_core::services::gmsh::tetrahedralize_args(&temp, &out_msh);
-        let output = std::process::Command::new(&gmsh_path)
-            .args(&args)
-            .output()
-            .map_err(|e| KairosError::io(format!("gmsh 启动失败：{e}")))?;
-        if !output.status.success() {
-            let tail = String::from_utf8_lossy(&output.stderr)
-                .lines()
-                .last()
-                .unwrap_or("无 stderr 输出")
-                .to_string();
-            return Err(KairosError::io(format!("gmsh 网格化失败：{tail}")));
-        }
-
-        let content = std::fs::read_to_string(&out_msh)
-            .map_err(|e| KairosError::io(format!("读取 msh 失败：{e}")))?;
-        let volume = kairos_core::services::gmsh::parse_msh_v2(&content)?;
+        let volume = kairos_core::services::gmsh::tetrahedralize(
+            &gmsh_path,
+            &temp,
+            &out_msh,
+            Some(target_size),
+        )?;
         let mut report = kairos_core::services::meshing::report(&volume);
         report.engine = "gmsh".into();
 

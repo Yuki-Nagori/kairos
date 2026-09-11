@@ -131,6 +131,22 @@ export interface GeometrySummary {
   suggestedUnit: string;
   issues: MeshIssues;
 }
+
+/** 对应 `kairos-core::models::repair::RepairReport`。 */
+export interface RepairReport {
+  mergedVertices: number;
+  removedDegenerate: number;
+  filledHoles: number;
+  filledTriangles: number;
+  flippedFaces: number;
+  selfIntersections: number;
+}
+
+/** 对应 `kairos-core::models::repair::RepairOutcome`。 */
+export interface RepairOutcome {
+  summary: GeometrySummary;
+  report: RepairReport;
+}
 /** 对应 `kairos-core::models::mesh::MeshQuality`。 */
 export interface MeshQuality {
   minEdgeRatio: number;
