@@ -1,4 +1,4 @@
-//! 结果数据模型：OpenFOAM 求解输出的时间步目录与场数据（T13）。
+//! 结果数据模型：OpenFOAM 求解输出的时间步目录与场数据。
 
 use serde::Serialize;
 

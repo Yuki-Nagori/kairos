@@ -192,3 +192,4 @@
 - **10:30** chore(tauri): 删除 tauri.macos.conf.json 平台覆盖文件——窗口装饰/标题栏已由插件三端统一管理，macOS 与 Win/Linux 行为一致（可缩放），无平台配置差异即无平台配置文件
 - **10:40** fix(tauri+ui): macOS 标题栏回归修复——插件激活路径的 set_decorations(true) 会抹掉 Overlay 样式，激活改为仅 Windows/Linux；macOS 在 setup 直接 show()（配置 Overlay 原生生效），红绿灯避让纳入外壳能力（titleBarPadding）
 - **11:00** fix(tauri): jobs.rs 平台条件编译清理——Path 导入与 safe_dir/inner 绑定补 cfg 门控（仅 mac/windows 分支消费），修复 Linux/Windows CI 的 unused 告警error
+- **11:10** chore: 全仓注释与引用清扫——lib.rs 窗口启动注释重写（移除已删配置引用）、7 个 Rust 文件头去除任务编号（comment-style 禁内部规划引用，此前清扫漏了 Rust 侧）、ARCHITECTURE 的 shortcuts.ts 旧名更新、MenuBar 头注释对齐实现

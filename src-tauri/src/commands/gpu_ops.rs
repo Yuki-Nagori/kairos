@@ -1,4 +1,4 @@
-//! GPU 加速后处理算子（T20）：wgpu compute + CPU 参考实现。
+//! GPU 加速后处理算子：wgpu compute + CPU 参考实现。
 //! 算子清单（v1）：矢量模量（速度场后处理）。归一化 / LOD / 切片按同一模式扩展。
 
 use serde::Serialize;

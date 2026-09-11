@@ -153,7 +153,7 @@ sequenceDiagram
 - 按领域 defineStore（app / project / geometry / materials / jobs / pipeline / results /
   dependencies / vm）：action 是状态的唯一写入口，组件不自改领域状态；
 - 响应式追踪由 Pinia 细粒度完成；跨域动作在 action 内引用其他 store；
-  `menu-actions.ts` / `shortcuts.ts` 在处理器内懒取 store（模块加载早于 `createPinia()`）；
+  `menu-actions.ts` / `global-shortcuts.ts` 在处理器内懒取 store（模块加载早于 `createPinia()`）；
 - IPC 不可用（浏览器预览）是预期场景：`IpcUnavailableError` 显示为中性提示并自动消失，与真实失败（红色）区分。
 
 ## 6. 测试策略

@@ -21,20 +21,18 @@ pub fn run() {
         ))
         .manage(commands::vm::VmShellState::default())
         .setup(|_app| {
-            // 窗口铺满统一在启动时处理：配置式的 center/maximized 在 macOS
-            // 不扣除 Dock 与菜单栏的可见区域，居中窗口会显得偏左，且 maximized
-            // 在 dev 下常不生效。三平台都最大化——Windows / Linux 无边框窗口
-            // 自绘标题栏（tauri.macos.conf.json 恢复系统边框），原生全屏会把它藏掉。
+            // 启动即最大化：配置式的 center/maximized 在 macOS 不扣除 Dock 与
+            // 菜单栏可见区域，居中窗口会偏左。原生全屏会藏掉标题栏，故不用。
             if let Some(window) = _app.get_webview_window("main") {
                 let _ = window.maximize();
-                // macOS 不经插件激活：配置的 Overlay 标题栏直接生效并显示窗口；
-                // Windows / Linux 保持隐藏，等前端就绪后由插件激活显示。
+                // macOS 不经插件激活（激活会抹掉 Overlay 标题栏），配置直接生效；
+                // Windows / Linux 保持隐藏，等前端就绪后由插件激活并显示。
                 #[cfg(target_os = "macos")]
                 let _ = window.show();
             }
 
             // 原生菜单仅 macOS：系统栏渲染，动作经 menu-action 事件桥回前端。
-            // Windows / Linux 为无边框窗口（自绘标题栏 + web 菜单，见 MenuBar.vue），
+            // Windows / Linux 为无边框窗口（标题栏 web 菜单见 MenuBar.vue），
             // 原生菜单在无边框窗口不渲染，故不构建。
 #[cfg(target_os = "macos")]
             {
@@ -123,7 +121,7 @@ pub fn run() {
                     .item(&action("view.theme", "切换主题", None)?)
                     .build()?;
 
-                // 工具聚合校验与依赖 / 虚拟机管理（设计稿菜单结构：文件 编辑 视图 工具 结果 报告 帮助）
+                // 工具聚合校验、依赖与虚拟机管理
                 let tools = SubmenuBuilder::new(_app, "工具")
                     .item(&action("analysis.checkNetwork", "校验模具网络", None)?)
                     .item(&action("tools.refreshDeps", "探测运行时依赖", None)?)

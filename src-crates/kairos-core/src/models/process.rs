@@ -1,4 +1,4 @@
-//! 成型工艺设置：注射 / 保压 / 冷却参数（T08）。
+//! 成型工艺设置：注射 / 保压 / 冷却参数。
 
 use serde::{Deserialize, Serialize};
 

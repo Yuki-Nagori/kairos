@@ -1,4 +1,4 @@
-//! Kairos 无头 CLI（T32）：复用 kairos-core 的纯函数服务，零 Tauri 依赖。
+//! Kairos 无头 CLI：复用 kairos-core 的纯函数服务，零 Tauri 依赖。
 //! 错误一律以 `{code, message}` 结构化输出（与 IPC 契约同形），--json 供脚本消费。
 
 use std::path::Path;
