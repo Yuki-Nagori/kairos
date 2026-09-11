@@ -41,4 +41,51 @@ describe("buildReportHtml", () => {
     const html = buildReportHtml({ ...input, fieldStats: null });
     expect(html).not.toContain('class="stats"');
   });
+
+  it("几何摘要 / 探针数值 / 时间序列节按数据渲染且转义", () => {
+    const html = buildReportHtml({
+      projectName: "项目 <A>",
+      studyName: "研究",
+      materialName: "PP",
+      generatedAt: "now",
+      parameterRows: [["材料", "PP"]],
+      geometryRows: [
+        ["三角形数", "12"],
+        ["网格健康", "<b>健康</b>"],
+      ],
+      probeRows: [["#1 · 节点 3", "0.5000"]],
+      timeSeriesTables: [
+        {
+          probeLabel: "#1 · 节点 <3>",
+          samples: [
+            ["0.000", "1.0000"],
+            ["0.100", "2.0000"],
+          ],
+        },
+      ],
+      snapshots: [],
+      fieldStats: null,
+    });
+    expect(html).toContain("<h2>几何摘要</h2>");
+    expect(html).toContain("<h2>探针数值</h2>");
+    expect(html).toContain("<h2>探针时间序列</h2>");
+    expect(html).toContain("&lt;b&gt;健康&lt;/b&gt;");
+    expect(html).toContain("#1 · 节点 &lt;3&gt;");
+    expect(html).not.toContain("<b>健康</b>");
+  });
+
+  it("新节缺省时不渲染对应标题", () => {
+    const html = buildReportHtml({
+      projectName: "p",
+      studyName: "s",
+      materialName: "m",
+      generatedAt: "now",
+      parameterRows: [["材料", "PP"]],
+      snapshots: [],
+      fieldStats: null,
+    });
+    expect(html).not.toContain("几何摘要");
+    expect(html).not.toContain("探针数值");
+    expect(html).not.toContain("探针时间序列");
+  });
 });

@@ -14,6 +14,12 @@ interface ReportInput {
   parameterRows: Array<[string, string]>;
   snapshots: ReportSnapshot[];
   fieldStats: string | null;
+  /** 几何摘要（三角形数 / 尺寸 / 网格健康）；缺省或空数组时不渲染该节。 */
+  geometryRows?: Array<[string, string]>;
+  /** 探针数值（节点序号 → 当前场值）；缺省或空数组时不渲染该节。 */
+  probeRows?: Array<[string, string]>;
+  /** 探针时间序列（每探针一张 采样表）；缺省或空数组时不渲染该节。 */
+  timeSeriesTables?: Array<{ probeLabel: string; samples: Array<[string, string]> }>;
 }
 
 /** 转义 HTML 特殊字符：报告内容含用户输入（项目/研究名等），防止破坏标记结构。 */
@@ -26,10 +32,39 @@ export function escapeHtml(text: string): string {
 }
 
 /** 生成自包含 HTML 报告（可直接浏览器打开并打印为 PDF）。 */
-export function buildReportHtml(input: ReportInput): string {
-  const parameterRows = input.parameterRows
+/** 键值对 → 表格行（键值均转义）。 */
+function keyValueRows(rows: Array<[string, string]>): string {
+  return rows
     .map(([key, value]) => `<tr><th>${escapeHtml(key)}</th><td>${escapeHtml(value)}</td></tr>`)
     .join("\n");
+}
+
+/** 时间序列采样 → 表格行。 */
+function sampleRows(samples: Array<[string, string]>): string {
+  return samples
+    .map(([time, value]) => `<tr><td>${escapeHtml(time)}</td><td>${escapeHtml(value)}</td></tr>`)
+    .join("\n");
+}
+
+export function buildReportHtml(input: ReportInput): string {
+  const parameterRows = keyValueRows(input.parameterRows);
+  const geometryRows = keyValueRows(input.geometryRows ?? []);
+  const probeRows = keyValueRows(input.probeRows ?? []);
+  const timeSeriesTables = (input.timeSeriesTables ?? [])
+    .map(
+      (table) =>
+        `<h3>探针 ${escapeHtml(table.probeLabel)} 时间序列</h3>` +
+        `<table><thead><tr><th>时间 (s)</th><th>值</th></tr></thead><tbody>${sampleRows(table.samples)}</tbody></table>`,
+    )
+    .join("\n");
+  const geometrySection =
+    (input.geometryRows?.length ?? 0) > 0
+      ? `<h2>几何摘要</h2>\n<table>\n${geometryRows}\n</table>`
+      : "";
+  const probeSection =
+    (input.probeRows?.length ?? 0) > 0 ? `<h2>探针数值</h2>\n<table>\n${probeRows}\n</table>` : "";
+  const timeSeriesSection =
+    (input.timeSeriesTables?.length ?? 0) > 0 ? `<h2>探针时间序列</h2>\n${timeSeriesTables}` : "";
   const snapshots = input.snapshots
     .map(
       (snapshot) =>
@@ -63,8 +98,11 @@ export function buildReportHtml(input: ReportInput): string {
 <table>
 ${parameterRows}
 </table>
+${geometrySection}
 <h2>结果</h2>
 ${fieldStats}
+${probeSection}
+${timeSeriesSection}
 ${snapshots}
 <p class="meta">由 Kairos 生成 · 数值结果请结合材料数据来源与网格质量评估。</p>
 </body>

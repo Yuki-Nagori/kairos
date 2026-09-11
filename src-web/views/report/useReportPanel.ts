@@ -1,5 +1,6 @@
-/** 报告面板：汇总项目/材料/工艺/结果快照，生成自包含 HTML 报告（浏览器可打印 PDF）。 */
+/** 报告面板：汇总项目/材料/工艺/几何/结果快照/探针与时间序列，生成自包含 HTML 报告。 */
 import { ref } from "vue";
+import { useGeometryStore } from "../../stores/geometry";
 import { useMaterialsStore } from "../../stores/materials";
 import { useProjectStore } from "../../stores/project";
 import { useResultsStore } from "../../stores/results";
@@ -11,6 +12,7 @@ export function useReportPanel() {
   const project = useProjectStore();
   const materials = useMaterialsStore();
   const results = useResultsStore();
+  const geometry = useGeometryStore();
 
   // 状态行三种结局：初始引导语 → 缺项目/研究 → 生成成功。
   const status = ref("生成自包含 HTML（浏览器打开后 Ctrl+P 打印为 PDF）。");
@@ -49,14 +51,66 @@ export function useReportPanel() {
       const { min, max } = minMax(loadedField.values);
       fieldStats = `${loadedField.field} @ ${loadedField.timeDir}s：${loadedField.values.length} 个值，min ${min.toFixed(3)} / max ${max.toFixed(3)}${loadedField.complete ? "" : "（不完整）"}`;
     }
+
+    // 几何摘要：首个已导入几何的规模与健康度；体积网格报告存在时附质量行。
+    const geometryRows: Array<[string, string]> = [];
+    const geometrySummary = geometry.geometries[0];
+    if (geometrySummary !== undefined) {
+      const issues = geometrySummary.issues;
+      const healthy =
+        issues.degenerate === 0 &&
+        issues.openEdges === 0 &&
+        issues.nonManifoldEdges === 0 &&
+        issues.normalInconsistentEdges === 0;
+      geometryRows.push(
+        ["三角形数", String(geometrySummary.triangleCount)],
+        [
+          "尺寸",
+          `${geometrySummary.size.map((value) => value.toFixed(2)).join(" × ")} ${geometrySummary.suggestedUnit}`,
+        ],
+        [
+          "网格健康",
+          healthy
+            ? "健康"
+            : `退化 ${issues.degenerate} / 开放边 ${issues.openEdges} / 非流形 ${issues.nonManifoldEdges}`,
+        ],
+      );
+    }
+    const meshReport = geometry.meshReports[geometrySummary?.geometryId ?? ""];
+    if (meshReport !== undefined) {
+      geometryRows.push([
+        "体积网格",
+        `${meshReport.engine} · 节点 ${meshReport.nodeCount} · 四面体 ${meshReport.elementCount} · 体积 ${meshReport.totalVolume.toFixed(3)}`,
+      ]);
+    }
+
+    // 探针数值：当前加载场下各探针的取值。
+    const probeRows: Array<[string, string]> = loadedField
+      ? results.probes.map((probe) => [
+          `#${probe.id} · 节点 ${probe.nodeIndex}`,
+          loadedField.values[probe.nodeIndex]?.toFixed(4) ?? "越界",
+        ])
+      : [];
+
+    // 探针时间序列：已加载时按采样逐行输出。
+    const timeSeriesTables = results.probeTimeSeries.map((series) => ({
+      probeLabel: `#${series.probeId} · 节点 ${series.nodeIndex}`,
+      samples: series.samples.map(
+        (sample) => [sample.timeS.toFixed(3), sample.value.toFixed(4)] as [string, string],
+      ),
+    }));
+
     const html = buildReportHtml({
       projectName: currentProject.name,
       studyName: study.name,
       materialName: material?.name ?? "未登记",
       generatedAt: new Date().toLocaleString("zh-CN", { hour12: false }),
       parameterRows: rows,
+      geometryRows,
       snapshots,
       fieldStats,
+      probeRows,
+      timeSeriesTables,
     });
     const blob = new Blob([html], { type: "text/html;charset=utf-8" });
     const url = URL.createObjectURL(blob);

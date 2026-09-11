@@ -6,6 +6,7 @@ import ReportPanel from "../../../../src-web/views/report/ReportPanel.vue";
 import { registerSnapshot } from "../../../../src-web/render/snapshot";
 import { useMaterialsStore } from "../../../../src-web/stores/materials";
 import { useProjectStore } from "../../../../src-web/stores/project";
+import { useGeometryStore } from "../../../../src-web/stores/geometry";
 import { useResultsStore } from "../../../../src-web/stores/results";
 import type { Material, Project, ScalarField, Study } from "../../../../src-web/types";
 
@@ -223,5 +224,102 @@ describe("ReportPanel", () => {
 
     const html = await clickGenerate(wrapper);
     expect(html).not.toContain('class="stats"');
+  });
+
+  it("几何摘要 / 探针数值 / 时间序列进入报告；无数据时不渲染对应节", async () => {
+    const geometry = useGeometryStore();
+    geometry.geometries = [
+      {
+        geometryId: "geo-1",
+        fileName: "box.stl",
+        triangleCount: 12,
+        size: [10, 10, 2],
+        surfaceArea: 280,
+        signedVolume: 200,
+        suggestedUnit: "mm",
+        issues: { degenerate: 0, openEdges: 0, nonManifoldEdges: 0, normalInconsistentEdges: 0 },
+      },
+    ];
+    geometry.meshReports["geo-1"] = {
+      engine: "voxel",
+      nodeCount: 27,
+      elementCount: 40,
+      surfaceFaceCount: 60,
+      totalVolume: 200,
+      quality: { minEdgeRatio: 1, avgEdgeRatio: 1.2, maxEdgeRatio: 2, minVolume: 0.5 },
+    };
+    const results = useResultsStore();
+    results.loadedField = fieldFixture({ values: [10, 20, 30] });
+    // 第二个探针序号越界：值回退为「越界」占位。
+    results.probes = [
+      { id: 1, nodeIndex: 2 },
+      { id: 2, nodeIndex: 99 },
+    ];
+    results.probeTimeSeries = [
+      {
+        probeId: 1,
+        nodeIndex: 2,
+        samples: [
+          { timeS: 0, value: 30 },
+          { timeS: 1, value: 22 },
+        ],
+      },
+    ];
+    const project = useProjectStore();
+    project.project = projectFixture([studyFixture()]);
+    project.activeStudyId = "study-1";
+    const wrapper = mount(ReportPanel, { global: { plugins: [pinia] } });
+
+    const html = await clickGenerate(wrapper);
+
+    expect(html).toContain("<h2>几何摘要</h2>");
+    expect(html).toContain("体积网格");
+    expect(html).toContain("<h2>探针数值</h2>");
+    expect(html).toContain("#1 · 节点 2");
+    expect(html).toContain("30.0000");
+    expect(html).toContain("<h2>探针时间序列</h2>");
+    expect(html).toContain("22.0000");
+  });
+
+  it("不健康几何给出问题计数；无场时探针节省略", async () => {
+    const geometry = useGeometryStore();
+    geometry.geometries = [
+      {
+        geometryId: "geo-bad",
+        fileName: "bad.stl",
+        triangleCount: 12,
+        size: [10, 10, 2],
+        surfaceArea: 280,
+        signedVolume: 200,
+        suggestedUnit: "mm",
+        issues: { degenerate: 2, openEdges: 4, nonManifoldEdges: 0, normalInconsistentEdges: 0 },
+      },
+    ];
+    const results = useResultsStore();
+    results.probes = [{ id: 1, nodeIndex: 0 }];
+    const project = useProjectStore();
+    project.project = projectFixture([studyFixture()]);
+    project.activeStudyId = "study-1";
+    const wrapper = mount(ReportPanel, { global: { plugins: [pinia] } });
+
+    const html = await clickGenerate(wrapper);
+
+    expect(html).toContain("退化 2 / 开放边 4 / 非流形 0");
+    expect(html).not.toContain("<h2>探针数值</h2>");
+  });
+
+  it("无几何 / 无探针时不渲染对应节", async () => {
+    const results = useResultsStore();
+    results.loadedField = fieldFixture({ values: [10, 20, 30] });
+    const project = useProjectStore();
+    project.project = projectFixture([studyFixture()]);
+    project.activeStudyId = "study-1";
+    const wrapper = mount(ReportPanel, { global: { plugins: [pinia] } });
+
+    const html = await clickGenerate(wrapper);
+
+    expect(html).not.toContain("<h2>几何摘要</h2>");
+    expect(html).not.toContain("<h2>探针数值</h2>");
+    expect(html).not.toContain("<h2>探针时间序列</h2>");
   });
 });
