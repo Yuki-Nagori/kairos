@@ -214,3 +214,4 @@
 - **01:25** feat(core+ui): B1-C2 中面网格（T42）——顶点配对法中面抽取（相邻面内法向多射线取近、中面节点=顶点与命中点中点、单元继承表面连接、未配对顶点丢弃单元并计数）+ 杆系梁端点捕捉中面节点与自由结点复用（复用 T41 均匀格射线加速，提为 pub(crate)）+ MidplaneReport 契约锁定 + generate_midplane_mesh 命令 + 几何面板「中面网格」动作与报告行
 - **02:00** feat(core+ui): B1-C2 局部加密/边界层（T43）——体素引擎支持 MeshRefinement 分级加密（边界层：包围盒面几何比率聚集；区域盒：相交轴区间逐级对半细分），非均匀坐标贯穿节点表/行扫描/占位填充；保形依据为奇偶对角分解与单元尺寸无关（否决四面体二分级联方案的面片对角冲突）；MeshRefinement 契约锁定 + generate_volume_mesh 可选参数 + 几何面板「边界层数」输入透传
 - **02:10** docs(arch): B1 前处理收官校准——architecture-status 状态截至 2026-09-12，C1/C2 全项 [x]（IGES、双域、中面、局部加密/边界层），里程碑对照 B1 ~75% → ~95%（余缺口：双域/中面的求解消费、精确 B-rep 导入）
+- **02:40** refactor(core+ui): B1 新增模块整体 review——删除 IGES 只有测试消费的 ImportStats/parse_iges_with_stats 死 API（与 STEP 解析器口径对齐）；DualDomainBeam 更名 ShellBeam（双域/中面共用，原名误导）；提取 dualdomain::weld_surface 复用双域/中面重复的焊接+退化剔除闭包；中面自由节点索引算术拆直；MeshSession 文档补中面缓存与存储理由；面板测试改按 placeholder 定位输入框

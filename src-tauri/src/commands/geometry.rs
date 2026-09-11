@@ -23,7 +23,8 @@ use kairos_core::services::repair;
 use kairos_core::services::step;
 use tauri::State;
 
-/// 单个导入几何的会话缓存（表面网格 + 体积网格 + 双域网格）。
+/// 单个导入几何的会话缓存。表面网格是唯一入口数据；体积 / 双域 / 中面
+/// 网格是各生成命令的产物，供后续渲染与求解消费（暂未被下游读取）。
 pub struct MeshSession {
     pub mesh: TriangleMesh,
     pub file_name: String,

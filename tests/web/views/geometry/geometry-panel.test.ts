@@ -239,8 +239,7 @@ describe("GeometryPanel", () => {
     vi.mocked(generateVolumeMesh).mockResolvedValue(meshReportFixture());
     const wrapper = mount(GeometryPanel, { global: { plugins: [pinia] } });
 
-    const layersInput = wrapper.findAll("input")[1]!;
-    await layersInput.setValue("2");
+    await wrapper.find('input[placeholder="边界层数"]').setValue("2");
     await findButton(wrapper, "生成体积网格").trigger("click");
     await flushPromises();
 

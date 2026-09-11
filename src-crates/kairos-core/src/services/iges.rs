@@ -27,19 +27,10 @@ struct Ring {
     closed: bool,
 }
 
-/// 导入统计：被跳过的几何实体数量（未知类型 / 不可解析 / 未成封闭环）。
-#[derive(Debug, Default, PartialEq, Eq)]
-pub struct ImportStats {
-    pub skipped_entities: usize,
-}
-
 /// 解析 IGES 文本为三角网格（106 / 63 镶嵌子集）。
+/// 不属于子集的实体（未知类型 / 不可解析 / 未成封闭环）静默跳过；
+/// 全部不可导入时才报错。
 pub fn parse_iges(text: &str) -> Result<TriangleMesh> {
-    parse_iges_with_stats(text).map(|(mesh, _)| mesh)
-}
-
-/// 解析 IGES 并返回跳过统计（供上层提示不完整导入）。
-pub fn parse_iges_with_stats(text: &str) -> Result<(TriangleMesh, ImportStats)> {
     // 分节：只关心目录节 D 与参数节 P（固定 80 列行格式，第 73 列为节字母）。
     let mut d_lines: Vec<&str> = Vec::new();
     let mut p_lines: Vec<&str> = Vec::new();
@@ -77,7 +68,6 @@ pub fn parse_iges_with_stats(text: &str) -> Result<(TriangleMesh, ImportStats)> 
     }
 
     let mut triangles: Vec<Triangle> = Vec::new();
-    let mut stats = ImportStats::default();
     for (seq, entry) in &entries {
         if entry.entity_type == 124 {
             continue;
@@ -90,19 +80,10 @@ pub fn parse_iges_with_stats(text: &str) -> Result<(TriangleMesh, ImportStats)> 
         let rings = match entry.entity_type {
             63 => parse_entity_63(&tokens, entry.form, matrix),
             106 => parse_entity_106(&tokens, entry.form, matrix),
-            _ => {
-                stats.skipped_entities += 1;
-                continue;
-            }
+            _ => continue,
         };
-        let mut produced = 0usize;
         for ring in rings.unwrap_or_default().iter().filter(|ring| ring.closed) {
-            let before = triangles.len();
             fan_triangulate(&ring.points, &mut triangles);
-            produced += triangles.len() - before;
-        }
-        if produced == 0 {
-            stats.skipped_entities += 1;
         }
     }
 
@@ -112,7 +93,7 @@ pub fn parse_iges_with_stats(text: &str) -> Result<(TriangleMesh, ImportStats)> 
              封闭多边形；开放折线 / 点列 / B-rep 实体不构成可导入曲面）。",
         ));
     }
-    Ok((TriangleMesh { triangles }, stats))
+    Ok(TriangleMesh { triangles })
 }
 
 /// 解析 IGES 文件为三角网格。
@@ -520,21 +501,15 @@ mod tests {
     }
 
     #[test]
-    fn mixed_import_counts_skipped_entities() {
-        // 有效 63 + 未知 110 + 开放 63（form 1）→ 1 个三角形、2 个跳过。
+    fn mixed_import_only_imports_supported_closed_entities() {
+        // 有效 63 + 未知 110 + 开放 63（form 1）：只导入前者。
         let text = fixture(&[
             (1, 63, 0, 0, "63,0,3,0.,0.,1.,0.,0.,1.;"),
             (2, 110, 0, 0, "110,0.,0.,0.,1.,1.,1.;"),
             (3, 63, 0, 1, "63,1,3,0.,5.,1.,5.,0.,5.;"),
         ]);
-        let (mesh, stats) = parse_iges_with_stats(&text).unwrap();
+        let mesh = parse_iges(&text).unwrap();
         assert_eq!(mesh.triangle_count(), 1);
-        assert_eq!(
-            stats,
-            ImportStats {
-                skipped_entities: 2
-            }
-        );
     }
 
     #[test]

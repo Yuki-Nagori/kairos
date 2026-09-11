@@ -7,13 +7,11 @@
 //! 杆系梁端点捕捉中面节点；捕捉失败的端点成为自由节点，完全重合的
 //! 自由端按位置复用。
 
-use std::collections::HashMap;
-
 use crate::error::{KairosError, Result};
 use crate::models::geometry::TriangleMesh;
-use crate::models::mesh::{BeamCoupling, DualDomainBeam, MidplaneMesh, MidplaneReport};
+use crate::models::mesh::{BeamCoupling, MidplaneMesh, MidplaneReport, ShellBeam};
 use crate::models::runners::RunnerElement;
-use crate::services::dualdomain::{TriangleGrid, nearest_node, normalized_normal};
+use crate::services::dualdomain::{TriangleGrid, nearest_node, normalized_normal, weld_surface};
 
 type Point = [f64; 3];
 
@@ -50,33 +48,7 @@ pub fn generate(
         ));
     }
 
-    // 顶点焊接（与双域网格同一容差口径），剔除零面积与焊接退化三角形。
-    let weld_tolerance = diagonal * 1e-6;
-    let mut welds: HashMap<[i64; 3], usize> = HashMap::new();
-    let mut nodes: Vec<Point> = Vec::new();
-    let weld =
-        |point: Point, welds: &mut HashMap<[i64; 3], usize>, nodes: &mut Vec<Point>| -> usize {
-            let key: [i64; 3] = point.map(|value| (value / weld_tolerance).round() as i64);
-            *welds.entry(key).or_insert_with(|| {
-                nodes.push(point);
-                nodes.len() - 1
-            })
-        };
-    let mut triangles: Vec<[usize; 3]> = Vec::with_capacity(mesh.triangles.len());
-    let degenerate_limit = diagonal * 1e-12;
-    for triangle in &mesh.triangles {
-        if triangle.area() < degenerate_limit {
-            continue;
-        }
-        let indices = [
-            weld(triangle.a, &mut welds, &mut nodes),
-            weld(triangle.b, &mut welds, &mut nodes),
-            weld(triangle.c, &mut welds, &mut nodes),
-        ];
-        if indices[0] != indices[1] && indices[1] != indices[2] && indices[0] != indices[2] {
-            triangles.push(indices);
-        }
-    }
+    let (nodes, triangles) = weld_surface(mesh);
     if triangles.is_empty() {
         return Err(KairosError::validation(
             "焊接后没有有效三角形，无法生成中面网格。",
@@ -171,16 +143,16 @@ pub fn generate(
                 });
                 continue;
             }
-            let reused = free_nodes.iter().position(|candidate| candidate == &point);
-            endpoints[slot] = match reused {
-                Some(free_index) => mid_nodes.len() + free_index,
+            // 自由端索引接在中面节点之后（最后统一并入节点数组）。
+            match free_nodes.iter().position(|candidate| candidate == &point) {
+                Some(free_index) => endpoints[slot] = mid_nodes.len() + free_index,
                 None => {
+                    endpoints[slot] = mid_nodes.len() + free_nodes.len();
                     free_nodes.push(point);
-                    mid_nodes.len() + free_nodes.len() - 1
                 }
-            };
+            }
         }
-        beams.push(DualDomainBeam {
+        beams.push(ShellBeam {
             nodes: endpoints,
             diameter: runner.diameter_mm,
             kind: runner.kind,

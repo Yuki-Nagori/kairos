@@ -26,14 +26,14 @@ pub struct DualDomainMesh {
     /// 每个三角形的局部厚度；0 表示未配对到对面（开放 / 非薄壁区域）。
     pub thickness: Vec<f64>,
     /// 杆系梁单元（节点索引对 + 圆截面直径）。
-    pub beams: Vec<DualDomainBeam>,
+    pub beams: Vec<ShellBeam>,
     /// 梁端点与表面节点的耦合记录。
     pub couplings: Vec<BeamCoupling>,
 }
 
-/// 梁单元：两端节点索引、圆截面直径与单元类型。
+/// 壳网格梁单元（双域 / 中面共用）：两端节点索引、圆截面直径与单元类型。
 #[derive(Debug, Clone, PartialEq)]
-pub struct DualDomainBeam {
+pub struct ShellBeam {
     pub nodes: [usize; 2],
     pub diameter: f64,
     pub kind: RunnerKind,
@@ -63,7 +63,7 @@ pub struct MidplaneMesh {
     /// 每个单元的厚度（三顶点配对厚度均值）。
     pub thickness: Vec<f64>,
     /// 杆系梁单元（与双域网格同型）。
-    pub beams: Vec<DualDomainBeam>,
+    pub beams: Vec<ShellBeam>,
     /// 梁端点与中面节点的耦合记录。
     pub couplings: Vec<BeamCoupling>,
 }

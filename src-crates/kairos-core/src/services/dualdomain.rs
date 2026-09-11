@@ -10,7 +10,7 @@ use std::collections::HashMap;
 
 use crate::error::{KairosError, Result};
 use crate::models::geometry::TriangleMesh;
-use crate::models::mesh::{BeamCoupling, DualDomainBeam, DualDomainMesh, DualDomainReport};
+use crate::models::mesh::{BeamCoupling, DualDomainMesh, DualDomainReport, ShellBeam};
 use crate::models::runners::RunnerElement;
 
 type Point = [f64; 3];
@@ -31,6 +31,39 @@ impl DualDomainParams {
         }
         Ok(())
     }
+}
+
+/// 顶点焊接（与网格健康检查同一容差口径）：剔除零面积与焊接退化三角形，
+/// 返回焊接后节点表与索引三角形。空三角形列表由调用方按各自语境报错。
+pub(crate) fn weld_surface(mesh: &TriangleMesh) -> (Vec<Point>, Vec<[usize; 3]>) {
+    let diagonal = mesh.diagonal();
+    let weld_tolerance = diagonal * 1e-6;
+    let mut welds: HashMap<[i64; 3], usize> = HashMap::new();
+    let mut nodes: Vec<Point> = Vec::new();
+    let weld =
+        |point: Point, welds: &mut HashMap<[i64; 3], usize>, nodes: &mut Vec<Point>| -> usize {
+            let key: [i64; 3] = point.map(|value| (value / weld_tolerance).round() as i64);
+            *welds.entry(key).or_insert_with(|| {
+                nodes.push(point);
+                nodes.len() - 1
+            })
+        };
+    let mut triangles: Vec<[usize; 3]> = Vec::with_capacity(mesh.triangles.len());
+    let degenerate_limit = diagonal * 1e-12;
+    for triangle in &mesh.triangles {
+        if triangle.area() < degenerate_limit {
+            continue;
+        }
+        let indices = [
+            weld(triangle.a, &mut welds, &mut nodes),
+            weld(triangle.b, &mut welds, &mut nodes),
+            weld(triangle.c, &mut welds, &mut nodes),
+        ];
+        if indices[0] != indices[1] && indices[1] != indices[2] && indices[0] != indices[2] {
+            triangles.push(indices);
+        }
+    }
+    (nodes, triangles)
 }
 
 /// 由表面网格与杆系生成双域网格。
@@ -131,7 +164,7 @@ pub fn generate(
             }
             endpoints[slot] = weld(point, &mut welds, &mut nodes);
         }
-        beams.push(DualDomainBeam {
+        beams.push(ShellBeam {
             nodes: endpoints,
             diameter: runner.diameter_mm,
             kind: runner.kind,
