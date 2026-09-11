@@ -1,4 +1,4 @@
-/** 材料库状态：内置示例材料 + 用户自定义材料的导入/导出/复制与研究登记。 */
+/** 材料库状态：内置参考牌号 + 用户自定义材料的导入/导出/复制与研究登记。 */
 import { defineStore } from "pinia";
 import {
   deleteCustomMaterial,

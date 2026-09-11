@@ -85,6 +85,6 @@ pub struct Material {
     pub mechanics: Option<Mechanics>,
     /// 纤维 / 填料参数组（无填料牌号为 null）。
     pub filler: Option<FillerGroup>,
-    /// 数据来源与免责声明（内置示例材料必须标注）。
+    /// 数据来源与免责声明（内置参考牌号必须标注）。
     pub data_note: String,
 }

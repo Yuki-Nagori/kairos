@@ -1,4 +1,4 @@
-//! 材料领域服务：参数校验、内置示例材料、自定义材料库的读写规则。
+//! 材料领域服务：参数校验、内置参考牌号库、自定义材料库的读写规则。
 
 use std::fs;
 use std::path::Path;
@@ -6,7 +6,7 @@ use std::path::Path;
 use crate::error::{KairosError, Result};
 use crate::models::material::{Material, PropertyTable};
 
-/// 内置示例材料（数据为量级合理的示例值，非实测；交付给用户前必须保留免责声明）。
+/// 内置参考牌号（数据为公开文献典型值，非实测；交付给用户前必须保留免责声明）。
 pub const BUILTIN_MATERIALS_JSON: &str = include_str!("../../assets/builtin-materials.json");
 
 /// 校验温度表：非空、温度严格递增、数值有限且为正。
@@ -87,7 +87,7 @@ pub fn validate(material: &Material) -> Result<()> {
     Ok(())
 }
 
-/// 解析内置示例材料；内置资产损坏属于构建期错误，转 internal。
+/// 解析内置参考牌号库；内置资产损坏属于构建期错误，转 internal。
 pub fn builtin_materials() -> Result<Vec<Material>> {
     serde_json::from_str(BUILTIN_MATERIALS_JSON)
         .map_err(|e| KairosError::internal(format!("内置材料资产损坏：{e}")))
@@ -297,10 +297,10 @@ mod tests {
     #[test]
     fn builtin_assets_are_valid() {
         let materials = builtin_materials().unwrap();
-        assert!(materials.len() >= 2, "内置示例材料至少 2 个");
+        assert!(materials.len() >= 2, "内置参考牌号至少 2 个");
         for material in &materials {
             validate(material).unwrap_or_else(|e| panic!("{} 校验失败：{e}", material.name));
-            assert!(!material.data_note.is_empty(), "示例材料必须注明数据来源");
+            assert!(!material.data_note.is_empty(), "参考牌号必须注明数据来源");
         }
     }
 

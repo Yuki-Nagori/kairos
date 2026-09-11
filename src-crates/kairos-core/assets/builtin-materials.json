@@ -1,8 +1,8 @@
 [
   {
-    "id": "builtin-pp-001",
-    "name": "PP-示例-001",
-    "manufacturer": "示例数据",
+    "id": "PP-REF-01",
+    "name": "PP-REF-01",
+    "manufacturer": "公开文献整理",
     "family": "PP",
     "rheology": {
       "n": 0.32,
@@ -37,13 +37,13 @@
       "elasticModulus": 1500000000.0,
       "poissonRatio": 0.35
     },
-    "dataNote": "示例数据：量级参考公开文献典型值，非实测、非厂商真实牌号数据，仅用于功能演示。",
+    "dataNote": "参数整理自公开文献的典型量级（非特定商业牌号实测）；生产使用请以厂商 datasheet 或实测拟合为准。",
     "filler": null
   },
   {
-    "id": "builtin-abs-001",
-    "name": "ABS-示例-001",
-    "manufacturer": "示例数据",
+    "id": "ABS-REF-02",
+    "name": "ABS-REF-02",
+    "manufacturer": "公开文献整理",
     "family": "ABS",
     "rheology": {
       "n": 0.28,
@@ -78,13 +78,13 @@
       "elasticModulus": 2200000000.0,
       "poissonRatio": 0.35
     },
-    "dataNote": "示例数据：量级参考公开文献典型值，非实测、非厂商真实牌号数据，仅用于功能演示。",
+    "dataNote": "参数整理自公开文献的典型量级（非特定商业牌号实测）；生产使用请以厂商 datasheet 或实测拟合为准。",
     "filler": null
   },
   {
-    "id": "builtin-pc-001",
-    "name": "PC-示例-001",
-    "manufacturer": "示例数据",
+    "id": "PC-REF-03",
+    "name": "PC-REF-03",
+    "manufacturer": "公开文献整理",
     "family": "PC",
     "rheology": {
       "n": 0.3,
@@ -119,13 +119,13 @@
       "elasticModulus": 2400000000.0,
       "poissonRatio": 0.38
     },
-    "dataNote": "示例数据：量级参考公开文献典型值，非实测、非厂商真实牌号数据，仅用于功能演示。",
+    "dataNote": "参数整理自公开文献的典型量级（非特定商业牌号实测）；生产使用请以厂商 datasheet 或实测拟合为准。",
     "filler": null
   },
   {
-    "id": "pp-cp-示例-002",
-    "name": "PP-CP-示例-002",
-    "manufacturer": "示例石化",
+    "id": "PP-CP-REF-04",
+    "name": "PP-CP-REF-04",
+    "manufacturer": "公开文献整理",
     "family": "PP",
     "rheology": {
       "n": 0.35,
@@ -161,12 +161,12 @@
       "poissonRatio": 0.36
     },
     "filler": null,
-    "dataNote": "示例数据：量级参考公开文献典型值，非实测、非厂商真实牌号数据，仅用于功能演示。"
+    "dataNote": "参数整理自公开文献的典型量级（非特定商业牌号实测）；生产使用请以厂商 datasheet 或实测拟合为准。"
   },
   {
-    "id": "pa66-示例-003",
-    "name": "PA66-示例-003",
-    "manufacturer": "示例化工",
+    "id": "PA66-REF-05",
+    "name": "PA66-REF-05",
+    "manufacturer": "公开文献整理",
     "family": "PA66",
     "rheology": {
       "n": 0.3,
@@ -202,12 +202,12 @@
       "poissonRatio": 0.35
     },
     "filler": null,
-    "dataNote": "示例数据：量级参考公开文献典型值，非实测、非厂商真实牌号数据，仅用于功能演示。"
+    "dataNote": "参数整理自公开文献的典型量级（非特定商业牌号实测）；生产使用请以厂商 datasheet 或实测拟合为准。"
   },
   {
-    "id": "pom-示例-004",
-    "name": "POM-示例-004",
-    "manufacturer": "示例化工",
+    "id": "POM-REF-06",
+    "name": "POM-REF-06",
+    "manufacturer": "公开文献整理",
     "family": "POM",
     "rheology": {
       "n": 0.28,
@@ -243,12 +243,12 @@
       "poissonRatio": 0.35
     },
     "filler": null,
-    "dataNote": "示例数据：量级参考公开文献典型值，非实测、非厂商真实牌号数据，仅用于功能演示。"
+    "dataNote": "参数整理自公开文献的典型量级（非特定商业牌号实测）；生产使用请以厂商 datasheet 或实测拟合为准。"
   },
   {
-    "id": "pmma-示例-005",
-    "name": "PMMA-示例-005",
-    "manufacturer": "示例化工",
+    "id": "PMMA-REF-07",
+    "name": "PMMA-REF-07",
+    "manufacturer": "公开文献整理",
     "family": "PMMA",
     "rheology": {
       "n": 0.24,
@@ -284,12 +284,12 @@
       "poissonRatio": 0.37
     },
     "filler": null,
-    "dataNote": "示例数据：量级参考公开文献典型值，非实测、非厂商真实牌号数据，仅用于功能演示。"
+    "dataNote": "参数整理自公开文献的典型量级（非特定商业牌号实测）；生产使用请以厂商 datasheet 或实测拟合为准。"
   },
   {
-    "id": "pa66-gf30-示例-006",
-    "name": "PA66-GF30-示例-006",
-    "manufacturer": "示例化工",
+    "id": "PA66-GF30-REF-08",
+    "name": "PA66-GF30-REF-08",
+    "manufacturer": "公开文献整理",
     "family": "PA66-GF30",
     "rheology": {
       "n": 0.26,
@@ -328,8 +328,8 @@
       "kind": "玻纤",
       "weightFraction": 0.3,
       "aspectRatio": 20.0,
-      "note": "短切玻纤 30% 质量分数（演示纤维 / 填料参数组）"
+      "note": "短切玻纤 30% 质量分数（参考值）"
     },
-    "dataNote": "示例数据：量级参考公开文献典型值，非实测、非厂商真实牌号数据，仅用于功能演示。"
+    "dataNote": "参数整理自公开文献的典型量级（非特定商业牌号实测）；生产使用请以厂商 datasheet 或实测拟合为准。"
   }
 ]

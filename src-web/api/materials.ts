@@ -2,7 +2,7 @@
 import { invokeCommand } from "../utils/ipc";
 import type { Material } from "../types";
 
-/** 内置示例材料清单。 */
+/** 内置参考牌号清单。 */
 export function listBuiltinMaterials(): Promise<Material[]> {
   return invokeCommand("list_builtin_materials");
 }

@@ -107,7 +107,7 @@ export interface Material {
   dataNote: string;
 }
 
-/** 材料库：内置示例材料 + 自定义材料。 */
+/** 材料库：内置参考牌号 + 自定义材料。 */
 export interface MaterialLibrary {
   builtin: Material[];
   custom: Material[];

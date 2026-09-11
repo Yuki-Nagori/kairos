@@ -43,7 +43,7 @@ const {
     <!-- 左列仅 ~280px：横排三栏会把详情区挤成 0 宽，列表收两列网格、详情整宽在下 -->
     <div class="grid grid-cols-2 gap-2">
       <div class="min-w-0">
-        <p class="mb-1 text-xs font-semibold text-zinc-400">内置示例</p>
+        <p class="mb-1 text-xs font-semibold text-zinc-400">内置参考库</p>
         <div class="space-y-1">
           <button
             v-for="material in materials.materials.builtin"
