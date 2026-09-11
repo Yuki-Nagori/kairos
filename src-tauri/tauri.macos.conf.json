@@ -7,10 +7,7 @@
         "title": "Kairos",
         "width": 1440,
         "height": 900,
-        "resizable": false,
-        "decorations": true,
-        "titleBarStyle": "Overlay",
-        "hiddenTitle": true
+        "resizable": false
       }
     ]
   }

@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+/* 插件内嵌窗口控制按钮按此高度对齐（与 MenuBar 行高 h-9 一致） */
+:root {
+  --tauri-plugin-decoration-titlebar-height: 36px;
+}
+
 @theme {
   --font-sans:
     ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,

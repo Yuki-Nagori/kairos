@@ -6,16 +6,15 @@
 import type { Platform } from "./environment";
 import { shortcutLabel, SHORTCUTS } from "./shortcuts";
 
-/** 外壳能力：各平台标题栏 / 菜单 / 窗口控制的承载方式。 */
+/**
+ * 外壳能力：各平台标题栏 / 菜单的承载方式。
+ * 窗口控制不在能力矩阵内——由系统（macOS 红绿灯）或 tauri-plugin-decoration
+ * 内嵌控制按钮（Windows/Linux，含 Win11 Snap Layout 热区）承载，标题栏
+ * 布局通过插件的 clearance CSS 变量避让，无需应用分支。
+ */
 export interface ShellCapabilities {
   /** 应用菜单由系统菜单栏承载（macOS 桌面端）；false 时标题栏内自绘 web 菜单。 */
   nativeMenu: boolean;
-  /** 窗口控制由系统标题栏承载（macOS 红绿灯）；false 且 windowControls 为真时标题栏自绘。 */
-  nativeWindowControls: boolean;
-  /** 内容延伸进系统标题栏（macOS Overlay），标题栏行首需为红绿灯留位。 */
-  overlayTitleBar: boolean;
-  /** 标题栏自绘窗口控制按钮可用（Windows/Linux 的 Tauri 运行时）。 */
-  windowControls: boolean;
   /** 命令面板修饰键提示（⌘K / Ctrl+K）。 */
   paletteShortcutLabel: string;
 }
@@ -32,17 +31,11 @@ export function resolveShellCapabilities(platform: Platform, tauri: boolean): Sh
   if (platform === "macos") {
     return {
       nativeMenu: tauri,
-      nativeWindowControls: tauri,
-      overlayTitleBar: tauri,
-      windowControls: false,
       paletteShortcutLabel,
     };
   }
   return {
     nativeMenu: false,
-    nativeWindowControls: false,
-    overlayTitleBar: false,
-    windowControls: tauri,
     paletteShortcutLabel,
   };
 }

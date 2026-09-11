@@ -4,36 +4,26 @@ import { resolveShellCapabilities } from "../../../src-web/utils/shell";
 import { useShell } from "../../../src-web/composables/useShell";
 
 describe("resolveShellCapabilities 能力矩阵", () => {
-  it("macOS + Tauri：系统菜单栏 / 红绿灯 / Overlay，无自绘窗口控制", () => {
+  it("macOS + Tauri：菜单由系统菜单栏承载", () => {
     const shell = resolveShellCapabilities("macos", true);
     expect(shell).toEqual({
       nativeMenu: true,
-      nativeWindowControls: true,
-      overlayTitleBar: true,
-      windowControls: false,
       paletteShortcutLabel: "⌘K",
     });
   });
 
-  it("Windows/Linux + Tauri：无边框窗口自绘菜单与窗口控制", () => {
+  it("Windows/Linux：无边框窗口，标题栏内自绘菜单", () => {
     const shell = resolveShellCapabilities("windows", true);
     expect(shell).toEqual({
       nativeMenu: false,
-      nativeWindowControls: false,
-      overlayTitleBar: false,
-      windowControls: true,
       paletteShortcutLabel: "Ctrl+K",
     });
-    expect(resolveShellCapabilities("linux", true).windowControls).toBe(true);
+    expect(resolveShellCapabilities("linux", true).nativeMenu).toBe(false);
   });
 
-  it("浏览器预览：无系统菜单与窗口控制，macOS 亦无 Overlay 可延伸", () => {
+  it("浏览器预览：系统菜单栏属于浏览器，任意平台均自绘 web 菜单", () => {
     for (const platform of ["macos", "windows", "linux"] as const) {
-      const shell = resolveShellCapabilities(platform, false);
-      expect(shell.nativeMenu).toBe(false);
-      expect(shell.nativeWindowControls).toBe(false);
-      expect(shell.overlayTitleBar).toBe(false);
-      expect(shell.windowControls).toBe(false);
+      expect(resolveShellCapabilities(platform, false).nativeMenu).toBe(false);
     }
   });
 
@@ -53,9 +43,6 @@ describe("useShell", () => {
     try {
       expect(useShell()).toEqual({
         nativeMenu: false,
-        nativeWindowControls: false,
-        overlayTitleBar: false,
-        windowControls: false,
         paletteShortcutLabel: "Ctrl+K",
       });
     } finally {

@@ -3,26 +3,11 @@ import { enableAutoUnmount, mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import type { Pinia } from "pinia";
 import type { DOMWrapper, VueWrapper } from "@vue/test-utils";
-import { flushPromises } from "@vue/test-utils";
 import MenuBar from "../../../src-web/components/menu-bar/MenuBar.vue";
 import { useAboutDialog } from "../../../src-web/components/menu-bar/useAboutDialog";
-import { useWindowControls } from "../../../src-web/components/menu-bar/useWindowControls";
 import { useCommandPalette } from "../../../src-web/components/command-palette/useCommandPalette";
 import { useAppStore } from "../../../src-web/stores/app";
 import { useProjectStore } from "../../../src-web/stores/project";
-
-// 窗口控制测试桩：getCurrentWindow 返回可断言的假窗口
-const unlisten = vi.fn();
-const windowApi = {
-  minimize: vi.fn().mockResolvedValue(undefined),
-  toggleMaximize: vi.fn().mockResolvedValue(undefined),
-  close: vi.fn().mockResolvedValue(undefined),
-  isMaximized: vi.fn().mockResolvedValue(false),
-  onResized: vi.fn().mockResolvedValue(unlisten),
-};
-vi.mock("@tauri-apps/api/window", () => ({
-  getCurrentWindow: () => windowApi,
-}));
 
 const GROUP_LABELS = ["文件", "视图", "工具", "结果", "报告", "帮助"];
 
@@ -181,12 +166,11 @@ describe("MenuBar（Windows/Linux 自绘标题栏）", () => {
     useCommandPalette().closePalette();
   });
 
-  it("macOS 桌面（系统菜单栏 + Overlay）不渲染 web 菜单与窗口控制", () => {
+  it("macOS 桌面（系统菜单栏承载菜单）不渲染 web 菜单", () => {
     vi.stubGlobal("navigator", { userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)" });
     (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {};
     const wrapper = mount(MenuBar, { global: { plugins: [pinia] } });
     expect(wrapper.find("nav").exists()).toBe(false);
-    expect(wrapper.findAll("button").map((button) => button.text())).not.toContain("✕");
     expect(wrapper.text()).toContain("搜索命令…");
     delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__;
   });
@@ -195,81 +179,19 @@ describe("MenuBar（Windows/Linux 自绘标题栏）", () => {
     vi.stubGlobal("navigator", { userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)" });
     const wrapper = mount(MenuBar, { global: { plugins: [pinia] } });
     expect(wrapper.find("nav").exists()).toBe(true);
-    expect(wrapper.findAll("button").map((button) => button.text())).not.toContain("✕");
-  });
-});
-
-describe("窗口控制（Tauri 运行时才渲染）", () => {
-  let pinia: Pinia;
-
-  beforeEach(() => {
-    pinia = createPinia();
-    setActivePinia(pinia);
-    vi.stubGlobal("navigator", { userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" });
-    windowApi.minimize.mockClear();
-    windowApi.toggleMaximize.mockClear();
-    windowApi.close.mockClear();
-    windowApi.isMaximized.mockClear();
-    windowApi.onResized.mockClear();
-    unlisten.mockClear();
   });
 
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
-  it("浏览器预览（无 __TAURI_INTERNALS__）不渲染窗口控制按钮，控制函数不动窗口", () => {
-    const wrapper = mount(MenuBar, { global: { plugins: [pinia] } });
-    expect(wrapper.findAll("button").map((button) => button.text())).not.toContain("✕");
-
-    const controls = useWindowControls();
-    expect(controls.available).toBe(false);
-    controls.minimize();
-    controls.toggleMaximize();
-    controls.close();
-    expect(windowApi.minimize).not.toHaveBeenCalled();
-    expect(windowApi.toggleMaximize).not.toHaveBeenCalled();
-    expect(windowApi.close).not.toHaveBeenCalled();
-  });
-
-  it("Tauri 运行时渲染窗口控制并调用窗口 API，跟踪最大化状态", async () => {
-    (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {};
-    const wrapper = mount(MenuBar, { global: { plugins: [pinia] } });
-    await flushPromises();
-
-    const buttons = wrapper.findAll("button").map((button) => button.text());
-    expect(buttons).toContain("─");
-    expect(buttons).toContain("▢");
-    expect(buttons).toContain("✕");
-    expect(windowApi.isMaximized).toHaveBeenCalled();
-    expect(windowApi.onResized).toHaveBeenCalledOnce();
-
-    const controls = useWindowControls();
-    expect(controls.available).toBe(true);
-    controls.minimize();
-    controls.toggleMaximize();
-    controls.close();
-    expect(windowApi.minimize).toHaveBeenCalledOnce();
-    expect(windowApi.toggleMaximize).toHaveBeenCalledOnce();
-    expect(windowApi.close).toHaveBeenCalledOnce();
-    delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__;
-  });
-
-  it("最大化状态经 resize 事件刷新，图标随之切换，卸载时退订", async () => {
-    (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {};
-    const wrapper = mount(MenuBar, { global: { plugins: [pinia] } });
-    expect(wrapper.findAll("button").map((button) => button.text())).toContain("▢");
-
-    windowApi.isMaximized.mockResolvedValue(true);
-    // 触发 onResized 回调 → 重新查询最大化状态
-    const handler = windowApi.onResized.mock.calls[0]![0] as () => void;
-    handler();
-    await flushPromises();
-    expect(wrapper.findAll("button").map((button) => button.text())).toContain("❐");
-
-    // 卸载时退订窗口事件
-    wrapper.unmount();
-    expect(unlisten).toHaveBeenCalledOnce();
-    delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__;
+  it("三端均不自绘窗口控制按钮（macOS 红绿灯 / Win-Linux 插件内嵌控制）", () => {
+    for (const userAgent of [
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
+    ]) {
+      vi.stubGlobal("navigator", { userAgent });
+      const wrapper = mount(MenuBar, { global: { plugins: [pinia] } });
+      const labels = wrapper.findAll("button").map((button) => button.text());
+      expect(labels).not.toContain("─");
+      expect(labels).not.toContain("▢");
+      expect(labels).not.toContain("✕");
+    }
   });
 });

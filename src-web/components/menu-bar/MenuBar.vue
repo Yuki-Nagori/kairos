@@ -1,29 +1,23 @@
 <script setup lang="ts">
 /**
- * 应用标题栏（菜单栏行）：
- * - macOS：Overlay 标题栏——本行即标题栏（内容延伸到系统红绿灯下，行首留位），
- *   菜单本体在系统菜单栏；
- * - Windows / Linux：无边框窗口，本行即标题栏——拖拽移动、web 菜单下拉、
- *   窗口控制按钮（最小化/最大化/关闭，走 Tauri 窗口 API）。
+ * 应用标题栏（菜单栏行）：三端统一为 Overlay 标题栏
+ * （tauri-plugin-decoration 运行时管理装饰），本行即标题栏——
+ * 拖拽移动、品牌、菜单、命令搜索入口都在这一行。
+ * 菜单本体：macOS 在系统菜单栏；Windows/Linux 无边框由本行 web 菜单承载。
+ * 窗口控制：macOS 为系统红绿灯，Windows/Linux 为插件内嵌控制按钮
+ * （Windows 11 含 Snap Layout 热区）——行首行尾按插件发布的 clearance
+ * 变量避让，不硬编码按钮宽度。
  */
 import { useShell } from "../../composables/useShell";
 import AboutDialog from "./AboutDialog.vue";
 import { useAboutDialog } from "./useAboutDialog";
 import { useMenuBar } from "./useMenuBar";
 import { useCommandPalette } from "../command-palette/useCommandPalette";
-import { useWindowControls } from "./useWindowControls";
 
 const shell = useShell();
 const { menuGroups, openIndex, toggleMenu, hoverMenu, runCommand } = useMenuBar();
 const { aboutOpen, hideAbout } = useAboutDialog();
 const { openPalette } = useCommandPalette();
-const {
-  available: controlsAvailable,
-  maximized,
-  minimize,
-  toggleMaximize,
-  close,
-} = useWindowControls();
 </script>
 
 <template>
@@ -31,7 +25,10 @@ const {
     data-menu-root
     data-tauri-drag-region
     class="flex h-9 shrink-0 items-center gap-1 border-b border-zinc-800 bg-zinc-900 select-none"
-    :class="shell.overlayTitleBar ? 'pl-20 pr-3' : 'px-3'"
+    :style="{
+      paddingLeft: 'max(12px, var(--tauri-plugin-decoration-left-clearance, 0px))',
+      paddingRight: 'max(12px, var(--tauri-plugin-decoration-right-clearance, 0px))',
+    }"
   >
     <img src="/icon.svg" alt="Kairos" data-tauri-drag-region class="mr-1.5 size-4 shrink-0" />
     <h1 data-tauri-drag-region class="text-xs font-semibold text-emerald-400">Kairos</h1>
@@ -86,34 +83,6 @@ const {
         shell.paletteShortcutLabel
       }}</span>
     </button>
-
-    <!-- 自绘窗口控制（Windows/Linux 无边框窗口）：走 Tauri 窗口 API -->
-    <div v-if="controlsAvailable" class="ml-3 flex items-center self-stretch">
-      <button
-        type="button"
-        title="最小化"
-        class="flex h-full w-10 items-center justify-center text-xs text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
-        @click="minimize()"
-      >
-        ─
-      </button>
-      <button
-        type="button"
-        :title="maximized ? '还原' : '最大化 / 还原'"
-        class="flex h-full w-10 items-center justify-center text-[10px] text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
-        @click="toggleMaximize()"
-      >
-        {{ maximized ? "❐" : "▢" }}
-      </button>
-      <button
-        type="button"
-        title="关闭"
-        class="flex h-full w-10 items-center justify-center text-xs text-zinc-400 transition-colors hover:bg-red-600 hover:text-white"
-        @click="close()"
-      >
-        ✕
-      </button>
-    </div>
 
     <AboutDialog :open="aboutOpen" @close="hideAbout()" />
   </header>

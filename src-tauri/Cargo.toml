@@ -19,6 +19,7 @@ serde_json = "1"
 tauri.workspace = true
 pollster = "0.4"
 tauri-plugin-dialog = "2"
+tauri-plugin-decoration = "3"
 ureq = "2"
 wgpu = "24"
 

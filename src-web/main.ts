@@ -5,6 +5,7 @@ import { createApp } from "vue";
 import App from "./App.vue";
 import { setupMenuActions } from "./menu-actions";
 import { setupGlobalShortcuts } from "./global-shortcuts";
+import { activateWindowDecoration } from "./window-decoration";
 import { initTheme } from "./composables/useTheme";
 import { useProjectStore } from "./stores/project";
 
@@ -27,3 +28,6 @@ setupMenuActions();
 
 // bootstrap 内部已自行处理失败（setError），无需 await。
 void useProjectStore().bootstrap();
+
+// 前端就绪后激活窗口装饰并显示窗口（失败回退原生标题栏；浏览器预览跳过）
+activateWindowDecoration();

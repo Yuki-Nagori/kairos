@@ -9,6 +9,10 @@ pub mod commands;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // 窗口装饰按平台运行时管理：Windows/Linux 无边框 + 内嵌控制按钮
+        // （Win11 含 Snap Layout 热区），macOS 保留红绿灯；激活失败回退原生标题栏。
+        // 必须先于任何 webview 创建注册。
+        .plugin(tauri_plugin_decoration::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(commands::geometry::GeometryStore::default())
         .manage(commands::jobs::JobScheduler::default().with_vm_shell(

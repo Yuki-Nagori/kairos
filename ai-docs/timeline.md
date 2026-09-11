@@ -188,3 +188,4 @@
 - **09:30** refactor(ui): 组合根类型化——App.vue 面板配置 stages 改 Stage[]（消除逗号串解析）、折叠网格列宽收敛为 gridClass 计算属性；menu-actions 动作 id 收编为 MenuActionId 编译期约束（注册表/面板引用 id 拼写错误会在 typecheck 暴露）
 - **09:45** fix(ui+tauri): 标题栏 review 收尾——恢复最小尺寸约束（1024×640，Win/Linux 可缩放后缺失）；最大化状态经 resize 事件跟踪，最大化/还原图标与提示随之切换；菜单按钮补 aria-haspopup/aria-expanded
 - **09:55** test+refactor: 视口叠加层构造下沉 render/overlays（buildOverlayLayers 纯函数 + 单测，useViewportPanel 只做上传编排）；新增菜单动作契约测试（Rust 菜单 id ⊆ 前端动作表 + 无重复 + 核心集防回漂，解析双方源码静态断言）
+- **10:10** feat(tauri+ui): 接入 tauri-plugin-decoration——窗口装饰运行时管理：Win/Linux 无边框 + 插件内嵌控制按钮（Win11 Snap Layout 热区），macOS 红绿灯叠加；前端 activate_and_show 激活失败回退原生标题栏；移除自绘窗口控制按钮，标题栏两侧按插件 clearance 变量避让
