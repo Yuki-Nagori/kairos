@@ -230,3 +230,4 @@
 - **06:10** feat(ui): C8 模板化自定义报告（T53）——buildReportHtml 增 ReportOptions（自定义标题 / 备注转义渲染 / 六分区开关，缺省全开兼容既有调用）+ 报告面板模板区（标题输入、备注文本域、分区勾选）透传生成；util/panel 各 2 新测试（含标题与备注转义注入用例）；T21 八项清单评审入 ai-docs/reviews/T53-review.md
 - **06:30** docs(arch): C8 报告生成收官——富文本/HTML 分析报告（T52 增强 + T53 模板化）与模板化自定义报告转 [x]；C8 剩余仅为真机无关的持久化/懒加载类延伸；B3 ~75%
 - **07:07** fix(mesh): 整体评审修复①——Gmsh 目标尺寸透传（tetrahedralize_args 增 -clmax 可选参数，generate_gmsh_mesh 校验后传入，此前被静默丢弃）；修复报告真正返回（RepairReport 迁入 models/ + 新增 RepairOutcome DTO，契约测试锁定 camelCase，前端 store 记录 repairReports、面板渲染非零修复项）；gmsh 子进程编排下沉 core services/gmsh::tetrahedralize（CLI 与桌面命令共用，消除两处重复）；CLI 网格完成消息修正引擎标识
+- **07:26** fix(jobs/downloads): 整体评审修复②——线程模型边角。multipass 的 case 目录 tar 复制（可耗时数分钟）从主线程 promote 路径移入作业线程，submit_job 立即返回不再冻结 UI；tar 启动失败由静默跳过改为明确报错（此前会无 case 目录照样启动求解器）；spawn 失败统一走「标记失败+提升下一个」保持队列推进；downloads 的 /releases/latest 资产解析（GitHub API 阻塞 IO）移入 spawn_blocking；submit_job 去除 expect 与无效 started_marker 包装

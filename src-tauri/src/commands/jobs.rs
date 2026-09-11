@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 
 use kairos_core::error::{KairosError, Result};
-use kairos_core::models::jobs::{Job, JobStatus};
+use kairos_core::models::jobs::Job;
 use kairos_core::services::jobs as job_logic;
 use kairos_core::services::jobs::SchedulerLimits;
 use kairos_core::services::openfoam;
@@ -107,51 +107,70 @@ fn now_ms() -> u64 {
         .as_millis() as u64
 }
 
+/// 把 case 目录复制进 VM 原生文件系统（tar 管道，macOS multipass 通道专用；
+/// multipass mount 的 sshfs 权限映射不可用）。大 case 可能耗时数分钟，
+/// 只允许在作业线程调用——同步命令线程（主线程）绝不进入本函数。
+#[cfg(target_os = "macos")]
+fn copy_case_into_vm(case_dir: &str, vm_shell: Option<&str>) -> Result<()> {
+    let Some("multipass") = vm_shell else {
+        return Ok(());
+    };
+    let parent = Path::new(case_dir)
+        .parent()
+        .unwrap_or(Path::new("."))
+        .to_path_buf();
+    let name = Path::new(case_dir)
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| "case".into());
+    let vm_case = format!("/home/ubuntu/{name}");
+    let mut tar_cmd = Command::new("tar");
+    tar_cmd
+        .arg("-C")
+        .arg(&parent)
+        .arg("-czf")
+        .arg("-")
+        .arg(&name);
+    let mut tar_child = tar_cmd
+        .stdout(Stdio::piped())
+        .spawn()
+        .map_err(|e| KairosError::io(format!("tar 启动失败：{e}")))?;
+    let tar_stdout = tar_child
+        .stdout
+        .take()
+        .ok_or_else(|| KairosError::io("tar stdout 管道不可用。"))?;
+    // 环境树由 vm_deploy_bundle 预先解压在 ~/moldingfoam-env。
+    let mut mp = Command::new("multipass");
+    mp.args([
+        "exec",
+        "kairos",
+        "--",
+        "bash",
+        "-lc",
+        &format!("mkdir -p '{vm_case}' && tar -xzf - -C '{vm_case}'"),
+    ])
+    .stdin(tar_stdout);
+    let status = mp
+        .status()
+        .map_err(|e| KairosError::io(format!("multipass 启动失败：{e}")))?;
+    let _ = tar_child.wait();
+    if !status.success() {
+        return Err(KairosError::io("case 目录复制进虚拟机失败。"));
+    }
+    Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn copy_case_into_vm(_case_dir: &str, _vm_shell: Option<&str>) -> Result<()> {
+    Ok(())
+}
+
 fn spawn_run_script(
     case_dir: &str,
     managed_path: Option<&str>,
     vm_shell: Option<&str>,
 ) -> Result<Child> {
-    // VM 执行：case 目录经 tar 管道复制进 VM 原生文件系统
-    // （multipass mount 的 sshfs 权限映射不可用），
-    // 环境树由 vm_deploy_bundle 预先解压在 ~/moldingfoam-env。
     if let Some(shell) = vm_shell {
-        // multipass mount 的 sshfs 权限映射导致子目录不可读，
-        // 改为 tar 管道把 case 目录复制进 VM 原生文件系统（权限与性能可靠）。
-        #[cfg(target_os = "macos")]
-        if shell == "multipass" {
-            let parent = Path::new(case_dir).parent().unwrap_or(Path::new("."));
-            let name = Path::new(case_dir)
-                .file_name()
-                .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or_else(|| "case".into());
-            let vm_case = format!("/home/ubuntu/{name}");
-            let mut tar_cmd = Command::new("tar");
-            tar_cmd
-                .arg("-C")
-                .arg(parent)
-                .arg("-czf")
-                .arg("-")
-                .arg(&name);
-            let mut mp = Command::new("multipass");
-            mp.args([
-                "exec",
-                "kairos",
-                "--",
-                "bash",
-                "-lc",
-                &format!("mkdir -p '{vm_case}' && tar -xzf - -C '{vm_case}'"),
-            ]);
-            let tar_child = tar_cmd.stdout(Stdio::piped()).spawn();
-            if let Ok(mut tchild) = tar_child {
-                mp.stdin(tchild.stdout.take().expect("tar stdout"));
-                let st = mp.status()?;
-                let _ = tchild.wait();
-                if !st.success() {
-                    return Err(KairosError::io("case 目录复制进虚拟机失败。"));
-                }
-            }
-        }
         #[cfg(target_os = "windows")]
         let case_dir = to_wsl_path(case_dir);
         #[cfg(any(target_os = "macos", target_os = "windows"))]
@@ -216,7 +235,9 @@ impl JobScheduler {
         Arc::clone(&self.inner)
     }
 
-    /// 提升排队作业并为其生成运行线程。
+    /// 提升排队作业并为其生成运行线程。作业线程内先做 VM tar 复制（可能耗时
+    /// 数分钟）再拉起求解进程——同步命令 submit_job 在主线程调用本函数，
+    /// 因此任何重活都不允许留在 promote 路径上。
     fn promote_and_spawn(&self, now: u64) {
         let started = {
             let mut inner = self.lock();
@@ -234,64 +255,92 @@ impl JobScheduler {
                     .unwrap_or_default();
                 (case_dir, self.managed_path.clone(), self.vm_shell.clone())
             };
-            match spawn_run_script(&case_dir, managed_path.as_deref(), vm_shell.as_deref()) {
-                Ok(child) => self.run_job_thread(job_id, child),
-                Err(e) => {
-                    let mut inner = self.lock();
-                    let _ = job_logic::mark_failed(&mut inner.jobs, &job_id, e.message(), now_ms());
+            let inner = self.arc();
+            thread::spawn(move || {
+                let staged = copy_case_into_vm(&case_dir, vm_shell.as_deref()).and_then(|()| {
+                    spawn_run_script(&case_dir, managed_path.as_deref(), vm_shell.as_deref())
+                });
+                match staged {
+                    Ok(child) => run_job_body(inner, job_id, child, managed_path, vm_shell),
+                    Err(e) => fail_and_promote(inner, job_id, e.message(), managed_path, vm_shell),
                 }
-            }
+            });
         }
     }
+}
 
-    /// 单作业运行线程：流式回传日志与进度，收尾后写回状态并提升下一个排队作业。
-    fn run_job_thread(&self, job_id: String, mut child: Child) {
-        let inner = self.arc();
-        let managed_path = self.managed_path.clone();
-        let vm_shell = self.vm_shell.clone();
-        let mut stdout = child.stdout.take();
-        thread::spawn(move || {
-            if let Some(pipe) = stdout.take() {
-                let reader = BufReader::new(pipe);
-                for line in reader.lines().map_while(std::result::Result::ok) {
-                    let time_s = openfoam::parse_time_line(&line);
-                    let forward = {
-                        let mut guard = inner
-                            .lock()
-                            .unwrap_or_else(|poisoned| poisoned.into_inner());
-                        if let Some(time_s) = time_s {
-                            let _ = job_logic::update_progress(&mut guard.jobs, &job_id, time_s);
-                        }
-                        guard.channels.get(&job_id).cloned()
-                    };
-                    if let Some(channel) = forward {
-                        let _ = channel.send(line.clone());
-                    }
-                }
-            }
-            let exit_ok = child.wait().map(|status| status.success()).unwrap_or(false);
-            let now = now_ms();
-            {
+/// 作业失败收尾：标记失败并立即尝试提升下一个排队作业（与正常结束路径的
+/// 语义一致，避免队列因单个作业启动失败而停滞）。
+fn fail_and_promote(
+    inner: Arc<Mutex<Inner>>,
+    job_id: String,
+    message: &str,
+    managed_path: Option<String>,
+    vm_shell: Option<String>,
+) {
+    let now = now_ms();
+    {
+        let mut guard = inner
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let _ = job_logic::mark_failed(&mut guard.jobs, &job_id, message, now);
+    }
+    let scheduler = JobScheduler {
+        inner,
+        managed_path,
+        vm_shell,
+    };
+    scheduler.promote_and_spawn(now);
+}
+
+/// 单作业运行主体：流式回传日志与进度，收尾后写回状态并提升下一个排队作业。
+fn run_job_body(
+    inner: Arc<Mutex<Inner>>,
+    job_id: String,
+    mut child: Child,
+    managed_path: Option<String>,
+    vm_shell: Option<String>,
+) {
+    let mut stdout = child.stdout.take();
+    if let Some(pipe) = stdout.take() {
+        let reader = BufReader::new(pipe);
+        for line in reader.lines().map_while(std::result::Result::ok) {
+            let time_s = openfoam::parse_time_line(&line);
+            let forward = {
                 let mut guard = inner
                     .lock()
                     .unwrap_or_else(|poisoned| poisoned.into_inner());
-                if exit_ok {
-                    let _ = job_logic::mark_done(&mut guard.jobs, &job_id, now);
-                } else {
-                    let _ = job_logic::mark_failed(&mut guard.jobs, &job_id, "进程异常退出", now);
+                if let Some(time_s) = time_s {
+                    let _ = job_logic::update_progress(&mut guard.jobs, &job_id, time_s);
                 }
-                guard.children.remove(&job_id);
-                guard.channels.remove(&job_id);
-            }
-            // 一个作业结束 → 立即尝试提升队列中的下一个（自动续跑）
-            let scheduler = JobScheduler {
-                inner,
-                managed_path,
-                vm_shell,
+                guard.channels.get(&job_id).cloned()
             };
-            scheduler.promote_and_spawn(now);
-        });
+            if let Some(channel) = forward {
+                let _ = channel.send(line.clone());
+            }
+        }
     }
+    let exit_ok = child.wait().map(|status| status.success()).unwrap_or(false);
+    let now = now_ms();
+    {
+        let mut guard = inner
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if exit_ok {
+            let _ = job_logic::mark_done(&mut guard.jobs, &job_id, now);
+        } else {
+            let _ = job_logic::mark_failed(&mut guard.jobs, &job_id, "进程异常退出", now);
+        }
+        guard.children.remove(&job_id);
+        guard.channels.remove(&job_id);
+    }
+    // 一个作业结束 → 立即尝试提升队列中的下一个（自动续跑）
+    let scheduler = JobScheduler {
+        inner,
+        managed_path,
+        vm_shell,
+    };
+    scheduler.promote_and_spawn(now);
 }
 
 /// 提交求解作业：入队并按预算立即尝试启动。progress 通道回传日志行与 __TIME__ 进度标记。
@@ -310,19 +359,17 @@ pub fn submit_job(
         job_logic::submit(&mut inner.jobs, id.clone(), study_id, case_dir, cores, now)?;
         inner.channels.insert(id.clone(), progress);
         let limits = inner.limits;
-        let started = job_logic::promote_ready(&mut inner.jobs, &limits, now);
-        let job = inner.jobs.iter().find(|job| job.id == id).cloned();
-        (started, job)
+        // submit 里已尝试提升，启动在 promote_and_spawn 的作业线程中进行。
+        job_logic::promote_ready(&mut inner.jobs, &limits, now);
+        inner
+            .jobs
+            .iter()
+            .find(|job| job.id == id)
+            .cloned()
+            .ok_or_else(|| KairosError::internal("刚提交的作业查询失败。"))?
     };
-    let job = job.1.expect("刚提交的作业必然存在");
     scheduler.promote_and_spawn(now);
-    let _ = started_marker(job.status);
     Ok(job)
-}
-
-// submit 里已尝试提升，这里的标记仅用于可读性。
-fn started_marker(status: JobStatus) -> JobStatus {
-    status
 }
 
 /// 取消作业：运行中的先终止进程组，再迁移状态；排队中的直接取消。

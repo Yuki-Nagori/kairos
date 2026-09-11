@@ -156,10 +156,12 @@ pub async fn download_file(
     progress: Channel<u64>,
 ) -> Result<SavedDownload> {
     ensure_allowed(&url)?;
-    let (url, release_tag) = resolve_release_asset(&url)?;
-    let file_name = derive_file_name(&component_id, &url);
 
     tauri::async_runtime::spawn_blocking(move || {
+        // /releases/latest 的资产解析要走 GitHub API（阻塞网络 IO），
+        // 与下载一并放进阻塞线程，避免占住 async runtime worker。
+        let (url, release_tag) = resolve_release_asset(&url)?;
+        let file_name = derive_file_name(&component_id, &url);
         let dir = downloads_dir(&app)?;
         fs::create_dir_all(&dir)?;
         // 升级场景：记录旧条目，成功登记新版本后清理旧归档（解压目录
