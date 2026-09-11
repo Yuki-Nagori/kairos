@@ -201,3 +201,4 @@
 - **12:30** fix(ui): 禁用 macOS 触控板双指滚动的整页橡皮筋回弹——html/body overflow hidden + overscroll-behavior none（工作台页面本身不可滚动，双指晃动是 WKWebView 弹性滚动而非窗口拖拽）
 - **13:00** fix(ui): 标题栏 logo 改为内联 LogoIcon 组件——消除 Windows CI 上 happy-dom 加载 /icon.svg 触发 fileURLToPath 的路径错误（file:///icon.svg 无盘符），测试不再依赖外部图标资源
 - **13:10** chore(data): 内置材料库定位升级——「示例」改「公开文献典型值参考库」，牌号命名规范化（PP-REF-01 … PA66-GF30-REF-08），dataNote/厂商列与相关注释统一为参考数据免责声明
+- **13:20** chore(data): 内置参考牌号逐族参数量级校准——Tait 转变温度对齐各族熔点/Tg（PP 418K、PA66/POM-GF 552K、PC Tg 423K、ABS/PMMA Tg 378-388K）、比容对齐各族真实密度（PA66 9.5e-4 / POM 7.8e-4 / PC 8.6e-4 kg/m³³）、Cp/λ 走各族典型范围；CrossWLF 特征参数（n/τ*/D1/D2）按族差异化
