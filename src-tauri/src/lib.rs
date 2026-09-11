@@ -216,6 +216,7 @@ pub fn run() {
             commands::downloads::list_downloads,
             commands::results::list_result_times,
             commands::results::load_result_field,
+            commands::results::load_result_field_binary,
             commands::results::derive_field,
             commands::vm::vm_status,
             commands::vm::vm_install,

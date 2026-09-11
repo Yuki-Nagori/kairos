@@ -223,3 +223,4 @@
 - **04:10** docs(arch): B3 后处理阶段校准——C7 五项中 XY 曲线/派生算子/探针拾取/完整剖切转正，剩余体渲染、多视口联动、大结果数据链与三端真机数字（T48）；里程碑对照 B3 ~20% → ~50%
 - **04:40** feat(ui): B3-C7 多视口联动（T49）——useViewportPanel 重构为多实例槽位（单视口/四分格布局，共享网格缓存、控制条广播、拾取每实例可用）+ 双后端轨道相机 getOrbit/setOrbit 与交互事件（ViewState 扩展 yaw/pitch/distance）+ 任一实例交互联动其余实例相机 + 时间轴经全局 loadedField 按构造同步；viewport store 增 layout 状态（单测）；T21 八项清单评审入 ai-docs/reviews/T49-review.md
 - **05:00** feat(core+ui): B3-C7 三维体渲染 POC（T50）——core 体数据重采样（四面体包围盒栅格化 + 重心坐标判定 → VolumeFieldGrid 结构化体素场，covered_ratio 诊断，5 单测）+ render/webgpu 光线步进管线（96 步前向合成、三线性采样、冷热迁移函数、轨道相机）+ 128³ 确定性球体密度基准入口；T21 八项清单评审入 ai-docs/reviews/T50-review.md
+- **05:20** feat(core+ui): B3-C7 大结果数据链第一步（T51）——field_binary 编解码（magic+meta JSON+f64 LE 值区，魔数/截断/数量校验）+ FieldCache FIFO 有界缓存（容量 1..=64，同键覆盖去重）+ load_result_field 缓存命中跳过磁盘 + load_result_field_binary 命令（tauri ipc Response 原始字节通道）+ 前端 decodeFieldBinary 解析器（DataView 小端）与全套单测；T21 八项清单评审入 ai-docs/reviews/T51-review.md

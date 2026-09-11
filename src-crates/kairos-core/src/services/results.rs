@@ -342,7 +342,124 @@ boundaryField
     }
 }
 
-/// 派生场后缀与变换：归一化映射 0–1（极差 0 时全 0），阈值掩码以中点为界。
+/// 二进制场编码的魔数与元数据结构（大体积数据走 IPC 原始字节通道）。
+/// 二进制场编码 / 解码：[magic 4B][meta_len u32 LE][meta JSON][f64 值 × n LE]。
+/// 大结果走原始字节而非 JSON 数组，体积与解析开销都显著降低。
+pub mod field_binary {
+    use crate::error::{KairosError, Result};
+    use crate::models::results::ScalarField;
+
+    const MAGIC: [u8; 4] = *b"KF1\x00";
+
+    #[derive(serde::Serialize, serde::Deserialize)]
+    struct Meta {
+        field: String,
+        time_dir: String,
+        time_s: f64,
+        is_magnitude: bool,
+        complete: bool,
+        count: usize,
+    }
+
+    pub fn encode(field: &ScalarField) -> Vec<u8> {
+        let meta = serde_json::to_vec(&Meta {
+            field: field.field.clone(),
+            time_dir: field.time_dir.clone(),
+            time_s: field.time_s,
+            is_magnitude: field.is_magnitude,
+            complete: field.complete,
+            count: field.values.len(),
+        })
+        .expect("元数据为纯标量结构，序列化不会失败");
+        let mut bytes = Vec::with_capacity(8 + meta.len() + field.values.len() * 8);
+        bytes.extend_from_slice(&MAGIC);
+        bytes.extend_from_slice(&(meta.len() as u32).to_le_bytes());
+        bytes.extend_from_slice(&meta);
+        for value in &field.values {
+            bytes.extend_from_slice(&value.to_le_bytes());
+        }
+        bytes
+    }
+
+    pub fn decode(bytes: &[u8]) -> Result<ScalarField> {
+        let invalid =
+            |reason: &str| KairosError::validation(format!("二进制场数据无效：{reason}。"));
+        if bytes.len() < 8 || bytes[..4] != MAGIC {
+            return Err(invalid("魔数不匹配"));
+        }
+        let meta_len = u32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]) as usize;
+        // 先比较后加法：避免 32 位平台上 8 + meta_len 溢出。
+        if meta_len > bytes.len() - 8 {
+            return Err(invalid("元数据被截断"));
+        }
+        let meta_end = 8 + meta_len;
+        let meta: Meta = serde_json::from_slice(&bytes[8..meta_end])
+            .map_err(|e| invalid(&format!("元数据解析失败（{e}）")))?;
+        let values_bytes = bytes.len() - meta_end;
+        if values_bytes < meta.count * 8 {
+            return Err(invalid("值区被截断"));
+        }
+        let mut values = Vec::with_capacity(meta.count);
+        for index in 0..meta.count {
+            let start = meta_end + index * 8;
+            // 值区数量已在上方与字节长度核对，切片必然完整。
+            let mut raw = [0u8; 8];
+            raw.copy_from_slice(&bytes[start..start + 8]);
+            values.push(f64::from_le_bytes(raw));
+        }
+        Ok(ScalarField {
+            field: meta.field,
+            time_dir: meta.time_dir,
+            time_s: meta.time_s,
+            values,
+            is_magnitude: meta.is_magnitude,
+            complete: meta.complete,
+        })
+    }
+}
+
+/// 有界场缓存（FIFO 淘汰）：命中时跳过磁盘读取，容量上限防御内存膨胀。
+pub struct FieldCache {
+    capacity: usize,
+    entries: std::collections::HashMap<String, ScalarField>,
+    order: Vec<String>,
+}
+
+impl FieldCache {
+    /// 容量 1..=64。
+    pub fn new(capacity: usize) -> Result<Self> {
+        if capacity == 0 || capacity > 64 {
+            return Err(KairosError::validation("场缓存容量必须在 1..=64 之间。"));
+        }
+        Ok(Self {
+            capacity,
+            entries: std::collections::HashMap::new(),
+            order: Vec::new(),
+        })
+    }
+
+    pub fn get(&mut self, key: &str) -> Option<&ScalarField> {
+        self.entries.get(key)
+    }
+
+    /// 命中计数 0 的最旧条目淘汰：插入时若超容量则移除队首。
+    pub fn put(&mut self, key: String, field: ScalarField) {
+        if !self.entries.contains_key(&key) {
+            self.order.push(key.clone());
+        }
+        self.entries.insert(key, field);
+        while self.order.len() > self.capacity {
+            let oldest = self.order.remove(0);
+            self.entries.remove(&oldest);
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+}
+
+/// 派生场：按请求对主场做归一化 / 阈值掩码 / 线性映射；差值走 derive_difference。
 pub fn derive_scalar_field(
     field: &crate::models::results::ScalarField,
     request: &crate::models::results::DeriveRequest,
@@ -525,5 +642,122 @@ mod derive_tests {
     fn difference_request_in_single_field_entry_is_rejected() {
         let error = derive_scalar_field(&field(vec![1.0]), &DeriveRequest::Difference).unwrap_err();
         assert!(error.to_string().contains("derive_difference"));
+    }
+}
+
+#[cfg(test)]
+mod field_chain_tests {
+    use super::*;
+
+    #[test]
+    fn binary_round_trip_preserves_field() {
+        let field = ScalarField {
+            field: "T".into(),
+            time_dir: "0.100".into(),
+            time_s: 0.1,
+            values: vec![1.5, -2.25, f64::INFINITY, 0.0],
+            is_magnitude: true,
+            complete: false,
+        };
+        let bytes = field_binary::encode(&field);
+        assert_eq!(&bytes[..4], b"KF1\x00");
+        let decoded = field_binary::decode(&bytes).unwrap();
+        assert_eq!(decoded.field, "T");
+        assert_eq!(decoded.time_dir, "0.100");
+        assert_eq!(decoded.time_s, 0.1);
+        assert_eq!(decoded.values, field.values);
+        assert!(decoded.is_magnitude);
+        assert!(!decoded.complete);
+    }
+
+    #[test]
+    fn binary_decode_rejects_garbage() {
+        // 长度不足（<8B）与魔数错误统一按「魔数不匹配」报错。
+        let error = field_binary::decode(b"XXXX").unwrap_err();
+        assert!(error.to_string().contains("魔数不匹配"));
+        // 长度足够但魔数错误。
+        let error = field_binary::decode(b"XXXX\0\0\0\0").unwrap_err();
+        assert!(error.to_string().contains("魔数不匹配"));
+        // 长度过短。
+        assert!(field_binary::decode(b"KF1\x00").is_err());
+        // 元数据被截断（截到值区以内，且不足 meta 声明长度）。
+        let mut truncated = field_binary::encode(&ScalarField {
+            field: "T".into(),
+            time_dir: "0".into(),
+            time_s: 0.0,
+            values: vec![1.0, 2.0],
+            is_magnitude: false,
+            complete: true,
+        });
+        truncated.truncate(truncated.len() - 9);
+        assert!(field_binary::decode(&truncated).is_err());
+        // 元数据 JSON 损坏（值区一起被改写，但解码在元数据阶段即失败）。
+        let mut broken_meta = field_binary::encode(&ScalarField {
+            field: "T".into(),
+            time_dir: "0".into(),
+            time_s: 0.0,
+            values: vec![1.0],
+            is_magnitude: false,
+            complete: true,
+        });
+        for byte in &mut broken_meta[8..] {
+            *byte = 0x78;
+        }
+        let error = field_binary::decode(&broken_meta).unwrap_err();
+        assert!(error.to_string().contains("元数据解析失败"));
+
+        // 头 + 部分元数据：连值区起始都未到达 → 元数据被截断。
+        let mut values_only = field_binary::encode(&ScalarField {
+            field: "T".into(),
+            time_dir: "0".into(),
+            time_s: 0.0,
+            values: vec![1.0, 2.0],
+            is_magnitude: false,
+            complete: true,
+        });
+        let meta_end = values_only.len() - 16;
+        values_only.truncate(meta_end - 1);
+        let error = field_binary::decode(&values_only).unwrap_err();
+        assert!(error.to_string().contains("元数据被截断"));
+    }
+
+    #[test]
+    fn cache_evicts_oldest_beyond_capacity() {
+        let mut cache = FieldCache::new(2).unwrap();
+        let field = |name: &str| ScalarField {
+            field: name.into(),
+            time_dir: "0".into(),
+            time_s: 0.0,
+            values: vec![],
+            is_magnitude: false,
+            complete: true,
+        };
+        cache.put("a".into(), field("a"));
+        cache.put("b".into(), field("b"));
+        assert!(!cache.is_empty());
+        cache.put("c".into(), field("c"));
+        // a 最旧被淘汰。
+        assert!(cache.get("a").is_none());
+        assert!(cache.get("b").is_some());
+        assert!(cache.get("c").is_some());
+        assert!(FieldCache::new(0).is_err());
+        assert!(FieldCache::new(65).is_err());
+    }
+
+    #[test]
+    fn cache_put_same_key_does_not_duplicate_order() {
+        let mut cache = FieldCache::new(2).unwrap();
+        let field = |name: &str| ScalarField {
+            field: name.into(),
+            time_dir: "0".into(),
+            time_s: 0.0,
+            values: vec![],
+            is_magnitude: false,
+            complete: true,
+        };
+        cache.put("a".into(), field("a"));
+        cache.put("a".into(), field("a-v2"));
+        assert!(!cache.is_empty());
+        assert_eq!(cache.get("a").unwrap().field, "a-v2");
     }
 }

@@ -6,19 +6,31 @@ use std::sync::{Arc, Mutex};
 use kairos_core::error::{KairosError, Result};
 use kairos_core::models::results::{DeriveRequest, ResultCatalog, ScalarField};
 use kairos_core::services::results;
+use kairos_core::services::results::{FieldCache, field_binary};
+use tauri::ipc::Response;
 
 /// 会话内的场槽位：派生直接基于缓存计算，前端不回传数值数组。
-#[derive(Default, Clone)]
 pub struct ResultSlots {
     /// 主场：普通加载 / 展示 / 单场派生的数据源。
     pub primary: Option<ScalarField>,
     /// 对比场：两场差值派生的减数。
     pub compare: Option<ScalarField>,
+    /// 有界场缓存（FIFO 淘汰）：命中时跳过磁盘读取。
+    pub cache: FieldCache,
 }
 
-/// 会话缓存：主场与对比场双槽（差值派生需要两份场数据）。
-#[derive(Default, Clone)]
+/// 会话缓存：主场与对比场双槽 + 有界场缓存（差值派生需要两份场数据）。
 pub struct ResultSession(pub Arc<Mutex<ResultSlots>>);
+
+impl Default for ResultSession {
+    fn default() -> Self {
+        Self(Arc::new(Mutex::new(ResultSlots {
+            primary: None,
+            compare: None,
+            cache: FieldCache::new(8).expect("默认容量在合法区间"),
+        })))
+    }
+}
 
 impl ResultSession {
     fn lock(&self) -> std::sync::MutexGuard<'_, ResultSlots> {
@@ -49,6 +61,11 @@ pub async fn list_result_times(case_dir: String) -> Result<ResultCatalog> {
 }
 
 /// 加载指定时间步的场到会话槽位（默认主场，slot="compare" 写对比场）。
+/// 场缓存键：路径 + 时间步 + 场名唯一确定一份数据。
+fn cache_key(case_dir: &str, time_dir: &str, field: &str) -> String {
+    format!("{case_dir}|{time_dir}|{field}")
+}
+
 #[tauri::command]
 pub async fn load_result_field(
     session: tauri::State<'_, ResultSession>,
@@ -58,11 +75,17 @@ pub async fn load_result_field(
     slot: Option<String>,
 ) -> Result<ScalarField> {
     let compare = parse_slot(slot.as_deref())?;
-    let loaded = tauri::async_runtime::spawn_blocking(move || {
-        results::read_field(std::path::Path::new(&case_dir), &time_dir, &field)
-    })
-    .await
-    .map_err(|e| KairosError::internal(format!("结果加载任务失败：{e}")))??;
+    let key = cache_key(&case_dir, &time_dir, &field);
+    let cached = session.lock().cache.get(&key).cloned();
+    let loaded = match cached {
+        Some(field) => field,
+        None => tauri::async_runtime::spawn_blocking(move || {
+            results::read_field(std::path::Path::new(&case_dir), &time_dir, &field)
+        })
+        .await
+        .map_err(|e| KairosError::internal(format!("结果加载任务失败：{e}")))??,
+    };
+    session.lock().cache.put(key, loaded.clone());
     {
         let mut slots = session.lock();
         if compare {
@@ -72,6 +95,39 @@ pub async fn load_result_field(
         }
     }
     Ok(loaded)
+}
+
+/// 二进制通道加载场：返回 [magic][meta JSON][f64 LE 值区] 的原始字节，
+/// 大结果避免 JSON 数组的体积与解析开销；同样写入会话槽位与缓存。
+#[tauri::command]
+pub async fn load_result_field_binary(
+    session: tauri::State<'_, ResultSession>,
+    case_dir: String,
+    time_dir: String,
+    field: String,
+    slot: Option<String>,
+) -> Result<Response> {
+    let compare = parse_slot(slot.as_deref())?;
+    let key = cache_key(&case_dir, &time_dir, &field);
+    let cached = session.lock().cache.get(&key).cloned();
+    let loaded = match cached {
+        Some(field) => field,
+        None => tauri::async_runtime::spawn_blocking(move || {
+            results::read_field(std::path::Path::new(&case_dir), &time_dir, &field)
+        })
+        .await
+        .map_err(|e| KairosError::internal(format!("结果加载任务失败：{e}")))??,
+    };
+    session.lock().cache.put(key, loaded.clone());
+    {
+        let mut slots = session.lock();
+        if compare {
+            slots.compare = Some(loaded.clone());
+        } else {
+            slots.primary = Some(loaded.clone());
+        }
+    }
+    Ok(Response::new(field_binary::encode(&loaded)))
 }
 
 /// 派生场：基于会话主场的归一化 / 阈值掩码 / 线性映射，返回新场。
