@@ -20,6 +20,7 @@ pub fn run() {
             commands::jobs::detect_vm_shell(),
         ))
         .manage(commands::vm::VmShellState::default())
+        .manage(commands::results::ResultSession::default())
         .setup(|_app| {
             // 启动即最大化：配置式的 center/maximized 在 macOS 不扣除 Dock 与
             // 菜单栏可见区域，居中窗口会偏左。原生全屏会藏掉标题栏，故不用。
@@ -212,6 +213,7 @@ pub fn run() {
             commands::downloads::list_downloads,
             commands::results::list_result_times,
             commands::results::load_result_field,
+            commands::results::derive_field,
             commands::vm::vm_status,
             commands::vm::vm_install,
             commands::vm::vm_start,

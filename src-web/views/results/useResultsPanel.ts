@@ -38,7 +38,7 @@ export function useResultsPanel() {
     };
   });
 
-  // 派生场：对已加载场做标量运算生成新场，图表与视口即时可用。
+  // 派生场：数值变换在 Rust 侧完成（derive_scalar_field），此处只透传派生类型。
   const deriveKind = ref("normalize");
 
   function deriveField(): void {
@@ -46,27 +46,7 @@ export function useResultsPanel() {
     if (!source || source.values.length === 0) {
       return;
     }
-    const values = source.values;
-    let derived: number[];
-    let suffix: string;
-    if (deriveKind.value === "threshold") {
-      const { min, max } = minMax(values);
-      const threshold = (min + max) / 2;
-      derived = values.map((v) => (v >= threshold ? 1 : 0));
-      suffix = "阈值掩码";
-    } else {
-      const { min, max } = minMax(values);
-      const range = max - min;
-      derived = range > 0 ? values.map((v) => (v - min) / range) : values.map(() => 0);
-      suffix = "归一化";
-    }
-    results.loadedField = {
-      ...source,
-      field: `${source.field} · ${suffix}`,
-      isMagnitude: false,
-      values: derived,
-      complete: source.complete,
-    };
+    void results.deriveField(deriveKind.value);
   }
 
   return { results, dirPath, catalog, loadedField, stats, scan, deriveKind, deriveField };

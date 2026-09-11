@@ -8,6 +8,7 @@ import {
   importSampleBox,
   importStl,
   importStep,
+  repairGeometry,
   removeGeometry,
 } from "../../../src-web/api/geometry";
 import { pickOpenGeometryPath } from "../../../src-web/api/dialog";
@@ -16,6 +17,7 @@ import type { GeometrySummary, MeshingReport } from "../../../src-web/types";
 vi.mock("../../../src-web/api/geometry", () => ({
   importStl: vi.fn(),
   importStep: vi.fn(),
+  repairGeometry: vi.fn(),
   removeGeometry: vi.fn(),
   generateVolumeMesh: vi.fn(),
   importSampleBox: vi.fn(),
@@ -122,6 +124,65 @@ describe("geometry store", () => {
       expect(app.error?.message).toBe("STL 解析失败");
       expect(geometry.geometries).toEqual([]);
       expect(app.busy).toBeNull();
+    });
+  });
+
+  describe("repairGeometryById", () => {
+    it("刷新几何摘要、作废体积网格并清 busy", async () => {
+      const repaired = makeSummary("g-1");
+      vi.mocked(repairGeometry).mockResolvedValue(repaired);
+
+      const geometry = useGeometryStore();
+      const app = useAppStore();
+      geometry.geometries = [makeSummary("g-1"), makeSummary("g-2")];
+      geometry.meshReports["g-1"] = {
+        engine: "voxel",
+        nodeCount: 100,
+        elementCount: 5000,
+        surfaceFaceCount: 120,
+        totalVolume: 1000,
+        quality: { minEdgeRatio: 0.4, avgEdgeRatio: 0.8, maxEdgeRatio: 1.2, minVolume: 0.01 },
+      };
+
+      await geometry.repairGeometryById("g-1");
+
+      expect(repairGeometry).toHaveBeenCalledWith("g-1");
+      expect(geometry.geometries[0]?.triangleCount).toBe(12);
+      // 非目标几何不受影响
+      expect(geometry.geometries.map((g) => g.geometryId)).toEqual(["g-1", "g-2"]);
+      expect(geometry.meshReports["g-1"]).toBeUndefined();
+      expect(app.busy).toBeNull();
+    });
+
+    it("修复失败时错误进入全局状态", async () => {
+      const app = useAppStore();
+      const geometry = useGeometryStore();
+      geometry.geometries = [makeSummary("g-1")];
+      vi.mocked(repairGeometry).mockRejectedValue(new Error("修复失败"));
+
+      await geometry.repairGeometryById("g-1");
+      expect(app.error?.message).toBe("修复失败");
+      expect(app.busy).toBeNull();
+    });
+
+    it("修复失败不影响既有体积网格报告", async () => {
+      const app = useAppStore();
+      const geometry = useGeometryStore();
+      geometry.geometries = [makeSummary("g-1")];
+      geometry.meshReports["g-1"] = {
+        engine: "voxel",
+        nodeCount: 100,
+        elementCount: 5000,
+        surfaceFaceCount: 120,
+        totalVolume: 1000,
+        quality: { minEdgeRatio: 0.4, avgEdgeRatio: 0.8, maxEdgeRatio: 1.2, minVolume: 0.01 },
+      };
+      vi.mocked(repairGeometry).mockRejectedValueOnce(new Error("修复失败"));
+      await geometry.repairGeometryById("g-1");
+
+      expect(app.error?.message).toBe("修复失败");
+      // 既有体积网格报告不被波及
+      expect(geometry.meshReports["g-1"]).toBeDefined();
     });
   });
 

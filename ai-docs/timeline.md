@@ -203,3 +203,4 @@
 - **13:10** chore(data): 内置材料库定位升级——「示例」改「公开文献典型值参考库」，牌号命名规范化（PP-REF-01 … PA66-GF30-REF-08），dataNote/厂商列与相关注释统一为参考数据免责声明
 - **13:20** chore(data): 内置参考牌号逐族参数量级校准——Tait 转变温度对齐各族熔点/Tg（PP 418K、PA66/POM-GF 552K、PC Tg 423K、ABS/PMMA Tg 378-388K）、比容对齐各族真实密度（PA66 9.5e-4 / POM 7.8e-4 / PC 8.6e-4 kg/m³³）、Cp/λ 走各族典型范围；CrossWLF 特征参数（n/τ*/D1/D2）按族差异化
 - **13:15** docs(readme): 新增「内置材料数据说明」——如实标注内置牌号参数为公开资料常见典型量级整理（无可指明的逐项文献出处、非商业牌号实测），并给出生产级数据替换路径
+- **15:00** refactor(core+ui): 结果派生算子下沉 Rust——derive_scalar_field（归一化 0-1 / 中点阈值掩码）+ ResultSession 会话缓存最近加载场 + derive_field 命令；useResultsPanel 移除 TS 侧归一化/阈值重复实现，派生改为命令分发

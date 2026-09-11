@@ -2,12 +2,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 import { useAppStore } from "../../../src-web/stores/app";
 import { useResultsStore } from "../../../src-web/stores/results";
-import { listResultTimes, loadResultField } from "../../../src-web/api/results";
+import {
+  deriveField as deriveFieldApi,
+  listResultTimes,
+  loadResultField,
+} from "../../../src-web/api/results";
 import type { ResultCatalog, ScalarField } from "../../../src-web/types";
 
 vi.mock("../../../src-web/api/results", () => ({
   listResultTimes: vi.fn(),
   loadResultField: vi.fn(),
+  deriveField: vi.fn(),
 }));
 
 const catalog: ResultCatalog = {
@@ -248,6 +253,44 @@ describe("results store", () => {
 
       const csv = await blobs[0]?.text();
       expect(csv).toBe("node,T\n0,1\n1,2\n2,3");
+    });
+  });
+
+  describe("deriveField", () => {
+    it("没有已加载场时静默返回，不触发派生请求", async () => {
+      const app = useAppStore();
+      const results = useResultsStore();
+      await results.deriveField("normalize");
+      expect(deriveFieldApi).not.toHaveBeenCalled();
+      expect(app.error).toBeNull();
+    });
+
+    it("调用后端派生并写回 loadedField", async () => {
+      vi.mocked(listResultTimes).mockResolvedValue(catalog);
+      const results = useResultsStore();
+      await results.loadResultsCatalog("/case/run");
+
+      vi.mocked(loadResultField).mockResolvedValue(makeField());
+      await results.loadField("/case/run", "0.100", "p");
+      vi.mocked(deriveFieldApi).mockResolvedValue(
+        makeField({ field: "p · 阈值掩码", values: [0, 1, 0] }),
+      );
+
+      await results.deriveField("threshold");
+      expect(deriveFieldApi).toHaveBeenCalledWith("threshold");
+      expect(results.loadedField?.values).toEqual([0, 1, 0]);
+    });
+
+    it("派生请求失败时错误进入全局状态", async () => {
+      const app = useAppStore();
+      const results = useResultsStore();
+      await results.loadResultsCatalog("/case/run");
+      vi.mocked(loadResultField).mockResolvedValue(makeField());
+      await results.loadField("/case/run", "0.100", "p");
+
+      vi.mocked(deriveFieldApi).mockRejectedValue(new Error("派生失败"));
+      await results.deriveField("normalize");
+      expect(app.error?.message).toBe("派生失败");
     });
   });
 });

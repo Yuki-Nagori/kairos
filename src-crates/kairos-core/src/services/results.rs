@@ -315,3 +315,104 @@ boundaryField
         fs::remove_dir_all(&dir).ok();
     }
 }
+
+/// 派生场后缀与变换：归一化映射 0–1（极差 0 时全 0），阈值掩码以中点为界。
+pub fn derive_scalar_field(
+    field: &crate::models::results::ScalarField,
+    kind: &str,
+) -> Result<crate::models::results::ScalarField> {
+    use crate::error::KairosError;
+    use crate::models::results::ScalarField;
+
+    if field.values.is_empty() {
+        // 空场原样返回：上层保持名称与状态不变
+        return Ok(field.clone());
+    }
+    let min = field.values.iter().cloned().fold(f64::INFINITY, f64::min);
+    let max = field
+        .values
+        .iter()
+        .cloned()
+        .fold(f64::NEG_INFINITY, f64::max);
+    let range = max - min;
+
+    let (suffix, derived): (&str, Vec<f64>) = match kind {
+        "normalize" => {
+            let values = if range > 0.0 {
+                field.values.iter().map(|v| (v - min) / range).collect()
+            } else {
+                vec![0.0; field.values.len()]
+            };
+            ("归一化", values)
+        }
+        "threshold" => {
+            let threshold = (min + max) / 2.0;
+            let values = field
+                .values
+                .iter()
+                .map(|v| if *v >= threshold { 1.0 } else { 0.0 })
+                .collect();
+            ("阈值掩码", values)
+        }
+        other => return Err(KairosError::validation(format!("未知派生类型：{other}"))),
+    };
+
+    Ok(ScalarField {
+        field: format!("{} · {suffix}", field.field),
+        time_dir: field.time_dir.clone(),
+        time_s: field.time_s,
+        values: derived,
+        is_magnitude: false,
+        complete: field.complete,
+    })
+}
+
+#[cfg(test)]
+mod derive_tests {
+    use super::*;
+    use crate::models::results::ScalarField;
+
+    fn field(values: Vec<f64>) -> ScalarField {
+        ScalarField {
+            field: "T".into(),
+            time_dir: "0.001".into(),
+            time_s: 0.001,
+            values,
+            is_magnitude: false,
+            complete: true,
+        }
+    }
+
+    #[test]
+    fn normalize_maps_to_zero_one_and_renames() {
+        let derived = derive_scalar_field(&field(vec![1.0, 2.0, 3.0]), "normalize").unwrap();
+        assert_eq!(derived.values, vec![0.0, 0.5, 1.0]);
+        assert_eq!(derived.field, "T · 归一化");
+        assert!(!derived.is_magnitude);
+    }
+
+    #[test]
+    fn normalize_flat_field_maps_to_zeros() {
+        let derived = derive_scalar_field(&field(vec![5.0, 5.0, 5.0]), "normalize").unwrap();
+        assert_eq!(derived.values, vec![0.0, 0.0, 0.0]);
+    }
+
+    #[test]
+    fn threshold_midpoint_inclusive() {
+        let derived = derive_scalar_field(&field(vec![1.0, 3.0, 2.0]), "threshold").unwrap();
+        assert_eq!(derived.values, vec![0.0, 1.0, 1.0]);
+        assert_eq!(derived.field, "T · 阈值掩码");
+    }
+
+    #[test]
+    fn empty_field_returns_unchanged() {
+        let derived = derive_scalar_field(&field(vec![]), "normalize").unwrap();
+        assert!(derived.values.is_empty());
+        assert_eq!(derived.field, "T");
+    }
+
+    #[test]
+    fn unknown_kind_is_rejected() {
+        assert!(derive_scalar_field(&field(vec![1.0]), "wat").is_err());
+    }
+}

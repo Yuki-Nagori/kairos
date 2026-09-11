@@ -1,6 +1,6 @@
 /** 求解结果状态：结果目录清单、最近加载的场与探针列表。 */
 import { defineStore } from "pinia";
-import { listResultTimes, loadResultField } from "../api/results";
+import { deriveField as deriveFieldApi, listResultTimes, loadResultField } from "../api/results";
 import type { Probe, ResultCatalog, ScalarField } from "../types";
 import { toCsv } from "../utils/chart";
 import { useAppStore } from "./app";
@@ -69,6 +69,19 @@ export const useResultsStore = defineStore("results", {
     },
     removeProbe(id: number): void {
       this.probes = this.probes.filter((probe) => probe.id !== id);
+    },
+    /** 对最近加载的场执行派生（normalize / threshold），写回 loadedField。 */
+    async deriveField(kind: string): Promise<void> {
+      const app = useAppStore();
+      const current = this.loadedField;
+      if (current === null || current.values.length === 0) {
+        return;
+      }
+      try {
+        this.loadedField = await deriveFieldApi(kind);
+      } catch (error) {
+        app.setError(error);
+      }
     },
     /** 导出已加载场为 CSV（节点序号 + 值）。 */
     exportFieldCsv(): void {

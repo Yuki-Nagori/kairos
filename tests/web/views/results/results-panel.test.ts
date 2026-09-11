@@ -1,16 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { mount } from "@vue/test-utils";
+import { flushPromises, mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import type { Pinia } from "pinia";
 import ResultsPanel from "../../../../src-web/views/results/ResultsPanel.vue";
 import { useAppStore } from "../../../../src-web/stores/app";
 import { useResultsStore } from "../../../../src-web/stores/results";
-import { listResultTimes, loadResultField } from "../../../../src-web/api/results";
+import { deriveField, listResultTimes, loadResultField } from "../../../../src-web/api/results";
 import type { ResultCatalog, ScalarField } from "../../../../src-web/types";
 
 vi.mock("../../../../src-web/api/results", () => ({
   listResultTimes: vi.fn(),
   loadResultField: vi.fn(),
+  deriveField: vi.fn(),
 }));
 
 const catalog: ResultCatalog = {
@@ -158,11 +159,21 @@ describe("ResultsPanel 派生场", () => {
     vi.resetAllMocks();
   });
 
-  it("归一化派生场：0–1 映射并改名", async () => {
+  it("归一化派生场：派生请求携带 kind，返回场写回加载态", async () => {
     const results = useResultsStore();
     results.loadedField = makeField({ values: [1, 2, 3] });
     const wrapper = mount(ResultsPanel, { global: { plugins: [pinia] } });
+    const derived = makeField({
+      field: "T · 归一化",
+      values: [0, 0.5, 1],
+      isMagnitude: false,
+    });
+    vi.mocked(deriveField).mockResolvedValue(derived);
+
     await findButton(wrapper, "生成派生场").trigger("click");
+    await flushPromises();
+
+    expect(deriveField).toHaveBeenCalledWith("normalize");
     expect(wrapper.text()).toContain("已加载 T · 归一化 @ 0.001：3 个值，min 0.000 / max 1.000");
     expect(results.loadedField?.values).toEqual([0, 0.5, 1]);
     expect(results.loadedField?.isMagnitude).toBe(false);
@@ -172,7 +183,11 @@ describe("ResultsPanel 派生场", () => {
     const results = useResultsStore();
     results.loadedField = makeField({ values: [5, 5, 5] });
     const wrapper = mount(ResultsPanel, { global: { plugins: [pinia] } });
+    vi.mocked(deriveField).mockResolvedValue(
+      makeField({ field: "T · 归一化", values: [0, 0, 0], isMagnitude: false }),
+    );
     await findButton(wrapper, "生成派生场").trigger("click");
+    await flushPromises();
     expect(results.loadedField?.values).toEqual([0, 0, 0]);
     expect(wrapper.text()).toContain("T · 归一化");
   });
@@ -182,7 +197,11 @@ describe("ResultsPanel 派生场", () => {
     results.loadedField = makeField({ values: [1, 3, 2] });
     const wrapper = mount(ResultsPanel, { global: { plugins: [pinia] } });
     await wrapper.find("select").setValue("threshold");
+    vi.mocked(deriveField).mockResolvedValue(
+      makeField({ field: "T · 阈值掩码", values: [0, 1, 1], isMagnitude: false }),
+    );
     await findButton(wrapper, "生成派生场").trigger("click");
+    await flushPromises();
     expect(results.loadedField?.values).toEqual([0, 1, 1]);
     expect(wrapper.text()).toContain("T · 阈值掩码");
   });

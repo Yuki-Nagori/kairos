@@ -15,3 +15,8 @@ export function loadResultField(
 ): Promise<ScalarField> {
   return invokeCommand("load_result_field", { caseDir, timeDir, field });
 }
+
+/** 对会话内最近加载的场执行派生（normalize / threshold），返回派生后的场。 */
+export function deriveField(kind: string): Promise<ScalarField> {
+  return invokeCommand("derive_field", { kind });
+}

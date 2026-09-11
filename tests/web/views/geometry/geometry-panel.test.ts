@@ -13,13 +13,16 @@ import {
   importSampleBox,
   importStl,
   removeGeometry,
+  repairGeometry,
 } from "../../../../src-web/api/geometry";
 import { pickOpenGeometryPath } from "../../../../src-web/api/dialog";
 import type { GeometrySummary, MeshingReport } from "../../../../src-web/types";
 
 vi.mock("../../../../src-web/api/geometry", () => ({
   importStl: vi.fn(),
+  importStep: vi.fn(),
   removeGeometry: vi.fn(),
+  repairGeometry: vi.fn(),
   generateVolumeMesh: vi.fn(),
   importSampleBox: vi.fn(),
   getRenderMesh: vi.fn(),
@@ -165,6 +168,48 @@ describe("GeometryPanel", () => {
     expect(wrapper.find("p.text-amber-400").exists()).toBe(true);
     expect(wrapper.text()).toContain("网格健康");
     expect(wrapper.text()).toContain("退化三角形 5");
+  });
+
+  it("修复：不健康几何按钮可用并调用 IPC，健康几何禁用", async () => {
+    const geometry = useGeometryStore();
+    geometry.geometries = [
+      geometryFixture({
+        geometryId: "geo-bad",
+        fileName: "bad.stl",
+        issues: {
+          degenerate: 1,
+          openEdges: 2,
+          nonManifoldEdges: 0,
+          normalInconsistentEdges: 0,
+        },
+      }),
+    ];
+    const wrapper = mount(GeometryPanel, { global: { plugins: [pinia] } });
+
+    vi.mocked(repairGeometry).mockResolvedValue(
+      geometryFixture({
+        geometryId: "geo-bad",
+        fileName: "bad.stl",
+        issues: {
+          degenerate: 0,
+          openEdges: 0,
+          nonManifoldEdges: 0,
+          normalInconsistentEdges: 0,
+        },
+      }),
+    );
+
+    const buttons = wrapper.findAll("button");
+    const repairButton = buttons.find((button) => button.text() === "修复")!;
+    expect(repairButton.attributes("disabled")).toBeUndefined();
+
+    await repairButton.trigger("click");
+    await flushPromises();
+    expect(repairGeometry).toHaveBeenCalledWith("geo-bad");
+
+    // 修复后摘要刷新（不健康问题清零）→ 按钮转为禁用
+    expect(wrapper.text()).toContain("网格健康");
+    expect(repairButton.attributes("disabled")).toBeDefined();
   });
 
   it("生成体积网格（体素）：目标尺寸可编辑并透传；报告行渲染统计", async () => {
