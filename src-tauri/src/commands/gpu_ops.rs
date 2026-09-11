@@ -1,9 +1,14 @@
-//! GPU 加速后处理算子：wgpu compute + CPU 参考实现。
-//! 算子清单（v1）：矢量模量（速度场后处理）。归一化 / LOD / 切片按同一模式扩展。
+//! GPU 加速后处理算子：wgpu compute，接入派生命令生产路径（derive_field /
+//! derive_difference）。CPU 参考实现住 core（services::operators / results::derive*），
+//! 仅作正确性基准——后处理以硬件加速 GPU 为运行前提，无 CPU 运行时回退。
+//! 算子清单（v1）：矢量模量、线性映射（含归一化）、阈值掩码、两场差值；
+//! LOD / 切片按同一模式扩展。
 
-use serde::Serialize;
+use std::sync::OnceLock;
 
 use kairos_core::error::KairosError;
+use kairos_core::models::results::{DeriveRequest, ScalarField};
+use serde::Serialize;
 use wgpu::util::DeviceExt;
 
 // 着色器源码外置在 src-tauri/shaders/（编译期 include_str! 内联），算子目录化铺路。
@@ -12,7 +17,23 @@ const VECTOR_MAGNITUDE_SHADER: &str = include_str!("../../shaders/vector_magnitu
 const WORKGROUP_SIZE: usize = 64;
 
 #[cfg(test)]
-use kairos_core::services::operators::vector_magnitude_cpu;
+use kairos_core::services::{operators::vector_magnitude_cpu, results};
+
+/// 进程级 compute 设备缓存。Device/Queue 本就为长生命周期设计，重建开销在
+/// 百毫秒级，没必要每次算子调用重新枚举适配器；探测失败同样缓存——无 GPU
+/// 环境下保持快速、明确的报错语义，不反复枚举。
+static COMPUTE_DEVICE: OnceLock<Option<(wgpu::Device, wgpu::Queue)>> = OnceLock::new();
+
+fn compute_device() -> Result<&'static (wgpu::Device, wgpu::Queue), KairosError> {
+    COMPUTE_DEVICE
+        .get_or_init(|| create_device().ok())
+        .as_ref()
+        .ok_or_else(|| {
+            KairosError::internal(
+                "后处理需要硬件加速 GPU：未检测到可用适配器，该能力不受支持（无 CPU 运行时回退）。",
+            )
+        })
+}
 
 fn create_device() -> Result<(wgpu::Device, wgpu::Queue), KairosError> {
     let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::default());
@@ -21,9 +42,9 @@ fn create_device() -> Result<(wgpu::Device, wgpu::Queue), KairosError> {
         compatible_surface: None,
         force_fallback_adapter: false,
     }))
-    .ok_or_else(|| KairosError::internal("无可用 GPU 适配器（CPU 回退路径可完成相同计算）。"))?;
-    let adapter_clone_info = adapter.get_info();
-    let _ = adapter_clone_info;
+    .ok_or_else(|| {
+        KairosError::internal("后处理需要硬件加速 GPU：未检测到可用适配器，该能力不受支持。")
+    })?;
     let future = adapter.request_device(
         &wgpu::DeviceDescriptor {
             label: Some("kairos-compute"),
@@ -36,12 +57,69 @@ fn create_device() -> Result<(wgpu::Device, wgpu::Queue), KairosError> {
     Ok(device_queue)
 }
 
-/// GPU 算子：矢量模量。输入按 vec4 对齐；在无 GPU 环境返回内部错误，由调用方回退 CPU。
+/// 公共管线尾段：一次 compute pass + 输出拷贝 + MAP_READ 回读，返回 len 个 f32。
+/// 所有算子共享同一编码方式（输出缓冲按 f32 LE 打包），差异只在管线与绑定。
+fn dispatch_and_readback(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    label: &str,
+    pipeline: &wgpu::ComputePipeline,
+    bind_group: &wgpu::BindGroup,
+    output_buffer: &wgpu::Buffer,
+    element_count: usize,
+) -> Result<Vec<f32>, KairosError> {
+    let byte_size = (element_count * 4) as u64;
+    let read_back_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some(&format!("{label}_read_back")),
+        size: byte_size,
+        usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+        mapped_at_creation: false,
+    });
+
+    let workgroups = element_count.div_ceil(WORKGROUP_SIZE) as u32;
+    let mut encoder =
+        device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some(label) });
+    {
+        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some(&format!("{label}_pass")),
+            timestamp_writes: None,
+        });
+        pass.set_pipeline(pipeline);
+        pass.set_bind_group(0, bind_group, &[]);
+        pass.dispatch_workgroups(workgroups, 1, 1);
+    }
+    encoder.copy_buffer_to_buffer(output_buffer, 0, &read_back_buffer, 0, byte_size);
+    queue.submit(Some(encoder.finish()));
+
+    let slice = read_back_buffer.slice(..);
+    let (sender, receiver) = std::sync::mpsc::channel();
+    slice.map_async(wgpu::MapMode::Read, move |result| {
+        let _ = sender.send(result);
+    });
+    device.poll(wgpu::Maintain::Wait);
+    receiver
+        .recv()
+        .map_err(|e| KairosError::internal(format!("GPU 回读信号丢失：{e}")))?
+        .map_err(|e| KairosError::internal(format!("GPU 映射失败：{e}")))?;
+
+    let mapped = slice.get_mapped_range();
+    let result: Vec<f32> = mapped
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|chunk| f32::from_le_bytes(*chunk))
+        .collect();
+    drop(mapped);
+    Ok(result)
+}
+
+/// GPU 算子：矢量模量。输入按 vec4 对齐；无 GPU 环境返回内部错误
+/// （后处理无 CPU 运行时回退，调用方不降级）。
 pub fn vector_magnitude_gpu(vectors: &[[f32; 3]]) -> Result<Vec<f32>, KairosError> {
     if vectors.is_empty() {
         return Ok(Vec::new());
     }
-    let (device, queue) = create_device()?;
+    let (device, queue) = compute_device()?;
 
     let mut flat: Vec<f32> = Vec::with_capacity(vectors.len() * 4);
     for vector in vectors {
@@ -53,7 +131,7 @@ pub fn vector_magnitude_gpu(vectors: &[[f32; 3]]) -> Result<Vec<f32>, KairosErro
         usage: wgpu::BufferUsages::STORAGE,
     });
     let output_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some("vector_magnitude_output"),
+        label: Some("vector_magnitude_out"),
         contents: vec![0u8; vectors.len() * 4].as_slice(),
         usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
     });
@@ -86,51 +164,15 @@ pub fn vector_magnitude_gpu(vectors: &[[f32; 3]]) -> Result<Vec<f32>, KairosErro
         ],
     });
 
-    // MAP_READ 暂存缓冲：GPU → CPU 回读必须经由拷贝。
-    let read_back_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-        label: Some("vector_magnitude_read_back"),
-        size: (vectors.len() * 4) as u64,
-        usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
-        mapped_at_creation: false,
-    });
-
-    let workgroups = vectors.len().div_ceil(WORKGROUP_SIZE) as u32;
-    let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-        label: Some("vector_magnitude"),
-    });
-    {
-        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-            label: Some("vector_magnitude_pass"),
-            timestamp_writes: None,
-        });
-        pass.set_pipeline(&pipeline);
-        pass.set_bind_group(0, &bind_group, &[]);
-        pass.dispatch_workgroups(workgroups, 1, 1);
-    }
-    let byte_size = (vectors.len() * 4) as u64;
-    encoder.copy_buffer_to_buffer(&output_buffer, 0, &read_back_buffer, 0, byte_size);
-    queue.submit(Some(encoder.finish()));
-
-    let slice = read_back_buffer.slice(..);
-    let (sender, receiver) = std::sync::mpsc::channel();
-    slice.map_async(wgpu::MapMode::Read, move |result| {
-        let _ = sender.send(result);
-    });
-    device.poll(wgpu::Maintain::Wait);
-    receiver
-        .recv()
-        .map_err(|e| KairosError::internal(format!("GPU 回读信号丢失：{e}")))?
-        .map_err(|e| KairosError::internal(format!("GPU 映射失败：{e}")))?;
-
-    let mapped = slice.get_mapped_range();
-    let result: Vec<f32> = mapped
-        .as_chunks::<4>()
-        .0
-        .iter()
-        .map(|chunk| f32::from_le_bytes(*chunk))
-        .collect();
-    drop(mapped);
-    Ok(result)
+    dispatch_and_readback(
+        device,
+        queue,
+        "vector_magnitude",
+        &pipeline,
+        &bind_group,
+        &output_buffer,
+        vectors.len(),
+    )
 }
 
 // ─── 派生标量算子：线性映射 / 阈值掩码 / 两场差值 ───
@@ -151,7 +193,7 @@ fn run_scalar_pipeline(
     if len == 0 {
         return Ok(Vec::new());
     }
-    let (device, queue) = create_device()?;
+    let (device, queue) = compute_device()?;
 
     let make_buffer = |name: &str, data: &[u8], read_back: bool| {
         let mut usage = wgpu::BufferUsages::STORAGE;
@@ -247,49 +289,15 @@ fn run_scalar_pipeline(
         entries: &entries,
     });
 
-    let read_back_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-        label: Some(&format!("{label}_read_back")),
-        size: (len * 4) as u64,
-        usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
-        mapped_at_creation: false,
-    });
-
-    let workgroups = len.div_ceil(WORKGROUP_SIZE) as u32;
-    let mut encoder =
-        device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some(label) });
-    {
-        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-            label: Some(&format!("{label}_pass")),
-            timestamp_writes: None,
-        });
-        pass.set_pipeline(&pipeline);
-        pass.set_bind_group(0, &bind_group, &[]);
-        pass.dispatch_workgroups(workgroups, 1, 1);
-    }
-    let byte_size = (len * 4) as u64;
-    encoder.copy_buffer_to_buffer(&output_buffer, 0, &read_back_buffer, 0, byte_size);
-    queue.submit(Some(encoder.finish()));
-
-    let slice = read_back_buffer.slice(..);
-    let (sender, receiver) = std::sync::mpsc::channel();
-    slice.map_async(wgpu::MapMode::Read, move |result| {
-        let _ = sender.send(result);
-    });
-    device.poll(wgpu::Maintain::Wait);
-    receiver
-        .recv()
-        .map_err(|e| KairosError::internal(format!("GPU 回读信号丢失：{e}")))?
-        .map_err(|e| KairosError::internal(format!("GPU 映射失败：{e}")))?;
-
-    let mapped = slice.get_mapped_range();
-    let result: Vec<f32> = mapped
-        .as_chunks::<4>()
-        .0
-        .iter()
-        .map(|chunk| f32::from_le_bytes(*chunk))
-        .collect();
-    drop(mapped);
-    Ok(result)
+    dispatch_and_readback(
+        device,
+        queue,
+        label,
+        &pipeline,
+        &bind_group,
+        &output_buffer,
+        len,
+    )
 }
 
 /// GPU 算子：线性映射（归一化由 CPU 预计算 min/max 后以 scale/offset 表达）。
@@ -323,6 +331,103 @@ pub fn scalar_difference_gpu(a: &[f32], b: &[f32]) -> Result<Vec<f32>, KairosErr
         &[0.0, 0.0, 0.0, 0.0],
         a.len(),
     )
+}
+
+/// GPU 主路径：单场派生（归一化 / 阈值掩码 / 线性映射），命名与标志位与
+/// core 的 CPU 参考实现（results::derive_scalar_field）逐字段一致。
+/// f64 场转 f32 参与计算——可视化后处理精度；Difference 单场入口不受理。
+pub fn derive_scalar_field_gpu(
+    field: &ScalarField,
+    request: &DeriveRequest,
+) -> Result<ScalarField, KairosError> {
+    if field.values.is_empty() {
+        // 空场原样返回：上层保持名称与状态不变（与 CPU 参考一致）
+        return Ok(field.clone());
+    }
+    // min/max 以 f64 统计（与 CPU 参考同口径），随后转 f32 进着色器。
+    let min = field.values.iter().cloned().fold(f64::INFINITY, f64::min) as f32;
+    let max = field
+        .values
+        .iter()
+        .cloned()
+        .fold(f64::NEG_INFINITY, f64::max) as f32;
+    let values: Vec<f32> = field.values.iter().map(|&v| v as f32).collect();
+
+    let (suffix, derived): (String, Vec<f32>) = match request {
+        DeriveRequest::Normalize => {
+            let range = max - min;
+            if range <= 0.0 {
+                ("归一化".into(), vec![0.0; values.len()])
+            } else {
+                // (v - min)/range ≡ v·(1/range) + (-min·(1/range))：复用线性映射管线
+                let scale = 1.0 / range;
+                (
+                    "归一化".into(),
+                    scalar_linear_gpu(&values, scale, -min * scale)?,
+                )
+            }
+        }
+        DeriveRequest::Threshold => (
+            "阈值掩码".into(),
+            scalar_threshold_gpu(&values, (min + max) / 2.0)?,
+        ),
+        DeriveRequest::Linear { scale, offset } => (
+            format!("线性映射 ×{scale} {offset:+}"),
+            scalar_linear_gpu(&values, *scale as f32, *offset as f32)?,
+        ),
+        // 差值需要主场与对比场两份数据，单场入口不受理（与 CPU 参考一致）。
+        DeriveRequest::Difference => {
+            return Err(KairosError::validation(
+                "两场差值请使用 derive_difference 命令（需要主场与对比场）。",
+            ));
+        }
+    };
+
+    Ok(ScalarField {
+        field: format!("{} · {suffix}", field.field),
+        time_dir: field.time_dir.clone(),
+        time_s: field.time_s,
+        values: derived.into_iter().map(f64::from).collect(),
+        is_magnitude: false,
+        complete: field.complete,
+    })
+}
+
+/// GPU 主路径：两场差值（主场 − 对比场）。长度校验、命名与标志位与
+/// core 的 CPU 参考实现（results::derive_difference）一致。
+pub fn derive_difference_gpu(
+    primary: &ScalarField,
+    compare: &ScalarField,
+) -> Result<ScalarField, KairosError> {
+    if primary.values.len() != compare.values.len() {
+        return Err(KairosError::validation(format!(
+            "两场长度不一致：{} 有 {} 个值，{} 有 {} 个值。",
+            primary.field,
+            primary.values.len(),
+            compare.field,
+            compare.values.len()
+        )));
+    }
+    let a: Vec<f32> = primary.values.iter().map(|&v| v as f32).collect();
+    let b: Vec<f32> = compare.values.iter().map(|&v| v as f32).collect();
+    let derived = scalar_difference_gpu(&a, &b)?;
+    Ok(ScalarField {
+        field: format!("{} - {}", primary.field, compare.field),
+        time_dir: primary.time_dir.clone(),
+        time_s: primary.time_s,
+        values: derived.into_iter().map(f64::from).collect(),
+        is_magnitude: false,
+        complete: primary.complete && compare.complete,
+    })
+}
+
+/// CPU 参考实现转交（测试与一致性基准使用；生产路径不经过）。
+#[cfg(test)]
+fn derive_scalar_field_cpu(
+    field: &ScalarField,
+    request: &DeriveRequest,
+) -> Result<ScalarField, kairos_core::error::KairosError> {
+    results::derive_scalar_field(field, request)
 }
 
 /// GPU 算子元数据（诊断页展示）。
@@ -450,5 +555,117 @@ mod tests {
                 "GPU {gpu_value} vs CPU {cpu_value}"
             );
         }
+    }
+
+    // ─── GPU 生产路径（derive_*_gpu）与 core CPU 参考的一致性 ───
+
+    fn sample_field(name: &str, count: usize) -> ScalarField {
+        let values: Vec<f64> = deterministic_scalars(count)
+            .into_iter()
+            .map(f64::from)
+            .collect();
+        ScalarField {
+            field: name.into(),
+            time_dir: "100".into(),
+            time_s: 1.0,
+            values,
+            is_magnitude: false,
+            complete: true,
+        }
+    }
+
+    fn assert_fields_close(gpu: &ScalarField, cpu: &ScalarField) {
+        assert_eq!(gpu.field, cpu.field, "派生命名必须与 CPU 参考一致");
+        assert_eq!(gpu.time_dir, cpu.time_dir);
+        assert_eq!(gpu.time_s, cpu.time_s);
+        assert_eq!(gpu.is_magnitude, cpu.is_magnitude);
+        assert_eq!(gpu.complete, cpu.complete);
+        assert_eq!(gpu.values.len(), cpu.values.len());
+        for (g, c) in gpu.values.iter().zip(&cpu.values) {
+            assert!((g - c).abs() < 1e-5, "GPU {g} vs CPU {c}");
+        }
+    }
+
+    #[test]
+    fn derive_normalize_gpu_matches_cpu_reference() {
+        let field = sample_field("T", 256);
+        let gpu = derive_scalar_field_gpu(&field, &DeriveRequest::Normalize).expect("GPU 归一化");
+        let cpu = derive_scalar_field_cpu(&field, &DeriveRequest::Normalize).unwrap();
+        assert_fields_close(&gpu, &cpu);
+    }
+
+    #[test]
+    fn derive_threshold_gpu_matches_cpu_reference() {
+        let field = sample_field("T", 256);
+        let gpu = derive_scalar_field_gpu(&field, &DeriveRequest::Threshold).expect("GPU 阈值");
+        let cpu = derive_scalar_field_cpu(&field, &DeriveRequest::Threshold).unwrap();
+        assert_fields_close(&gpu, &cpu);
+    }
+
+    #[test]
+    fn derive_linear_gpu_matches_cpu_reference() {
+        let field = sample_field("p", 256);
+        let request = DeriveRequest::Linear {
+            scale: 2.0,
+            offset: -1.0,
+        };
+        let gpu = derive_scalar_field_gpu(&field, &request).expect("GPU 线性映射");
+        let cpu = derive_scalar_field_cpu(&field, &request).unwrap();
+        assert_fields_close(&gpu, &cpu);
+    }
+
+    #[test]
+    fn derive_normalize_flat_field_maps_to_zeros_on_gpu() {
+        let field = ScalarField {
+            field: "T".into(),
+            time_dir: "100".into(),
+            time_s: 1.0,
+            values: vec![5.0; 64],
+            is_magnitude: false,
+            complete: true,
+        };
+        let gpu = derive_scalar_field_gpu(&field, &DeriveRequest::Normalize).expect("GPU 归一化");
+        assert!(gpu.values.iter().all(|&v| v == 0.0));
+        assert!(gpu.field.contains("归一化"));
+    }
+
+    #[test]
+    fn derive_scalar_field_gpu_rejects_difference_request() {
+        let field = sample_field("T", 8);
+        let error = derive_scalar_field_gpu(&field, &DeriveRequest::Difference).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("两场差值请使用 derive_difference 命令")
+        );
+    }
+
+    #[test]
+    fn derive_difference_gpu_matches_cpu_reference() {
+        let primary = sample_field("T", 256);
+        let compare = sample_field("T0", 256);
+        let gpu = derive_difference_gpu(&primary, &compare).expect("GPU 两场差值");
+        let cpu = results::derive_difference(&primary, &compare).unwrap();
+        assert_fields_close(&gpu, &cpu);
+    }
+
+    #[test]
+    fn derive_difference_gpu_rejects_length_mismatch() {
+        let error =
+            derive_difference_gpu(&sample_field("T", 8), &sample_field("T0", 16)).unwrap_err();
+        assert!(error.to_string().contains("两场长度不一致"));
+    }
+
+    #[test]
+    fn derive_gpu_handles_empty_field_like_cpu() {
+        let field = sample_field("T", 0);
+        let gpu = derive_scalar_field_gpu(&field, &DeriveRequest::Normalize).unwrap();
+        let cpu = derive_scalar_field_cpu(&field, &DeriveRequest::Normalize).unwrap();
+        assert!(gpu.values.is_empty());
+        assert_eq!(gpu.field, cpu.field);
+
+        let difference = derive_difference_gpu(&field, &field).unwrap();
+        assert!(difference.values.is_empty());
+        assert_eq!(difference.field, "T - T");
     }
 }

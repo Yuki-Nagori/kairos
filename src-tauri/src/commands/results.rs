@@ -131,30 +131,45 @@ pub async fn load_result_field_binary(
 }
 
 /// 派生场：基于会话主场的归一化 / 阈值掩码 / 线性映射，返回新场。
+/// 派生在 wgpu compute 完成（GPU 主路径，后处理以硬件加速 GPU 为运行前提，
+/// 无可用 GPU 时明确报错不降级）；CPU 参考实现住 core 仅作正确性基准。
 /// 派生不改写会话缓存（源场保持不变，派生场只回显前端）。
 #[tauri::command]
-pub fn derive_field(
+pub async fn derive_field(
     session: tauri::State<'_, ResultSession>,
     request: DeriveRequest,
 ) -> Result<ScalarField> {
-    let slots = session.lock();
-    let Some(field) = slots.primary.clone() else {
-        return Err(KairosError::validation("请先加载结果场，再执行派生。"));
+    let field = {
+        let slots = session.lock();
+        slots
+            .primary
+            .clone()
+            .ok_or_else(|| KairosError::validation("请先加载结果场，再执行派生。"))?
     };
-    results::derive_scalar_field(&field, &request)
+    tauri::async_runtime::spawn_blocking(move || {
+        super::gpu_ops::derive_scalar_field_gpu(&field, &request)
+    })
+    .await
+    .map_err(|e| KairosError::internal(format!("派生任务失败：{e}")))?
 }
 
-/// 两场差值：会话主场 − 对比场，逐值相减，返回新场。
+/// 两场差值：会话主场 − 对比场，wgpu compute 逐值相减，返回新场（GPU 主路径）。
 #[tauri::command]
-pub fn derive_difference(session: tauri::State<'_, ResultSession>) -> Result<ScalarField> {
-    let slots = session.lock();
-    let Some(primary) = slots.primary.clone() else {
-        return Err(KairosError::validation("请先加载主场，再执行两场差值。"));
+pub async fn derive_difference(session: tauri::State<'_, ResultSession>) -> Result<ScalarField> {
+    let (primary, compare) = {
+        let slots = session.lock();
+        let primary = slots
+            .primary
+            .clone()
+            .ok_or_else(|| KairosError::validation("请先加载主场，再执行两场差值。"))?;
+        let compare = slots.compare.clone().ok_or_else(|| {
+            KairosError::validation("请先加载对比场（加载时选择「对比场」槽位），再执行两场差值。")
+        })?;
+        (primary, compare)
     };
-    let Some(compare) = slots.compare.clone() else {
-        return Err(KairosError::validation(
-            "请先加载对比场（加载时选择「对比场」槽位），再执行两场差值。",
-        ));
-    };
-    results::derive_difference(&primary, &compare)
+    tauri::async_runtime::spawn_blocking(move || {
+        super::gpu_ops::derive_difference_gpu(&primary, &compare)
+    })
+    .await
+    .map_err(|e| KairosError::internal(format!("差值任务失败：{e}")))?
 }
