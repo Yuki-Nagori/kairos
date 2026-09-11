@@ -3,6 +3,7 @@
 
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader};
+#[cfg(target_os = "macos")]
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
@@ -153,7 +154,9 @@ fn spawn_run_script(
         }
         #[cfg(target_os = "windows")]
         let case_dir = to_wsl_path(case_dir);
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
         let safe_dir = case_dir.replace('\'', "'\\''");
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
         let inner = format!(
             "source ~/moldingfoam-env/openfoam14/etc/bashrc && cd '{safe_dir}' && decomposePar -force && foamRun -parallel"
         );
