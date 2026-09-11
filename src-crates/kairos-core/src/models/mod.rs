@@ -7,6 +7,7 @@ pub mod material;
 pub mod mesh;
 pub mod process;
 pub mod project;
+pub mod render;
 pub mod repair;
 pub mod results;
 pub mod runners;

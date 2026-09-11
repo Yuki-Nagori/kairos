@@ -15,8 +15,8 @@ pub fn list_builtin_materials() -> Result<Vec<Material>> {
 }
 
 #[tauri::command]
-pub fn list_custom_materials(app: AppHandle) -> Vec<Material> {
-    read_custom(&app)
+pub fn list_custom_materials(app: AppHandle) -> Result<Vec<Material>> {
+    Ok(read_custom(&app))
 }
 
 /// 从 JSON / CSV 文件导入材料：校验、按 id 合并入库，返回合并后的完整材料库。

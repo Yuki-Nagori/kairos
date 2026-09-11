@@ -399,6 +399,6 @@ pub fn cancel_job(scheduler: State<'_, JobScheduler>, job_id: String) -> Result<
 }
 
 #[tauri::command]
-pub fn list_jobs(scheduler: State<'_, JobScheduler>) -> Vec<Job> {
-    scheduler.lock().jobs.clone()
+pub fn list_jobs(scheduler: State<'_, JobScheduler>) -> Result<Vec<Job>> {
+    Ok(scheduler.lock().jobs.clone())
 }

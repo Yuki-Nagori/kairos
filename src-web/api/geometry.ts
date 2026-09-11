@@ -7,6 +7,7 @@ import type {
   MeshRefinement,
   MidplaneReport,
   RepairOutcome,
+  RenderMeshData,
   RunnerElement,
 } from "../types";
 
@@ -47,12 +48,6 @@ export function importIges(path: string): Promise<GeometrySummary> {
 /** 修复几何（顶点焊接 / 孔洞填充 / 法向一致化），返回更新后的摘要与修复报告。 */
 export function repairGeometry(geometryId: string): Promise<RepairOutcome> {
   return invokeCommand("repair_geometry", { geometryId });
-}
-
-interface RenderMeshData {
-  positions: number[];
-  indices: number[];
-  faceCells: number[];
 }
 
 /** 导出视口渲染网格（体积边界面或 STL 表面）。 */

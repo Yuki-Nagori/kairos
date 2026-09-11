@@ -32,9 +32,9 @@ pub struct DependencyStatus {
 }
 
 #[tauri::command]
-pub fn list_runtime_dependencies(app: AppHandle) -> Vec<DependencyStatus> {
+pub fn list_runtime_dependencies(app: AppHandle) -> Result<Vec<DependencyStatus>> {
     let downloads_dir = downloads::downloads_dir(&app).ok();
-    dependencies_service::catalog()
+    let list = dependencies_service::catalog()
         .iter()
         .map(|dep| {
             // PATH 命中或应用内受管副本命中，都算就绪。
@@ -49,7 +49,8 @@ pub fn list_runtime_dependencies(app: AppHandle) -> Vec<DependencyStatus> {
                 updatable: dependencies_service::is_release_updatable(dep),
             }
         })
-        .collect()
+        .collect();
+    Ok(list)
 }
 
 /// 在受管组件目录中查找可执行文件（gmsh SDK 解压后位于 bin/ 子目录）。

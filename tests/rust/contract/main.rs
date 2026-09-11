@@ -346,3 +346,17 @@ fn derive_request_serializes_with_kind_tag() {
         json!({ "kind": "difference" })
     );
 }
+
+/// RenderMeshData 的形状：camelCase 字段，前端视口上传用（云图按 faceCells 着色）。
+#[test]
+fn render_mesh_data_serializes_with_camel_case() {
+    let data = kairos_core::models::render::RenderMeshData {
+        positions: vec![0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0],
+        indices: vec![0, 1, 2],
+        face_cells: vec![7],
+    };
+    let json = serde_json::to_value(&data).unwrap();
+    assert_eq!(json["positions"].as_array().map(Vec::len), Some(9));
+    assert_eq!(json["indices"], json!([0, 1, 2]));
+    assert_eq!(json["faceCells"], json!([7]));
+}

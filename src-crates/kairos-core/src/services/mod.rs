@@ -14,6 +14,7 @@ pub mod openfoam;
 pub mod operators;
 pub mod process;
 pub mod project;
+pub mod render_mesh;
 pub mod repair;
 pub mod results;
 pub mod runners;

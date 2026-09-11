@@ -1,6 +1,7 @@
 //! GPU 命令：wgpu 适配器探测与厂商识别（NVIDIA / AMD / Intel / Apple，T19）。
 //! 统一走 wgpu（Vulkan / DX12 / Metal），禁止引入 CUDA 等单厂商 SDK。
 
+use kairos_core::error::Result;
 use serde::Serialize;
 
 /// GPU 适配器信息（诊断页展示）。
@@ -16,7 +17,7 @@ pub struct GpuAdapterInfo {
 }
 
 #[tauri::command]
-pub async fn probe_gpu() -> Vec<GpuAdapterInfo> {
+pub async fn probe_gpu() -> Result<Vec<GpuAdapterInfo>> {
     let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::default());
     let mut adapters = Vec::new();
     for adapter in instance.enumerate_adapters(wgpu::Backends::all()) {
@@ -28,7 +29,7 @@ pub async fn probe_gpu() -> Vec<GpuAdapterInfo> {
             device_type: format!("{:?}", info.device_type).to_lowercase(),
         });
     }
-    adapters
+    Ok(adapters)
 }
 
 /// PCI 厂商 ID → 厂商名（诊断展示用）。
@@ -58,7 +59,7 @@ mod tests {
     #[test]
     fn probe_returns_adapters_on_machines_with_gpu() {
         // 在有 GPU 的机器上（CI runner 与开发机均有），至少能枚举一个适配器。
-        let adapters = pollster::block_on(probe_gpu());
+        let adapters = pollster::block_on(probe_gpu()).expect("GPU 探测不应失败");
         assert!(!adapters.is_empty(), "应有至少一个可用适配器");
     }
 }

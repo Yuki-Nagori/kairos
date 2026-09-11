@@ -29,7 +29,7 @@ pub struct EnvironmentCheck {
 }
 
 #[tauri::command]
-pub fn probe_openfoam() -> EnvironmentCheck {
+pub fn probe_openfoam() -> Result<EnvironmentCheck> {
     let check = |command: &str| -> bool {
         Command::new("sh")
             .arg("-c")
@@ -47,11 +47,11 @@ pub fn probe_openfoam() -> EnvironmentCheck {
     } else {
         "OpenFOAM 版本过旧：缺少 foamRun 模块化运行器，请升级到 11+（推荐 14）。".into()
     };
-    EnvironmentCheck {
+    Ok(EnvironmentCheck {
         openfoam,
         solver,
         hint,
-    }
+    })
 }
 
 /// 由已导入几何生成 OpenFOAM case（polyMesh + 场 + 字典）。

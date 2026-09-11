@@ -147,6 +147,14 @@ export interface RepairOutcome {
   summary: GeometrySummary;
   report: RepairReport;
 }
+
+/** 对应 `kairos-core::models::render::RenderMeshData`（视口上传用）。 */
+export interface RenderMeshData {
+  positions: number[];
+  indices: number[];
+  /** 每个三角形所属单元索引（云图按单元值着色）。 */
+  faceCells: number[];
+}
 /** 对应 `kairos-core::models::mesh::MeshQuality`。 */
 export interface MeshQuality {
   minEdgeRatio: number;

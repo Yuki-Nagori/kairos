@@ -44,8 +44,8 @@ pub fn load_project_file(app: AppHandle, path: String) -> Result<Project> {
 }
 
 #[tauri::command]
-pub fn list_recent_projects(app: AppHandle) -> Vec<RecentProject> {
-    read_recents(&app)
+pub fn list_recent_projects(app: AppHandle) -> Result<Vec<RecentProject>> {
+    Ok(read_recents(&app))
 }
 
 /// 最近项目以应用数据目录下的 JSON 为准（跨会话）；读取失败按空处理。
