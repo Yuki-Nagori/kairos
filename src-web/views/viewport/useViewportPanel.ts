@@ -7,27 +7,11 @@ import { useResultsStore } from "../../stores/results";
 import { useViewportStore } from "../../stores/viewport";
 import type { ScalarField } from "../../types";
 import { ViewportRenderer } from "../../render/renderer";
+import { buildOverlayLayers, OVERLAY_IDS } from "../../render/overlays";
 import { detectRenderCapabilityInBrowser } from "../../render/capability";
 import { registerSnapshot } from "../../render/snapshot";
 import { minMax } from "../../utils/stats";
 import { getRenderMesh } from "../../api/geometry";
-
-/** 叠加层配色：浇口红、流道琥珀、冷却水路蓝（深色视口下高对比）。 */
-const GATE_COLOR: [number, number, number] = [0.95, 0.32, 0.3];
-const RUNNER_COLOR: [number, number, number] = [0.95, 0.62, 0.12];
-const COOLING_COLOR: [number, number, number] = [0.3, 0.6, 0.95];
-
-/** 端点对压平成线段坐标（长度 = 6 × 段数）。 */
-function flattenSegments(
-  elements: { start: [number, number, number]; end: [number, number, number] }[],
-): Float32Array {
-  const positions = new Float32Array(elements.length * 6);
-  elements.forEach((element, index) => {
-    positions.set(element.start, index * 6);
-    positions.set(element.end, index * 6 + 3);
-  });
-  return positions;
-}
 
 export function useViewportPanel() {
   const geometry = useGeometryStore();
@@ -207,14 +191,10 @@ export function useViewportPanel() {
     if (study === null || renderer === null) {
       return;
     }
-    const gates = study.runnerElements.filter((element) => element.kind === "gate");
-    const runners = study.runnerElements.filter((element) => element.kind === "runner");
-    renderer.uploadOverlay("gates", { positions: flattenSegments(gates), color: GATE_COLOR });
-    renderer.uploadOverlay("runners", { positions: flattenSegments(runners), color: RUNNER_COLOR });
-    renderer.uploadOverlay("cooling", {
-      positions: flattenSegments(study.coolingChannels),
-      color: COOLING_COLOR,
-    });
+    const layers = buildOverlayLayers(study);
+    renderer.uploadOverlay(OVERLAY_IDS.gates, layers.gates);
+    renderer.uploadOverlay(OVERLAY_IDS.runners, layers.runners);
+    renderer.uploadOverlay(OVERLAY_IDS.cooling, layers.cooling);
   }
 
   /** 把图层可见性意图同步到渲染器（层管理面板与视口的桥）。 */
@@ -223,9 +203,9 @@ export function useViewportPanel() {
       return;
     }
     renderer.setMeshVisible(viewport.layers.mesh);
-    renderer.setOverlayVisible("gates", viewport.layers.gates);
-    renderer.setOverlayVisible("runners", viewport.layers.runners);
-    renderer.setOverlayVisible("cooling", viewport.layers.cooling);
+    renderer.setOverlayVisible(OVERLAY_IDS.gates, viewport.layers.gates);
+    renderer.setOverlayVisible(OVERLAY_IDS.runners, viewport.layers.runners);
+    renderer.setOverlayVisible(OVERLAY_IDS.cooling, viewport.layers.cooling);
   }
 
   watch(

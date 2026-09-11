@@ -1,4 +1,5 @@
 import { mat4Identity, mat4LookAt, mat4Multiply, mat4Perspective, type Vec3 } from "./math";
+import type { OverlayLayer } from "./overlays";
 import { THEME_CHANGED_EVENT } from "../composables/useTheme";
 
 /** 视口清屏色的深色缺省（CSS 变量缺失时的兜底）。 */
@@ -22,14 +23,6 @@ interface RenderMesh {
   indices: Uint32Array;
   /** 每个三角形所属单元索引（云图着色用；可为空）。 */
   faceCells?: Uint32Array;
-}
-
-/** 线段叠加层（浇口 / 流道 / 冷却水路）：成对端点的扁平坐标。 */
-interface OverlayLayer {
-  /** 成对端点坐标（长度 = 6 × 线段数）。 */
-  positions: Float32Array;
-  /** RGB 颜色（0..1）。 */
-  color: [number, number, number];
 }
 
 /** 相机注视点（模型坐标），供视口坐标读数展示。 */
