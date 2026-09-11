@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mount } from "@vue/test-utils";
+import { flushPromises, mount } from "@vue/test-utils";
 import { defineComponent, nextTick } from "vue";
 import { createPinia, setActivePinia } from "pinia";
 import type { Pinia } from "pinia";
@@ -8,7 +8,15 @@ import { useXyChartPanel } from "../../../../src-web/views/xy-chart/useXyChartPa
 import { useAppStore } from "../../../../src-web/stores/app";
 import { useResultsStore } from "../../../../src-web/stores/results";
 import { THEME_CHANGED_EVENT } from "../../../../src-web/composables/useTheme";
+import { loadResultField } from "../../../../src-web/api/results";
 import type { ScalarField } from "../../../../src-web/types";
+
+vi.mock("../../../../src-web/api/results", () => ({
+  listResultTimes: vi.fn(),
+  loadResultField: vi.fn(),
+  deriveField: vi.fn(),
+  deriveDifference: vi.fn(),
+}));
 
 /** 录制调用的假 2D 上下文：属性可写，方法名与实参记入 calls。 */
 function fakeCtx(): CanvasRenderingContext2D & { calls: Array<{ name: string; args: unknown[] }> } {
@@ -201,6 +209,90 @@ describe("XyChartPanel", () => {
     expect(fresh.map((call) => call.name)).toContain("fillRect");
     expect(fresh.map((call) => call.name)).not.toContain("lineTo");
     expect(fresh.map((call) => call.name)).not.toContain("arc");
+  });
+
+  it("探针时间曲线：就绪时加载时间序列并绘制探针编号", async () => {
+    const results = useResultsStore();
+    results.resultCatalog = {
+      caseDir: "/case/run",
+      times: [
+        { dirName: "0", timeS: 0, fields: ["T"] },
+        { dirName: "1", timeS: 1, fields: ["T"] },
+      ],
+    };
+    results.loadedField = makeField({ field: "T" });
+    results.addProbe(0);
+    results.addProbe(1);
+    vi.mocked(loadResultField).mockImplementation((_caseDir: string, timeDir: string) => {
+      const values = timeDir === "0" ? [10, 20] : [30, 40];
+      return Promise.resolve(makeField({ timeDir, values }));
+    });
+    const wrapper = mountPanel();
+
+    await wrapper.findAll("select")[0]!.setValue("time");
+    await findButton(wrapper, "加载时间曲线").trigger("click");
+    await flushPromises();
+
+    expect(results.probeTimeSeries).toHaveLength(2);
+    expect(results.probeTimeSeries[0]?.samples).toEqual([
+      { timeS: 0, value: 10 },
+      { timeS: 1, value: 30 },
+    ]);
+    expect(results.probeTimeSeries[1]?.samples).toEqual([
+      { timeS: 0, value: 20 },
+      { timeS: 1, value: 40 },
+    ]);
+    // 时间模式坐标轴：x 轴为时间步序，值域取自探针采样 min/max。
+    const texts = ctx.calls.filter((call) => call.name === "fillText").map((call) => call.args[0]);
+    expect(texts).toContain("时间步（序）");
+    expect(texts).toContain("10.000");
+    expect(texts).toContain("40.000");
+  });
+
+  it("时间曲线加载守卫：目录/探针/场未就绪时静默", async () => {
+    const panel = useXyChartPanel();
+    panel.loadTimeSeries();
+    expect(loadResultField).not.toHaveBeenCalled();
+  });
+
+  it("跳转选择为空时静默返回，不触发加载", async () => {
+    const results = useResultsStore();
+    results.resultCatalog = {
+      caseDir: "/case/run",
+      times: [{ dirName: "0", timeS: 0, fields: ["T"] }],
+    };
+    results.loadedField = makeField({ field: "T" });
+    results.probeSeriesField = "T";
+    const wrapper = mountPanel();
+
+    // 保持空选项直接 change：守卫返回，不调用加载。
+    await wrapper.findAll("select")[0]!.setValue("time");
+    await wrapper.findAll("select")[1]!.setValue("");
+    await flushPromises();
+
+    expect(loadResultField).not.toHaveBeenCalled();
+  });
+
+  it("跳转到时间步：按所选时间步加载原始场", async () => {
+    const results = useResultsStore();
+    results.resultCatalog = {
+      caseDir: "/case/run",
+      times: [
+        { dirName: "0", timeS: 0, fields: ["T"] },
+        { dirName: "1", timeS: 1, fields: ["T"] },
+      ],
+    };
+    results.loadedField = makeField({ field: "T" });
+    results.probeSeriesField = "T";
+    vi.mocked(loadResultField).mockResolvedValue(makeField());
+    const wrapper = mountPanel();
+
+    // 跳转选择器仅在时间模式下渲染。
+    await wrapper.findAll("select")[0]!.setValue("time");
+    await wrapper.findAll("select")[1]!.setValue("1");
+    await flushPromises();
+
+    expect(loadResultField).toHaveBeenCalledWith("/case/run", "1", "T", "primary");
   });
 });
 

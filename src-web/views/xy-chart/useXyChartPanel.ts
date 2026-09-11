@@ -1,4 +1,4 @@
-/** XY 图表面板：场分布曲线 + 探针管理 + CSV 导出。 */
+/** XY 图表面板：场分布曲线 / 探针时间曲线 + 探针管理 + CSV 导出。 */
 import { computed, onMounted, onUnmounted, ref, useTemplateRef, watch } from "vue";
 import { useAppStore } from "../../stores/app";
 import { useResultsStore } from "../../stores/results";
@@ -16,6 +16,32 @@ export function useXyChartPanel() {
   const canvasRef = useTemplateRef<HTMLCanvasElement>("canvasRef");
   const nodeInput = ref("");
   const working = computed(() => app.busy !== null);
+
+  // 图表模式：空间分布（全场按节点序号）/ 探针时间曲线（探针值随时间步）。
+  const mode = ref<"spatial" | "time">("spatial");
+  const PROBE_COLORS = ["#34d399", "#fbbf24", "#60a5fa", "#f472b6", "#a78bfa"];
+
+  const canLoadTimeSeries = computed(
+    () =>
+      results.resultCatalog !== null && results.probes.length > 0 && results.loadedField !== null,
+  );
+
+  function loadTimeSeries(): void {
+    if (canLoadTimeSeries.value) {
+      void results.loadProbeTimeSeries();
+    }
+  }
+
+  // 时间轴联动：选择时间步 → 加载该步主场 → 视口云图与探针数值同步刷新。
+  const selectedTimeDir = ref("");
+  function jumpToTime(): void {
+    const catalog = results.resultCatalog;
+    const fieldName = results.probeSeriesField;
+    if (catalog === null || fieldName === null || selectedTimeDir.value === "") {
+      return;
+    }
+    void results.loadField(catalog.caseDir, selectedTimeDir.value, fieldName);
+  }
 
   function addProbeFromInput(): void {
     results.addProbe(Number(nodeInput.value));
@@ -37,6 +63,10 @@ export function useXyChartPanel() {
     }
     const ctx = canvas.getContext("2d");
     if (ctx === null) {
+      return;
+    }
+    if (mode.value === "time") {
+      drawTimeMode(ctx, canvas);
       return;
     }
     const series: Array<{ values: number[]; color: string; label: string }> = [];
@@ -81,8 +111,23 @@ export function useXyChartPanel() {
     }
   }
 
+  /** 时间曲线模式：每探针一条曲线，x 为目录时间步序。 */
+  function drawTimeMode(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
+    const series = results.probeTimeSeries.map((entry, index) => ({
+      values: entry.samples.map((sample) => sample.value),
+      color: PROBE_COLORS[index % PROBE_COLORS.length]!,
+      label: `#${entry.nodeIndex}`,
+    }));
+    void drawLineChart(ctx, series, {
+      width: canvas.width,
+      height: canvas.height,
+      xLabel: "时间步（序）",
+      yLabel: results.probeSeriesField ?? "",
+    });
+  }
+
   watch(
-    () => [results.loadedField, results.probes],
+    () => [results.loadedField, results.probes, results.probeTimeSeries, mode.value],
     () => draw(),
   );
 
@@ -101,6 +146,11 @@ export function useXyChartPanel() {
     nodeInput,
     working,
     probeDots,
+    mode,
+    canLoadTimeSeries,
+    loadTimeSeries,
+    selectedTimeDir,
+    jumpToTime,
     addProbeFromInput,
     draw,
   };

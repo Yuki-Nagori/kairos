@@ -350,3 +350,10 @@ export type DeriveRequest =
 
 /** 场加载槽位（主场用于展示与单场派生，对比场用于两场差值）。 */
 export type FieldSlot = "primary" | "compare";
+
+/** 探针时间序列采样（对应一个探针在目录各时间步的取值）。 */
+export interface ProbeTimeSeries {
+  probeId: number;
+  nodeIndex: number;
+  samples: { timeS: number; value: number }[];
+}

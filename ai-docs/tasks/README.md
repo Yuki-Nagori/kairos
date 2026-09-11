@@ -56,6 +56,7 @@
 | T43 | [T43-voxel-graded-refinement-done.md](T43-voxel-graded-refinement-done.md)     | 局部加密 / 边界层（体素分级）   |
 | T44 | [T44-derive-pipeline-done.md](T44-derive-pipeline-done.md)                     | 派生算子管线补全（线性/差值）   |
 | T45 | [T45-viewport-picking-done.md](T45-viewport-picking-done.md)                   | 视口空间拾取与探针场关联        |
+| T46 | [T46-probe-time-series-done.md](T46-probe-time-series-done.md)                 | 探针时间曲线与时间轴联动        |
 
 > T26/T27 落地后的增量打磨（系统窗口按钮、原生应用菜单、主题注入统一、
 > 品牌图标、emoji 清理、启动窗口位置）见 `ai-docs/timeline.md` 对应条目，

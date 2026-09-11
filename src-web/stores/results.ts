@@ -6,7 +6,14 @@ import {
   listResultTimes,
   loadResultField,
 } from "../api/results";
-import type { DeriveRequest, FieldSlot, Probe, ResultCatalog, ScalarField } from "../types";
+import type {
+  DeriveRequest,
+  FieldSlot,
+  Probe,
+  ProbeTimeSeries,
+  ResultCatalog,
+  ScalarField,
+} from "../types";
 import { toCsv } from "../utils/chart";
 import { useAppStore } from "./app";
 
@@ -20,6 +27,10 @@ export const useResultsStore = defineStore("results", {
     loadedField: null as ScalarField | null,
     /** 对比场（两场差值的减数）。 */
     compareField: null as ScalarField | null,
+    /** 探针时间序列：每探针一份「时间步序 → 值」采样。 */
+    probeTimeSeries: [] as ProbeTimeSeries[],
+    /** 时间序列对应的原始场名（如 T）。 */
+    probeSeriesField: null as string | null,
     /** 探针列表（节点序号）。 */
     probes: [] as Probe[],
   }),
@@ -86,6 +97,43 @@ export const useResultsStore = defineStore("results", {
     },
     removeProbe(id: number): void {
       this.probes = this.probes.filter((probe) => probe.id !== id);
+      this.probeTimeSeries = this.probeTimeSeries.filter((series) => series.probeId !== id);
+    },
+    /** 加载探针时间序列：遍历目录时间步取各探针值；结束后恢复原时间步显示。 */
+    async loadProbeTimeSeries(): Promise<void> {
+      const app = useAppStore();
+      const catalog = this.resultCatalog;
+      const probes = this.probes;
+      const source = this.loadedField;
+      const rawField = source?.field.split(" · ")[0] ?? "";
+      if (catalog === null || probes.length === 0 || source === null || rawField === "") {
+        return;
+      }
+      app.beginBusy("正在加载探针时间曲线…");
+      try {
+        const originalTimeDir = source.timeDir;
+        const series: ProbeTimeSeries[] = probes.map((probe) => ({
+          probeId: probe.id,
+          nodeIndex: probe.nodeIndex,
+          samples: [],
+        }));
+        for (const time of catalog.times) {
+          const field = await loadResultField(catalog.caseDir, time.dirName, rawField);
+          for (const entry of series) {
+            entry.samples.push({ timeS: time.timeS, value: field.values[entry.nodeIndex] ?? 0 });
+          }
+          // 恢复原时间步：遍历中遇到即缓存，结束后回填展示态。
+          if (time.dirName === originalTimeDir) {
+            this.loadedField = field;
+          }
+        }
+        this.probeTimeSeries = series;
+        this.probeSeriesField = rawField;
+      } catch (error) {
+        app.setError(error);
+      } finally {
+        app.endBusy();
+      }
     },
     /** 对主场执行单场派生（normalize / threshold / linear），写回 loadedField。 */
     async deriveField(request: DeriveRequest): Promise<void> {
