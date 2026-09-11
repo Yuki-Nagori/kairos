@@ -177,11 +177,21 @@ describe("MenuBar（Windows/Linux 自绘标题栏）", () => {
     useCommandPalette().closePalette();
   });
 
-  it("macOS 不渲染 web 菜单与窗口控制", () => {
+  it("macOS 桌面（系统菜单栏 + Overlay）不渲染 web 菜单与窗口控制", () => {
     vi.stubGlobal("navigator", { userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)" });
+    (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {};
     const wrapper = mount(MenuBar, { global: { plugins: [pinia] } });
     expect(wrapper.find("nav").exists()).toBe(false);
+    expect(wrapper.findAll("button").map((button) => button.text())).not.toContain("✕");
     expect(wrapper.text()).toContain("搜索命令…");
+    delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__;
+  });
+
+  it("macOS 浏览器预览：系统菜单栏属于浏览器，仍渲染 web 菜单", () => {
+    vi.stubGlobal("navigator", { userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)" });
+    const wrapper = mount(MenuBar, { global: { plugins: [pinia] } });
+    expect(wrapper.find("nav").exists()).toBe(true);
+    expect(wrapper.findAll("button").map((button) => button.text())).not.toContain("✕");
   });
 });
 

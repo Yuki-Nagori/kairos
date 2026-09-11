@@ -4,7 +4,7 @@ export function isTauriRuntime(): boolean {
 }
 
 /** 桌面平台（快捷键提示与匹配按平台区分）。 */
-type Platform = "macos" | "windows" | "linux";
+export type Platform = "macos" | "windows" | "linux";
 
 /** 从 userAgent 解析平台：iPadOS 15+ 的 UA 也报告 Mac，归入 macOS 符合其键位习惯。 */
 export function detectPlatform(userAgent: string): Platform {
