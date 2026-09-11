@@ -17,7 +17,13 @@ const shell = useShell();
 const { menuGroups, openIndex, toggleMenu, hoverMenu, runCommand } = useMenuBar();
 const { aboutOpen, hideAbout } = useAboutDialog();
 const { openPalette } = useCommandPalette();
-const controls = useWindowControls();
+const {
+  available: controlsAvailable,
+  maximized,
+  minimize,
+  toggleMaximize,
+  close,
+} = useWindowControls();
 </script>
 
 <template>
@@ -42,6 +48,8 @@ const controls = useWindowControls();
               ? 'bg-zinc-800 text-zinc-100'
               : 'text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200'
           "
+          aria-haspopup="menu"
+          :aria-expanded="openIndex === index"
           @click="toggleMenu(index)"
           @mouseenter="hoverMenu(index)"
         >
@@ -80,28 +88,28 @@ const controls = useWindowControls();
     </button>
 
     <!-- 自绘窗口控制（Windows/Linux 无边框窗口）：走 Tauri 窗口 API -->
-    <div v-if="controls.available" class="ml-3 flex items-center self-stretch">
+    <div v-if="controlsAvailable" class="ml-3 flex items-center self-stretch">
       <button
         type="button"
         title="最小化"
         class="flex h-full w-10 items-center justify-center text-xs text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
-        @click="controls.minimize()"
+        @click="minimize()"
       >
         ─
       </button>
       <button
         type="button"
-        title="最大化 / 还原"
+        :title="maximized ? '还原' : '最大化 / 还原'"
         class="flex h-full w-10 items-center justify-center text-[10px] text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
-        @click="controls.toggleMaximize()"
+        @click="toggleMaximize()"
       >
-        ▢
+        {{ maximized ? "❐" : "▢" }}
       </button>
       <button
         type="button"
         title="关闭"
         class="flex h-full w-10 items-center justify-center text-xs text-zinc-400 transition-colors hover:bg-red-600 hover:text-white"
-        @click="controls.close()"
+        @click="close()"
       >
         ✕
       </button>
