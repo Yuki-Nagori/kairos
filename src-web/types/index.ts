@@ -166,6 +166,24 @@ export interface DualDomainReport {
   thicknessAvg: number;
 }
 
+/** 对应 `kairos-core::models::mesh::MidplaneReport`。 */
+export interface MidplaneReport {
+  nodeCount: number;
+  elementCount: number;
+  beamCount: number;
+  /** 成功捕捉到中面节点的梁端点数。 */
+  couplingCount: number;
+  /** 未捕捉（自成为自由节点）的梁端点数。 */
+  uncoupledEndpoints: number;
+  /** 未配对到对面的表面顶点数。 */
+  unpairedVertices: number;
+  /** 因顶点未配对而被丢弃的单元数。 */
+  droppedElements: number;
+  thicknessMin: number;
+  thicknessMax: number;
+  thicknessAvg: number;
+}
+
 /** 对应 `kairos-core::models::runners::RunnerKind`。 */
 export type RunnerKind = "gate" | "runner";
 

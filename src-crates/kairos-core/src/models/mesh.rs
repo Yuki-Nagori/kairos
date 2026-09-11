@@ -51,6 +51,23 @@ pub struct BeamCoupling {
     pub distance: f64,
 }
 
+/// 中面网格：顶点配对法产物（1D/2.5D 快速分析路线）。
+/// 每个表面顶点沿相邻面法向向内射线取最近对面命中，中面节点取
+/// 顶点与命中点的中点；单元继承表面三角形连接。
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct MidplaneMesh {
+    /// 中面节点（与焊接后的表面顶点一一对应，未配对顶点不在其中）。
+    pub nodes: Vec<[f64; 3]>,
+    /// 三角形单元（中面节点索引）；三个顶点全部配对的表面三角形才保留。
+    pub elements: Vec<[usize; 3]>,
+    /// 每个单元的厚度（三顶点配对厚度均值）。
+    pub thickness: Vec<f64>,
+    /// 杆系梁单元（与双域网格同型）。
+    pub beams: Vec<DualDomainBeam>,
+    /// 梁端点与中面节点的耦合记录。
+    pub couplings: Vec<BeamCoupling>,
+}
+
 /// 单个四面体的质量指标。
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -93,5 +110,26 @@ pub struct DualDomainReport {
     pub thickness_min: f64,
     pub thickness_max: f64,
     /// 已配对三角形的平均厚度。
+    pub thickness_avg: f64,
+}
+
+/// 中面网格报告：返回给前端的统计信息。
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MidplaneReport {
+    pub node_count: usize,
+    pub element_count: usize,
+    pub beam_count: usize,
+    /// 成功捕捉到中面节点的梁端点数。
+    pub coupling_count: usize,
+    /// 未捕捉（自成为自由节点）的梁端点数。
+    pub uncoupled_endpoints: usize,
+    /// 未配对到对面的表面顶点数。
+    pub unpaired_vertices: usize,
+    /// 因顶点未配对而被丢弃的单元数。
+    pub dropped_elements: usize,
+    pub thickness_min: f64,
+    pub thickness_max: f64,
+    /// 已保留单元的平均厚度。
     pub thickness_avg: f64,
 }

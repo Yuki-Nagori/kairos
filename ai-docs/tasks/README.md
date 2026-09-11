@@ -52,6 +52,7 @@
 | T38 | [T38-frontend-architecture.md](T38-frontend-architecture.md)                   | 前端架构重构                    |
 | T40 | [T40-iges-import-done.md](T40-iges-import-done.md)                             | IGES 导入（106/63 镶嵌子集）    |
 | T41 | [T41-dual-domain-mesh-done.md](T41-dual-domain-mesh-done.md)                   | 双域网格（表面 + 杆系耦合）     |
+| T42 | [T42-midplane-mesh-done.md](T42-midplane-mesh-done.md)                         | 中面网格（1D/2.5D 快速路线）    |
 
 > T26/T27 落地后的增量打磨（系统窗口按钮、原生应用菜单、主题注入统一、
 > 品牌图标、emoji 清理、启动窗口位置）见 `ai-docs/timeline.md` 对应条目，

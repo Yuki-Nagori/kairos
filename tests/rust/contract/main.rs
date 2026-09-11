@@ -8,7 +8,7 @@ use kairos_core::services::system;
 use serde_json::json;
 
 use kairos_core::models::material::Material;
-use kairos_core::models::mesh::{DualDomainReport, MeshQuality, MeshingReport};
+use kairos_core::models::mesh::{DualDomainReport, MeshQuality, MeshingReport, MidplaneReport};
 use kairos_core::models::project::{Project, Study};
 use kairos_core::models::results::{ResultCatalog, ScalarField, TimeStepMeta};
 use kairos_core::services::{geometry, material};
@@ -153,6 +153,34 @@ fn dual_domain_report_serializes_with_camel_case() {
             "thicknessAvg": 2.0,
         })
     );
+}
+
+/// MidplaneReport 的形状：统计字段 camelCase，前端几何面板与之对应。
+#[test]
+fn midplane_report_serializes_with_camel_case() {
+    let report = MidplaneReport {
+        node_count: 8,
+        element_count: 12,
+        beam_count: 1,
+        coupling_count: 1,
+        uncoupled_endpoints: 1,
+        unpaired_vertices: 2,
+        dropped_elements: 3,
+        thickness_min: 1.9,
+        thickness_max: 2.1,
+        thickness_avg: 2.0,
+    };
+    let json = serde_json::to_value(&report).unwrap();
+    assert_eq!(json["nodeCount"], 8);
+    assert_eq!(json["elementCount"], 12);
+    assert_eq!(json["beamCount"], 1);
+    assert_eq!(json["couplingCount"], 1);
+    assert_eq!(json["uncoupledEndpoints"], 1);
+    assert_eq!(json["unpairedVertices"], 2);
+    assert_eq!(json["droppedElements"], 3);
+    assert_eq!(json["thicknessMin"], 1.9);
+    assert_eq!(json["thicknessMax"], 2.1);
+    assert_eq!(json["thicknessAvg"], 2.0);
 }
 
 /// 结果模型形状：时间步与标量场（complete 标记不完整结果）。

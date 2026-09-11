@@ -197,6 +197,7 @@ pub fn run() {
             commands::geometry::get_render_mesh,
             commands::geometry::generate_volume_mesh,
             commands::geometry::generate_dual_domain_mesh,
+            commands::geometry::generate_midplane_mesh,
             commands::geometry::generate_gmsh_mesh,
             commands::mold::check_mold_network,
             commands::process::check_process,

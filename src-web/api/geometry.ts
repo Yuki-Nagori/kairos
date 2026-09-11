@@ -1,6 +1,12 @@
 /** 几何 IPC：STL 导入、体积网格生成（内置与 Gmsh 引擎）、双域网格与渲染网格导出。 */
 import { invokeCommand } from "../utils/ipc";
-import type { DualDomainReport, GeometrySummary, MeshingReport, RunnerElement } from "../types";
+import type {
+  DualDomainReport,
+  GeometrySummary,
+  MeshingReport,
+  MidplaneReport,
+  RunnerElement,
+} from "../types";
 
 /** 导入 STL（全量网格留在 Rust 侧），返回摘要与健康检查结果。 */
 export function importStl(path: string): Promise<GeometrySummary> {
@@ -59,4 +65,12 @@ export function generateDualDomainMesh(
   runners: RunnerElement[],
 ): Promise<DualDomainReport> {
   return invokeCommand("generate_dual_domain_mesh", { geometryId, runners });
+}
+
+/** 生成中面网格：顶点配对法（1D/2.5D 快速分析路线），杆系梁耦合中面节点。 */
+export function generateMidplaneMesh(
+  geometryId: string,
+  runners: RunnerElement[],
+): Promise<MidplaneReport> {
+  return invokeCommand("generate_midplane_mesh", { geometryId, runners });
 }

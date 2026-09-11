@@ -8,12 +8,15 @@ use serde::Serialize;
 
 use kairos_core::error::{KairosError, Result};
 use kairos_core::models::geometry::{GeometrySummary, TriangleMesh};
-use kairos_core::models::mesh::{DualDomainMesh, DualDomainReport, MeshingReport, VolumeMesh};
+use kairos_core::models::mesh::{
+    DualDomainMesh, DualDomainReport, MeshingReport, MidplaneMesh, MidplaneReport, VolumeMesh,
+};
 use kairos_core::models::runners::RunnerElement;
 use kairos_core::services::dualdomain::{self, DualDomainParams};
 use kairos_core::services::geometry as geometry_service;
 use kairos_core::services::iges;
 use kairos_core::services::meshing::{self, VolumeMeshParams};
+use kairos_core::services::midplane::{self, MidplaneParams};
 use kairos_core::services::project::new_id;
 use kairos_core::services::repair;
 use kairos_core::services::step;
@@ -25,6 +28,7 @@ pub struct MeshSession {
     pub file_name: String,
     pub volume: Option<VolumeMesh>,
     pub dual: Option<DualDomainMesh>,
+    pub midplane: Option<MidplaneMesh>,
 }
 
 /// 几何会话缓存：渲染与网格生成（T06/T14）从这里取全量数据。
@@ -68,6 +72,7 @@ fn store_import(store: &GeometryStore, path: &str, mesh: TriangleMesh) -> Geomet
             file_name,
             volume: None,
             dual: None,
+            midplane: None,
         },
     );
     summary
@@ -162,6 +167,33 @@ pub async fn generate_dual_domain_mesh(
     })
     .await
     .map_err(|e| KairosError::internal(format!("双域网格任务失败：{e}")))?
+}
+
+/// 生成中面网格：顶点配对法（1D/2.5D 快速分析路线），杆系梁耦合中面节点
+/// （网格保留在会话缓存中，前端获得统计报告）。
+#[tauri::command]
+pub async fn generate_midplane_mesh(
+    store: State<'_, GeometryStore>,
+    geometry_id: String,
+    runners: Vec<RunnerElement>,
+) -> Result<MidplaneReport> {
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let mesh = {
+            let sessions = store.lock();
+            let session = sessions
+                .get(&geometry_id)
+                .ok_or_else(|| KairosError::not_found(format!("几何不存在：{geometry_id}")))?;
+            session.mesh.clone()
+        };
+        let (mid, report) = midplane::generate(&mesh, &runners, &MidplaneParams::default())?;
+        if let Some(session) = store.lock().get_mut(&geometry_id) {
+            session.midplane = Some(mid);
+        }
+        Ok(report)
+    })
+    .await
+    .map_err(|e| KairosError::internal(format!("中面网格任务失败：{e}")))?
 }
 
 /// 对已导入几何生成 3D 体积网格，返回统计报告（网格保留在会话缓存中）。
@@ -375,6 +407,7 @@ pub fn import_sample_box(store: State<'_, GeometryStore>, size: f64) -> Result<G
             file_name: "样例立方体.stl".into(),
             volume: None,
             dual: None,
+            midplane: None,
         },
     );
     Ok(summary)

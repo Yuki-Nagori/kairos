@@ -175,7 +175,7 @@ pub fn report(mesh: &DualDomainMesh) -> DualDomainReport {
 }
 
 /// 单位化三角形法向；退化（零长度叉积）返回 None。
-fn normalized_normal(a: &Point, b: &Point, c: &Point) -> Option<Point> {
+pub(crate) fn normalized_normal(a: &Point, b: &Point, c: &Point) -> Option<Point> {
     let e1 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
     let e2 = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
     let n = [
@@ -195,7 +195,7 @@ fn distance_sq(a: Point, b: Point) -> f64 {
 }
 
 /// 最近节点线性搜索（杆系数量级小，表面节点一次扫描可接受）。
-fn nearest_node(nodes: &[Point], point: Point) -> Option<(usize, f64)> {
+pub(crate) fn nearest_node(nodes: &[Point], point: Point) -> Option<(usize, f64)> {
     let mut best: Option<(usize, f64)> = None;
     for (index, candidate) in nodes.iter().enumerate() {
         let distance = distance_sq(*candidate, point);
@@ -207,7 +207,7 @@ fn nearest_node(nodes: &[Point], point: Point) -> Option<(usize, f64)> {
 }
 
 /// Möller–Trumbore 射线 / 三角形求交，返回参数 t（> 0）。
-fn ray_triangle(origin: Point, dir: Point, a: Point, b: Point, c: Point) -> Option<f64> {
+pub(crate) fn ray_triangle(origin: Point, dir: Point, a: Point, b: Point, c: Point) -> Option<f64> {
     let e1 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
     let e2 = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
     let p = [
@@ -239,7 +239,7 @@ fn ray_triangle(origin: Point, dir: Point, a: Point, b: Point, c: Point) -> Opti
 }
 
 /// 均匀格加速结构：三角形按包围盒落入格桶，射线用 3D DDA 逐格遍历。
-struct TriangleGrid {
+pub(crate) struct TriangleGrid {
     origin: Point,
     cell: f64,
     dims: [i64; 3],
@@ -248,7 +248,7 @@ struct TriangleGrid {
 
 impl TriangleGrid {
     /// 格数目标 64³：兼顾桶大小与遍历步数。
-    fn new(nodes: &[Point], triangles: &[[usize; 3]], min: Point, max: Point) -> Self {
+    pub(crate) fn new(nodes: &[Point], triangles: &[[usize; 3]], min: Point, max: Point) -> Self {
         let extent = [max[0] - min[0], max[1] - min[1], max[2] - min[2]];
         let diagonal = (extent[0] * extent[0] + extent[1] * extent[1] + extent[2] * extent[2])
             .sqrt()
@@ -291,7 +291,7 @@ impl TriangleGrid {
     }
 
     /// 沿单位方向 dir 的最近命中距离；下一格入口距离超过当前最优命中时提前终止。
-    fn first_hit(
+    pub(crate) fn first_hit(
         &self,
         nodes: &[Point],
         triangles: &[[usize; 3]],

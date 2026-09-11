@@ -6,7 +6,13 @@
 import { computed, reactive, watch } from "vue";
 import { useAppStore } from "../../stores/app";
 import { useGeometryStore } from "../../stores/geometry";
-import type { DualDomainReport, GeometrySummary, MeshIssues, MeshingReport } from "../../types";
+import type {
+  DualDomainReport,
+  GeometrySummary,
+  MeshIssues,
+  MeshingReport,
+  MidplaneReport,
+} from "../../types";
 
 export function useGeometryPanel() {
   const app = useAppStore();
@@ -110,6 +116,18 @@ export function useGeometryPanel() {
     return `三角形 ${report.triangleCount} · 厚度 ${thickness} ~ ${report.thicknessMax.toFixed(2)}（avg ${report.thicknessAvg.toFixed(2)}）· 未配对 ${report.unpairedTriangles} · 梁 ${report.beamCount}（耦合 ${report.couplingCount} / 自由 ${report.uncoupledEndpoints}）`;
   }
 
+  function midplaneReportText(report: MidplaneReport | undefined): string {
+    if (!report) {
+      return "顶点配对中面抽取（1D/2.5D 快速分析路线）。";
+    }
+    return `单元 ${report.elementCount} · 节点 ${report.nodeCount} · 厚度 ${report.thicknessMin.toFixed(2)} ~ ${report.thicknessMax.toFixed(2)}（avg ${report.thicknessAvg.toFixed(2)}）· 丢弃 ${report.droppedElements} · 梁 ${report.beamCount}（耦合 ${report.couplingCount}）`;
+  }
+
+  /** 中面网格：按当前方案流道/浇口做杆系耦合。 */
+  function generateMid(item: GeometrySummary): void {
+    void geometry.generateMidplane(item.geometryId);
+  }
+
   function onImport(): void {
     void geometry.importGeometry();
   }
@@ -141,6 +159,8 @@ export function useGeometryPanel() {
     reportText,
     dualReportText,
     generateDual,
+    midplaneReportText,
+    generateMid,
     onImport,
     onSample,
     repair,

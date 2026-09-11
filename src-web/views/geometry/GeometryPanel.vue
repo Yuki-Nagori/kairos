@@ -18,6 +18,8 @@ const {
   reportText,
   dualReportText,
   generateDual,
+  midplaneReportText,
+  generateMid,
   onImport,
   onSample,
 } = useGeometryPanel();
@@ -74,6 +76,13 @@ const {
             双域网格
           </UiButton>
           <UiButton
+            :disabled="working"
+            title="顶点配对中面抽取 + 当前方案流道/浇口梁耦合"
+            @click="generateMid(row.geometry)"
+          >
+            中面网格
+          </UiButton>
+          <UiButton
             :disabled="repairDisabled(row.geometry)"
             title="焊接重复顶点、移除退化面、填充孔洞、统一法向"
             @click="repair(row.geometry)"
@@ -85,6 +94,9 @@ const {
           </p>
           <p class="text-xs text-zinc-500">
             {{ dualReportText(geometry.dualDomainReports[row.geometry.geometryId]) }}
+          </p>
+          <p class="text-xs text-zinc-500">
+            {{ midplaneReportText(geometry.midplaneReports[row.geometry.geometryId]) }}
           </p>
         </div>
       </div>

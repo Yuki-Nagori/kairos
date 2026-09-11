@@ -6,6 +6,7 @@ import { useProjectStore } from "../../../src-web/stores/project";
 import {
   generateDualDomainMesh,
   generateGmshMesh,
+  generateMidplaneMesh,
   generateVolumeMesh,
   importIges,
   importSampleBox,
@@ -19,6 +20,7 @@ import type {
   DualDomainReport,
   GeometrySummary,
   MeshingReport,
+  MidplaneReport,
   RunnerElement,
   Study,
 } from "../../../src-web/types";
@@ -33,6 +35,7 @@ vi.mock("../../../src-web/api/geometry", () => ({
   importSampleBox: vi.fn(),
   generateGmshMesh: vi.fn(),
   generateDualDomainMesh: vi.fn(),
+  generateMidplaneMesh: vi.fn(),
 }));
 vi.mock("../../../src-web/api/dialog", () => ({
   pickOpenProjectPath: vi.fn(),
@@ -68,6 +71,21 @@ function makeReport(): MeshingReport {
     surfaceFaceCount: 12,
     totalVolume: 1000,
     quality: { minEdgeRatio: 1, avgEdgeRatio: 1.2, maxEdgeRatio: 2, minVolume: 0.5 },
+  };
+}
+
+function makeMidplaneReport(): MidplaneReport {
+  return {
+    nodeCount: 8,
+    elementCount: 4,
+    beamCount: 0,
+    couplingCount: 0,
+    uncoupledEndpoints: 0,
+    unpairedVertices: 0,
+    droppedElements: 0,
+    thicknessMin: 2,
+    thicknessMax: 2,
+    thicknessAvg: 2,
   };
 }
 
@@ -300,6 +318,55 @@ describe("geometry store", () => {
 
       expect(app.error?.message).toBe("双域失败");
       expect(geometry.dualDomainReports["g-1"]).toBeUndefined();
+      expect(app.busy).toBeNull();
+    });
+  });
+
+  describe("generateMidplane", () => {
+    it("无活跃方案时以空杆系调用并保存报告", async () => {
+      const report = makeMidplaneReport();
+      vi.mocked(generateMidplaneMesh).mockResolvedValue(report);
+
+      const app = useAppStore();
+      const geometry = useGeometryStore();
+      await geometry.generateMidplane("g-1");
+
+      expect(generateMidplaneMesh).toHaveBeenCalledWith("g-1", []);
+      expect(geometry.midplaneReports["g-1"]).toEqual(report);
+      expect(app.busy).toBeNull();
+    });
+
+    it("活跃方案的流道/浇口作为杆系透传", async () => {
+      const project = useProjectStore();
+      const runners: RunnerElement[] = [
+        { id: "r-1", kind: "runner", diameterMm: 5, start: [0, 0, 0], end: [10, 0, 0] },
+      ];
+      project.project = {
+        schemaVersion: 4,
+        id: "p-1",
+        name: "演示",
+        createdMs: 1,
+        updatedMs: 1,
+        studies: [studyWithRunners(runners)],
+      };
+      project.activeStudyId = "study-1";
+      vi.mocked(generateMidplaneMesh).mockResolvedValue(makeMidplaneReport());
+
+      const geometry = useGeometryStore();
+      await geometry.generateMidplane("g-1");
+
+      expect(generateMidplaneMesh).toHaveBeenCalledWith("g-1", runners);
+    });
+
+    it("生成失败时错误进入全局状态", async () => {
+      const app = useAppStore();
+      const geometry = useGeometryStore();
+      vi.mocked(generateMidplaneMesh).mockRejectedValue(new Error("中面失败"));
+
+      await geometry.generateMidplane("g-1");
+
+      expect(app.error?.message).toBe("中面失败");
+      expect(geometry.midplaneReports["g-1"]).toBeUndefined();
       expect(app.busy).toBeNull();
     });
   });

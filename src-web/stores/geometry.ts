@@ -3,6 +3,7 @@ import { defineStore } from "pinia";
 import {
   generateDualDomainMesh as apiGenerateDualDomain,
   generateGmshMesh as apiGenerateGmshMesh,
+  generateMidplaneMesh as apiGenerateMidplane,
   generateVolumeMesh,
   importIges as apiImportIges,
   importSampleBox,
@@ -12,7 +13,7 @@ import {
   repairGeometry as apiRepairGeometry,
 } from "../api/geometry";
 import { pickOpenGeometryPath } from "../api/dialog";
-import type { DualDomainReport, GeometrySummary, MeshingReport } from "../types";
+import type { DualDomainReport, GeometrySummary, MeshingReport, MidplaneReport } from "../types";
 import { useAppStore } from "./app";
 import { useProjectStore } from "./project";
 
@@ -24,6 +25,8 @@ export const useGeometryStore = defineStore("geometry", {
     meshReports: {} as Record<string, MeshingReport>,
     /** 每个几何的双域网格报告（key = geometryId）。 */
     dualDomainReports: {} as Record<string, DualDomainReport>,
+    /** 每个几何的中面网格报告（key = geometryId）。 */
+    midplaneReports: {} as Record<string, MidplaneReport>,
   }),
   actions: {
     /** 导入 STL：弹出文件对话框，解析检查后入列表。 */
@@ -107,6 +110,20 @@ export const useGeometryStore = defineStore("geometry", {
         app.endBusy();
       }
     },
+    /** 为几何生成中面网格：顶点配对法，杆系梁耦合中面节点。 */
+    async generateMidplane(geometryId: string): Promise<void> {
+      const app = useAppStore();
+      const runners = useProjectStore().activeStudy?.runnerElements ?? [];
+      app.beginBusy("正在生成中面网格…");
+      try {
+        const report = await apiGenerateMidplane(geometryId, runners);
+        this.midplaneReports = { ...this.midplaneReports, [geometryId]: report };
+      } catch (error) {
+        app.setError(error);
+      } finally {
+        app.endBusy();
+      }
+    },
     /** 修复几何：焊接 / 去退化 / 填孔 / 一致化，刷新摘要并作废体积网格。 */
     async repairGeometryById(geometryId: string): Promise<void> {
       const app = useAppStore();
@@ -123,6 +140,9 @@ export const useGeometryStore = defineStore("geometry", {
         const dualDomainReports = { ...this.dualDomainReports };
         delete dualDomainReports[geometryId];
         this.dualDomainReports = dualDomainReports;
+        const midplaneReports = { ...this.midplaneReports };
+        delete midplaneReports[geometryId];
+        this.midplaneReports = midplaneReports;
       } catch (error) {
         app.setError(error);
       } finally {

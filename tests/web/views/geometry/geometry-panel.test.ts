@@ -10,6 +10,7 @@ import { useGeometryStore } from "../../../../src-web/stores/geometry";
 import {
   generateDualDomainMesh,
   generateGmshMesh,
+  generateMidplaneMesh,
   generateVolumeMesh,
   importSampleBox,
   importStl,
@@ -29,6 +30,7 @@ vi.mock("../../../../src-web/api/geometry", () => ({
   getRenderMesh: vi.fn(),
   generateGmshMesh: vi.fn(),
   generateDualDomainMesh: vi.fn(),
+  generateMidplaneMesh: vi.fn(),
 }));
 vi.mock("../../../../src-web/api/dialog", () => ({
   pickOpenProjectPath: vi.fn(),
@@ -283,6 +285,36 @@ describe("GeometryPanel", () => {
     expect(geometry.dualDomainReports["geo-1"]).toBeDefined();
     expect(wrapper.text()).toContain(
       "三角形 12 · 厚度 1.80 ~ 2.20（avg 2.00）· 未配对 0 · 梁 2（耦合 1 / 自由 3）",
+    );
+  });
+
+  it("中面网格：透传杆系并渲染报告行", async () => {
+    const geometry = useGeometryStore();
+    geometry.geometries = [geometryFixture()];
+    vi.mocked(generateMidplaneMesh).mockResolvedValue({
+      nodeCount: 8,
+      elementCount: 4,
+      beamCount: 1,
+      couplingCount: 1,
+      uncoupledEndpoints: 1,
+      unpairedVertices: 0,
+      droppedElements: 0,
+      thicknessMin: 2,
+      thicknessMax: 2,
+      thicknessAvg: 2,
+    });
+    const wrapper = mount(GeometryPanel, { global: { plugins: [pinia] } });
+
+    // 未生成时显示引导语。
+    expect(wrapper.text()).toContain("顶点配对中面抽取");
+
+    await findButton(wrapper, "中面网格").trigger("click");
+    await flushPromises();
+
+    expect(generateMidplaneMesh).toHaveBeenCalledWith("geo-1", []);
+    expect(geometry.midplaneReports["geo-1"]).toBeDefined();
+    expect(wrapper.text()).toContain(
+      "单元 4 · 节点 8 · 厚度 2.00 ~ 2.00（avg 2.00）· 丢弃 0 · 梁 1（耦合 1）",
     );
   });
 
