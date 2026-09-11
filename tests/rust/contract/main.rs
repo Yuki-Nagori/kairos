@@ -8,7 +8,7 @@ use kairos_core::services::system;
 use serde_json::json;
 
 use kairos_core::models::material::Material;
-use kairos_core::models::mesh::{MeshQuality, MeshingReport};
+use kairos_core::models::mesh::{DualDomainReport, MeshQuality, MeshingReport};
 use kairos_core::models::project::{Project, Study};
 use kairos_core::models::results::{ResultCatalog, ScalarField, TimeStepMeta};
 use kairos_core::services::{geometry, material};
@@ -122,6 +122,37 @@ fn meshing_report_serializes_with_camel_case() {
     assert_eq!(json["totalVolume"], 1.0);
     assert_eq!(json["quality"]["minEdgeRatio"], 1.0);
     assert_eq!(json["quality"]["minVolume"], 0.01);
+}
+
+/// DualDomainReport 的形状：统计字段 camelCase，前端几何面板与之对应。
+#[test]
+fn dual_domain_report_serializes_with_camel_case() {
+    let report = DualDomainReport {
+        node_count: 9,
+        triangle_count: 12,
+        beam_count: 2,
+        coupling_count: 3,
+        uncoupled_endpoints: 1,
+        unpaired_triangles: 0,
+        thickness_min: 1.8,
+        thickness_max: 2.2,
+        thickness_avg: 2.0,
+    };
+    let json = serde_json::to_value(&report).unwrap();
+    assert_eq!(
+        json,
+        json!({
+            "nodeCount": 9,
+            "triangleCount": 12,
+            "beamCount": 2,
+            "couplingCount": 3,
+            "uncoupledEndpoints": 1,
+            "unpairedTriangles": 0,
+            "thicknessMin": 1.8,
+            "thicknessMax": 2.2,
+            "thicknessAvg": 2.0,
+        })
+    );
 }
 
 /// 结果模型形状：时间步与标量场（complete 标记不完整结果）。

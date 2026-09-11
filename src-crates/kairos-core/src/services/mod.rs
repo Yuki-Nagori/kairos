@@ -2,6 +2,7 @@
 
 pub mod dependencies;
 pub mod derive;
+pub mod dualdomain;
 pub mod geometry;
 pub mod gmsh;
 pub mod iges;

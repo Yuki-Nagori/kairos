@@ -1,6 +1,6 @@
-/** 几何 IPC：STL 导入、体积网格生成（内置与 Gmsh 引擎）与渲染网格导出。 */
+/** 几何 IPC：STL 导入、体积网格生成（内置与 Gmsh 引擎）、双域网格与渲染网格导出。 */
 import { invokeCommand } from "../utils/ipc";
-import type { GeometrySummary, MeshingReport } from "../types";
+import type { DualDomainReport, GeometrySummary, MeshingReport, RunnerElement } from "../types";
 
 /** 导入 STL（全量网格留在 Rust 侧），返回摘要与健康检查结果。 */
 export function importStl(path: string): Promise<GeometrySummary> {
@@ -51,4 +51,12 @@ export function getRenderMesh(geometryId: string): Promise<RenderMeshData> {
 /** 生成 Gmsh 引擎体积网格（需已下载 Gmsh 并定位到可执行文件）。 */
 export function generateGmshMesh(geometryId: string, targetSize: number): Promise<MeshingReport> {
   return invokeCommand("generate_gmsh_mesh", { geometryId, targetSize });
+}
+
+/** 生成双域网格：表面厚度配对 + 杆系（流道/浇口）梁单元耦合。 */
+export function generateDualDomainMesh(
+  geometryId: string,
+  runners: RunnerElement[],
+): Promise<DualDomainReport> {
+  return invokeCommand("generate_dual_domain_mesh", { geometryId, runners });
 }

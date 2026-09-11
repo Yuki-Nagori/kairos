@@ -6,7 +6,7 @@
 import { computed, reactive, watch } from "vue";
 import { useAppStore } from "../../stores/app";
 import { useGeometryStore } from "../../stores/geometry";
-import type { GeometrySummary, MeshIssues, MeshingReport } from "../../types";
+import type { DualDomainReport, GeometrySummary, MeshIssues, MeshingReport } from "../../types";
 
 export function useGeometryPanel() {
   const app = useAppStore();
@@ -102,11 +102,24 @@ export function useGeometryPanel() {
     return `节点 ${report.nodeCount} · 四面体 ${report.elementCount} · 表面 ${report.surfaceFaceCount} · 体积 ${report.totalVolume.toFixed(3)} · 质量比 min ${report.quality.minEdgeRatio.toFixed(2)} / avg ${report.quality.avgEdgeRatio.toFixed(2)} / max ${report.quality.maxEdgeRatio.toFixed(2)}`;
   }
 
+  function dualReportText(report: DualDomainReport | undefined): string {
+    if (!report) {
+      return "表面厚度配对 + 杆系梁耦合（2.5D 快速分析路线）。";
+    }
+    const thickness = report.thicknessMin.toFixed(2);
+    return `三角形 ${report.triangleCount} · 厚度 ${thickness} ~ ${report.thicknessMax.toFixed(2)}（avg ${report.thicknessAvg.toFixed(2)}）· 未配对 ${report.unpairedTriangles} · 梁 ${report.beamCount}（耦合 ${report.couplingCount} / 自由 ${report.uncoupledEndpoints}）`;
+  }
+
   function onImport(): void {
     void geometry.importGeometry();
   }
   function onSample(): void {
     void geometry.importSampleGeometry(10);
+  }
+
+  /** 双域网格：按当前方案流道/浇口做杆系耦合。 */
+  function generateDual(item: GeometrySummary): void {
+    void geometry.generateDualDomain(item.geometryId);
   }
 
   /** 修复几何：焊接 / 去退化 / 填孔 / 一致化（不健康几何才可用）。 */
@@ -126,6 +139,8 @@ export function useGeometryPanel() {
     statsText,
     generate,
     reportText,
+    dualReportText,
+    generateDual,
     onImport,
     onSample,
     repair,

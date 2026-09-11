@@ -149,6 +149,23 @@ export interface MeshingReport {
   totalVolume: number;
   quality: MeshQuality;
 }
+
+/** 对应 `kairos-core::models::mesh::DualDomainReport`。 */
+export interface DualDomainReport {
+  nodeCount: number;
+  triangleCount: number;
+  beamCount: number;
+  /** 成功捕捉到表面节点的梁端点数。 */
+  couplingCount: number;
+  /** 未捕捉（自成为自由节点）的梁端点数。 */
+  uncoupledEndpoints: number;
+  /** 未配对到对面（厚度为 0）的表面三角形数。 */
+  unpairedTriangles: number;
+  thicknessMin: number;
+  thicknessMax: number;
+  thicknessAvg: number;
+}
+
 /** 对应 `kairos-core::models::runners::RunnerKind`。 */
 export type RunnerKind = "gate" | "runner";
 

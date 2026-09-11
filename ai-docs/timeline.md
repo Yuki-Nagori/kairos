@@ -210,3 +210,4 @@
 ## 2026-09-12
 
 - **00:40** feat(core+ui): B1-C1 IGES 镶嵌网格导入（实体 106 Copious Data forms 0/1/2/11/12 封闭环 + 实体 63 Compact Plane Subfigure + 实体 124 变换矩阵，Hollerith 切分、开放折线与 B-rep 跳过计数）+ import_iges 命令 + 前端按扩展名分发（igs/iges）与对话框过滤器；任务 T40
+- **01:10** feat(core+ui): B1-C2 双域网格（T41）——表面三角形质心 ±法向射线厚度配对（均匀格 3D DDA 加速 + 暴力求交一致性测试）+ 流道/浇口梁单元端点捕捉耦合（BeamCoupling，自由节点按焊接容差去重）+ DualDomainReport 契约锁定 + generate_dual_domain_mesh 命令 + 几何面板「双域网格」动作与报告行（活跃方案杆系透传，修复时作废）

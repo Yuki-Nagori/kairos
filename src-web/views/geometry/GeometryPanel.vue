@@ -16,6 +16,8 @@ const {
   repair,
   repairDisabled,
   reportText,
+  dualReportText,
+  generateDual,
   onImport,
   onSample,
 } = useGeometryPanel();
@@ -24,13 +26,13 @@ const {
 <template>
   <Card title="几何">
     <div class="flex flex-wrap items-center gap-2">
-      <UiButton variant="primary" :disabled="working" @click="onImport">导入 STL</UiButton>
+      <UiButton variant="primary" :disabled="working" @click="onImport">导入几何</UiButton>
       <UiButton @click="onSample">导入样例</UiButton>
     </div>
 
     <div class="space-y-2">
       <p v-if="geometry.geometries.length === 0" class="text-xs text-zinc-500">
-        尚未导入几何。支持二进制 / ASCII STL。
+        尚未导入几何。支持 STL / STEP / IGES。
       </p>
       <div
         v-for="row in rows"
@@ -65,6 +67,13 @@ const {
           </select>
           <UiButton :disabled="working" @click="generate(row.geometry)">生成体积网格</UiButton>
           <UiButton
+            :disabled="working"
+            title="表面厚度配对 + 当前方案流道/浇口梁耦合"
+            @click="generateDual(row.geometry)"
+          >
+            双域网格
+          </UiButton>
+          <UiButton
             :disabled="repairDisabled(row.geometry)"
             title="焊接重复顶点、移除退化面、填充孔洞、统一法向"
             @click="repair(row.geometry)"
@@ -73,6 +82,9 @@ const {
           </UiButton>
           <p class="text-xs text-zinc-500">
             {{ reportText(geometry.meshReports[row.geometry.geometryId]) }}
+          </p>
+          <p class="text-xs text-zinc-500">
+            {{ dualReportText(geometry.dualDomainReports[row.geometry.geometryId]) }}
           </p>
         </div>
       </div>

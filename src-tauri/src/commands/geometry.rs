@@ -8,7 +8,9 @@ use serde::Serialize;
 
 use kairos_core::error::{KairosError, Result};
 use kairos_core::models::geometry::{GeometrySummary, TriangleMesh};
-use kairos_core::models::mesh::{MeshingReport, VolumeMesh};
+use kairos_core::models::mesh::{DualDomainMesh, DualDomainReport, MeshingReport, VolumeMesh};
+use kairos_core::models::runners::RunnerElement;
+use kairos_core::services::dualdomain::{self, DualDomainParams};
 use kairos_core::services::geometry as geometry_service;
 use kairos_core::services::iges;
 use kairos_core::services::meshing::{self, VolumeMeshParams};
@@ -17,11 +19,12 @@ use kairos_core::services::repair;
 use kairos_core::services::step;
 use tauri::State;
 
-/// 单个导入几何的会话缓存（表面网格 + 生成的体积网格）。
+/// 单个导入几何的会话缓存（表面网格 + 体积网格 + 双域网格）。
 pub struct MeshSession {
     pub mesh: TriangleMesh,
     pub file_name: String,
     pub volume: Option<VolumeMesh>,
+    pub dual: Option<DualDomainMesh>,
 }
 
 /// 几何会话缓存：渲染与网格生成（T06/T14）从这里取全量数据。
@@ -64,6 +67,7 @@ fn store_import(store: &GeometryStore, path: &str, mesh: TriangleMesh) -> Geomet
             mesh,
             file_name,
             volume: None,
+            dual: None,
         },
     );
     summary
@@ -130,6 +134,34 @@ pub async fn import_iges(store: State<'_, GeometryStore>, path: String) -> Resul
     })
     .await
     .map_err(|e| KairosError::internal(format!("导入任务失败：{e}")))?
+}
+
+/// 生成双域网格：表面三角形厚度配对 + 流道/浇口梁单元耦合
+/// （网格保留在会话缓存中，前端获得统计报告）。
+#[tauri::command]
+pub async fn generate_dual_domain_mesh(
+    store: State<'_, GeometryStore>,
+    geometry_id: String,
+    runners: Vec<RunnerElement>,
+) -> Result<DualDomainReport> {
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let mesh = {
+            let sessions = store.lock();
+            let session = sessions
+                .get(&geometry_id)
+                .ok_or_else(|| KairosError::not_found(format!("几何不存在：{geometry_id}")))?;
+            session.mesh.clone()
+        };
+        let dual = dualdomain::generate(&mesh, &runners, &DualDomainParams::default())?;
+        let report = dualdomain::report(&dual);
+        if let Some(session) = store.lock().get_mut(&geometry_id) {
+            session.dual = Some(dual);
+        }
+        Ok(report)
+    })
+    .await
+    .map_err(|e| KairosError::internal(format!("双域网格任务失败：{e}")))?
 }
 
 /// 对已导入几何生成 3D 体积网格，返回统计报告（网格保留在会话缓存中）。
@@ -342,6 +374,7 @@ pub fn import_sample_box(store: State<'_, GeometryStore>, size: f64) -> Result<G
             mesh,
             file_name: "样例立方体.stl".into(),
             volume: None,
+            dual: None,
         },
     );
     Ok(summary)

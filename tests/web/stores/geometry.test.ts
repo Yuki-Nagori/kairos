@@ -2,7 +2,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 import { useAppStore } from "../../../src-web/stores/app";
 import { useGeometryStore } from "../../../src-web/stores/geometry";
+import { useProjectStore } from "../../../src-web/stores/project";
 import {
+  generateDualDomainMesh,
   generateGmshMesh,
   generateVolumeMesh,
   importIges,
@@ -13,7 +15,13 @@ import {
   removeGeometry,
 } from "../../../src-web/api/geometry";
 import { pickOpenGeometryPath } from "../../../src-web/api/dialog";
-import type { GeometrySummary, MeshingReport } from "../../../src-web/types";
+import type {
+  DualDomainReport,
+  GeometrySummary,
+  MeshingReport,
+  RunnerElement,
+  Study,
+} from "../../../src-web/types";
 
 vi.mock("../../../src-web/api/geometry", () => ({
   importStl: vi.fn(),
@@ -24,6 +32,7 @@ vi.mock("../../../src-web/api/geometry", () => ({
   generateVolumeMesh: vi.fn(),
   importSampleBox: vi.fn(),
   generateGmshMesh: vi.fn(),
+  generateDualDomainMesh: vi.fn(),
 }));
 vi.mock("../../../src-web/api/dialog", () => ({
   pickOpenProjectPath: vi.fn(),
@@ -59,6 +68,32 @@ function makeReport(): MeshingReport {
     surfaceFaceCount: 12,
     totalVolume: 1000,
     quality: { minEdgeRatio: 1, avgEdgeRatio: 1.2, maxEdgeRatio: 2, minVolume: 0.5 },
+  };
+}
+
+function makeDualReport(): DualDomainReport {
+  return {
+    nodeCount: 8,
+    triangleCount: 12,
+    beamCount: 1,
+    couplingCount: 1,
+    uncoupledEndpoints: 1,
+    unpairedTriangles: 0,
+    thicknessMin: 2,
+    thicknessMax: 2,
+    thicknessAvg: 2,
+  };
+}
+
+function studyWithRunners(runners: RunnerElement[]): Study {
+  return {
+    id: "study-1",
+    name: "填充分析",
+    createdMs: 1,
+    runnerElements: runners,
+    coolingChannels: [],
+    process: null,
+    materialId: null,
   };
 }
 
@@ -199,6 +234,73 @@ describe("geometry store", () => {
       expect(app.error?.message).toBe("修复失败");
       // 既有体积网格报告不被波及
       expect(geometry.meshReports["g-1"]).toBeDefined();
+    });
+
+    it("修复成功同时作废双域网格报告", async () => {
+      const geometry = useGeometryStore();
+      geometry.geometries = [makeSummary("g-1")];
+      geometry.dualDomainReports["g-1"] = makeDualReport();
+      vi.mocked(repairGeometry).mockResolvedValue(makeSummary("g-1"));
+
+      await geometry.repairGeometryById("g-1");
+
+      expect(geometry.dualDomainReports["g-1"]).toBeUndefined();
+    });
+  });
+
+  describe("generateDualDomain", () => {
+    it("无活跃方案时以空杆系调用并保存报告", async () => {
+      const report = makeDualReport();
+      vi.mocked(generateDualDomainMesh).mockResolvedValue(report);
+
+      const app = useAppStore();
+      const geometry = useGeometryStore();
+      await geometry.generateDualDomain("g-1");
+
+      expect(generateDualDomainMesh).toHaveBeenCalledWith("g-1", []);
+      expect(geometry.dualDomainReports["g-1"]).toEqual(report);
+      expect(app.busy).toBeNull();
+      expect(app.error).toBeNull();
+    });
+
+    it("活跃方案的流道/浇口作为杆系透传", async () => {
+      const project = useProjectStore();
+      const runners: RunnerElement[] = [
+        {
+          id: "r-1",
+          kind: "runner",
+          diameterMm: 5,
+          start: [0, 0, 0],
+          end: [10, 0, 0],
+        },
+      ];
+      project.project = {
+        schemaVersion: 4,
+        id: "p-1",
+        name: "演示",
+        createdMs: 1,
+        updatedMs: 1,
+        studies: [studyWithRunners(runners)],
+      };
+      project.activeStudyId = "study-1";
+      vi.mocked(generateDualDomainMesh).mockResolvedValue(makeDualReport());
+
+      const geometry = useGeometryStore();
+      await geometry.generateDualDomain("g-1");
+
+      expect(generateDualDomainMesh).toHaveBeenCalledWith("g-1", runners);
+    });
+
+    it("生成失败时错误进入全局状态", async () => {
+      const app = useAppStore();
+      const geometry = useGeometryStore();
+      vi.mocked(generateDualDomainMesh).mockRejectedValue(new Error("双域失败"));
+
+      await geometry.generateDualDomain("g-1");
+
+      expect(app.error?.message).toBe("双域失败");
+      expect(geometry.dualDomainReports["g-1"]).toBeUndefined();
+      expect(app.busy).toBeNull();
     });
   });
 

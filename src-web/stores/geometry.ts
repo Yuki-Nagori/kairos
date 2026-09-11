@@ -1,6 +1,7 @@
 /** 几何域状态：已导入的 STL 摘要列表与每个几何的体积网格报告。 */
 import { defineStore } from "pinia";
 import {
+  generateDualDomainMesh as apiGenerateDualDomain,
   generateGmshMesh as apiGenerateGmshMesh,
   generateVolumeMesh,
   importIges as apiImportIges,
@@ -11,8 +12,9 @@ import {
   repairGeometry as apiRepairGeometry,
 } from "../api/geometry";
 import { pickOpenGeometryPath } from "../api/dialog";
-import type { GeometrySummary, MeshingReport } from "../types";
+import type { DualDomainReport, GeometrySummary, MeshingReport } from "../types";
 import { useAppStore } from "./app";
+import { useProjectStore } from "./project";
 
 export const useGeometryStore = defineStore("geometry", {
   state: () => ({
@@ -20,6 +22,8 @@ export const useGeometryStore = defineStore("geometry", {
     geometries: [] as GeometrySummary[],
     /** 每个几何的体积网格报告（key = geometryId）。 */
     meshReports: {} as Record<string, MeshingReport>,
+    /** 每个几何的双域网格报告（key = geometryId）。 */
+    dualDomainReports: {} as Record<string, DualDomainReport>,
   }),
   actions: {
     /** 导入 STL：弹出文件对话框，解析检查后入列表。 */
@@ -89,6 +93,20 @@ export const useGeometryStore = defineStore("geometry", {
         app.endBusy();
       }
     },
+    /** 为几何生成双域网格：表面厚度配对 + 当前方案杆系（流道/浇口）耦合。 */
+    async generateDualDomain(geometryId: string): Promise<void> {
+      const app = useAppStore();
+      const runners = useProjectStore().activeStudy?.runnerElements ?? [];
+      app.beginBusy("正在生成双域网格…");
+      try {
+        const report = await apiGenerateDualDomain(geometryId, runners);
+        this.dualDomainReports = { ...this.dualDomainReports, [geometryId]: report };
+      } catch (error) {
+        app.setError(error);
+      } finally {
+        app.endBusy();
+      }
+    },
     /** 修复几何：焊接 / 去退化 / 填孔 / 一致化，刷新摘要并作废体积网格。 */
     async repairGeometryById(geometryId: string): Promise<void> {
       const app = useAppStore();
@@ -98,9 +116,13 @@ export const useGeometryStore = defineStore("geometry", {
         this.geometries = this.geometries.map((geometry) =>
           geometry.geometryId === geometryId ? summary : geometry,
         );
+        // 修复改变了表面网格：体积与双域网格一并作废。
         const meshReports = { ...this.meshReports };
         delete meshReports[geometryId];
         this.meshReports = meshReports;
+        const dualDomainReports = { ...this.dualDomainReports };
+        delete dualDomainReports[geometryId];
+        this.dualDomainReports = dualDomainReports;
       } catch (error) {
         app.setError(error);
       } finally {

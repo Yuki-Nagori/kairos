@@ -8,6 +8,7 @@ import { useGeometryPanel } from "../../../../src-web/views/geometry/useGeometry
 import { useAppStore } from "../../../../src-web/stores/app";
 import { useGeometryStore } from "../../../../src-web/stores/geometry";
 import {
+  generateDualDomainMesh,
   generateGmshMesh,
   generateVolumeMesh,
   importSampleBox,
@@ -27,6 +28,7 @@ vi.mock("../../../../src-web/api/geometry", () => ({
   importSampleBox: vi.fn(),
   getRenderMesh: vi.fn(),
   generateGmshMesh: vi.fn(),
+  generateDualDomainMesh: vi.fn(),
 }));
 vi.mock("../../../../src-web/api/dialog", () => ({
   pickOpenProjectPath: vi.fn(),
@@ -80,7 +82,7 @@ describe("GeometryPanel", () => {
 
   it("空状态显示引导文案", () => {
     const wrapper = mount(GeometryPanel, { global: { plugins: [pinia] } });
-    expect(wrapper.text()).toContain("尚未导入几何。支持二进制 / ASCII STL。");
+    expect(wrapper.text()).toContain("尚未导入几何。支持 STL / STEP / IGES。");
   });
 
   it("导入样例：摘要行、健康文案与按最大边二十分之一的表单初值", async () => {
@@ -121,18 +123,18 @@ describe("GeometryPanel", () => {
     const wrapper = mount(GeometryPanel, { global: { plugins: [pinia] } });
 
     vi.mocked(pickOpenGeometryPath).mockResolvedValue(null);
-    await findButton(wrapper, "导入 STL").trigger("click");
+    await findButton(wrapper, "导入几何").trigger("click");
     await flushPromises();
     expect(importStl).not.toHaveBeenCalled();
 
     vi.mocked(pickOpenGeometryPath).mockResolvedValue("/模型/demo.stl");
-    await findButton(wrapper, "导入 STL").trigger("click");
+    await findButton(wrapper, "导入几何").trigger("click");
     await flushPromises();
     expect(importStl).toHaveBeenCalledWith("/模型/demo.stl");
     expect(geometry.geometries).toHaveLength(1);
 
     vi.mocked(importStl).mockRejectedValue(new Error("非二进制 STL"));
-    await findButton(wrapper, "导入 STL").trigger("click");
+    await findButton(wrapper, "导入几何").trigger("click");
     await flushPromises();
     expect(useAppStore().error?.message).toBe("非二进制 STL");
   });
@@ -255,6 +257,35 @@ describe("GeometryPanel", () => {
     expect(useAppStore().error?.message).toBe("网格退化");
   });
 
+  it("双域网格：透传当前方案杆系并渲染报告行", async () => {
+    const geometry = useGeometryStore();
+    geometry.geometries = [geometryFixture()];
+    vi.mocked(generateDualDomainMesh).mockResolvedValue({
+      nodeCount: 8,
+      triangleCount: 12,
+      beamCount: 2,
+      couplingCount: 1,
+      uncoupledEndpoints: 3,
+      unpairedTriangles: 0,
+      thicknessMin: 1.8,
+      thicknessMax: 2.2,
+      thicknessAvg: 2.0,
+    });
+    const wrapper = mount(GeometryPanel, { global: { plugins: [pinia] } });
+
+    // 未生成时显示引导语。
+    expect(wrapper.text()).toContain("表面厚度配对 + 杆系梁耦合");
+
+    await findButton(wrapper, "双域网格").trigger("click");
+    await flushPromises();
+
+    expect(generateDualDomainMesh).toHaveBeenCalledWith("geo-1", []);
+    expect(geometry.dualDomainReports["geo-1"]).toBeDefined();
+    expect(wrapper.text()).toContain(
+      "三角形 12 · 厚度 1.80 ~ 2.20（avg 2.00）· 未配对 0 · 梁 2（耦合 1 / 自由 3）",
+    );
+  });
+
   it("移除几何：调用 IPC 并从列表消失；失败进全局错误", async () => {
     const geometry = useGeometryStore();
     geometry.geometries = [geometryFixture()];
@@ -266,7 +297,7 @@ describe("GeometryPanel", () => {
 
     expect(removeGeometry).toHaveBeenCalledWith("geo-1");
     expect(geometry.geometries).toHaveLength(0);
-    expect(wrapper.text()).toContain("尚未导入几何。支持二进制 / ASCII STL。");
+    expect(wrapper.text()).toContain("尚未导入几何。支持 STL / STEP / IGES。");
 
     geometry.geometries = [geometryFixture()];
     await nextTick();
@@ -284,7 +315,7 @@ describe("GeometryPanel", () => {
 
     app.beginBusy("正在导入几何…");
     await nextTick();
-    expect(findButton(wrapper, "导入 STL").attributes("disabled")).toBeDefined();
+    expect(findButton(wrapper, "导入几何").attributes("disabled")).toBeDefined();
     expect(findButton(wrapper, "移除").attributes("disabled")).toBeDefined();
     expect(findButton(wrapper, "生成体积网格").attributes("disabled")).toBeDefined();
   });
