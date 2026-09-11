@@ -1,10 +1,11 @@
-/** 报告面板：汇总项目/材料/工艺/几何/结果快照/探针与时间序列，生成自包含 HTML 报告。 */
-import { ref } from "vue";
+/** 报告面板：汇总项目/材料/工艺/几何/结果快照/探针与时间序列，生成自包含 HTML 报告。
+ * 模板化：自定义标题 / 备注 / 分区开关（分区全开为默认模板）。 */
+import { reactive, ref } from "vue";
 import { useGeometryStore } from "../../stores/geometry";
 import { useMaterialsStore } from "../../stores/materials";
 import { useProjectStore } from "../../stores/project";
 import { useResultsStore } from "../../stores/results";
-import { buildReportHtml } from "../../utils/report";
+import { buildReportHtml, type ReportOptions } from "../../utils/report";
 import { minMax } from "../../utils/stats";
 import { getSnapshotDataUrl } from "../../render/snapshot";
 
@@ -16,6 +17,20 @@ export function useReportPanel() {
 
   // 状态行三种结局：初始引导语 → 缺项目/研究 → 生成成功。
   const status = ref("生成自包含 HTML（浏览器打开后 Ctrl+P 打印为 PDF）。");
+
+  // 报告模板：自定义标题（空 = 默认）、备注、分区开关。
+  const template = reactive({
+    title: "",
+    notes: "",
+    sections: {
+      parameters: true,
+      geometry: true,
+      fieldStats: true,
+      probes: true,
+      timeSeries: true,
+      snapshots: true,
+    },
+  });
 
   function generateReport(): void {
     const currentProject = project.project;
@@ -100,18 +115,26 @@ export function useReportPanel() {
       ),
     }));
 
-    const html = buildReportHtml({
-      projectName: currentProject.name,
-      studyName: study.name,
-      materialName: material?.name ?? "未登记",
-      generatedAt: new Date().toLocaleString("zh-CN", { hour12: false }),
-      parameterRows: rows,
-      geometryRows,
-      snapshots,
-      fieldStats,
-      probeRows,
-      timeSeriesTables,
-    });
+    const options: ReportOptions = {
+      title: template.title,
+      notes: template.notes,
+      sections: { ...template.sections },
+    };
+    const html = buildReportHtml(
+      {
+        projectName: currentProject.name,
+        studyName: study.name,
+        materialName: material?.name ?? "未登记",
+        generatedAt: new Date().toLocaleString("zh-CN", { hour12: false }),
+        parameterRows: rows,
+        geometryRows,
+        snapshots,
+        fieldStats,
+        probeRows,
+        timeSeriesTables,
+      },
+      options,
+    );
     const blob = new Blob([html], { type: "text/html;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
@@ -122,5 +145,5 @@ export function useReportPanel() {
     status.value = "报告已生成并下载";
   }
 
-  return { status, generateReport };
+  return { status, template, generateReport };
 }

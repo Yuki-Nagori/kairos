@@ -227,3 +227,4 @@
 - **05:40** docs(arch): B3 状态终校准——C7 记账：多视口联动/剖面切片 [x]（T49/T47）、三维体渲染 △ POC（T50）、大结果二进制通道+缓存淘汰 [x]（T51）、剩余懒加载/持久关联/迁移函数 UI/三端真机数字（T48）；B3 ~70%
 - **06:00** chore(build): Dev 构建优化——依赖 profile 降为行表调试信息 + O1（app crate 全量重编译 20.4s → 17.7s，链接输入变小；wgpu/naga 在 dev 下运行不再 O0 卡顿）；行覆盖率只统计 kairos-core（保持 debug=2），verify 全绿不受影响
 - **05:40** feat(ui): C8 分析报告内容增强（T52）——HTML 报告新增几何摘要（三角形/尺寸/健康+体积网格质量行）、探针数值表、探针时间序列逐采样表三节（可选字段，无数据自动省略，全量转义）；util/panel 各 2 新测试；T21 八项清单评审入 ai-docs/reviews/T52-review.md
+- **06:10** feat(ui): C8 模板化自定义报告（T53）——buildReportHtml 增 ReportOptions（自定义标题 / 备注转义渲染 / 六分区开关，缺省全开兼容既有调用）+ 报告面板模板区（标题输入、备注文本域、分区勾选）透传生成；util/panel 各 2 新测试（含标题与备注转义注入用例）；T21 八项清单评审入 ai-docs/reviews/T53-review.md

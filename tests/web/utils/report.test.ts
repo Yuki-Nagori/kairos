@@ -88,4 +88,50 @@ describe("buildReportHtml", () => {
     expect(html).not.toContain("探针数值");
     expect(html).not.toContain("探针时间序列");
   });
+
+  it("模板选项：自定义标题 / 备注渲染并转义，分区关闭则整节消失", () => {
+    const html = buildReportHtml(
+      {
+        projectName: "p",
+        studyName: "s",
+        materialName: "m",
+        generatedAt: "now",
+        parameterRows: [["材料", "PP"]],
+        geometryRows: [["三角形数", "12"]],
+        fieldStats: "统计行",
+        probeRows: [["#1", "1"]],
+        timeSeriesTables: [{ probeLabel: "#1", samples: [["0", "1"]] }],
+        snapshots: [{ title: "视口", dataUrl: "data:image/png;base64,AAA" }],
+      },
+      {
+        title: "定制报告 <X>",
+        notes: "第一行\n第二行 <b>",
+        sections: { geometry: false, snapshots: false, parameters: false, fieldStats: false },
+      },
+    );
+    expect(html).toContain("<h1>定制报告 &lt;X&gt;</h1>");
+    expect(html).toContain("<h2>备注</h2>");
+    expect(html).toContain("第二行 &lt;b&gt;");
+    expect(html).not.toContain("<h2>几何摘要</h2>");
+    expect(html).not.toContain("data:image/png");
+    // 关闭的分区整节消失。
+    expect(html).not.toContain("<h2>材料与工艺</h2>");
+    expect(html).not.toContain("<h2>结果</h2>");
+    // 未关闭的分区仍然渲染。
+    expect(html).toContain("<h2>探针数值</h2>");
+  });
+
+  it("无模板选项时使用默认标题且无备注节", () => {
+    const html = buildReportHtml({
+      projectName: "p",
+      studyName: "s",
+      materialName: "m",
+      generatedAt: "now",
+      parameterRows: [["材料", "PP"]],
+      snapshots: [],
+      fieldStats: null,
+    });
+    expect(html).toContain("<h1>Kairos 仿真报告</h1>");
+    expect(html).not.toContain("备注");
+  });
 });

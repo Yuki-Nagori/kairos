@@ -322,4 +322,24 @@ describe("ReportPanel", () => {
     expect(html).not.toContain("<h2>探针数值</h2>");
     expect(html).not.toContain("<h2>探针时间序列</h2>");
   });
+
+  it("模板化：自定义标题与关闭分区透传到报告", async () => {
+    const results = useResultsStore();
+    results.loadedField = fieldFixture({ values: [10, 20, 30] });
+    const project = useProjectStore();
+    project.project = projectFixture([studyFixture()]);
+    project.activeStudyId = "study-1";
+    const wrapper = mount(ReportPanel, { global: { plugins: [pinia] } });
+
+    await wrapper.find('input[placeholder="报告标题（空 = 默认）"]').setValue("季度评审报告");
+    // 关闭结果统计分区。
+    const checkboxes = wrapper.findAll('input[type="checkbox"]');
+    await checkboxes[2]!.setValue(false);
+
+    const html = await clickGenerate(wrapper);
+
+    expect(html).toContain("<h1>季度评审报告</h1>");
+    expect(html).not.toContain("<h2>结果</h2>");
+    expect(html).not.toContain("统计行");
+  });
 });

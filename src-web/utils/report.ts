@@ -22,6 +22,32 @@ interface ReportInput {
   timeSeriesTables?: Array<{ probeLabel: string; samples: Array<[string, string]> }>;
 }
 
+/** 报告分区开关：模板化自定义报告的分区选择。 */
+export interface ReportSections {
+  parameters: boolean;
+  geometry: boolean;
+  fieldStats: boolean;
+  probes: boolean;
+  timeSeries: boolean;
+  snapshots: boolean;
+}
+
+/** 报告模板选项：自定义标题 / 备注 / 分区开关；缺省 = 默认标题 + 全部分区。 */
+export interface ReportOptions {
+  title?: string;
+  notes?: string | null;
+  sections?: Partial<ReportSections>;
+}
+
+const ALL_SECTIONS: ReportSections = {
+  parameters: true,
+  geometry: true,
+  fieldStats: true,
+  probes: true,
+  timeSeries: true,
+  snapshots: true,
+};
+
 /** 转义 HTML 特殊字符：报告内容含用户输入（项目/研究名等），防止破坏标记结构。 */
 export function escapeHtml(text: string): string {
   return text
@@ -46,7 +72,9 @@ function sampleRows(samples: Array<[string, string]>): string {
     .join("\n");
 }
 
-export function buildReportHtml(input: ReportInput): string {
+export function buildReportHtml(input: ReportInput, options: ReportOptions = {}): string {
+  const sections: ReportSections = { ...ALL_SECTIONS, ...(options.sections ?? {}) };
+  const reportTitle = options.title?.trim() || "Kairos 仿真报告";
   const parameterRows = keyValueRows(input.parameterRows);
   const geometryRows = keyValueRows(input.geometryRows ?? []);
   const probeRows = keyValueRows(input.probeRows ?? []);
@@ -58,13 +86,22 @@ export function buildReportHtml(input: ReportInput): string {
     )
     .join("\n");
   const geometrySection =
-    (input.geometryRows?.length ?? 0) > 0
+    sections.geometry && (input.geometryRows?.length ?? 0) > 0
       ? `<h2>几何摘要</h2>\n<table>\n${geometryRows}\n</table>`
       : "";
   const probeSection =
-    (input.probeRows?.length ?? 0) > 0 ? `<h2>探针数值</h2>\n<table>\n${probeRows}\n</table>` : "";
+    sections.probes && (input.probeRows?.length ?? 0) > 0
+      ? `<h2>探针数值</h2>\n<table>\n${probeRows}\n</table>`
+      : "";
   const timeSeriesSection =
-    (input.timeSeriesTables?.length ?? 0) > 0 ? `<h2>探针时间序列</h2>\n${timeSeriesTables}` : "";
+    sections.timeSeries && (input.timeSeriesTables?.length ?? 0) > 0
+      ? `<h2>探针时间序列</h2>\n${timeSeriesTables}`
+      : "";
+  const notes = options.notes?.trim();
+  const notesSection =
+    notes !== undefined && notes !== ""
+      ? `<h2>备注</h2>\n<p class="notes">${escapeHtml(notes).replace(/\n/g, "<br />")}</p>`
+      : "";
   const snapshots = input.snapshots
     .map(
       (snapshot) =>
@@ -77,7 +114,7 @@ export function buildReportHtml(input: ReportInput): string {
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8" />
-<title>Kairos 仿真报告 · ${escapeHtml(input.projectName)} / ${escapeHtml(input.studyName)}</title>
+<title>${escapeHtml(reportTitle)} · ${escapeHtml(input.projectName)} / ${escapeHtml(input.studyName)}</title>
 <style>
   body { font-family: sans-serif; color: #18181b; margin: 40px auto; max-width: 800px; }
   h1 { border-bottom: 2px solid #10b981; padding-bottom: 8px; }
@@ -89,21 +126,31 @@ export function buildReportHtml(input: ReportInput): string {
   figcaption { font-size: 12px; color: #71717a; margin-top: 4px; }
   .meta { color: #71717a; font-size: 12px; }
   .stats { background: #fafafa; padding: 8px; font-size: 13px; }
+  .notes { background: #fafafa; padding: 8px; font-size: 13px; white-space: pre-wrap; }
 </style>
 </head>
 <body>
-<h1>Kairos 仿真报告</h1>
+<h1>${escapeHtml(reportTitle)}</h1>
 <p class="meta">项目：${escapeHtml(input.projectName)} · 研究：${escapeHtml(input.studyName)} · 生成时间：${escapeHtml(input.generatedAt)}</p>
-<h2>材料与工艺</h2>
+${
+  sections.parameters
+    ? `<h2>材料与工艺</h2>
 <table>
 ${parameterRows}
-</table>
+</table>`
+    : ""
+}
 ${geometrySection}
-<h2>结果</h2>
-${fieldStats}
+${
+  sections.fieldStats
+    ? `<h2>结果</h2>
+${fieldStats}`
+    : ""
+}
 ${probeSection}
 ${timeSeriesSection}
-${snapshots}
+${sections.snapshots ? snapshots : ""}
+${notesSection}
 <p class="meta">由 Kairos 生成 · 数值结果请结合材料数据来源与网格质量评估。</p>
 </body>
 </html>
