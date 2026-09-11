@@ -40,7 +40,12 @@ $ cargo run -p kairos-cli -- results list --case-dir kairos-case
 ## 环境要求
 
 - [Bun](https://bun.sh) ≥ 1.2
-- [Rust](https://rustup.rs) stable（macOS 需要 Xcode Command Line Tools）
+- [Rust](https://rustup.rs)（经 rustup 安装，macOS 需要 Xcode Command Line Tools）：仓库
+  `rust-toolchain.toml` 已钉定工具链版本并声明 clippy / rustfmt / llvm-tools-preview 组件，
+  在仓库内首次执行 cargo 命令时自动安装，无需手动对版本
+- [cargo-llvm-cov](https://github.com/taiki-e/cargo-llvm-cov)（`cargo install cargo-llvm-cov`）：
+  覆盖率门禁依赖；非 rustup 管理的 rustc（如 Homebrew）由 `bun run coverage:rust`
+  自动定位系统 LLVM 工具
 
 ## 快速开始
 
@@ -58,23 +63,24 @@ bun run dev           # Vite 开发服务器（http://localhost:1420）
 
 ## 常用命令
 
-| 命令                                            | 说明                                                                 |
-| ----------------------------------------------- | -------------------------------------------------------------------- |
-| `bun run dev`                                   | 仅启动前端（Vite，端口 1420，固定端口防止 Tauri 错连）               |
-| `bun run build`                                 | 类型检查 + 前端生产构建（输出 `dist/`）                              |
-| `bun run tauri dev`（`tauri:dev`）              | 启动 Tauri 桌面应用                                                  |
-| `bun run tauri build`（`tauri:build`）          | 打包桌面应用                                                         |
-| `bun run typecheck`                             | TypeScript 类型检查（vue-tsc，覆盖 `.vue` SFC）                      |
-| `bun run typecheck:rust`                        | Rust 编译检查（`cargo check --workspace`）                           |
-| `bun run lint` / `lint:fix` / `lint:rust`       | ESLint 检查 / 自动修复 / cargo clippy（Rust warning 视为错误）       |
-| `bun run format` / `format:check`               | Prettier 格式化 / 校验                                               |
-| `bun run format:rust` / `format:rust:check`     | rustfmt 格式化 / 校验                                                |
-| `bun run test` / `test:watch` / `test:coverage` | Vitest 单测                                                          |
-| `bun run test:rust`                             | Rust 单测（`cargo test`）                                            |
-| `bun run bench` / `cargo bench`                 | 性能基准（预算见 `ai-docs/perf-budget.md`）                          |
-| `bun run analyze`                               | 前端构建 + 体积分析报告（输出 `dist/stats.html`）                    |
-| `bun run knip`                                  | 检测未使用的文件、导出、依赖                                         |
-| `bun run verify`                                | 一键全量门禁：前端 + Rust 的 typecheck → lint → format → test → knip |
+| 命令                                            | 说明                                                                          |
+| ----------------------------------------------- | ----------------------------------------------------------------------------- |
+| `bun run dev`                                   | 仅启动前端（Vite，端口 1420，固定端口防止 Tauri 错连）                        |
+| `bun run build`                                 | 类型检查 + 前端生产构建（输出 `dist/`）                                       |
+| `bun run tauri dev`（`tauri:dev`）              | 启动 Tauri 桌面应用                                                           |
+| `bun run tauri build`（`tauri:build`）          | 打包桌面应用                                                                  |
+| `bun run typecheck`                             | TypeScript 类型检查（vue-tsc，覆盖 `.vue` SFC）                               |
+| `bun run typecheck:rust`                        | Rust 编译检查（`cargo check --workspace`）                                    |
+| `bun run lint` / `lint:fix` / `lint:rust`       | ESLint 检查 / 自动修复 / cargo clippy（Rust warning 视为错误）                |
+| `bun run format` / `format:check`               | Prettier 格式化 / 校验                                                        |
+| `bun run format:rust` / `format:rust:check`     | rustfmt 格式化 / 校验                                                         |
+| `bun run test` / `test:watch` / `test:coverage` | Vitest 单测（coverage 含 100% 覆盖率门槛）                                    |
+| `bun run test:rust`                             | Rust 单测（`cargo test`）                                                     |
+| `bun run coverage:rust`                         | Rust core 行覆盖率门槛（100%，cargo-llvm-cov）                                |
+| `bun run bench` / `cargo bench`                 | 性能基准（预算见 `ai-docs/perf-budget.md`）                                   |
+| `bun run analyze`                               | 前端构建 + 体积分析报告（输出 `dist/stats.html`）                             |
+| `bun run knip`                                  | 检测未使用的文件、导出、依赖                                                  |
+| `bun run verify`                                | 一键全量门禁：前端 + Rust 的 typecheck → lint → format → test → 覆盖率 → knip |
 
 ## 说明
 

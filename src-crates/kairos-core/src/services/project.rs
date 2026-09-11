@@ -60,8 +60,8 @@ pub fn validate(project: &Project) -> Result<()> {
 /// 序列化为工程文件内容。
 pub fn serialize(project: &Project) -> Result<String> {
     validate(project)?;
-    serde_json::to_string_pretty(project)
-        .map_err(|e| KairosError::internal(format!("工程序列化失败：{e}")))
+    // 已通过校验的工程数据必可序列化；失败属程序缺陷，快速失败。
+    Ok(serde_json::to_string_pretty(project).expect("工程序列化失败"))
 }
 
 /// 解析工程文件内容；仅接受当前版本 schema，过新 / 过旧版本明确拒绝。
@@ -98,9 +98,9 @@ pub fn parse_recents(content: &str) -> Vec<RecentProject> {
     serde_json::from_str(content).unwrap_or_default()
 }
 
-pub fn serialize_recents(recents: &[RecentProject]) -> Result<String> {
-    serde_json::to_string_pretty(recents)
-        .map_err(|e| KairosError::internal(format!("最近项目序列化失败：{e}")))
+pub fn serialize_recents(recents: &[RecentProject]) -> String {
+    // 纯字符串结构的序列化不会失败；失败属程序缺陷，快速失败。
+    serde_json::to_string_pretty(recents).expect("最近项目序列化失败")
 }
 
 /// 登记最近项目：同名路径去重置顶、最多保留 10 条。
@@ -152,7 +152,7 @@ mod recents_tests {
     #[test]
     fn recents_roundtrip() {
         let recents = record_recent(Vec::new(), "/p/1".into(), "一".into(), 1);
-        let parsed = parse_recents(&serialize_recents(&recents).unwrap());
+        let parsed = parse_recents(&serialize_recents(&recents));
         assert_eq!(parsed, recents);
     }
 }
@@ -216,5 +216,17 @@ mod tests {
         let content = fs::read_to_string(&path).unwrap();
         assert_eq!(parse(&content).unwrap(), project);
         fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn write_atomic_reports_tmp_write_failure() {
+        let dir = std::env::temp_dir().join(format!("kairos-t03b-{}", now_ms()));
+        fs::create_dir_all(&dir).unwrap();
+        let target = dir.join("project.kairos");
+        // 预埋同名临时文件为目录，令临时文件写入失败。
+        fs::create_dir_all(target.with_extension("kairos.tmp")).unwrap();
+        let error = write_atomic(&target, "内容").unwrap_err();
+        assert!(error.to_string().contains("写入临时文件失败"));
+        fs::remove_dir_all(&dir).ok();
     }
 }

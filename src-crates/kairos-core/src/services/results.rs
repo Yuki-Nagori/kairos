@@ -33,11 +33,12 @@ pub fn scan_times(case_dir: &Path) -> Result<ResultCatalog> {
         if !path.is_dir() {
             continue;
         }
-        let dir_name = match path.file_name().and_then(|n| n.to_str()) {
-            Some(dir_name) => dir_name,
-            None => continue,
-        };
-        let Some(time_s) = parse_time_dir_name(dir_name) else {
+        // 非 UTF-8 目录名与非时间目录名一并不解析（链式 None 合流到同一跳过分支）。
+        let Some((time_s, dir_name)) = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .and_then(|name| parse_time_dir_name(name).map(|time_s| (time_s, name)))
+        else {
             continue;
         };
         // read_dir 失败（极罕见）等价于无字段文件：两层 flatten 剥掉 Result 与目录迭代器。
@@ -283,6 +284,31 @@ boundaryField
         assert_eq!(catalog.times[0].dir_name, "0");
         assert_eq!(catalog.times[1].dir_name, "0.5");
         assert!(catalog.times[0].fields.contains(&"T".to_string()));
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn scan_times_rejects_unreadable_case_dir() {
+        // case 路径存在但不是目录：read_dir 失败走 io 错误分支。
+        let path = std::env::temp_dir().join(format!("kairos-t13f-{}", std::process::id()));
+        fs::write(&path, "不是目录").unwrap();
+        let error = scan_times(&path).unwrap_err();
+        assert!(error.to_string().contains("读取结果目录失败"));
+        fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn read_field_reports_missing_file_and_bad_time_dir() {
+        let dir = std::env::temp_dir().join(format!("kairos-t13g-{}", std::process::id()));
+        let time_dir = dir.join("abc"); // 非时间目录名
+        fs::create_dir_all(&time_dir).unwrap();
+        // 场文件缺失：io 失败先于目录名解析报出。
+        let missing = read_field(&dir, "1.0", "T").unwrap_err();
+        assert!(missing.to_string().contains("读取场文件失败"));
+        // 目录名无法解析为时间步。
+        fs::write(time_dir.join("T"), SCALAR_UNIFORM).unwrap();
+        let error = read_field(&dir, "abc", "T").unwrap_err();
+        assert!(error.to_string().contains("时间目录名无法解析"));
         fs::remove_dir_all(&dir).ok();
     }
 

@@ -11,7 +11,7 @@ use tauri::{AppHandle, Manager};
 
 #[tauri::command]
 pub fn list_builtin_materials() -> Result<Vec<Material>> {
-    material_service::builtin_materials()
+    Ok(material_service::builtin_materials())
 }
 
 #[tauri::command]

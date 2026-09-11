@@ -456,6 +456,64 @@ mod tests {
     use super::*;
     use crate::models::process::ProcessSettings;
 
+    #[test]
+    fn generate_case_reports_constant_and_stage_dir_collisions() {
+        let material = &crate::services::material::builtin_materials()[0];
+        // 预埋 case 目录本身为文件：polyMesh 目录创建失败（首个写点）。
+        let as_file = std::env::temp_dir().join(format!("kairos-t36c-{}", std::process::id()));
+        fs::write(&as_file, "占位").unwrap();
+        let error = generate_case(
+            &as_file,
+            &two_tet_mesh(),
+            material,
+            &process(),
+            &AnalysisStage::Fill,
+            4,
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("创建 polyMesh 目录失败"));
+        fs::remove_file(&as_file).ok();
+
+        // 预埋 0/ 为文件：write_case_files 的目录准备失败。
+        let staged = std::env::temp_dir().join(format!("kairos-t36d-{}", std::process::id()));
+        let case = staged.join("case");
+        fs::create_dir_all(case.join("constant")).unwrap();
+        fs::write(case.join("0"), "占位").unwrap();
+        let error = generate_case(
+            &case,
+            &two_tet_mesh(),
+            material,
+            &process(),
+            &AnalysisStage::Fill,
+            4,
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("创建"), "{error}");
+        fs::remove_dir_all(&staged).ok();
+    }
+
+    #[test]
+    fn write_reports_parent_dir_creation_failure() {
+        let blocked = std::env::temp_dir().join(format!("kairos-t36e-{}", std::process::id()));
+        fs::create_dir_all(&blocked).unwrap();
+        fs::write(blocked.join("system"), "占位").unwrap();
+        let error = write(&blocked.join("system").join("controlDict"), "x").unwrap_err();
+        assert!(error.to_string().contains("创建目录失败"));
+        fs::remove_dir_all(&blocked).ok();
+
+        // 根路径没有父目录：走 Path::new(".") 兜底后，写入根目录仍失败。
+        let error = write(std::path::Path::new("/"), "x").unwrap_err();
+        assert!(error.to_string().contains("写入"));
+    }
+
+    #[test]
+    fn physical_properties_melt_requires_specific_heat_table() {
+        let mut material = crate::services::material::builtin_materials()[0].clone();
+        material.specific_heat = Vec::new();
+        let error = physical_properties_melt(&material, &process()).unwrap_err();
+        assert!(error.to_string().contains("材料比热表为空"));
+    }
+
     fn two_tet_mesh() -> VolumeMesh {
         VolumeMesh {
             nodes: vec![
@@ -498,7 +556,7 @@ mod tests {
         generate_case(
             &case,
             &two_tet_mesh(),
-            &crate::services::material::builtin_materials().unwrap()[0],
+            &crate::services::material::builtin_materials()[0],
             &process(),
             &AnalysisStage::Fill,
             4,
@@ -552,7 +610,7 @@ mod tests {
 
     #[test]
     fn molding_dict_reflects_process_settings() {
-        let material = crate::services::material::builtin_materials().unwrap()[0].clone();
+        let material = crate::services::material::builtin_materials()[0].clone();
         let dict = molding_dict(&process());
         assert!(dict.contains("switchFraction   0.96"));
         assert!(dict.contains("(0 1e5)"));
@@ -605,7 +663,7 @@ mod tests {
         generate_case(
             &case,
             &two_tet_mesh(),
-            &crate::services::material::builtin_materials().unwrap()[0],
+            &crate::services::material::builtin_materials()[0],
             &process(),
             &crate::models::solver::AnalysisStage::FillPackCool,
             4,

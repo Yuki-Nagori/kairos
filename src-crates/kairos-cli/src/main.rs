@@ -353,7 +353,7 @@ fn run_pipeline(
     // 2. 网格
     let volume = meshing::generate(&mesh_tri, &meshing::VolumeMeshParams { target_size: 1.0 })?;
     // 3. case（首个内置材料 + 默认工艺 + 填充阶段）
-    let material = services::material::builtin_materials()?[0].clone();
+    let material = services::material::builtin_materials()[0].clone();
     openfoam::generate_case(
         out,
         &volume,

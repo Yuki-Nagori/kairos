@@ -209,6 +209,25 @@ $EndElements
     }
 
     #[test]
+    fn parse_errors_cover_every_malformed_shape() {
+        for (content, message) in [
+            ("$Nodes\n", "$Nodes 后缺少数量行"),
+            ("$Nodes\nabc\n", "节点数量行无法解析"),
+            ("$Nodes\n2\n", "节点行数量不足"),
+            ("$Nodes\n1\n1 a 0 0\n", "节点坐标无法解析"),
+            ("$Nodes\n1\n1 0 a 0\n", "节点坐标无法解析"),
+            ("$Nodes\n1\n1 0 0 a\n", "节点坐标无法解析"),
+            ("$Elements\n", "$Elements 后缺少数量行"),
+            ("$Elements\nabc\n", "单元数量行无法解析"),
+            ("$Elements\n3\n", "单元行数量不足"),
+            ("$Elements\n1\n5 4 0 4 1 2 3 x\n", "节点索引无法解析"),
+        ] {
+            let error = parse_msh_v2(content).unwrap_err();
+            assert!(error.to_string().contains(message), "{message}");
+        }
+    }
+
+    #[test]
     fn volume_mesh_roundtrip_via_msh() {
         let mesh = crate::models::geometry::TriangleMesh::sample_box(1.0);
         let _ = mesh; // 体素网格 → msh → 解析回读

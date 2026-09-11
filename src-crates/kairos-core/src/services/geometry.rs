@@ -227,11 +227,16 @@ pub fn summarize(geometry_id: String, file_name: String, mesh: &TriangleMesh) ->
 /// 读取 STL 文件并解析。
 /// 写出二进制 STL（Gmsh 引擎的文件输入；80 字节头 + 三角形逐个落盘）。
 pub fn write_stl_binary(mesh: &TriangleMesh, path: &Path) -> Result<()> {
-    use std::io::Write;
     let mut file =
         std::fs::File::create(path).map_err(|e| KairosError::io(format!("创建 STL 失败：{e}")))?;
-    file.write_all(&[0u8; 80])
-        .and_then(|_| file.write_all(&(mesh.triangles.len() as u32).to_le_bytes()))
+    write_stl_binary_to(&mut file, mesh)
+}
+
+/// STL 二进制编码；写入器参数化，便于用故障写入器单测错误传播。
+fn write_stl_binary_to<W: std::io::Write>(writer: &mut W, mesh: &TriangleMesh) -> Result<()> {
+    writer
+        .write_all(&[0u8; 80])
+        .and_then(|_| writer.write_all(&(mesh.triangles.len() as u32).to_le_bytes()))
         .map_err(|e| KairosError::io(format!("STL 头写入失败：{e}")))?;
     for tri in &mesh.triangles {
         // 二进制 STL 记录固定 50 字节：法向 3×f32 + 顶点 9×f32 + 属性 u16。
@@ -247,7 +252,8 @@ pub fn write_stl_binary(mesh: &TriangleMesh, path: &Path) -> Result<()> {
             }
         }
         record.extend_from_slice(&0u16.to_le_bytes());
-        file.write_all(&record)
+        writer
+            .write_all(&record)
             .map_err(|e| KairosError::io(format!("STL 三角形写入失败：{e}")))?;
     }
     Ok(())
@@ -261,6 +267,78 @@ pub fn parse_stl_file(path: &Path) -> Result<TriangleMesh> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 恒定失败的写入器：allow_calls 次调用放行后开始报错。
+    struct FailingWriter {
+        allow_calls: usize,
+    }
+
+    impl std::io::Write for FailingWriter {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            if self.allow_calls == 0 {
+                return Err(std::io::Error::other("磁盘已满"));
+            }
+            self.allow_calls -= 1;
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    fn single_triangle() -> TriangleMesh {
+        TriangleMesh {
+            triangles: vec![Triangle {
+                a: [0.0, 0.0, 0.0],
+                b: [1.0, 0.0, 0.0],
+                c: [0.0, 1.0, 0.0],
+                normal: [0.0, 0.0, 1.0],
+            }],
+        }
+    }
+
+    #[test]
+    fn ascii_stl_with_invalid_utf8_is_rejected() {
+        let error = parse_stl(b"solid broken \xff").unwrap_err();
+        assert!(error.to_string().contains("非法 UTF-8"));
+    }
+
+    #[test]
+    fn write_stl_binary_reports_create_failure() {
+        // 对目录路径 File::create 必然失败。
+        let error = write_stl_binary(&single_triangle(), &std::env::temp_dir()).unwrap_err();
+        assert!(error.to_string().contains("创建 STL 失败"));
+    }
+
+    #[test]
+    fn write_stl_binary_reports_header_write_failure() {
+        let mut writer = FailingWriter { allow_calls: 0 };
+        let error = write_stl_binary_to(&mut writer, &single_triangle()).unwrap_err();
+        assert!(error.to_string().contains("STL 头写入失败"));
+    }
+
+    #[test]
+    fn write_stl_binary_reports_triangle_write_failure() {
+        // 头部两次 write_all 放行，第一个三角形记录写入即失败。
+        let mut writer = FailingWriter { allow_calls: 2 };
+        let error = write_stl_binary_to(&mut writer, &single_triangle()).unwrap_err();
+        assert!(error.to_string().contains("STL 三角形写入失败"));
+    }
+
+    #[test]
+    fn write_stl_binary_succeeds_and_flushes_cleanly() {
+        use std::io::Write as _;
+        let mut writer = FailingWriter { allow_calls: 99 };
+        write_stl_binary_to(&mut writer, &single_triangle()).unwrap();
+        writer.flush().unwrap();
+    }
+
+    #[test]
+    fn parse_stl_file_reports_read_failure() {
+        let path = std::env::temp_dir().join(format!("kairos-missing-{}.stl", std::process::id()));
+        let error = parse_stl_file(&path).unwrap_err();
+        assert!(error.to_string().contains("读取 STL 文件失败"));
+    }
 
     /// 单位立方体 [0,1]³ 的 12 个三角形（封闭、法向朝外、绕向一致）。
     type Quad = ([f64; 3], [f64; 3], [f64; 3], [f64; 3]);

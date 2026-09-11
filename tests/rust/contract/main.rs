@@ -67,7 +67,7 @@ fn project_serializes_with_camel_case() {
 /// Material 的形状：camelCase 参数组，前端 `src-web/types.ts` 与之对应。
 #[test]
 fn material_serializes_with_camel_case() {
-    let material: Material = material::builtin_materials().unwrap().remove(0);
+    let material: Material = material::builtin_materials().remove(0);
     let json = serde_json::to_value(&material).unwrap();
     assert_eq!(json["family"], "PP");
     assert_eq!(json["rheology"]["tauStar"], 2.0e4);

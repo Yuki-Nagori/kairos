@@ -87,10 +87,9 @@ pub fn validate(material: &Material) -> Result<()> {
     Ok(())
 }
 
-/// 解析内置参考牌号库；内置资产损坏属于构建期错误，转 internal。
-pub fn builtin_materials() -> Result<Vec<Material>> {
-    serde_json::from_str(BUILTIN_MATERIALS_JSON)
-        .map_err(|e| KairosError::internal(format!("内置材料资产损坏：{e}")))
+/// 解析内置参考牌号库；资产内嵌于二进制，损坏属构建期错误，直接快速失败。
+pub fn builtin_materials() -> Vec<Material> {
+    serde_json::from_str(BUILTIN_MATERIALS_JSON).expect("内置材料资产损坏")
 }
 
 /// 从 JSON 内容解析自定义材料集（单个对象或数组均可）。
@@ -254,8 +253,8 @@ pub fn serialize_custom(materials: &[Material]) -> Result<String> {
     for material in materials {
         validate(material)?;
     }
-    serde_json::to_string_pretty(materials)
-        .map_err(|e| KairosError::internal(format!("材料库序列化失败：{e}")))
+    // 已通过校验的材料必可序列化；失败属程序缺陷，快速失败。
+    Ok(serde_json::to_string_pretty(materials).expect("材料库序列化失败"))
 }
 
 /// 把导入的材料合并进既有材料库：同 id 覆盖，同名同厂商提示冲突由调用方决定（此处按覆盖）。
@@ -287,19 +286,18 @@ pub fn write_custom_file(path: &Path, materials: &[Material]) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::material::{CrossWlf, Mechanics, Tait};
+    use crate::models::material::{CrossWlf, FillerGroup, Mechanics, Tait};
 
     fn valid_material() -> Material {
-        serde_json::from_str(&serde_json::to_string(&builtin_materials().unwrap()[0]).unwrap())
-            .unwrap()
+        serde_json::from_str(&serde_json::to_string(&builtin_materials()[0]).unwrap()).unwrap()
     }
 
     #[test]
     fn builtin_assets_are_valid() {
-        let materials = builtin_materials().unwrap();
+        let materials = builtin_materials();
         assert!(materials.len() >= 2, "内置参考牌号至少 2 个");
         for material in &materials {
-            validate(material).unwrap_or_else(|e| panic!("{} 校验失败：{e}", material.name));
+            assert!(validate(material).is_ok(), "{} 校验失败", material.name);
             assert!(!material.data_note.is_empty(), "参考牌号必须注明数据来源");
         }
     }
@@ -351,7 +349,7 @@ mod tests {
     #[test]
     fn custom_file_roundtrip_and_tolerant_read() {
         let path = std::env::temp_dir().join(format!("kairos-t04-{}.json", 1));
-        let materials = builtin_materials().unwrap();
+        let materials = builtin_materials();
         write_custom_file(&path, &materials).unwrap();
         assert_eq!(read_custom_file(&path).len(), materials.len());
         fs::write(&path, "垃圾内容").unwrap();
@@ -402,5 +400,63 @@ mod tests {
         let empty_body = format!("{good_header}\n");
         let error = parse_custom_csv(&empty_body).unwrap_err();
         assert!(error.to_string().contains("没有数据行"));
+    }
+
+    #[test]
+    fn csv_import_rejects_missing_header() {
+        let error = parse_custom_csv("").unwrap_err();
+        assert!(error.to_string().contains("缺少表头"));
+    }
+
+    #[test]
+    fn csv_import_rejects_malformed_table_cell() {
+        let good_header = CSV_HEADER.join(",");
+        let row = |specific_heat: &str, conductivity: &str| {
+            format!(
+                "{good_header}\n牌号,厂,PP,0.35,20000,1e13,263,0,31,51.6,1.3e-3,1.24e-3,7.5e-7,3e-7,1.4e8,0.003,0.0015,418,{specific_heat},{conductivity},"
+            )
+        };
+        let error = parse_custom_csv(&row("300:1900", "没有冒号")).unwrap_err();
+        assert!(error.to_string().contains("缺少冒号分隔"));
+        let error = parse_custom_csv(&row("温度:1900", "300:0.2")).unwrap_err();
+        assert!(error.to_string().contains("温度不是数字"));
+        let error = parse_custom_csv(&row("300:1900", "300:热导")).unwrap_err();
+        assert!(error.to_string().contains("值不是数字"));
+    }
+
+    #[test]
+    fn csv_import_rejects_malformed_filler_column() {
+        let good_header = CSV_HEADER.join(",");
+        let row = |filler: &str| {
+            format!(
+                "{good_header}\n牌号,厂,PP,0.35,20000,1e13,263,0,31,51.6,1.3e-3,1.24e-3,7.5e-7,3e-7,1.4e8,0.003,0.0015,418,300:1900,300:0.2,{filler}"
+            )
+        };
+        let error = parse_custom_csv(&row("玻纤:0.3")).unwrap_err();
+        assert!(error.to_string().contains("filler 应为"));
+        let error = parse_custom_csv(&row("玻纤:abc:20:短切")).unwrap_err();
+        assert!(error.to_string().contains("填料质量分数不是数字"));
+        let error = parse_custom_csv(&row("玻纤:0.3:abc:短切")).unwrap_err();
+        assert!(error.to_string().contains("填料长径比不是数字"));
+    }
+
+    #[test]
+    fn validate_rejects_bad_filler_group() {
+        let mut material = valid_material();
+        let filler = |kind: &str, weight_fraction: f64, aspect_ratio: f64| FillerGroup {
+            kind: kind.into(),
+            weight_fraction,
+            aspect_ratio,
+            note: String::new(),
+        };
+        material.filler = Some(filler("   ", 0.3, 20.0));
+        let error = validate(&material).unwrap_err();
+        assert!(error.to_string().contains("填料类型不能为空"));
+        material.filler = Some(filler("玻纤", 1.5, 20.0));
+        let error = validate(&material).unwrap_err();
+        assert!(error.to_string().contains("填料质量分数"));
+        material.filler = Some(filler("玻纤", 0.3, 0.0));
+        let error = validate(&material).unwrap_err();
+        assert!(error.to_string().contains("填料长径比"));
     }
 }

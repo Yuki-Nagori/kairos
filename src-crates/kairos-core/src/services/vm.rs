@@ -233,10 +233,8 @@ pub fn parse_wsl_list(text: &str) -> VmState {
 pub fn decode_wsl_output(bytes: &[u8]) -> String {
     let looks_utf16 = bytes.len() >= 2 && bytes.get(1) == Some(&0);
     let text = if looks_utf16 {
-        let units: Vec<u16> = bytes
-            .chunks_exact(2)
-            .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
-            .collect();
+        let (pairs, _rest) = bytes.as_chunks::<2>();
+        let units: Vec<u16> = pairs.iter().map(|pair| u16::from_le_bytes(*pair)).collect();
         String::from_utf16_lossy(&units)
     } else {
         String::from_utf8_lossy(bytes).into_owned()
@@ -289,35 +287,11 @@ pub fn build_status(
         (tool_installed, instance_state)
     };
     let hint = if provider == VmProviderKind::Native {
-        "Linux 原生环境，无需虚拟机，可直接进入 Shell。".to_string()
+        NATIVE_HINT.to_string()
     } else if !tool_installed {
-        match provider {
-            VmProviderKind::Multipass => {
-                "未检测到 Multipass。点击「安装虚拟机」（约需数分钟，依赖 Homebrew）。".to_string()
-            }
-            VmProviderKind::Wsl => {
-                "未检测到 WSL2。点击「安装虚拟机」（需管理员授权，完成后可能要求重启）。"
-                    .to_string()
-            }
-            VmProviderKind::Native => unreachable!(),
-        }
+        install_hint(provider).to_string()
     } else {
-        match instance_state {
-            VmState::Missing => match provider {
-                VmProviderKind::Multipass => {
-                    "Multipass 已就绪，虚拟机尚未创建。点击「启动虚拟机」开始拉起 Ubuntu 实例。"
-                        .to_string()
-                }
-                VmProviderKind::Wsl => {
-                    "WSL2 已就绪，Ubuntu-24.04 尚未安装。点击「启动虚拟机」安装发行版。".to_string()
-                }
-                VmProviderKind::Native => unreachable!(),
-            },
-            VmState::Stopped => "虚拟机已创建但未运行。点击「启动虚拟机」。".to_string(),
-            VmState::Starting => "虚拟机启动中…".to_string(),
-            VmState::Running => "虚拟机运行中，可进入 Shell。".to_string(),
-            VmState::Unknown => "虚拟机状态未知，请重新探测。".to_string(),
-        }
+        instance_hint(provider, instance_state).to_string()
     };
     VmStatus {
         provider,
@@ -325,6 +299,43 @@ pub fn build_status(
         instance_name,
         instance_state,
         hint,
+    }
+}
+
+/// Native 平台的兜底提示：正常路径下 build_status 已短路，永远轮不到
+/// 虚拟机提示；仍给真实文案而非 panic，保证提示函数全分支可测。
+const NATIVE_HINT: &str = "Linux 原生环境，无需虚拟机，可直接进入 Shell。";
+
+/// 工具未安装时的安装引导提示。
+fn install_hint(provider: VmProviderKind) -> &'static str {
+    match provider {
+        VmProviderKind::Multipass => {
+            "未检测到 Multipass。点击「安装虚拟机」（约需数分钟，依赖 Homebrew）。"
+        }
+        VmProviderKind::Wsl => {
+            "未检测到 WSL2。点击「安装虚拟机」（需管理员授权，完成后可能要求重启）。"
+        }
+        VmProviderKind::Native => NATIVE_HINT,
+    }
+}
+
+/// 工具就绪后的实例状态提示。
+fn instance_hint(provider: VmProviderKind, instance_state: VmState) -> &'static str {
+    if provider == VmProviderKind::Native {
+        return NATIVE_HINT;
+    }
+    match instance_state {
+        // 走到这里 provider 只可能是 Multipass / Wsl（Native 已在上方返回）。
+        VmState::Missing if provider == VmProviderKind::Wsl => {
+            "WSL2 已就绪，Ubuntu-24.04 尚未安装。点击「启动虚拟机」安装发行版。"
+        }
+        VmState::Missing => {
+            "Multipass 已就绪，虚拟机尚未创建。点击「启动虚拟机」开始拉起 Ubuntu 实例。"
+        }
+        VmState::Stopped => "虚拟机已创建但未运行。点击「启动虚拟机」。",
+        VmState::Starting => "虚拟机启动中…",
+        VmState::Running => "虚拟机运行中，可进入 Shell。",
+        VmState::Unknown => "虚拟机状态未知，请重新探测。",
     }
 }
 
@@ -359,6 +370,21 @@ mod tests {
         ] {
             assert_eq!(args, vec!["true"]);
         }
+    }
+
+    #[test]
+    fn native_provider_hints_stay_native_specific() {
+        assert!(install_hint(VmProviderKind::Native).contains("原生"));
+        for state in [
+            VmState::Missing,
+            VmState::Stopped,
+            VmState::Starting,
+            VmState::Unknown,
+        ] {
+            assert!(instance_hint(VmProviderKind::Native, state).contains("原生"));
+            assert!(instance_hint(VmProviderKind::Multipass, state).contains("虚拟机"));
+        }
+        assert!(instance_hint(VmProviderKind::Wsl, VmState::Missing).contains("WSL2"));
     }
 
     #[test]

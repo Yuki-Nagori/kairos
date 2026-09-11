@@ -132,65 +132,50 @@ pub fn parse_step_file(path: &std::path::Path) -> Result<TriangleMesh> {
 
 /// 收集文本中所有最内层的纯数字括号组（如坐标三元组、三角形索引三元组）。
 /// 引用（#n）、字符串（''）等非数字内容会使所在组被丢弃。
+/// 单遍扫描：'(' 开启新组（嵌套时外层部分作废，从更内层重新收集），
+/// ')' 收束当前组；组内非数字令整组作废；括号未闭合到结尾则整组丢弃。
 fn numeric_groups(text: &str) -> Vec<Vec<f64>> {
-    let bytes = text.as_bytes();
     let mut groups: Vec<Vec<f64>> = Vec::new();
-    let mut index = 0usize;
-    while index < bytes.len() {
-        if bytes[index] != b'(' {
-            index += 1;
-            continue;
-        }
-        // 收集到匹配的 ')' 为止；遇到嵌套 '(' 时放弃本组、
-        // 从嵌套处重新收集（最内层组才是有效数据）。
-        let mut numbers: Vec<f64> = Vec::new();
-        let mut number = String::new();
-        let mut numeric = true;
-        let mut closed = false;
-        let mut restart: Option<usize> = None;
-        let mut cursor = index + 1;
-        while cursor < bytes.len() {
-            match bytes[cursor] {
-                b'(' => {
-                    numeric = false;
-                    restart = Some(cursor);
-                    break;
-                }
-                b')' => {
-                    closed = true;
-                    break;
-                }
-                b',' | b' ' | b'\t' => {
-                    if !number.is_empty() {
-                        match number.parse::<f64>() {
-                            Ok(value) => numbers.push(value),
-                            Err(_) => numeric = false,
-                        }
-                        number.clear();
+    let mut numbers: Vec<f64> = Vec::new();
+    let mut number = String::new();
+    let mut depth = 0usize;
+    let mut numeric = true;
+    for ch in text.chars() {
+        match ch {
+            '(' => {
+                depth += 1;
+                numbers.clear();
+                number.clear();
+                numeric = true;
+            }
+            ')' if depth > 0 => {
+                if !number.is_empty() {
+                    match number.parse::<f64>() {
+                        Ok(value) => numbers.push(value),
+                        Err(_) => numeric = false,
                     }
+                    number.clear();
                 }
-                _ => number.push(bytes[cursor] as char),
+                if numeric && !numbers.is_empty() {
+                    groups.push(std::mem::take(&mut numbers));
+                    // 已收束的组必然是最内层：回到顶层，外层残余一并作废。
+                    depth = 0;
+                } else {
+                    depth -= 1;
+                }
             }
-            cursor += 1;
-        }
-        if let Some(pos) = restart {
-            index = pos;
-            continue;
-        }
-        if !closed {
-            break;
-        }
-        if numeric && !number.is_empty() {
-            if let Ok(value) = number.parse::<f64>() {
-                numbers.push(value);
-            } else {
-                numeric = false;
+            ',' | ' ' | '\t' if depth > 0 => {
+                if !number.is_empty() {
+                    match number.parse::<f64>() {
+                        Ok(value) => numbers.push(value),
+                        Err(_) => numeric = false,
+                    }
+                    number.clear();
+                }
             }
+            _ if depth > 0 => number.push(ch),
+            _ => {}
         }
-        if numeric && !numbers.is_empty() {
-            groups.push(numbers);
-        }
-        index = cursor + 1;
     }
     groups
 }
@@ -215,26 +200,15 @@ fn scan_int_triples(text: &str) -> Vec<[i64; 3]> {
 
 /// 从实体参数文本中提取全部「#数字」引用（按出现顺序）。
 fn extract_refs(text: &str) -> Vec<String> {
-    let bytes = text.as_bytes();
-    let mut refs = Vec::new();
-    let mut index = 0usize;
-    while index < bytes.len() {
-        if bytes[index] == b'#' {
-            let mut number = String::new();
-            let mut cursor = index + 1;
-            while cursor < bytes.len() && bytes[cursor].is_ascii_digit() {
-                number.push(bytes[cursor] as char);
-                cursor += 1;
-            }
-            if !number.is_empty() {
-                refs.push(number);
-                index = cursor;
-                continue;
-            }
-        }
-        index += 1;
-    }
-    refs
+    text.split('#')
+        .skip(1)
+        .map(|part| {
+            part.chars()
+                .take_while(char::is_ascii_digit)
+                .collect::<String>()
+        })
+        .filter(|digits| !digits.is_empty())
+        .collect()
 }
 
 /// 提取文本中的第一个「#数字」引用。
@@ -282,5 +256,81 @@ ENDSEC;
         let text = "#5=B_SPLINE_SURFACE_WITH_KNOTS('',3,(#1,#2),.UNSPECIFIED.,...);";
         let error = parse_step(text).unwrap_err();
         assert!(error.to_string().contains("未找到可导入的镶嵌几何"));
+    }
+
+    #[test]
+    fn parse_step_tolerates_malformed_statements() {
+        let text = r#"
+# 纯注释：无等号;
+#5=UNKNOWN_ENTITY_NO_PAREN;
+#6=POLY_LOOP('',(#10,#11));
+#7=POLY_LOOP('',(#90,#91,#92));
+#8=COORDINATES_LIST('',(1.,x,3.;
+#1=COORDINATES_LIST('',3,((0.,0.,0.),(1.,0.,0.),(0.,1.,0.)));
+#2=TRIANGULATED_FACE_SET('',#1,(''),(1,2,3));
+"#;
+        // 畸形语句逐条跳过，合法镶嵌面仍然产出。
+        let mesh = parse_step(text).unwrap();
+        assert_eq!(mesh.triangle_count(), 1);
+    }
+
+    #[test]
+    fn triangulated_face_set_missing_coordinates_list_is_rejected() {
+        let text = "#2=TRIANGULATED_FACE_SET('',#404,(''),(1,2,3));";
+        let error = parse_step(text).unwrap_err();
+        assert!(error.to_string().contains("坐标表 #404 不存在"));
+    }
+
+    #[test]
+    fn zero_vertex_index_slot_is_skipped() {
+        let text = r#"
+#1=COORDINATES_LIST('',3,((0.,0.,0.),(1.,0.,0.),(0.,1.,0.)));
+#2=TRIANGULATED_FACE_SET('',#1,(''),(0,2,3));
+"#;
+        // 顶点索引从 1 开始：0 号槽位缺省跳过，其余槽位照常成面。
+        let mesh = parse_step(text).unwrap();
+        assert_eq!(mesh.triangle_count(), 1);
+        assert_eq!(mesh.triangles[0].a, [0.0, 0.0, 0.0]);
+    }
+
+    #[test]
+    fn out_of_range_vertex_index_is_rejected() {
+        let text = r#"
+#1=COORDINATES_LIST('',3,((0.,0.,0.),(1.,0.,0.),(0.,1.,0.)));
+#2=TRIANGULATED_FACE_SET('',#1,(''),(1,2,99));
+"#;
+        let error = parse_step(text).unwrap_err();
+        assert!(error.to_string().contains("顶点索引越界"));
+    }
+
+    #[test]
+    fn face_set_without_coordinates_reference_falls_back() {
+        // 参数中没有 #引用：回退到 0 号坐标表，不存在则明确报错。
+        let text = "#2=TRIANGULATED_FACE_SET('',3,(''),(1,2,3));";
+        let error = parse_step(text).unwrap_err();
+        assert!(error.to_string().contains("坐标表 #0 不存在"));
+    }
+
+    #[test]
+    fn empty_point_tuple_is_tolerated() {
+        let text = "#9=CARTESIAN_POINT('',());";
+        assert!(parse_step(text).is_err());
+    }
+
+    #[test]
+    fn parse_step_file_reads_disk_and_reports_io_error() {
+        let path = std::env::temp_dir().join(format!("kairos-step-{}.stp", std::process::id()));
+        std::fs::write(
+            &path,
+            "#1=COORDINATES_LIST('',3,((0.,0.,0.),(1.,0.,0.),(0.,1.,0.)));\n\
+             #2=TRIANGULATED_FACE_SET('',#1,(''),(1,2,3));\n",
+        )
+        .unwrap();
+        let mesh = parse_step_file(&path).unwrap();
+        assert_eq!(mesh.triangle_count(), 1);
+        std::fs::remove_file(&path).ok();
+
+        let error = parse_step_file(&path).unwrap_err();
+        assert!(error.to_string().contains("读取 STEP 文件失败"));
     }
 }

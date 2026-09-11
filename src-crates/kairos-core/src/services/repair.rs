@@ -241,9 +241,8 @@ fn orient_faces(faces: &mut [([i64; 3], [i64; 3], [i64; 3])]) -> usize {
             let (a, b, c) = faces[face];
             for (from, to) in [(a, b), (b, c), (c, a)] {
                 let key = if from < to { (from, to) } else { (to, from) };
-                let Some(owners) = edge_faces.get(&key) else {
-                    continue;
-                };
+                // 边表由同一批面的归一化边构建，此处查找必然命中（不变量）。
+                let owners = &edge_faces[&key];
                 if owners.len() != 2 {
                     continue;
                 }
@@ -484,6 +483,58 @@ mod tests {
             tri([0.5, 0.5, -1.0], [0.5, 0.5, 1.0], [2.0, 0.5, 0.0]),
         ];
         assert_eq!(count_self_intersections(&TriangleMesh { triangles }), 1);
+    }
+
+    #[test]
+    fn face_normal_falls_back_to_z_axis_for_zero_area_face() {
+        let weld: HashMap<[i64; 3], [f64; 3]> = HashMap::from([
+            ([0, 0, 0], [0.0, 0.0, 0.0]),
+            ([1, 0, 0], [1.0, 0.0, 0.0]),
+            ([2, 0, 0], [2.0, 0.0, 0.0]),
+        ]);
+        // 三点共线叉积为零，法向回退 +Z。
+        assert_eq!(
+            face_normal(&[0, 0, 0], &[1, 0, 0], &[2, 0, 0], &weld),
+            [0.0, 0.0, 1.0]
+        );
+    }
+
+    #[test]
+    fn fan_boundary_abandons_fill_and_stays_boundary() {
+        // 三个三角形共享同一条边：边界图在共享顶点处邻接数为 3 ≠ 2，
+        // 任何环行走都必然在共享顶点处断掉——孔洞放弃填充（结果与
+        // boundary_neighbors 的迭代顺序无关），边界边保留到法向一致化。
+        let mesh = TriangleMesh {
+            triangles: vec![
+                tri([0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]),
+                tri([0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]),
+                tri([0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 1.0, 0.0]),
+            ],
+        };
+        let (repaired, report) = repair_mesh(&mesh).unwrap();
+        assert_eq!(report.filled_holes, 0);
+        assert_eq!(repaired.triangle_count(), 3);
+    }
+
+    #[test]
+    fn coplanar_separated_triangles_short_circuit_on_first_plane() {
+        // p 整体在 q 平面（x+y+z=1）下侧：第一层平面剔除直接判不相交。
+        let triangles = vec![
+            tri([0.0, 0.0, 0.0], [0.8, 0.0, 0.0], [0.0, 0.8, 0.0]),
+            tri([1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]),
+        ];
+        assert_eq!(count_self_intersections(&TriangleMesh { triangles }), 0);
+    }
+
+    #[test]
+    fn perpendicularly_arranged_triangles_short_circuit_on_second_plane() {
+        // q 穿过 p 所在平面（第一层剔除不成立），但 p 整体在 q 平面
+        // （x+y=1）一侧：第二层平面剔除判不相交。
+        let triangles = vec![
+            tri([0.0, 0.0, 0.0], [2.0, 0.0, 0.0], [0.0, 2.0, 3.0]),
+            tri([0.0, 1.0, 2.0], [1.0, 0.0, 2.0], [0.5, 0.5, 2.5]),
+        ];
+        assert_eq!(count_self_intersections(&TriangleMesh { triangles }), 0);
     }
 
     #[test]

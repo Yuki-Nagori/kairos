@@ -21,7 +21,7 @@ use crate::services::{
 // ---------- 共享构造 ----------
 
 fn valid_material() -> Material {
-    let mut material = material_service::builtin_materials().unwrap().remove(0);
+    let mut material = material_service::builtin_materials().remove(0);
     material.id = "gap-test".into();
     material
 }
@@ -541,6 +541,44 @@ fn generate_case_reports_write_failure_when_target_is_directory() {
     .unwrap_err();
     assert!(error.message().contains("写入") || error.message().contains("创建目录"));
     std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn generate_case_reports_write_failure_at_constant_dictionaries() {
+    // 逐个把 constant 下的字典文件预埋成目录，验证各 write()? 的失败传播：
+    // momentumTransport / physicalProperties.melt / physicalProperties.air。
+    let params = meshing::VolumeMeshParams { target_size: 2.5 };
+    let volume_mesh = meshing::generate(&sample_mesh(), &params).unwrap();
+    for target in [
+        "constant/momentumTransport",
+        "constant/physicalProperties.melt",
+        "constant/physicalProperties.air",
+    ] {
+        let dir = std::env::temp_dir().join(format!(
+            "kairos-case-{}-{}",
+            target.replace(['/', '.'], "-"),
+            std::process::id()
+        ));
+        std::fs::create_dir_all(dir.join(target)).unwrap();
+        let error = openfoam::generate_case(
+            &dir,
+            &volume_mesh,
+            &valid_material(),
+            &valid_process(),
+            &AnalysisStage::Fill,
+            2,
+        )
+        .unwrap_err();
+        assert!(error.message().contains("写入"), "{target}");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+}
+
+#[test]
+fn cancel_reports_missing_job() {
+    let mut jobs: Vec<Job> = Vec::new();
+    let error = job_service::cancel(&mut jobs, "ghost", 1_000).unwrap_err();
+    assert!(error.to_string().contains("作业不存在"));
 }
 
 #[test]

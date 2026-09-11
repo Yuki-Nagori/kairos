@@ -63,7 +63,7 @@ fn write_recents(app: &AppHandle, recents: &[RecentProject]) -> Result<()> {
         fs::create_dir_all(parent)
             .map_err(|e| KairosError::io(format!("创建数据目录失败：{e}")))?;
     }
-    project_service::write_atomic(&file, &project_service::serialize_recents(recents)?)
+    project_service::write_atomic(&file, &project_service::serialize_recents(recents))
 }
 
 fn recents_file(app: &AppHandle) -> Result<PathBuf> {

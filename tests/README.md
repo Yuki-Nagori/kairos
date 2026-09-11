@@ -21,11 +21,11 @@
 | `src-tauri/src/commands/**`                                               | 适配层单元测试（下载清单 / GPU）                  | `cargo test -p kairos --lib`                 |
 | `tests/rust/contract/main.rs`                                             | DTO 契约测试（serde 形态锁定）                    | `cargo test -p kairos-tests --test contract` |
 
-- 覆盖率门槛（kairos-core 行 ≥ 98%）：`bun run coverage:rust`（cargo-llvm-cov，统计口径 = lib 单元测试）。
+- 覆盖率门槛（kairos-core 行 100%）：`bun run coverage:rust`（cargo-llvm-cov，统计口径 = lib 单元测试）；非 rustup 管理的 rustc（如 Homebrew）由 `scripts/coverage-rust.mts` 自动定位 LLVM 工具。
 - 新增 Rust 集成测试：在 `tests/rust/<分类>/main.rs` 落文件（根包的 `[[test]]` 目标自动发现），并在上方表格登记。
 
 ## 原则
 
 - 前端测试与源码分离（本目录）；Rust 单元测试与源码同文件（语言惯例），集成测试归集于此；
 - 测试不写业务逻辑——被测逻辑一律住 `kairos-core`；
-- 覆盖率数字以 CI 的 coverage 作业为准（前端四维 100% / Rust core 行 ≥ 98%）。
+- 覆盖率门槛已并入 verify 门禁，本地与 CI 同卡点（前端四维 100% / Rust core 行 100%）。

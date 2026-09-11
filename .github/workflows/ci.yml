@@ -1,5 +1,5 @@
 # CI：三平台各一条流水线（单作业单编译链，避免多作业重复编译）
-# 门禁 = bun run verify（typecheck / lint / format / test / knip / cargo 同链）
+# 门禁 = bun run verify（typecheck / lint / format / test / 覆盖率 / knip / cargo 同链）
 
 name: CI
 
@@ -27,7 +27,7 @@ jobs:
           bun-version: latest
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: "1.95.0"
+          toolchain: "1.98.1"
           components: clippy, rustfmt, llvm-tools-preview
       - name: 安装 Tauri Linux 依赖
         if: matrix.os == 'ubuntu-latest'
@@ -37,17 +37,13 @@ jobs:
             libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf unzip
       - uses: Swatinem/rust-cache@v2
       - run: bun install --frozen-lockfile
-      - name: 全量门禁（typecheck / lint / format / test / knip / Rust 同链）
-        run: bun run verify
-      # 三平台同卡点：覆盖率门禁不分平台（llvm-tools-preview 已在工具链组件里）
+      # 覆盖率门槛已并入 verify（前端 lib 100% · Rust core 行 100%），须先装 cargo-llvm-cov
       - name: 安装 cargo-llvm-cov（覆盖率门槛依赖）
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-llvm-cov
-      - name: 覆盖率门槛（前端 lib 100% · Rust core 行 ≥98%）
-        run: |
-          bun run test:coverage
-          cargo llvm-cov -p kairos-core --lib --summary-only --fail-under-lines 98
+      - name: 全量门禁（typecheck / lint / format / test / 覆盖率 / knip / Rust 同链）
+        run: bun run verify
       - name: 依赖漏洞审计
         if: matrix.os == 'ubuntu-latest'
         uses: taiki-e/install-action@v2
