@@ -25,9 +25,19 @@ async function detectRenderCapability(
   return { backend: "unsupported", note: "当前环境不支持硬件渲染。" };
 }
 
-/** 浏览器环境探测入口。 */
-export function detectRenderCapabilityInBrowser(): Promise<RenderCapability> {
-  const hasWebGPU = typeof navigator !== "undefined" && "gpu" in navigator;
+/** 浏览器环境探测入口：WebGPU 以真实适配器请求为准（"gpu" 存在 ≠ 可用）。 */
+export async function detectRenderCapabilityInBrowser(): Promise<RenderCapability> {
+  const gpu = (navigator as Navigator & { gpu?: { requestAdapter(): Promise<unknown> } }).gpu;
+  if (gpu !== undefined) {
+    try {
+      const adapter = await gpu.requestAdapter();
+      if (adapter !== null && adapter !== undefined) {
+        return { backend: "webgpu", note: "WebGPU 后端" };
+      }
+    } catch {
+      // 适配器探测失败按 WebGPU 不可用处理，继续回退探测。
+    }
+  }
   let hasWebGL2 = false;
   try {
     const canvas = document.createElement("canvas");
@@ -35,5 +45,5 @@ export function detectRenderCapabilityInBrowser(): Promise<RenderCapability> {
   } catch {
     hasWebGL2 = false;
   }
-  return detectRenderCapability(hasWebGPU, hasWebGL2);
+  return detectRenderCapability(false, hasWebGL2);
 }

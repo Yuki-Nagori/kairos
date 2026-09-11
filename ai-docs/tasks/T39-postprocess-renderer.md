@@ -1,6 +1,7 @@
 # T39 · 后处理渲染后端 POC 与技术决策
 
-- 阶段：待开工
+- 阶段：自研 WebGPU 后端 POC 与基准协议已实现；三端真机验收与百万三角形
+  FPS 实测 ⚠ 待真机（决策门的通过标准均需真机数字）
 - 依赖：T13、T14
 - 优先级：P0（后处理继续扩展前的架构关口）
 
@@ -49,3 +50,16 @@ Kairos 的主路径是**自研前端渲染后端**：以 WebGPU 为目标主后�
 
 POC 通过也只说明 VTK.js 可作为表面后处理的**可替换实现**；并不改变自研 WebGPU、
 中立结果数据模型和非结构体渲染独立设计这三项决策。
+
+## 当前实现边界（本轮落地）
+
+- 自研 WebGPU 后端 POC：`src-web/render/webgpu/`（renderer + WGSL + 最小
+  类型声明），与 WebGL2 主后端同一 RenderMesh / 逐面场值 / 剖切平面语义；
+  后端工厂 `render/backend.ts` 优先 WebGPU（真实适配器请求），不可用回退
+  WebGL2——面板逻辑经 `ViewportBackend` 公共方法面，不感知后端差异；
+- 能力探测升级为真实适配器请求（`"gpu" in navigator` ≠ 可用）；
+- 基准协议落地：`render/webgpu/mesh-asset.ts` 确定性网格资产生成器（单测
+  锁定确定性）+ `utils/bench/webgpu-render.ts`（上传 / 首帧 / 中位与 P05
+  FPS / 剖切切换延迟，需 GPU 环境运行）；
+- VTK.js 对照 POC 未执行：自研 WebGPU 后端已可渲染，VTK.js 的「显著降低
+  实现成本」前提已不成立，按决策门直接走自研路线（记录于评审报告）。

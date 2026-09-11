@@ -6,7 +6,7 @@ import { useProjectStore } from "../../stores/project";
 import { useResultsStore } from "../../stores/results";
 import { useViewportStore } from "../../stores/viewport";
 import type { ScalarField } from "../../types";
-import { ViewportRenderer } from "../../render/renderer";
+import { createViewportRenderer, type ViewportBackend } from "../../render/backend";
 import { pickCell, rayFromPointer, type PickMesh } from "../../render/picking";
 import { buildOverlayLayers, OVERLAY_IDS } from "../../render/overlays";
 import { detectRenderCapabilityInBrowser } from "../../render/capability";
@@ -65,7 +65,7 @@ export function useViewportPanel() {
   const playing = ref(false);
   const playLabel = computed(() => (playing.value ? "停止动画" : "播放动画"));
 
-  let renderer: ViewportRenderer | null = null;
+  let renderer: ViewportBackend | null = null;
   let renderMesh: PickMesh | null = null;
   let playTimer: ReturnType<typeof setInterval> | null = null;
   let playIndex = 0;
@@ -193,7 +193,7 @@ export function useViewportPanel() {
     renderer?.fitView();
   }
 
-  function ensureRenderer(): void {
+  async function ensureRenderer(): Promise<void> {
     if (renderer !== null) {
       return;
     }
@@ -201,7 +201,7 @@ export function useViewportPanel() {
     if (canvas === null) {
       return;
     }
-    renderer = ViewportRenderer.create(
+    const created = await createViewportRenderer(
       canvas,
       (fps) => {
         fpsText.value = `FPS: ${fps}`;
@@ -210,16 +210,18 @@ export function useViewportPanel() {
         viewCenter.value = state;
       },
     );
+    if (created === null) {
+      emptyText.value = "当前环境不支持 WebGL2 / WebGPU，无法渲染视口。";
+      emptyError.value = true;
+      return;
+    }
+    renderer = created.backend;
     canvas.addEventListener("pointerdown", onPointerDown);
     canvas.addEventListener("pointerup", onPointerUp);
-    if (renderer === null) {
-      emptyText.value = "当前环境不支持 WebGL2，无法渲染视口。";
-      emptyError.value = true;
-    }
   }
 
-  function loadMesh(): void {
-    ensureRenderer();
+  async function loadMesh(): Promise<void> {
+    await ensureRenderer();
     const first = geometry.geometries[0];
     if (first === undefined || renderer === null) {
       return;

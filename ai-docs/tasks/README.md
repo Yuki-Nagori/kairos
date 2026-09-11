@@ -65,12 +65,13 @@
 
 ## 待开工 / 待验收任务
 
-| ID  | 文件                                                       | 任务                           | 依赖     |
-| --- | ---------------------------------------------------------- | ------------------------------ | -------- |
-| T21 | [T21-milestone-review.md](T21-milestone-review.md)         | 里程碑评审循环（随里程碑触发） | 随里程碑 |
-| T29 | [T29-real-solve-e2e.md](T29-real-solve-e2e.md)             | 真实求解端到端验证（OpenFOAM） | T09–T11  |
-| T33 | [T33-updater-hardening.md](T33-updater-hardening.md)       | 发布加固：updater + CSP 收窄   | T18      |
-| T39 | [T39-postprocess-renderer.md](T39-postprocess-renderer.md) | 后处理渲染后端 POC 与技术决策  | T13/T14  |
+| ID  | 文件                                                                 | 任务                            | 依赖     |
+| --- | -------------------------------------------------------------------- | ------------------------------- | -------- |
+| T21 | [T21-milestone-review.md](T21-milestone-review.md)                   | 里程碑评审循环（随里程碑触发）  | 随里程碑 |
+| T29 | [T29-real-solve-e2e.md](T29-real-solve-e2e.md)                       | 真实求解端到端验证（OpenFOAM）  | T09–T11  |
+| T33 | [T33-updater-hardening.md](T33-updater-hardening.md)                 | 发布加固：updater + CSP 收窄    | T18      |
+| T39 | [T39-postprocess-renderer.md](T39-postprocess-renderer.md)           | 后处理渲染后端 POC 与技术决策   | T13/T14  |
+| T48 | [T48-renderer-bench-realdevice.md](T48-renderer-bench-realdevice.md) | 渲染后端三端真机验收与 FPS 回填 | T39      |
 
 > T29 优先级最高：真实求解仍被 moldingFoam bundle 的 SIGILL 阻塞。T13/T14/T20/
 > T23/T31 的实现已经存在，但大结果、GPU 管线与性能验收尚未闭环，不能推进为
