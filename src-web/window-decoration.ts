@@ -6,10 +6,12 @@
  * 浏览器预览无 Tauri 运行时，静默跳过。
  */
 import { invoke } from "@tauri-apps/api/core";
-import { isTauriRuntime } from "./utils/environment";
+import { currentPlatform, isTauriRuntime } from "./utils/environment";
 
 export function activateWindowDecoration(): void {
-  if (!isTauriRuntime()) {
+  // macOS 不激活：插件激活路径的 set_decorations(true) 会抹掉配置生成的
+  // Overlay 标题栏（退回原生带边框窗口），macOS 直接用配置生效的红绿灯叠加。
+  if (!isTauriRuntime() || currentPlatform() === "macos") {
     return;
   }
   void invoke<"custom" | "native">("activate_and_show").catch(() => undefined);

@@ -17,6 +17,10 @@ export interface ShellCapabilities {
   nativeMenu: boolean;
   /** 命令面板修饰键提示（⌘K / Ctrl+K）。 */
   paletteShortcutLabel: string;
+  /** 标题栏行首内边距：macOS 桌面避开红绿灯，其余用插件 clearance 变量。 */
+  titleBarPaddingLeft: string;
+  /** 标题栏行尾内边距：Windows/Linux Tauri 避开插件内嵌控制按钮。 */
+  titleBarPaddingRight: string;
 }
 
 /**
@@ -32,10 +36,21 @@ export function resolveShellCapabilities(platform: Platform, tauri: boolean): Sh
     return {
       nativeMenu: tauri,
       paletteShortcutLabel,
+      // macOS 桌面：红绿灯叠加在内容上，固定留出灯组宽度（约 80px）；
+      // 浏览器预览的窗口装饰属于浏览器，普通内边距即可。
+      titleBarPaddingLeft: tauri ? "80px" : "12px",
+      titleBarPaddingRight: "12px",
     };
   }
   return {
     nativeMenu: false,
     paletteShortcutLabel,
+    // Tauri：插件内嵌控制按钮的避让宽度经 clearance 变量发布；浏览器无插件，普通内边距
+    titleBarPaddingLeft: tauri
+      ? "max(12px, var(--tauri-plugin-decoration-left-clearance, 0px))"
+      : "12px",
+    titleBarPaddingRight: tauri
+      ? "max(12px, var(--tauri-plugin-decoration-right-clearance, 0px))"
+      : "12px",
   };
 }

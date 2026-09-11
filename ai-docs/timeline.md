@@ -190,3 +190,4 @@
 - **09:55** test+refactor: 视口叠加层构造下沉 render/overlays（buildOverlayLayers 纯函数 + 单测，useViewportPanel 只做上传编排）；新增菜单动作契约测试（Rust 菜单 id ⊆ 前端动作表 + 无重复 + 核心集防回漂，解析双方源码静态断言）
 - **10:10** feat(tauri+ui): 接入 tauri-plugin-decoration——窗口装饰运行时管理：Win/Linux 无边框 + 插件内嵌控制按钮（Win11 Snap Layout 热区），macOS 红绿灯叠加；前端 activate_and_show 激活失败回退原生标题栏；移除自绘窗口控制按钮，标题栏两侧按插件 clearance 变量避让
 - **10:30** chore(tauri): 删除 tauri.macos.conf.json 平台覆盖文件——窗口装饰/标题栏已由插件三端统一管理，macOS 与 Win/Linux 行为一致（可缩放），无平台配置差异即无平台配置文件
+- **10:40** fix(tauri+ui): macOS 标题栏回归修复——插件激活路径的 set_decorations(true) 会抹掉 Overlay 样式，激活改为仅 Windows/Linux；macOS 在 setup 直接 show()（配置 Overlay 原生生效），红绿灯避让纳入外壳能力（titleBarPadding）

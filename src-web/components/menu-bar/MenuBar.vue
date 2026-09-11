@@ -26,8 +26,8 @@ const { openPalette } = useCommandPalette();
     data-tauri-drag-region
     class="flex h-9 shrink-0 items-center gap-1 border-b border-zinc-800 bg-zinc-900 select-none"
     :style="{
-      paddingLeft: 'max(12px, var(--tauri-plugin-decoration-left-clearance, 0px))',
-      paddingRight: 'max(12px, var(--tauri-plugin-decoration-right-clearance, 0px))',
+      paddingLeft: shell.titleBarPaddingLeft,
+      paddingRight: shell.titleBarPaddingRight,
     }"
   >
     <img src="/icon.svg" alt="Kairos" data-tauri-drag-region class="mr-1.5 size-4 shrink-0" />

@@ -27,6 +27,10 @@ pub fn run() {
             // 自绘标题栏（tauri.macos.conf.json 恢复系统边框），原生全屏会把它藏掉。
             if let Some(window) = _app.get_webview_window("main") {
                 let _ = window.maximize();
+                // macOS 不经插件激活：配置的 Overlay 标题栏直接生效并显示窗口；
+                // Windows / Linux 保持隐藏，等前端就绪后由插件激活显示。
+                #[cfg(target_os = "macos")]
+                let _ = window.show();
             }
 
             // 原生菜单仅 macOS：系统栏渲染，动作经 menu-action 事件桥回前端。
