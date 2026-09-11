@@ -22,6 +22,11 @@ export function importSampleBox(size: number): Promise<GeometrySummary> {
   return invokeCommand("import_sample_box", { size });
 }
 
+/** 修复几何（顶点焊接 / 孔洞填充 / 法向一致化），返回更新后的摘要。 */
+export function repairGeometry(geometryId: string): Promise<GeometrySummary> {
+  return invokeCommand("repair_geometry", { geometryId });
+}
+
 interface RenderMeshData {
   positions: number[];
   indices: number[];

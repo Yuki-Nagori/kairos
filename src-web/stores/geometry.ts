@@ -6,6 +6,7 @@ import {
   importSampleBox,
   importStl,
   removeGeometry,
+  repairGeometry as apiRepairGeometry,
 } from "../api/geometry";
 import { pickStlPath } from "../api/dialog";
 import type { GeometrySummary, MeshingReport } from "../types";
@@ -74,6 +75,24 @@ export const useGeometryStore = defineStore("geometry", {
       try {
         const report = await generateVolumeMesh(geometryId, targetSize);
         this.meshReports = { ...this.meshReports, [geometryId]: report };
+      } catch (error) {
+        app.setError(error);
+      } finally {
+        app.endBusy();
+      }
+    },
+    /** 修复几何：焊接 / 去退化 / 填孔 / 一致化，刷新摘要并作废体积网格。 */
+    async repairGeometryById(geometryId: string): Promise<void> {
+      const app = useAppStore();
+      app.beginBusy("正在修复几何…");
+      try {
+        const summary = await apiRepairGeometry(geometryId);
+        this.geometries = this.geometries.map((geometry) =>
+          geometry.geometryId === geometryId ? summary : geometry,
+        );
+        const meshReports = { ...this.meshReports };
+        delete meshReports[geometryId];
+        this.meshReports = meshReports;
       } catch (error) {
         app.setError(error);
       } finally {

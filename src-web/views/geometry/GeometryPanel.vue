@@ -13,6 +13,8 @@ const {
   isClean,
   statsText,
   generate,
+  repair,
+  repairDisabled,
   reportText,
   onImport,
   onSample,
@@ -62,6 +64,13 @@ const {
             <option value="gmsh">Gmsh</option>
           </select>
           <UiButton :disabled="working" @click="generate(row.geometry)">生成体积网格</UiButton>
+          <UiButton
+            :disabled="repairDisabled(row.geometry)"
+            title="焊接重复顶点、移除退化面、填充孔洞、统一法向"
+            @click="repair(row.geometry)"
+          >
+            修复
+          </UiButton>
           <p class="text-xs text-zinc-500">
             {{ reportText(geometry.meshReports[row.geometry.geometryId]) }}
           </p>

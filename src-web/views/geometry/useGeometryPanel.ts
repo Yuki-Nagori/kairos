@@ -109,6 +109,14 @@ export function useGeometryPanel() {
     void geometry.importSampleGeometry(10);
   }
 
+  /** 修复几何：焊接 / 去退化 / 填孔 / 一致化（不健康几何才可用）。 */
+  function repair(item: GeometrySummary): void {
+    void geometry.repairGeometryById(item.geometryId);
+  }
+  function repairDisabled(item: GeometrySummary): boolean {
+    return working.value || isClean(item);
+  }
+
   return {
     geometry,
     working,
@@ -120,5 +128,7 @@ export function useGeometryPanel() {
     reportText,
     onImport,
     onSample,
+    repair,
+    repairDisabled,
   };
 }

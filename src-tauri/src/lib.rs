@@ -190,6 +190,7 @@ pub fn run() {
             commands::geometry::import_stl,
             commands::geometry::remove_geometry,
             commands::geometry::import_sample_box,
+            commands::geometry::repair_geometry,
             commands::geometry::get_render_mesh,
             commands::geometry::generate_volume_mesh,
             commands::geometry::generate_gmsh_mesh,

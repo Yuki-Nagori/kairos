@@ -12,6 +12,7 @@ use kairos_core::models::mesh::{MeshingReport, VolumeMesh};
 use kairos_core::services::geometry as geometry_service;
 use kairos_core::services::meshing::{self, VolumeMeshParams};
 use kairos_core::services::project::new_id;
+use kairos_core::services::repair;
 use tauri::State;
 
 /// 单个导入几何的会话缓存（表面网格 + 生成的体积网格）。
@@ -59,6 +60,45 @@ pub async fn import_stl(store: State<'_, GeometryStore>, path: String) -> Result
     })
     .await
     .map_err(|e| KairosError::internal(format!("导入任务失败：{e}")))?
+}
+
+/// 修复已导入几何：顶点焊接 / 退化面移除 / 孔洞填充 / 法向一致化 / 自交检测。
+/// 修复后体积网格失效（作废待重新生成），返回更新后的摘要与修复报告。
+#[tauri::command]
+pub async fn repair_geometry(
+    store: State<'_, GeometryStore>,
+    geometry_id: String,
+) -> Result<GeometrySummary> {
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let mesh = {
+            let sessions = store.lock();
+            let session = sessions
+                .get(&geometry_id)
+                .ok_or_else(|| KairosError::not_found(format!("几何不存在：{geometry_id}")))?;
+            session.mesh.clone()
+        };
+        let (repaired, report) = repair::repair_mesh(&mesh)?;
+        let file_name = {
+            let sessions = store.lock();
+            sessions
+                .get(&geometry_id)
+                .map(|session| session.file_name.clone())
+                .ok_or_else(|| KairosError::not_found(format!("几何不存在：{geometry_id}")))?
+        };
+        let summary = geometry_service::summarize(geometry_id.clone(), file_name, &repaired);
+        if let Some(session) = store.lock().get_mut(&geometry_id) {
+            session.mesh = repaired;
+            session.volume = None;
+        }
+        Ok((summary, report))
+    })
+    .await
+    .map_err(|e| KairosError::internal(format!("修复任务失败：{e}")))?
+    .map(|(summary, report)| {
+        let _ = report;
+        summary
+    })
 }
 
 /// 对已导入几何生成 3D 体积网格，返回统计报告（网格保留在会话缓存中）。
