@@ -5,8 +5,11 @@
  * 视口渲染器、图表画布等有状态组件不因切换阶段而重建。
  * 左右列可折叠（useLayout），中列视口恒驻。
  */
+import { computed } from "vue";
+import type { Component } from "vue";
 import { useAppStore } from "./stores/app";
 import { useLayout } from "./composables/useLayout";
+import { STAGES } from "./components/stage-tabs/useStageTabs";
 import MenuBar from "./components/menu-bar/MenuBar.vue";
 import StageTabs from "./components/stage-tabs/StageTabs.vue";
 import StageRibbon from "./components/stage-ribbon/StageRibbon.vue";
@@ -28,32 +31,54 @@ import ProcessPanel from "./views/process/ProcessPanel.vue";
 import DependenciesPanel from "./views/dependencies/DependenciesPanel.vue";
 import ReportPanel from "./views/report/ReportPanel.vue";
 import JobsPanel from "./views/jobs/JobsPanel.vue";
+import type { Stage } from "./types";
+
+/** 列内面板配置：component 恒挂载，stages 决定可见的分析阶段。 */
+interface PanelConfig {
+  component: Component;
+  stages: Stage[];
+}
 
 const app = useAppStore();
 const { leftCollapsed, rightCollapsed, toggleLeft, toggleRight } = useLayout();
 
-const LEFT_PANELS = [
-  { component: ProjectTree, stages: "home,geometry,mesh,process,solve,results,report" },
-  { component: LayersPanel, stages: "home,geometry,mesh,process,solve,results,report" },
-  { component: PipelinePanel, stages: "home" },
-  { component: MaterialsPanel, stages: "home,process" },
-  { component: GeometryPanel, stages: "home,geometry,mesh" },
+const ALL_STAGES: Stage[] = STAGES.map(([stage]) => stage);
+
+const LEFT_PANELS: PanelConfig[] = [
+  { component: ProjectTree, stages: ALL_STAGES },
+  { component: LayersPanel, stages: ALL_STAGES },
+  { component: PipelinePanel, stages: ["home"] },
+  { component: MaterialsPanel, stages: ["home", "process"] },
+  { component: GeometryPanel, stages: ["home", "geometry", "mesh"] },
 ];
 
-const RIGHT_PANELS = [
-  { component: MoldPanel, stages: "home,process" },
-  { component: ProcessPanel, stages: "home,process" },
-  { component: DependenciesPanel, stages: "home,solve" },
-  { component: ResultsPanel, stages: "results,report" },
-  { component: ReportPanel, stages: "home,results,report" },
-  { component: JobsPanel, stages: "home,solve,results" },
+const RIGHT_PANELS: PanelConfig[] = [
+  { component: MoldPanel, stages: ["home", "process"] },
+  { component: ProcessPanel, stages: ["home", "process"] },
+  { component: DependenciesPanel, stages: ["home", "solve"] },
+  { component: ResultsPanel, stages: ["results", "report"] },
+  { component: ReportPanel, stages: ["home", "results", "report"] },
+  { component: JobsPanel, stages: ["home", "solve", "results"] },
 ];
 
-function stageVisible(stages: string): boolean {
-  return stages.split(",").includes(app.stage);
+function stageVisible(stages: Stage[]): boolean {
+  return stages.includes(app.stage);
 }
-</script>
 
+/** 三列网格列宽随折叠状态切换（Tailwind 任意值类需整串出现在源码中）。 */
+const gridClass = computed(() => {
+  if (leftCollapsed.value && rightCollapsed.value) {
+    return "grid-cols-[0px_minmax(0,1fr)_0px]";
+  }
+  if (leftCollapsed.value) {
+    return "grid-cols-[0px_minmax(0,1fr)_320px]";
+  }
+  if (rightCollapsed.value) {
+    return "grid-cols-[280px_minmax(0,1fr)_0px]";
+  }
+  return "grid-cols-[280px_minmax(0,1fr)_320px]";
+});
+</script>
 <template>
   <!-- 整页锁定不滚动，只有左右列与视口内部各自伸缩 -->
   <div class="flex h-screen flex-col overflow-hidden bg-zinc-950 text-zinc-100">
@@ -82,15 +107,7 @@ function stageVisible(stages: string): boolean {
     <StageRibbon />
     <main
       class="relative grid min-h-0 flex-1 gap-3 overflow-hidden px-3 py-2 transition-[grid-template-columns]"
-      :class="
-        leftCollapsed && rightCollapsed
-          ? 'grid-cols-[0px_minmax(0,1fr)_0px]'
-          : leftCollapsed
-            ? 'grid-cols-[0px_minmax(0,1fr)_320px]'
-            : rightCollapsed
-              ? 'grid-cols-[280px_minmax(0,1fr)_0px]'
-              : 'grid-cols-[280px_minmax(0,1fr)_320px]'
-      "
+      :class="gridClass"
     >
       <div v-show="!leftCollapsed" class="flex min-h-0 flex-col gap-3 overflow-y-auto py-1 pr-1">
         <!-- 滚动列里的卡片必须 shrink-0：宁可列滚动，也不让卡片内容被压缩裁切 -->
@@ -106,7 +123,7 @@ function stageVisible(stages: string): boolean {
       <div class="flex min-h-0 min-w-0 flex-col gap-3 overflow-hidden">
         <ViewportPanel />
         <!-- XY 曲线是结果阶段工具：结果 / 主页可见，其他阶段让位给视口与日志 -->
-        <XyChartPanel v-show="stageVisible('home,results')" />
+        <XyChartPanel v-show="stageVisible(['home', 'results'])" />
         <LogTabs />
       </div>
 

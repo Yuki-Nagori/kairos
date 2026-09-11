@@ -43,11 +43,18 @@ const menuActions: Record<string, () => void> = {
 /** 注册原生菜单事件监听（main 启动时调用一次）。 */
 export function setupMenuActions(): void {
   listen<string>("menu-action", (event) => {
-    menuActions[event.payload]?.();
+    // 载荷来自 Rust 菜单的字符串 id：只在命中注册表时触发，其余静默忽略。
+    const id = event.payload as MenuActionId;
+    if (id in menuActions) {
+      menuActions[id]?.();
+    }
   }).catch(() => undefined);
 }
 
+/** 动作 id 的编译期类型：菜单结构（useCommandRegistry）引用 id 时受此约束。 */
+type MenuActionId = keyof typeof menuActions;
+
 /** 按动作 id 直接触发：窗口内菜单栏 / 命令面板与原生菜单共用同一动作集。 */
-export function runMenuAction(id: string): void {
+export function runMenuAction(id: MenuActionId): void {
   menuActions[id]?.();
 }

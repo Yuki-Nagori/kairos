@@ -185,3 +185,4 @@
 - **08:40** feat(tauri+ui): 标题栏按平台分化——Win/Linux 无边框窗口自绘标题栏（web 菜单下拉 + Tauri 窗口 API 最小化/最大化/关闭 + 拖拽区）；macOS Overlay 标题栏（品牌/搜索内容延伸至红绿灯下）；启动统一 maximize；app.about 弹自绘关于对话框
 - **09:00** refactor(ui): 外壳适配层——utils/shell 能力矩阵（nativeMenu/nativeWindowControls/overlayTitleBar/windowControls/快捷键提示）+ useShell 入口，MenuBar 不再出现平台分支；浏览器预览下 mac 也渲染 web 菜单（系统菜单栏属于浏览器）
 - **09:15** refactor(ui): 快捷键注册表——utils/shortcuts 单一来源（SHORTCUTS 定义表 + matchesShortcut 平台严格匹配 + shortcutLabel 文案），命令面板/全局键/菜单标签/外壳能力统一消费；global-shortcuts 只做接线并补 ⇧⌘S 另存为
+- **09:30** refactor(ui): 组合根类型化——App.vue 面板配置 stages 改 Stage[]（消除逗号串解析）、折叠网格列宽收敛为 gridClass 计算属性；menu-actions 动作 id 收编为 MenuActionId 编译期约束（注册表/面板引用 id 拼写错误会在 typecheck 暴露）
