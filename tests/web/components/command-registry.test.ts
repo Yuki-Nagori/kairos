@@ -9,14 +9,21 @@ vi.mock("../../../src-web/menu-actions", () => ({
 
 import { runMenuAction } from "../../../src-web/menu-actions";
 
+const GROUP_LABELS = ["文件", "视图", "工具", "结果", "报告", "帮助"];
+
 describe("useCommandRegistry", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
     vi.mocked(runMenuAction).mockClear();
   });
 
+  it("六个一级菜单分组，与设计稿菜单结构一致", () => {
+    const { menuGroups } = useCommandRegistry();
+    expect(menuGroups.map((group) => group.label)).toEqual(GROUP_LABELS);
+  });
+
   it("全量命令 = 七个阶段切换 + 菜单命令，均带分组名", () => {
-    const { allCommands } = useCommandRegistry();
+    const { menuGroups, allCommands } = useCommandRegistry();
     const stageCommands = allCommands.filter((command) => command.group === "分析阶段");
     expect(stageCommands.map((command) => command.label)).toEqual([
       "主页",
@@ -27,25 +34,18 @@ describe("useCommandRegistry", () => {
       "结果",
       "报告",
     ]);
-    // 菜单命令分组与原生菜单结构一致（设计稿：文件/视图/工具/结果/报告）
-    const groups = [...new Set(allCommands.map((command) => command.group))];
-    expect(groups).toEqual(["分析阶段", "文件", "视图", "工具", "结果", "报告"]);
+    const menuCount = menuGroups.reduce((sum, group) => sum + group.commands.length, 0);
+    expect(allCommands.length).toBe(7 + menuCount);
+    expect(allCommands[0]!.group).toBe("分析阶段");
   });
 
-  it("菜单命令触发对应的原生菜单动作 id", () => {
+  it("菜单命令触发对应的原生菜单动作 id（含关于）", () => {
     const { allCommands } = useCommandRegistry();
     for (const command of allCommands.filter((item) => item.group !== "分析阶段")) {
       command.run();
       expect(runMenuAction).toHaveBeenCalledWith(command.id);
     }
-  });
-
-  it("报告命令与原生菜单同走 report.open 动作", () => {
-    const { allCommands } = useCommandRegistry();
-    const report = allCommands.find((command) => command.label === "打开报告工作台")!;
-    expect(report.group).toBe("报告");
-    report.run();
-    expect(runMenuAction).toHaveBeenCalledWith("report.open");
+    expect(runMenuAction).toHaveBeenCalledWith("app.about");
   });
 
   it("阶段切换命令写入 store 且与阶段一一对应", () => {

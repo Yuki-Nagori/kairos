@@ -182,3 +182,4 @@
 - **03:10** refactor(ui): 菜单迁回系统栏——窗口内下拉菜单移除（菜单本体归 Tauri 原生：macOS 系统菜单栏 / Win-Linux 窗口标题栏下），Rust 菜单结构对齐设计稿（文件 编辑 视图 工具 结果 报告 帮助）+ macOS 应用菜单（关于/服务/隐藏/退出），⌘K 命令面板为 web 侧命令入口
 - **08:00** fix(ui): 命令面板快捷键按平台区分——macOS ⌘K / Windows·Linux Ctrl+K 严格匹配，搜索框与面板内加速键提示随 UA 切换（environment 工具新增平台判定）
 - **08:20** feat(tauri): 原生菜单系统项中文化——应用菜单（关于/服务/隐藏/退出）与编辑菜单（撤销/剪切/拷贝…）自定义中文标题；macOS 帮助菜单移除重复「关于」（应用菜单已有），帮助仅 Windows/Linux 保留
+- **08:40** feat(tauri+ui): 标题栏按平台分化——Win/Linux 无边框窗口自绘标题栏（web 菜单下拉 + Tauri 窗口 API 最小化/最大化/关闭 + 拖拽区）；macOS Overlay 标题栏（品牌/搜索内容延伸至红绿灯下）；启动统一 maximize；app.about 弹自绘关于对话框

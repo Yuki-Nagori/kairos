@@ -1,7 +1,7 @@
 /**
- * 命令注册表：命令面板（⌘K）的单一命令源。
- * 菜单本体在系统菜单栏（Tauri 原生菜单），动作经 runMenuAction 路由
- * 与原生菜单共用同一动作集；阶段切换在执行时现取 app store
+ * 命令注册表：标题栏菜单（Windows/Linux 自绘）与命令面板（⌘K / Ctrl+K）
+ * 共用的单一命令源。动作经 runMenuAction 路由（macOS 原生菜单同一动作集，
+ * id 即 menu-action 事件里的动作 id）；阶段切换在执行时现取 app store
  * （命令闭包不绑定具体 pinia 实例）。无本地状态，多次调用彼此独立。
  */
 import { useAppStore } from "../../stores/app";
@@ -18,6 +18,15 @@ export interface PaletteItem {
   run: () => void;
 }
 
+/** 菜单命令：分组名由所属一级菜单提供，命令本体不带 group。 */
+export type MenuCommand = Omit<PaletteItem, "group">;
+
+/** 一级菜单分组：label 为菜单名，commands 为其下的命令集合。 */
+interface MenuGroup {
+  label: string;
+  commands: MenuCommand[];
+}
+
 export function useCommandRegistry() {
   /** 阶段切换命令：按工作流直达任一分析阶段。 */
   const stageCommands: PaletteItem[] = STAGES.map(([stage, label]) => ({
@@ -27,89 +36,116 @@ export function useCommandRegistry() {
     run: () => (useAppStore().stage = stage),
   }));
 
-  /** 菜单命令：与原生菜单同一动作集（id 即 menu-action 事件里的动作 id）。 */
-  const menuCommands: PaletteItem[] = [
+  const menuGroups: MenuGroup[] = [
     {
-      id: "file.new",
-      label: "新建项目",
-      group: "文件",
-      shortcut: acceleratorLabel("⌘N", "Ctrl+N"),
-      run: () => runMenuAction("file.new"),
+      label: "文件",
+      commands: [
+        {
+          id: "file.new",
+          label: "新建项目",
+          shortcut: acceleratorLabel("⌘N", "Ctrl+N"),
+          run: () => runMenuAction("file.new"),
+        },
+        {
+          id: "file.open",
+          label: "打开项目…",
+          shortcut: acceleratorLabel("⌘O", "Ctrl+O"),
+          run: () => runMenuAction("file.open"),
+        },
+        {
+          id: "file.save",
+          label: "保存",
+          shortcut: acceleratorLabel("⌘S", "Ctrl+S"),
+          run: () => runMenuAction("file.save"),
+        },
+        {
+          id: "file.saveAs",
+          label: "另存为…",
+          shortcut: acceleratorLabel("⇧⌘S", "Ctrl+Shift+S"),
+          run: () => runMenuAction("file.saveAs"),
+        },
+      ],
     },
     {
-      id: "file.open",
-      label: "打开项目…",
-      group: "文件",
-      shortcut: acceleratorLabel("⌘O", "Ctrl+O"),
-      run: () => runMenuAction("file.open"),
+      label: "视图",
+      commands: [
+        { id: "view.theme", label: "切换主题", run: () => runMenuAction("view.theme") },
+        {
+          id: "tools.vmPanel",
+          label: "Shell 环境面板",
+          run: () => runMenuAction("tools.vmPanel"),
+        },
+      ],
     },
     {
-      id: "file.save",
-      label: "保存",
-      group: "文件",
-      shortcut: acceleratorLabel("⌘S", "Ctrl+S"),
-      run: () => runMenuAction("file.save"),
+      label: "工具",
+      commands: [
+        {
+          id: "analysis.checkNetwork",
+          label: "校验模具网络",
+          run: () => runMenuAction("analysis.checkNetwork"),
+        },
+        {
+          id: "tools.refreshDeps",
+          label: "探测运行时依赖",
+          run: () => runMenuAction("tools.refreshDeps"),
+        },
+        {
+          id: "tools.vmStart",
+          label: "启动虚拟机",
+          run: () => runMenuAction("tools.vmStart"),
+        },
+        {
+          id: "tools.vmShell",
+          label: "进入虚拟机 Shell",
+          run: () => runMenuAction("tools.vmShell"),
+        },
+        {
+          id: "tools.vmStop",
+          label: "关闭虚拟机",
+          run: () => runMenuAction("tools.vmStop"),
+        },
+      ],
     },
     {
-      id: "file.saveAs",
-      label: "另存为…",
-      group: "文件",
-      shortcut: acceleratorLabel("⇧⌘S", "Ctrl+Shift+S"),
-      run: () => runMenuAction("file.saveAs"),
-    },
-    { id: "view.theme", label: "切换主题", group: "视图", run: () => runMenuAction("view.theme") },
-    {
-      id: "tools.vmPanel",
-      label: "Shell 环境面板",
-      group: "视图",
-      run: () => runMenuAction("tools.vmPanel"),
+      label: "结果",
+      commands: [
+        {
+          id: "results.exportCsv",
+          label: "导出当前场为 CSV",
+          run: () => runMenuAction("results.exportCsv"),
+        },
+      ],
     },
     {
-      id: "analysis.checkNetwork",
-      label: "校验模具网络",
-      group: "工具",
-      run: () => runMenuAction("analysis.checkNetwork"),
+      label: "报告",
+      commands: [
+        {
+          id: "report.open",
+          label: "打开报告工作台",
+          run: () => runMenuAction("report.open"),
+        },
+      ],
     },
     {
-      id: "tools.refreshDeps",
-      label: "探测运行时依赖",
-      group: "工具",
-      run: () => runMenuAction("tools.refreshDeps"),
-    },
-    {
-      id: "tools.vmStart",
-      label: "启动虚拟机",
-      group: "工具",
-      run: () => runMenuAction("tools.vmStart"),
-    },
-    {
-      id: "tools.vmShell",
-      label: "进入虚拟机 Shell",
-      group: "工具",
-      run: () => runMenuAction("tools.vmShell"),
-    },
-    {
-      id: "tools.vmStop",
-      label: "关闭虚拟机",
-      group: "工具",
-      run: () => runMenuAction("tools.vmStop"),
-    },
-    {
-      id: "results.exportCsv",
-      label: "导出当前场为 CSV",
-      group: "结果",
-      run: () => runMenuAction("results.exportCsv"),
-    },
-    {
-      id: "report.open",
-      label: "打开报告工作台",
-      group: "报告",
-      run: () => runMenuAction("report.open"),
+      label: "帮助",
+      commands: [
+        {
+          id: "app.about",
+          label: "关于 Kairos",
+          run: () => runMenuAction("app.about"),
+        },
+      ],
     },
   ];
+
+  /** 菜单命令平铺（带分组名）。 */
+  const menuCommands: PaletteItem[] = menuGroups.flatMap((group) =>
+    group.commands.map((command) => ({ ...command, group: group.label })),
+  );
 
   /** 全量命令（阶段切换在前，菜单命令随后）：命令面板的搜索域。 */
   const allCommands: PaletteItem[] = [...stageCommands, ...menuCommands];
 
-  return { allCommands };
+  return { menuGroups, allCommands };
 }

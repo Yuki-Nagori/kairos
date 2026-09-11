@@ -17,7 +17,8 @@ export function detectPlatform(userAgent: string): Platform {
   return "linux";
 }
 
-function currentPlatform(): Platform {
+/** 当前平台：标题栏形态（macOS 系统栏 / 其余自绘）与快捷键提示按它分支。 */
+export function currentPlatform(): Platform {
   if (typeof navigator === "undefined") {
     return "macos";
   }

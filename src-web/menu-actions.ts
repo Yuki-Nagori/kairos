@@ -10,6 +10,7 @@ import { useProjectStore } from "./stores/project";
 import { useResultsStore } from "./stores/results";
 import { useDependenciesStore } from "./stores/dependencies";
 import { useVmStore } from "./stores/vm";
+import { useAboutDialog } from "./components/menu-bar/useAboutDialog";
 
 const menuActions: Record<string, () => void> = {
   "file.new": () => void useProjectStore().newProject("未命名项目"),
@@ -22,6 +23,8 @@ const menuActions: Record<string, () => void> = {
   "tools.refreshDeps": () => void useDependenciesStore().refreshDependencies(),
   // 报告：直达报告工作台
   "report.open": () => (useAppStore().stage = "report"),
+  // 关于：Windows/Linux 与命令面板弹 web 对话框（macOS 应用菜单走系统面板不经此）
+  "app.about": () => useAboutDialog().showAbout(),
   // 虚拟机：面板入口展开抽屉，动作直接走 vm store
   "tools.vmPanel": () => {
     const vm = useVmStore();
