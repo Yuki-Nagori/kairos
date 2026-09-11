@@ -2,6 +2,7 @@
 import { computed, ref } from "vue";
 import { useAppStore } from "../../stores/app";
 import { useResultsStore } from "../../stores/results";
+import type { DeriveRequest, FieldSlot } from "../../types";
 import { minMax } from "../../utils/stats";
 
 export function useResultsPanel() {
@@ -38,16 +39,50 @@ export function useResultsPanel() {
     };
   });
 
-  // 派生场：数值变换在 Rust 侧完成（derive_scalar_field），此处只透传派生类型。
-  const deriveKind = ref("normalize");
+  // 场加载槽位：主场供展示与单场派生，对比场供两场差值。
+  const loadSlot = ref<FieldSlot>("primary");
+
+  // 派生场：数值变换在 Rust 侧完成（derive_scalar_field / derive_difference），
+  // 此处只收集算子类型与线性参数。
+  const deriveKind = ref<"normalize" | "threshold" | "linear">("normalize");
+  const linearScale = ref("1");
+  const linearOffset = ref("0");
+
+  function buildDeriveRequest(): DeriveRequest {
+    if (deriveKind.value === "linear") {
+      return {
+        kind: "linear",
+        scale: Number(linearScale.value) || 1,
+        offset: Number(linearOffset.value) || 0,
+      };
+    }
+    return { kind: deriveKind.value };
+  }
 
   function deriveField(): void {
     const source = loadedField.value;
     if (!source || source.values.length === 0) {
       return;
     }
-    void results.deriveField(deriveKind.value);
+    void results.deriveField(buildDeriveRequest());
   }
 
-  return { results, dirPath, catalog, loadedField, stats, scan, deriveKind, deriveField };
+  function deriveDifference(): void {
+    void results.deriveDifference();
+  }
+
+  return {
+    results,
+    dirPath,
+    catalog,
+    loadedField,
+    stats,
+    scan,
+    loadSlot,
+    deriveKind,
+    linearScale,
+    linearOffset,
+    deriveField,
+    deriveDifference,
+  };
 }

@@ -3,6 +3,7 @@ import { createPinia, setActivePinia } from "pinia";
 import { useAppStore } from "../../../src-web/stores/app";
 import { useResultsStore } from "../../../src-web/stores/results";
 import {
+  deriveDifference as deriveDifferenceApi,
   deriveField as deriveFieldApi,
   listResultTimes,
   loadResultField,
@@ -13,6 +14,7 @@ vi.mock("../../../src-web/api/results", () => ({
   listResultTimes: vi.fn(),
   loadResultField: vi.fn(),
   deriveField: vi.fn(),
+  deriveDifference: vi.fn(),
 }));
 
 const catalog: ResultCatalog = {
@@ -105,7 +107,7 @@ describe("results store", () => {
       const results = useResultsStore();
       await results.loadField("/case/run", "0.100", "p");
 
-      expect(loadResultField).toHaveBeenCalledWith("/case/run", "0.100", "p");
+      expect(loadResultField).toHaveBeenCalledWith("/case/run", "0.100", "p", "primary");
       expect(results.loadedField).toEqual(field);
       expect(app.busy).toBeNull();
       expect(app.error).toBeNull();
@@ -260,7 +262,7 @@ describe("results store", () => {
     it("没有已加载场时静默返回，不触发派生请求", async () => {
       const app = useAppStore();
       const results = useResultsStore();
-      await results.deriveField("normalize");
+      await results.deriveField({ kind: "normalize" });
       expect(deriveFieldApi).not.toHaveBeenCalled();
       expect(app.error).toBeNull();
     });
@@ -276,8 +278,8 @@ describe("results store", () => {
         makeField({ field: "p · 阈值掩码", values: [0, 1, 0] }),
       );
 
-      await results.deriveField("threshold");
-      expect(deriveFieldApi).toHaveBeenCalledWith("threshold");
+      await results.deriveField({ kind: "threshold" });
+      expect(deriveFieldApi).toHaveBeenCalledWith({ kind: "threshold" });
       expect(results.loadedField?.values).toEqual([0, 1, 0]);
     });
 
@@ -289,8 +291,68 @@ describe("results store", () => {
       await results.loadField("/case/run", "0.100", "p");
 
       vi.mocked(deriveFieldApi).mockRejectedValue(new Error("派生失败"));
-      await results.deriveField("normalize");
+      await results.deriveField({ kind: "normalize" });
       expect(app.error?.message).toBe("派生失败");
+    });
+
+    it("线性映射请求携带 scale 与 offset", async () => {
+      vi.mocked(listResultTimes).mockResolvedValue(catalog);
+      const results = useResultsStore();
+      await results.loadResultsCatalog("/case/run");
+      vi.mocked(loadResultField).mockResolvedValue(makeField());
+      await results.loadField("/case/run", "0.100", "p");
+      vi.mocked(deriveFieldApi).mockResolvedValue(makeField());
+
+      await results.deriveField({ kind: "linear", scale: 2, offset: -1 });
+
+      expect(deriveFieldApi).toHaveBeenCalledWith({ kind: "linear", scale: 2, offset: -1 });
+    });
+  });
+
+  describe("compare slot & deriveDifference", () => {
+    it("compare 槽位加载写入 compareField 而非 loadedField", async () => {
+      const primary = makeField();
+      vi.mocked(loadResultField).mockResolvedValue(primary);
+
+      const results = useResultsStore();
+      await results.loadField("/case/run", "0.100", "p", "compare");
+
+      expect(loadResultField).toHaveBeenCalledWith("/case/run", "0.100", "p", "compare");
+      expect(results.compareField).toEqual(primary);
+      expect(results.loadedField).toBeNull();
+    });
+
+    it("双场就绪时执行差值并写回 loadedField", async () => {
+      const primary = makeField();
+      vi.mocked(loadResultField).mockResolvedValue(primary);
+      const results = useResultsStore();
+      await results.loadField("/case/run", "0.100", "p");
+      await results.loadField("/case/run", "0.100", "T", "compare");
+      vi.mocked(deriveDifferenceApi).mockResolvedValue(makeField({ field: "p - T" }));
+
+      await results.deriveDifference();
+
+      expect(deriveDifferenceApi).toHaveBeenCalled();
+      expect(results.loadedField?.field).toBe("p - T");
+    });
+
+    it("缺少主场或对比场时静默返回，不触发差值请求", async () => {
+      const results = useResultsStore();
+      await results.deriveDifference();
+      expect(deriveDifferenceApi).not.toHaveBeenCalled();
+    });
+
+    it("差值请求失败时错误进入全局状态", async () => {
+      vi.mocked(loadResultField).mockResolvedValue(makeField());
+      const results = useResultsStore();
+      await results.loadField("/case/run", "0.100", "p");
+      await results.loadField("/case/run", "0.100", "T", "compare");
+      vi.mocked(deriveDifferenceApi).mockRejectedValue(new Error("差值失败"));
+
+      const app = useAppStore();
+      await results.deriveDifference();
+
+      expect(app.error?.message).toBe("差值失败");
     });
   });
 });

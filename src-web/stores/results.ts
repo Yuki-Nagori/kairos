@@ -1,7 +1,12 @@
 /** 求解结果状态：结果目录清单、最近加载的场与探针列表。 */
 import { defineStore } from "pinia";
-import { deriveField as deriveFieldApi, listResultTimes, loadResultField } from "../api/results";
-import type { Probe, ResultCatalog, ScalarField } from "../types";
+import {
+  deriveDifference as deriveDifferenceApi,
+  deriveField as deriveFieldApi,
+  listResultTimes,
+  loadResultField,
+} from "../api/results";
+import type { DeriveRequest, FieldSlot, Probe, ResultCatalog, ScalarField } from "../types";
 import { toCsv } from "../utils/chart";
 import { useAppStore } from "./app";
 
@@ -11,8 +16,10 @@ export const useResultsStore = defineStore("results", {
   state: () => ({
     /** 结果目录清单（扫描后填充）。 */
     resultCatalog: null as ResultCatalog | null,
-    /** 最近加载的场（视口/图表展示用）。 */
+    /** 最近加载的主场（视口/图表展示用）。 */
     loadedField: null as ScalarField | null,
+    /** 对比场（两场差值的减数）。 */
+    compareField: null as ScalarField | null,
     /** 探针列表（节点序号）。 */
     probes: [] as Probe[],
   }),
@@ -38,12 +45,22 @@ export const useResultsStore = defineStore("results", {
       }
       await this.loadResultsCatalog(catalog.caseDir);
     },
-    /** 加载指定时间步的场数据（供视口与图表）。 */
-    async loadField(caseDir: string, timeDir: string, field: string): Promise<void> {
+    /** 加载指定时间步的场数据到指定槽位（供视口与图表）。 */
+    async loadField(
+      caseDir: string,
+      timeDir: string,
+      field: string,
+      slot: FieldSlot = "primary",
+    ): Promise<void> {
       const app = useAppStore();
       app.beginBusy("正在加载场数据…");
       try {
-        this.loadedField = await loadResultField(caseDir, timeDir, field);
+        const loaded = await loadResultField(caseDir, timeDir, field, slot);
+        if (slot === "compare") {
+          this.compareField = loaded;
+        } else {
+          this.loadedField = loaded;
+        }
       } catch (error) {
         app.setError(error);
       } finally {
@@ -70,15 +87,27 @@ export const useResultsStore = defineStore("results", {
     removeProbe(id: number): void {
       this.probes = this.probes.filter((probe) => probe.id !== id);
     },
-    /** 对最近加载的场执行派生（normalize / threshold），写回 loadedField。 */
-    async deriveField(kind: string): Promise<void> {
+    /** 对主场执行单场派生（normalize / threshold / linear），写回 loadedField。 */
+    async deriveField(request: DeriveRequest): Promise<void> {
       const app = useAppStore();
       const current = this.loadedField;
       if (current === null || current.values.length === 0) {
         return;
       }
       try {
-        this.loadedField = await deriveFieldApi(kind);
+        this.loadedField = await deriveFieldApi(request);
+      } catch (error) {
+        app.setError(error);
+      }
+    },
+    /** 两场差值：主场 − 对比场，结果写回 loadedField。 */
+    async deriveDifference(): Promise<void> {
+      const app = useAppStore();
+      if (this.loadedField === null || this.compareField === null) {
+        return;
+      }
+      try {
+        this.loadedField = await deriveDifferenceApi();
       } catch (error) {
         app.setError(error);
       }

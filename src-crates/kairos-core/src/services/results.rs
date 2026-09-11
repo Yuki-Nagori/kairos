@@ -345,10 +345,10 @@ boundaryField
 /// 派生场后缀与变换：归一化映射 0–1（极差 0 时全 0），阈值掩码以中点为界。
 pub fn derive_scalar_field(
     field: &crate::models::results::ScalarField,
-    kind: &str,
+    request: &crate::models::results::DeriveRequest,
 ) -> Result<crate::models::results::ScalarField> {
     use crate::error::KairosError;
-    use crate::models::results::ScalarField;
+    use crate::models::results::{DeriveRequest, ScalarField};
 
     if field.values.is_empty() {
         // 空场原样返回：上层保持名称与状态不变
@@ -362,25 +362,34 @@ pub fn derive_scalar_field(
         .fold(f64::NEG_INFINITY, f64::max);
     let range = max - min;
 
-    let (suffix, derived): (&str, Vec<f64>) = match kind {
-        "normalize" => {
+    let (suffix, derived): (String, Vec<f64>) = match request {
+        DeriveRequest::Normalize => {
             let values = if range > 0.0 {
                 field.values.iter().map(|v| (v - min) / range).collect()
             } else {
                 vec![0.0; field.values.len()]
             };
-            ("归一化", values)
+            ("归一化".into(), values)
         }
-        "threshold" => {
+        DeriveRequest::Threshold => {
             let threshold = (min + max) / 2.0;
             let values = field
                 .values
                 .iter()
                 .map(|v| if *v >= threshold { 1.0 } else { 0.0 })
                 .collect();
-            ("阈值掩码", values)
+            ("阈值掩码".into(), values)
         }
-        other => return Err(KairosError::validation(format!("未知派生类型：{other}"))),
+        DeriveRequest::Linear { scale, offset } => (
+            format!("线性映射 ×{scale} {offset:+}"),
+            field.values.iter().map(|v| v * scale + offset).collect(),
+        ),
+        // 差值需要主场与对比场两份数据，单场入口不受理。
+        DeriveRequest::Difference => {
+            return Err(KairosError::validation(
+                "两场差值请使用 derive_difference 命令（需要主场与对比场）。",
+            ));
+        }
     };
 
     Ok(ScalarField {
@@ -393,10 +402,44 @@ pub fn derive_scalar_field(
     })
 }
 
+/// 两场差值：主场 − 对比场，逐值相减。长度不一致时报验证错误（不静默截断）；
+/// 结果继承主场的时间步与完整性标记，命名记为「主场 - 对比场」。
+pub fn derive_difference(
+    primary: &crate::models::results::ScalarField,
+    compare: &crate::models::results::ScalarField,
+) -> Result<crate::models::results::ScalarField> {
+    use crate::error::KairosError;
+    use crate::models::results::ScalarField;
+
+    if primary.values.len() != compare.values.len() {
+        return Err(KairosError::validation(format!(
+            "两场长度不一致：{} 有 {} 个值，{} 有 {} 个值。",
+            primary.field,
+            primary.values.len(),
+            compare.field,
+            compare.values.len()
+        )));
+    }
+    let values = primary
+        .values
+        .iter()
+        .zip(compare.values.iter())
+        .map(|(a, b)| a - b)
+        .collect();
+    Ok(ScalarField {
+        field: format!("{} - {}", primary.field, compare.field),
+        time_dir: primary.time_dir.clone(),
+        time_s: primary.time_s,
+        values,
+        is_magnitude: false,
+        complete: primary.complete && compare.complete,
+    })
+}
+
 #[cfg(test)]
 mod derive_tests {
     use super::*;
-    use crate::models::results::ScalarField;
+    use crate::models::results::{DeriveRequest, ScalarField};
 
     fn field(values: Vec<f64>) -> ScalarField {
         ScalarField {
@@ -411,7 +454,8 @@ mod derive_tests {
 
     #[test]
     fn normalize_maps_to_zero_one_and_renames() {
-        let derived = derive_scalar_field(&field(vec![1.0, 2.0, 3.0]), "normalize").unwrap();
+        let derived =
+            derive_scalar_field(&field(vec![1.0, 2.0, 3.0]), &DeriveRequest::Normalize).unwrap();
         assert_eq!(derived.values, vec![0.0, 0.5, 1.0]);
         assert_eq!(derived.field, "T · 归一化");
         assert!(!derived.is_magnitude);
@@ -419,26 +463,67 @@ mod derive_tests {
 
     #[test]
     fn normalize_flat_field_maps_to_zeros() {
-        let derived = derive_scalar_field(&field(vec![5.0, 5.0, 5.0]), "normalize").unwrap();
+        let derived =
+            derive_scalar_field(&field(vec![5.0, 5.0, 5.0]), &DeriveRequest::Normalize).unwrap();
         assert_eq!(derived.values, vec![0.0, 0.0, 0.0]);
     }
 
     #[test]
     fn threshold_midpoint_inclusive() {
-        let derived = derive_scalar_field(&field(vec![1.0, 3.0, 2.0]), "threshold").unwrap();
+        let derived =
+            derive_scalar_field(&field(vec![1.0, 3.0, 2.0]), &DeriveRequest::Threshold).unwrap();
         assert_eq!(derived.values, vec![0.0, 1.0, 1.0]);
         assert_eq!(derived.field, "T · 阈值掩码");
     }
 
     #[test]
     fn empty_field_returns_unchanged() {
-        let derived = derive_scalar_field(&field(vec![]), "normalize").unwrap();
+        let derived = derive_scalar_field(&field(vec![]), &DeriveRequest::Normalize).unwrap();
         assert!(derived.values.is_empty());
         assert_eq!(derived.field, "T");
     }
 
     #[test]
-    fn unknown_kind_is_rejected() {
-        assert!(derive_scalar_field(&field(vec![1.0]), "wat").is_err());
+    fn linear_map_applies_scale_and_offset_with_named_suffix() {
+        let derived = derive_scalar_field(
+            &field(vec![1.0, 2.0]),
+            &DeriveRequest::Linear {
+                scale: 2.0,
+                offset: -1.0,
+            },
+        )
+        .unwrap();
+        assert_eq!(derived.values, vec![1.0, 3.0]);
+        assert_eq!(derived.field, "T · 线性映射 ×2 -1");
+    }
+
+    #[test]
+    fn difference_subtracts_compare_field_value_wise() {
+        let primary = field(vec![3.0, 5.0]);
+        let mut compare = field(vec![1.0, 2.0]);
+        compare.field = "Tamb".into();
+        let derived = derive_difference(&primary, &compare).unwrap();
+        assert_eq!(derived.values, vec![2.0, 3.0]);
+        assert_eq!(derived.field, "T - Tamb");
+    }
+
+    #[test]
+    fn difference_marks_completeness_only_when_both_complete() {
+        let primary = field(vec![1.0]);
+        let mut compare = field(vec![1.0]);
+        compare.complete = false;
+        assert!(!derive_difference(&primary, &compare).unwrap().complete);
+    }
+
+    #[test]
+    fn difference_rejects_length_mismatch() {
+        let error = derive_difference(&field(vec![1.0]), &field(vec![1.0, 2.0])).unwrap_err();
+        assert!(error.to_string().contains("长度不一致"));
+    }
+
+    #[test]
+    fn difference_request_in_single_field_entry_is_rejected() {
+        let error = derive_scalar_field(&field(vec![1.0]), &DeriveRequest::Difference).unwrap_err();
+        assert!(error.to_string().contains("derive_difference"));
     }
 }

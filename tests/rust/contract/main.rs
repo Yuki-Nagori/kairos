@@ -12,7 +12,7 @@ use kairos_core::models::mesh::{
     DualDomainReport, MeshQuality, MeshRefinement, MeshingReport, MidplaneReport, RefineRegion,
 };
 use kairos_core::models::project::{Project, Study};
-use kairos_core::models::results::{ResultCatalog, ScalarField, TimeStepMeta};
+use kairos_core::models::results::{DeriveRequest, ResultCatalog, ScalarField, TimeStepMeta};
 use kairos_core::services::{geometry, material};
 
 /// SystemInfo 的形状：camelCase 字段，前端 `src-web/types.ts` 的 SystemInfo 与之对应。
@@ -291,4 +291,26 @@ fn mesh_refinement_serializes_with_mode_tag() {
     assert_eq!(json["levels"], 2);
     assert_eq!(json["region"]["min"], json!([0.0, 0.0, 0.0]));
     assert_eq!(json["region"]["max"], json!([4.0, 4.0, 4.0]));
+}
+
+/// DeriveRequest 的形状：内部标记 tag = kind，字段 camelCase，
+/// 前端以可辨识联合类型与之对应。
+#[test]
+fn derive_request_serializes_with_kind_tag() {
+    let linear = DeriveRequest::Linear {
+        scale: 2.0,
+        offset: -1.0,
+    };
+    assert_eq!(
+        serde_json::to_value(linear).unwrap(),
+        json!({ "kind": "linear", "scale": 2.0, "offset": -1.0 })
+    );
+    assert_eq!(
+        serde_json::to_value(DeriveRequest::Normalize).unwrap(),
+        json!({ "kind": "normalize" })
+    );
+    assert_eq!(
+        serde_json::to_value(DeriveRequest::Difference).unwrap(),
+        json!({ "kind": "difference" })
+    );
 }

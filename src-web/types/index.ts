@@ -340,3 +340,13 @@ export interface DependencyStatus {
 
 /** 分析阶段选项卡（工作流导航；home = 总览显示全部面板）。 */
 export type Stage = "home" | "geometry" | "mesh" | "process" | "solve" | "results" | "report";
+
+/** 派生算子请求（对应 `kairos-core::models::results::DeriveRequest`）。 */
+export type DeriveRequest =
+  | { kind: "normalize" }
+  | { kind: "threshold" }
+  | { kind: "linear"; scale: number; offset: number }
+  | { kind: "difference" };
+
+/** 场加载槽位（主场用于展示与单场派生，对比场用于两场差值）。 */
+export type FieldSlot = "primary" | "compare";

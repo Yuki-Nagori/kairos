@@ -1,6 +1,6 @@
-//! 结果数据模型：OpenFOAM 求解输出的时间步目录与场数据。
+//! 结果数据模型：OpenFOAM 求解输出的时间步目录与场数据，以及派生算子请求。
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// 单个时间步元数据：目录名、物理时间、该目录下可读的场文件列表。
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -35,4 +35,18 @@ pub struct ScalarField {
     pub is_magnitude: bool,
     /// false = 声明数量与实际不符（求解中途取消的不完整结果）。
     pub complete: bool,
+}
+
+/// 派生算子请求：作用于会话缓存的最近加载场；差值另需会话中的对比场。
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum DeriveRequest {
+    /// 归一化到 [0, 1]（极差为 0 时全 0）。
+    Normalize,
+    /// 中点阈值掩码：v ≥ (min+max)/2 → 1，否则 0。
+    Threshold,
+    /// 线性映射：v × scale + offset。
+    Linear { scale: f64, offset: f64 },
+    /// 两场差值：主场 − 对比场（长度不一致时报验证错误）。
+    Difference,
 }

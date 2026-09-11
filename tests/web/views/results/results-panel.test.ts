@@ -5,13 +5,19 @@ import type { Pinia } from "pinia";
 import ResultsPanel from "../../../../src-web/views/results/ResultsPanel.vue";
 import { useAppStore } from "../../../../src-web/stores/app";
 import { useResultsStore } from "../../../../src-web/stores/results";
-import { deriveField, listResultTimes, loadResultField } from "../../../../src-web/api/results";
+import {
+  deriveDifference,
+  deriveField,
+  listResultTimes,
+  loadResultField,
+} from "../../../../src-web/api/results";
 import type { ResultCatalog, ScalarField } from "../../../../src-web/types";
 
 vi.mock("../../../../src-web/api/results", () => ({
   listResultTimes: vi.fn(),
   loadResultField: vi.fn(),
   deriveField: vi.fn(),
+  deriveDifference: vi.fn(),
 }));
 
 const catalog: ResultCatalog = {
@@ -54,7 +60,7 @@ describe("ResultsPanel 扫描与目录", () => {
   it("未扫描时显示占位，派生场控件禁用", () => {
     const wrapper = mount(ResultsPanel, { global: { plugins: [pinia] } });
     expect(wrapper.text()).toContain("尚未扫描结果目录。");
-    expect(wrapper.find("select").attributes("disabled")).toBeDefined();
+    expect(wrapper.findAll("select")[1]?.attributes("disabled")).toBeDefined();
     expect(findButton(wrapper, "生成派生场").attributes("disabled")).toBeDefined();
   });
 
@@ -87,7 +93,9 @@ describe("ResultsPanel 扫描与目录", () => {
     await findButton(wrapper, "扫描结果").trigger("click");
     await vi.waitFor(() => expect(wrapper.text()).toContain("加载 T 场"));
     await findButton(wrapper, "加载 T 场").trigger("click");
-    await vi.waitFor(() => expect(loadResultField).toHaveBeenCalledWith("/tmp/case", "0.001", "T"));
+    await vi.waitFor(() =>
+      expect(loadResultField).toHaveBeenCalledWith("/tmp/case", "0.001", "T", "primary"),
+    );
     expect(wrapper.text()).toContain("已加载 T @ 0.001：3 个值，min 280.000 / max 320.000");
   });
 
@@ -173,7 +181,7 @@ describe("ResultsPanel 派生场", () => {
     await findButton(wrapper, "生成派生场").trigger("click");
     await flushPromises();
 
-    expect(deriveField).toHaveBeenCalledWith("normalize");
+    expect(deriveField).toHaveBeenCalledWith({ kind: "normalize" });
     expect(wrapper.text()).toContain("已加载 T · 归一化 @ 0.001：3 个值，min 0.000 / max 1.000");
     expect(results.loadedField?.values).toEqual([0, 0.5, 1]);
     expect(results.loadedField?.isMagnitude).toBe(false);
@@ -196,7 +204,7 @@ describe("ResultsPanel 派生场", () => {
     const results = useResultsStore();
     results.loadedField = makeField({ values: [1, 3, 2] });
     const wrapper = mount(ResultsPanel, { global: { plugins: [pinia] } });
-    await wrapper.find("select").setValue("threshold");
+    await wrapper.findAll("select")[1]!.setValue("threshold");
     vi.mocked(deriveField).mockResolvedValue(
       makeField({ field: "T · 阈值掩码", values: [0, 1, 1], isMagnitude: false }),
     );
@@ -204,6 +212,73 @@ describe("ResultsPanel 派生场", () => {
     await flushPromises();
     expect(results.loadedField?.values).toEqual([0, 1, 1]);
     expect(wrapper.text()).toContain("T · 阈值掩码");
+  });
+
+  it("线性映射：请求携带 scale 与 offset 参数", async () => {
+    const results = useResultsStore();
+    results.loadedField = makeField({ values: [1, 2] });
+    const wrapper = mount(ResultsPanel, { global: { plugins: [pinia] } });
+    await wrapper.findAll("select")[1]!.setValue("linear");
+    await wrapper.find('input[placeholder="scale"]').setValue("2");
+    await wrapper.find('input[placeholder="offset"]').setValue("-1");
+    vi.mocked(deriveField).mockResolvedValue(
+      makeField({ field: "T · 线性映射 ×2 -1", values: [1, 3], isMagnitude: false }),
+    );
+
+    await findButton(wrapper, "生成派生场").trigger("click");
+    await flushPromises();
+
+    expect(deriveField).toHaveBeenCalledWith({ kind: "linear", scale: 2, offset: -1 });
+    expect(wrapper.text()).toContain("T · 线性映射 ×2 -1");
+  });
+
+  it("线性参数留空时按 scale=1、offset=0 回退", async () => {
+    const results = useResultsStore();
+    results.loadedField = makeField({ values: [1, 2] });
+    const wrapper = mount(ResultsPanel, { global: { plugins: [pinia] } });
+    await wrapper.findAll("select")[1]!.setValue("linear");
+    // 显式清空输入框：空串经 Number() 得 NaN，走 || 回退分支。
+    await wrapper.find('input[placeholder="scale"]').setValue("");
+    await wrapper.find('input[placeholder="offset"]').setValue("");
+    vi.mocked(deriveField).mockResolvedValue(makeField());
+
+    await findButton(wrapper, "生成派生场").trigger("click");
+    await flushPromises();
+
+    expect(deriveField).toHaveBeenCalledWith({ kind: "linear", scale: 1, offset: 0 });
+  });
+
+  it("两场差值：对比场加载后可用，结果写回主场展示", async () => {
+    vi.mocked(loadResultField).mockResolvedValue(makeField());
+    const results = useResultsStore();
+    const catalog = {
+      caseDir: "/tmp/case",
+      times: [{ dirName: "0.001", timeS: 0.001, fields: ["T"] }],
+    };
+    results.resultCatalog = catalog;
+    results.loadedField = makeField();
+    const wrapper = mount(ResultsPanel, { global: { plugins: [pinia] } });
+
+    // 未加载对比场时按钮禁用。
+    expect(findButton(wrapper, "两场差值").attributes("disabled")).toBeDefined();
+
+    await wrapper.find("select").setValue("compare");
+    await wrapper
+      .findAll("button")
+      .find((b) => b.text() === "加载 T 场")!
+      .trigger("click");
+    await flushPromises();
+    expect(loadResultField).toHaveBeenCalledWith("/tmp/case", "0.001", "T", "compare");
+    expect(results.compareField).not.toBeNull();
+    expect(wrapper.text()).toContain("对比场：T @ 0.001");
+
+    vi.mocked(deriveDifference).mockResolvedValue(
+      makeField({ field: "T - T", values: [0, 0, 0], isMagnitude: false }),
+    );
+    await findButton(wrapper, "两场差值").trigger("click");
+    await flushPromises();
+    expect(deriveDifference).toHaveBeenCalled();
+    expect(results.loadedField?.field).toBe("T - T");
   });
 
   it("空场派生早退不改原名", async () => {
