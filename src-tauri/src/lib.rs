@@ -1,4 +1,6 @@
-use tauri::menu::{AboutMetadata, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
+use tauri::menu::{
+    AboutMetadata, MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder,
+};
 use tauri::{Emitter, Manager};
 
 pub mod commands;
@@ -50,17 +52,30 @@ pub fn run() {
 
             // macOS 规范：首个子菜单是应用菜单（关于 / 服务 / 隐藏 / 退出），
             // 没有它 ⌘Q 退出与「关于」入口都会缺席。
+            // 系统预定义项默认英文标题（About / Hide / Quit…），统一给中文标签。
             #[cfg(target_os = "macos")]
-            let app_menu = SubmenuBuilder::new(_app, "Kairos")
-                .about(Some(about_metadata(&version)))
-                .services()
-                .separator()
-                .hide()
-                .hide_others()
-                .show_all()
-                .separator()
-                .quit()
-                .build()?;
+            let app_menu = {
+                let about = PredefinedMenuItem::about(
+                    _app,
+                    Some("关于 Kairos"),
+                    Some(about_metadata(&version)),
+                )?;
+                let services = PredefinedMenuItem::services(_app, Some("服务"))?;
+                let hide = PredefinedMenuItem::hide(_app, Some("隐藏 Kairos"))?;
+                let hide_others = PredefinedMenuItem::hide_others(_app, Some("隐藏其他"))?;
+                let show_all = PredefinedMenuItem::show_all(_app, Some("显示全部"))?;
+                let quit = PredefinedMenuItem::quit(_app, Some("退出 Kairos"))?;
+                SubmenuBuilder::new(_app, "Kairos")
+                    .item(&about)
+                    .item(&services)
+                    .separator()
+                    .item(&hide)
+                    .item(&hide_others)
+                    .item(&show_all)
+                    .separator()
+                    .item(&quit)
+                    .build()?
+            };
 
             let file = SubmenuBuilder::new(_app, "文件")
                 .item(&action("file.new", "新建项目", Some("CmdOrCtrl+N"))?)
@@ -75,16 +90,24 @@ pub fn run() {
                 .build()?;
 
             // 编辑菜单用系统预定义项：没有它 macOS 的 ⌘C/⌘V 在输入框里不生效。
-            let edit = SubmenuBuilder::new(_app, "编辑")
-                .undo()
-                .redo()
-                .separator()
-                .cut()
-                .copy()
-                .paste()
-                .separator()
-                .select_all()
-                .build()?;
+            let edit = {
+                let undo = PredefinedMenuItem::undo(_app, Some("撤销"))?;
+                let redo = PredefinedMenuItem::redo(_app, Some("重做"))?;
+                let cut = PredefinedMenuItem::cut(_app, Some("剪切"))?;
+                let copy = PredefinedMenuItem::copy(_app, Some("拷贝"))?;
+                let paste = PredefinedMenuItem::paste(_app, Some("粘贴"))?;
+                let select_all = PredefinedMenuItem::select_all(_app, Some("全选"))?;
+                SubmenuBuilder::new(_app, "编辑")
+                    .item(&undo)
+                    .item(&redo)
+                    .separator()
+                    .item(&cut)
+                    .item(&copy)
+                    .item(&paste)
+                    .separator()
+                    .item(&select_all)
+                    .build()?
+            };
 
             let view = SubmenuBuilder::new(_app, "视图")
                 .item(&action("view.theme", "切换主题", None)?)
@@ -109,23 +132,32 @@ pub fn run() {
                 .item(&action("report.open", "打开报告工作台", None)?)
                 .build()?;
 
-            let help = SubmenuBuilder::new(_app, "帮助")
-                .about(Some(about_metadata(&version)))
-                .build()?;
+            // macOS 的「关于」在应用菜单里，帮助菜单只剩空壳就不保留；
+            // Windows / Linux 没有应用菜单，关于入口放帮助菜单。
+            #[cfg(not(target_os = "macos"))]
+            let help = {
+                let about = PredefinedMenuItem::about(
+                    _app,
+                    Some("关于 Kairos"),
+                    Some(about_metadata(&version)),
+                )?;
+                SubmenuBuilder::new(_app, "帮助").item(&about).build()?
+            };
 
             let menu = {
                 let builder = MenuBuilder::new(_app);
                 #[cfg(target_os = "macos")]
                 let builder = builder.item(&app_menu);
-                builder
+                let builder = builder
                     .item(&file)
                     .item(&edit)
                     .item(&view)
                     .item(&tools)
                     .item(&results)
-                    .item(&report)
-                    .item(&help)
-                    .build()?
+                    .item(&report);
+                #[cfg(not(target_os = "macos"))]
+                let builder = builder.item(&help);
+                builder.build()?
             };
             _app.set_menu(menu)?;
             Ok(())
