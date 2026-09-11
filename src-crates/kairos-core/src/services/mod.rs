@@ -20,6 +20,7 @@ pub mod runners;
 pub mod step;
 pub mod system;
 pub mod vm;
+pub mod volume_field;
 
 #[cfg(test)]
 mod gap_tests;
