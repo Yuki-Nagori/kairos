@@ -50,6 +50,7 @@
 | T36 | [T36-contract-case-and-vm-exec-done.md](T36-contract-case-and-vm-exec-done.md) | case 契约与 VM 执行链路         |
 | T37 | [T37-vue3-migration.md](T37-vue3-migration.md)                                 | Vue 3 迁移                      |
 | T38 | [T38-frontend-architecture.md](T38-frontend-architecture.md)                   | 前端架构重构                    |
+| T40 | [T40-iges-import-done.md](T40-iges-import-done.md)                             | IGES 导入（106/63 镶嵌子集）    |
 
 > T26/T27 落地后的增量打磨（系统窗口按钮、原生应用菜单、主题注入统一、
 > 品牌图标、emoji 清理、启动窗口位置）见 `ai-docs/timeline.md` 对应条目，

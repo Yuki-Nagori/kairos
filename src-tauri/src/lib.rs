@@ -189,6 +189,7 @@ pub fn run() {
             commands::material::delete_custom_material,
             commands::material::export_materials_to_file,
             commands::geometry::import_stl,
+            commands::geometry::import_iges,
             commands::geometry::remove_geometry,
             commands::geometry::import_sample_box,
             commands::geometry::repair_geometry,

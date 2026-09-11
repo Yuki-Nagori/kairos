@@ -206,3 +206,7 @@
 - **15:00** refactor(core+ui): 结果派生算子下沉 Rust——derive_scalar_field（归一化 0-1 / 中点阈值掩码）+ ResultSession 会话缓存最近加载场 + derive_field 命令；useResultsPanel 移除 TS 侧归一化/阈值重复实现，派生改为命令分发
 - **21:27** docs(arch): 完成度口径改版——architecture-status 引入 [x]/△/[ ]/⚠ 状态语义（C7 后处理降 △，B2/B3/D0 完成度校准）、T13/T14/T19/T20/T23/T31 增补「当前实现边界」（-done 仅代表有实现提交）、tasks README 分区重构并收编 T30–T38；后处理 GPU 必需政策贯通 AGENTS/ARCHITECTURE/任务文档（CPU 仅作对拍基准、Rust 与 WebView device 不共享、无 GPU 明确提示不受支持）；新增 T39 后处理渲染后端 POC 任务（自研 WebGPU 主路径，VTK.js 仅作可删除 POC 与决策门）；README 能力清单对齐
 - **23:22** test+chore: 门禁接入测试覆盖率并冲上 100%——verify 以前端 test:coverage（四维 100%）+ coverage:rust（cargo-llvm-cov，行 100%）取代裸 test；新增 scripts/coverage-rust.mts 定位 LLVM 工具（rustc sysroot → rustup 工具链 → 系统 LLVM，兼容 Homebrew rustc 无 llvm-tools 的混合环境）；rust-toolchain.toml 升 1.98.1 并内嵌 clippy/rustfmt/llvm-tools-preview 组件，CI 同步（cargo-llvm-cov 前置到 verify 之前）；core 新增 20+ 测试覆盖 CSV/STEP/Gmsh/写入失败等错误分支，三处诚实重构（builtin_materials/serialize_* 对编译期可信数据 expect 快速失败、step 扫描器去 restart 状态机重写、orient_faces 删构造不可达死守卫），修复 fill_holes 顺序敏感缺陷的测试不稳定问题；kairos-core 行覆盖 97.70% → 100.00%（4183 行）
+
+## 2026-09-12
+
+- **00:40** feat(core+ui): B1-C1 IGES 镶嵌网格导入（实体 106 Copious Data forms 0/1/2/11/12 封闭环 + 实体 63 Compact Plane Subfigure + 实体 124 变换矩阵，Hollerith 切分、开放折线与 B-rep 跳过计数）+ import_iges 命令 + 前端按扩展名分发（igs/iges）与对话框过滤器；任务 T40

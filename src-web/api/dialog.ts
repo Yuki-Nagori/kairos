@@ -35,9 +35,9 @@ export async function pickExportJsonPath(defaultName: string): Promise<string | 
   return path ?? null;
 }
 
-const GEOMETRY_FILTER = { name: "几何模型", extensions: ["stl", "step", "stp"] };
+const GEOMETRY_FILTER = { name: "几何模型", extensions: ["stl", "step", "stp", "igs", "iges"] };
 
-/** 选择要导入的几何模型文件（STL / STEP），取消返回 null。 */
+/** 选择要导入的几何模型文件（STL / STEP / IGES），取消返回 null。 */
 export async function pickOpenGeometryPath(): Promise<string | null> {
   const selection = await open({ multiple: false, filters: [GEOMETRY_FILTER] });
   return typeof selection === "string" ? selection : null;

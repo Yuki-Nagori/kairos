@@ -3,6 +3,7 @@ import { defineStore } from "pinia";
 import {
   generateGmshMesh as apiGenerateGmshMesh,
   generateVolumeMesh,
+  importIges as apiImportIges,
   importSampleBox,
   importStl,
   importStep as apiImportStep,
@@ -34,7 +35,9 @@ export const useGeometryStore = defineStore("geometry", {
         const summary =
           extension === "step" || extension === "stp"
             ? await apiImportStep(path)
-            : await importStl(path);
+            : extension === "igs" || extension === "iges"
+              ? await apiImportIges(path)
+              : await importStl(path);
         this.geometries = [...this.geometries, summary];
       } catch (error) {
         app.setError(error);

@@ -27,6 +27,11 @@ export function importStep(path: string): Promise<GeometrySummary> {
   return invokeCommand("import_step", { path });
 }
 
+/** 导入 IGES 镶嵌网格（实体 106 / 63 子集）。 */
+export function importIges(path: string): Promise<GeometrySummary> {
+  return invokeCommand("import_iges", { path });
+}
+
 /** 修复几何（顶点焊接 / 孔洞填充 / 法向一致化），返回更新后的摘要。 */
 export function repairGeometry(geometryId: string): Promise<GeometrySummary> {
   return invokeCommand("repair_geometry", { geometryId });

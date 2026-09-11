@@ -5,6 +5,7 @@ import { useGeometryStore } from "../../../src-web/stores/geometry";
 import {
   generateGmshMesh,
   generateVolumeMesh,
+  importIges,
   importSampleBox,
   importStl,
   importStep,
@@ -17,6 +18,7 @@ import type { GeometrySummary, MeshingReport } from "../../../src-web/types";
 vi.mock("../../../src-web/api/geometry", () => ({
   importStl: vi.fn(),
   importStep: vi.fn(),
+  importIges: vi.fn(),
   repairGeometry: vi.fn(),
   removeGeometry: vi.fn(),
   generateVolumeMesh: vi.fn(),
@@ -110,6 +112,20 @@ describe("geometry store", () => {
 
       expect(importStep).toHaveBeenCalledWith("/models/壳体.step");
       expect(importStl).not.toHaveBeenCalled();
+      expect(geometry.geometries).toEqual([summary]);
+    });
+
+    it.each(["igs", "iges"])("%S 文件分派到 IGES 镶嵌导入", async (extension) => {
+      vi.mocked(pickOpenGeometryPath).mockResolvedValue(`/models/壳体.${extension}`);
+      const summary = makeSummary();
+      vi.mocked(importIges).mockResolvedValue(summary);
+
+      const geometry = useGeometryStore();
+      await geometry.importGeometry();
+
+      expect(importIges).toHaveBeenCalledWith(`/models/壳体.${extension}`);
+      expect(importStl).not.toHaveBeenCalled();
+      expect(importStep).not.toHaveBeenCalled();
       expect(geometry.geometries).toEqual([summary]);
     });
 

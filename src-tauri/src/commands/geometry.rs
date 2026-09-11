@@ -10,6 +10,7 @@ use kairos_core::error::{KairosError, Result};
 use kairos_core::models::geometry::{GeometrySummary, TriangleMesh};
 use kairos_core::models::mesh::{MeshingReport, VolumeMesh};
 use kairos_core::services::geometry as geometry_service;
+use kairos_core::services::iges;
 use kairos_core::services::meshing::{self, VolumeMeshParams};
 use kairos_core::services::project::new_id;
 use kairos_core::services::repair;
@@ -43,24 +44,29 @@ pub async fn import_stl(store: State<'_, GeometryStore>, path: String) -> Result
     let store = store.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         let mesh = geometry_service::parse_stl_file(Path::new(&path))?;
-        let file_name = Path::new(&path)
-            .file_name()
-            .map(|name| name.to_string_lossy().to_string())
-            .unwrap_or_else(|| path.clone());
-        let geometry_id = new_id("geom");
-        let summary = geometry_service::summarize(geometry_id.clone(), file_name.clone(), &mesh);
-        store.lock().insert(
-            geometry_id,
-            MeshSession {
-                mesh,
-                file_name,
-                volume: None,
-            },
-        );
-        Ok(summary)
+        Ok(store_import(&store, &path, mesh))
     })
     .await
     .map_err(|e| KairosError::internal(format!("导入任务失败：{e}")))?
+}
+
+/// 解析后的网格登记入会话缓存并生成摘要。
+fn store_import(store: &GeometryStore, path: &str, mesh: TriangleMesh) -> GeometrySummary {
+    let file_name = Path::new(path)
+        .file_name()
+        .map(|name| name.to_string_lossy().to_string())
+        .unwrap_or_else(|| path.to_string());
+    let geometry_id = new_id("geom");
+    let summary = geometry_service::summarize(geometry_id.clone(), file_name.clone(), &mesh);
+    store.lock().insert(
+        geometry_id,
+        MeshSession {
+            mesh,
+            file_name,
+            volume: None,
+        },
+    );
+    summary
 }
 
 /// 修复已导入几何：顶点焊接 / 退化面移除 / 孔洞填充 / 法向一致化 / 自交检测。
@@ -108,21 +114,19 @@ pub async fn import_step(store: State<'_, GeometryStore>, path: String) -> Resul
     let store = store.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         let mesh = step::parse_step_file(Path::new(&path))?;
-        let file_name = Path::new(&path)
-            .file_name()
-            .map(|name| name.to_string_lossy().to_string())
-            .unwrap_or_else(|| path.clone());
-        let geometry_id = new_id("geom");
-        let summary = geometry_service::summarize(geometry_id.clone(), file_name.clone(), &mesh);
-        store.lock().insert(
-            geometry_id,
-            MeshSession {
-                mesh,
-                file_name,
-                volume: None,
-            },
-        );
-        Ok(summary)
+        Ok(store_import(&store, &path, mesh))
+    })
+    .await
+    .map_err(|e| KairosError::internal(format!("导入任务失败：{e}")))?
+}
+
+/// 导入 IGES 镶嵌网格（实体 106 / 63 子集）。
+#[tauri::command]
+pub async fn import_iges(store: State<'_, GeometryStore>, path: String) -> Result<GeometrySummary> {
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let mesh = iges::parse_iges_file(Path::new(&path))?;
+        Ok(store_import(&store, &path, mesh))
     })
     .await
     .map_err(|e| KairosError::internal(format!("导入任务失败：{e}")))?

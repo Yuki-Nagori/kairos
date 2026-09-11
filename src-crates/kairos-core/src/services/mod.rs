@@ -4,6 +4,7 @@ pub mod dependencies;
 pub mod derive;
 pub mod geometry;
 pub mod gmsh;
+pub mod iges;
 pub mod jobs;
 pub mod material;
 pub mod meshing;
