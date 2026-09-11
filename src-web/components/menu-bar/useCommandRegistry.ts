@@ -6,7 +6,7 @@
  */
 import { useAppStore } from "../../stores/app";
 import { runMenuAction } from "../../menu-actions";
-import { acceleratorLabel } from "../../utils/environment";
+import { shortcutLabel, SHORTCUTS } from "../../utils/shortcuts";
 import { STAGES } from "../stage-tabs/useStageTabs";
 
 /** 命令面板条目：label 为展示名，group 为分组名，shortcut 仅作提示。 */
@@ -43,25 +43,25 @@ export function useCommandRegistry() {
         {
           id: "file.new",
           label: "新建项目",
-          shortcut: acceleratorLabel("⌘N", "Ctrl+N"),
+          shortcut: shortcutLabel(SHORTCUTS.fileNew),
           run: () => runMenuAction("file.new"),
         },
         {
           id: "file.open",
           label: "打开项目…",
-          shortcut: acceleratorLabel("⌘O", "Ctrl+O"),
+          shortcut: shortcutLabel(SHORTCUTS.fileOpen),
           run: () => runMenuAction("file.open"),
         },
         {
           id: "file.save",
           label: "保存",
-          shortcut: acceleratorLabel("⌘S", "Ctrl+S"),
+          shortcut: shortcutLabel(SHORTCUTS.fileSave),
           run: () => runMenuAction("file.save"),
         },
         {
           id: "file.saveAs",
           label: "另存为…",
-          shortcut: acceleratorLabel("⇧⌘S", "Ctrl+Shift+S"),
+          shortcut: shortcutLabel(SHORTCUTS.fileSaveAs),
           run: () => runMenuAction("file.saveAs"),
         },
       ],

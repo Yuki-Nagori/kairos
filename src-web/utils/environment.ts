@@ -1,7 +1,4 @@
-/** 当前是否运行在 Tauri WebView 内（而非普通浏览器）。 */
-export function isTauriRuntime(): boolean {
-  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-}
+/** 平台运行环境：运行时判定与平台判定（快捷键定义/匹配/文案见 utils/shortcuts）。 */
 
 /** 桌面平台（快捷键提示与匹配按平台区分）。 */
 export type Platform = "macos" | "windows" | "linux";
@@ -25,27 +22,7 @@ export function currentPlatform(): Platform {
   return detectPlatform(navigator.userAgent);
 }
 
-/** 事件是否命中当前平台的命令面板快捷键（macOS ⌘K / Windows·Linux Ctrl+K）。 */
-export function isCommandPaletteShortcut(
-  event: { metaKey: boolean; ctrlKey: boolean; key: string },
-  platform: Platform = currentPlatform(),
-): boolean {
-  if (event.key.toLowerCase() !== "k") {
-    return false;
-  }
-  return platform === "macos" ? event.metaKey : event.ctrlKey;
-}
-
-/** 命令面板快捷键的展示文案（搜索框内提示）。 */
-export function commandPaletteShortcutLabel(platform: Platform = currentPlatform()): string {
-  return platform === "macos" ? "⌘K" : "Ctrl+K";
-}
-
-/** 通用加速键展示：macOS 用 ⌘/⇧ 组合符号，其余平台用 Ctrl/Shift 写法。 */
-export function acceleratorLabel(
-  macLabel: string,
-  otherLabel: string,
-  platform: Platform = currentPlatform(),
-): string {
-  return platform === "macos" ? macLabel : otherLabel;
+/** 当前是否运行在 Tauri WebView 内（而非普通浏览器）。 */
+export function isTauriRuntime(): boolean {
+  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }

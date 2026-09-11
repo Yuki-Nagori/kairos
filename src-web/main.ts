@@ -4,7 +4,7 @@ import { createPinia } from "pinia";
 import { createApp } from "vue";
 import App from "./App.vue";
 import { setupMenuActions } from "./menu-actions";
-import { setupGlobalShortcuts } from "./shortcuts";
+import { setupGlobalShortcuts } from "./global-shortcuts";
 import { initTheme } from "./composables/useTheme";
 import { useProjectStore } from "./stores/project";
 

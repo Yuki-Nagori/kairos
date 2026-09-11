@@ -1,9 +1,10 @@
 /**
  * 桌面外壳适配层：把「平台 × 运行时」差异收敛为一组能力描述。
  * 组件按能力渲染（标题栏形态 / 菜单承载 / 窗口控制），不写平台分支；
- * 平台判定与快捷键文案复用 environment，此处只做一次性解析。
+ * 平台判定与快捷键文案复用 environment / shortcuts，此处只做一次性解析。
  */
-import { commandPaletteShortcutLabel, type Platform } from "./environment";
+import type { Platform } from "./environment";
+import { shortcutLabel, SHORTCUTS } from "./shortcuts";
 
 /** 外壳能力：各平台标题栏 / 菜单 / 窗口控制的承载方式。 */
 export interface ShellCapabilities {
@@ -27,13 +28,14 @@ export interface ShellCapabilities {
  *   无窗口控制，macOS 下无 Overlay（不存在系统标题栏可延伸）。
  */
 export function resolveShellCapabilities(platform: Platform, tauri: boolean): ShellCapabilities {
+  const paletteShortcutLabel = shortcutLabel(SHORTCUTS.commandPalette, platform);
   if (platform === "macos") {
     return {
       nativeMenu: tauri,
       nativeWindowControls: tauri,
       overlayTitleBar: tauri,
       windowControls: false,
-      paletteShortcutLabel: commandPaletteShortcutLabel(platform),
+      paletteShortcutLabel,
     };
   }
   return {
@@ -41,6 +43,6 @@ export function resolveShellCapabilities(platform: Platform, tauri: boolean): Sh
     nativeWindowControls: false,
     overlayTitleBar: false,
     windowControls: tauri,
-    paletteShortcutLabel: commandPaletteShortcutLabel(platform),
+    paletteShortcutLabel,
   };
 }

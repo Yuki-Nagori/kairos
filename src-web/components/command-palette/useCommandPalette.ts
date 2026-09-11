@@ -4,7 +4,7 @@
  * 全局快捷键也只注册一次（应用生命周期，无需随组件卸载）。
  */
 import { computed, ref } from "vue";
-import { isCommandPaletteShortcut } from "../../utils/environment";
+import { matchesShortcut, SHORTCUTS } from "../../utils/shortcuts";
 import type { PaletteItem } from "../menu-bar/useCommandRegistry";
 import { useCommandRegistry } from "../menu-bar/useCommandRegistry";
 
@@ -69,7 +69,7 @@ export function useCommandPalette() {
   }
 
   function onGlobalKeydown(event: KeyboardEvent): void {
-    if (isCommandPaletteShortcut(event)) {
+    if (matchesShortcut(event, SHORTCUTS.commandPalette)) {
       event.preventDefault();
       togglePalette();
       return;
