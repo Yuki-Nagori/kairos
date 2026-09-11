@@ -41,6 +41,14 @@ export class WebGPURenderer {
   private readonly device: GpuDevice;
   private readonly format: GpuTextureFormat;
   private readonly onFps?: (fps: number) => void;
+  private readonly onView?: (state: {
+    x: number;
+    y: number;
+    z: number;
+    yaw: number;
+    pitch: number;
+    distance: number;
+  }) => void;
 
   private meshPipeline: GpuRenderPipeline;
   private linePipeline: GpuRenderPipeline;
@@ -84,7 +92,16 @@ export class WebGPURenderer {
     device: GpuDevice,
     format: GpuTextureFormat,
     onFps?: (fps: number) => void,
+    onView?: (state: {
+      x: number;
+      y: number;
+      z: number;
+      yaw: number;
+      pitch: number;
+      distance: number;
+    }) => void,
   ) {
+    this.onView = onView;
     this.canvas = canvas;
     this.context = context;
     this.device = device;
@@ -105,6 +122,14 @@ export class WebGPURenderer {
   static async create(
     canvas: HTMLCanvasElement,
     onFps?: (fps: number) => void,
+    onView?: (state: {
+      x: number;
+      y: number;
+      z: number;
+      yaw: number;
+      pitch: number;
+      distance: number;
+    }) => void,
   ): Promise<WebGPURenderer | null> {
     try {
       const gpu = navigator.gpu;
@@ -122,7 +147,7 @@ export class WebGPURenderer {
         return null;
       }
       const format = gpu.getPreferredCanvasFormat();
-      return new WebGPURenderer(canvas, context, device, format, onFps);
+      return new WebGPURenderer(canvas, context, device, format, onFps, onView);
     } catch {
       // 适配器请求可能因驱动 / 黑名单抛错：按不可用处理，交上层回退。
       return null;
@@ -278,6 +303,40 @@ export class WebGPURenderer {
 
   zoomBy(factor: number): void {
     this.distance = Math.min(Math.max(this.distance * factor, 0.1), 500);
+  }
+
+  /** 轨道相机快照 / 恢复（多视口联动）。 */
+  getOrbit(): {
+    x: number;
+    y: number;
+    z: number;
+    yaw: number;
+    pitch: number;
+    distance: number;
+  } {
+    return {
+      x: this.target[0],
+      y: this.target[1],
+      z: this.target[2],
+      yaw: this.yaw,
+      pitch: this.pitch,
+      distance: this.distance,
+    };
+  }
+
+  setOrbit(orbit: {
+    x: number;
+    y: number;
+    z: number;
+    yaw: number;
+    pitch: number;
+    distance: number;
+  }): void {
+    this.target = [orbit.x, orbit.y, orbit.z];
+    this.yaw = orbit.yaw;
+    this.pitch = orbit.pitch;
+    this.distance = orbit.distance;
+    this.onView?.(this.getOrbit());
   }
 
   fitView(): void {
@@ -439,6 +498,7 @@ export class WebGPURenderer {
         Math.max(this.pitch + event.movementY * 0.005, -Math.PI / 2 + 0.01),
         Math.PI / 2 - 0.01,
       );
+      this.onView?.(this.getOrbit());
     });
     this.canvas.addEventListener(
       "wheel",

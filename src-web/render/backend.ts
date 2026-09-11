@@ -27,6 +27,23 @@ export interface ViewportBackend {
     width: number;
     height: number;
   };
+  /** 轨道相机快照 / 恢复：多视口联动时把源视口相机复制到其余视口。 */
+  getOrbit(): {
+    x: number;
+    y: number;
+    z: number;
+    yaw: number;
+    pitch: number;
+    distance: number;
+  };
+  setOrbit(orbit: {
+    x: number;
+    y: number;
+    z: number;
+    yaw: number;
+    pitch: number;
+    distance: number;
+  }): void;
   getMeshBounds(): { min: Vec3; max: Vec3 } | null;
   resetView(): void;
   zoomBy(factor: number): void;
@@ -40,7 +57,14 @@ type BackendKind = "webgpu" | "webgl2";
 export async function createViewportRenderer(
   canvas: HTMLCanvasElement,
   onFps?: (fps: number) => void,
-  onView?: (state: { x: number; y: number; z: number }) => void,
+  onView?: (state: {
+    x: number;
+    y: number;
+    z: number;
+    yaw: number;
+    pitch: number;
+    distance: number;
+  }) => void,
 ): Promise<{ backend: ViewportBackend; kind: BackendKind } | null> {
   const gpu = await WebGPURenderer.create(canvas, onFps);
   if (gpu !== null) {

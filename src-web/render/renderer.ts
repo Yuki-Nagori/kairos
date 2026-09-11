@@ -34,6 +34,10 @@ interface ViewState {
   x: number;
   y: number;
   z: number;
+  /** 轨道相机参数：多视口相机同步（setOrbit）与注视点读数共用。 */
+  yaw: number;
+  pitch: number;
+  distance: number;
 }
 
 /** 每顶点法向（按三角形面法向展开，非索引共享）。 */
@@ -227,7 +231,28 @@ export class ViewportRenderer {
 
   /** 相机变化后回报注视点（模型坐标）。 */
   private emitViewState(): void {
-    this.onView?.({ x: this.target[0], y: this.target[1], z: this.target[2] });
+    const orbit = this.getOrbit();
+    this.onView?.(orbit);
+  }
+
+  /** 轨道相机快照 / 恢复：多视口联动时把源视口相机复制到其余视口。 */
+  getOrbit(): ViewState {
+    return {
+      x: this.target[0],
+      y: this.target[1],
+      z: this.target[2],
+      yaw: this.yaw,
+      pitch: this.pitch,
+      distance: this.distance,
+    };
+  }
+
+  setOrbit(orbit: ViewState): void {
+    this.target = [orbit.x, orbit.y, orbit.z];
+    this.yaw = orbit.yaw;
+    this.pitch = orbit.pitch;
+    this.distance = orbit.distance;
+    this.emitViewState();
   }
 
   private buildProgram(): WebGLProgram {

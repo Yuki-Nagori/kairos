@@ -22,9 +22,13 @@ const DEFAULT_VISIBLE: LayerState = {
   cooling: true,
 };
 
+export type ViewportLayout = "single" | "quad";
+
 export const useViewportStore = defineStore("viewport", {
   state: () => ({
     layers: { ...DEFAULT_VISIBLE } as LayerState,
+    /** 视口布局：单视口 / 四分格（多视口联动）。 */
+    layout: "single" as ViewportLayout,
   }),
   actions: {
     /** 切换图层可见性。 */
@@ -34,6 +38,10 @@ export const useViewportStore = defineStore("viewport", {
     /** 恢复默认全开（切换研究 / 重置视图时调用）。 */
     resetLayers(): void {
       this.layers = { ...DEFAULT_VISIBLE };
+    },
+    /** 切换视口布局（单视口 / 四分格）。 */
+    setLayout(layout: ViewportLayout): void {
+      this.layout = layout;
     },
   },
 });

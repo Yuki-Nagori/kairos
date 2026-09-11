@@ -39,4 +39,17 @@ describe("viewport store", () => {
     viewport.resetLayers();
     expect(viewport.layers).toEqual({ mesh: true, gates: true, runners: true, cooling: true });
   });
+
+  describe("layout（多视口联动）", () => {
+    it("默认单视口，setLayout 切换四分格", () => {
+      const viewport = useViewportStore();
+      expect(viewport.layout).toBe("single");
+
+      viewport.setLayout("quad");
+      expect(viewport.layout).toBe("quad");
+
+      viewport.setLayout("single");
+      expect(viewport.layout).toBe("single");
+    });
+  });
 });
