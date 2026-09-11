@@ -8,7 +8,7 @@ import {
   listCustomMaterials,
   upsertCustomMaterial,
 } from "../api/materials";
-import { pickExportJsonPath, pickOpenJsonPath } from "../api/dialog";
+import { pickExportJsonPath, pickOpenMaterialsPath } from "../api/dialog";
 import type { Material, MaterialLibrary } from "../types";
 import { useAppStore } from "./app";
 import { useProjectStore } from "./project";
@@ -38,7 +38,7 @@ export const useMaterialsStore = defineStore("materials", {
     },
     /** 弹出对话框导入材料。 */
     async importMaterials(): Promise<void> {
-      const path = await pickOpenJsonPath();
+      const path = await pickOpenMaterialsPath();
       if (path) {
         await this.importMaterialsFromPath(path);
       }

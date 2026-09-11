@@ -11,7 +11,7 @@ import {
   listCustomMaterials,
   upsertCustomMaterial,
 } from "../../../src-web/api/materials";
-import { pickExportJsonPath, pickOpenJsonPath } from "../../../src-web/api/dialog";
+import { pickExportJsonPath, pickOpenMaterialsPath } from "../../../src-web/api/dialog";
 import type { Material, Project } from "../../../src-web/types";
 
 vi.mock("../../../src-web/api/materials", () => ({
@@ -26,6 +26,7 @@ vi.mock("../../../src-web/api/dialog", () => ({
   pickOpenProjectPath: vi.fn(),
   pickSaveProjectPath: vi.fn(),
   pickOpenJsonPath: vi.fn(),
+  pickOpenMaterialsPath: vi.fn(),
   pickExportJsonPath: vi.fn(),
   pickStlPath: vi.fn(),
 }));
@@ -50,6 +51,7 @@ function makeMaterial(id: string, overrides: Partial<Material> = {}): Material {
     specificHeat: [[300, 1900]],
     conductivity: [[300, 0.22]],
     mechanics: null,
+    filler: null,
     dataNote: "示例数据",
     ...overrides,
   };
@@ -96,7 +98,7 @@ describe("materials store", () => {
   describe("import", () => {
     it("imports materials from the picked file", async () => {
       const custom = [makeMaterial("custom-1")];
-      vi.mocked(pickOpenJsonPath).mockResolvedValue("/data/custom.json");
+      vi.mocked(pickOpenMaterialsPath).mockResolvedValue("/data/custom.json");
       vi.mocked(importCustomMaterials).mockResolvedValue(custom);
 
       const app = useAppStore();
@@ -112,7 +114,7 @@ describe("materials store", () => {
     });
 
     it("does nothing when the dialog is cancelled", async () => {
-      vi.mocked(pickOpenJsonPath).mockResolvedValue(null);
+      vi.mocked(pickOpenMaterialsPath).mockResolvedValue(null);
 
       const materials = useMaterialsStore();
       await materials.importMaterials();

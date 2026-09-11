@@ -29,6 +29,7 @@ function materialFixture(): Material {
     specificHeat: [[300, 1900]],
     conductivity: [[300, 0.22]],
     mechanics: null,
+    filler: null,
     dataNote: "示例数据",
   };
 }

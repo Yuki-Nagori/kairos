@@ -16,6 +16,7 @@ const {
   cpRows,
   lambdaRows,
   mechanicsRows,
+  fillerRows,
   importDisabled,
   exportDisabled,
   copyDisabled,
@@ -133,6 +134,18 @@ const {
                 <tr v-for="[key, value] in mechanicsRows" :key="key">
                   <td class="pr-4 py-0.5 text-zinc-500">{{ key }}</td>
                   <td class="py-0.5 font-mono text-zinc-300">{{ value }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </template>
+
+          <template v-if="fillerRows">
+            <p class="text-[11px] font-semibold tracking-wide text-zinc-400">纤维 / 填料</p>
+            <table class="text-xs">
+              <tbody>
+                <tr v-for="[key, value] in fillerRows" :key="key">
+                  <td class="pr-4 py-0.5 text-zinc-500">{{ key }}</td>
+                  <td class="py-0.5 text-zinc-300">{{ value }}</td>
                 </tr>
               </tbody>
             </table>

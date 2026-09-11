@@ -92,6 +92,20 @@ export function useMaterialsPanel() {
     ];
   });
 
+  /** 纤维 / 填料参数组（无填料牌号为 null）。 */
+  const fillerRows = computed<[string, string][] | null>(() => {
+    const filler = selected.value?.filler;
+    if (!filler) {
+      return null;
+    }
+    return [
+      ["类型", filler.kind],
+      ["质量分数", `${(filler.weightFraction * 100).toFixed(1)} %`],
+      ["长径比", String(filler.aspectRatio)],
+      ["备注", filler.note],
+    ];
+  });
+
   const importDisabled = computed(() => working.value);
   const exportDisabled = computed(() => materials.materials.custom.length === 0 || working.value);
   const copyDisabled = computed(() => !selectedId.value || working.value);
@@ -140,6 +154,7 @@ export function useMaterialsPanel() {
     cpRows,
     lambdaRows,
     mechanicsRows,
+    fillerRows,
     importDisabled,
     exportDisabled,
     copyDisabled,

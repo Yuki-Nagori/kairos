@@ -19,12 +19,16 @@ pub fn list_custom_materials(app: AppHandle) -> Vec<Material> {
     read_custom(&app)
 }
 
-/// 从 JSON 文件导入材料：校验、按 id 合并入库，返回合并后的完整材料库。
+/// 从 JSON / CSV 文件导入材料：校验、按 id 合并入库，返回合并后的完整材料库。
 #[tauri::command]
 pub fn import_custom_materials(app: AppHandle, path: String) -> Result<Vec<Material>> {
     let content =
         fs::read_to_string(&path).map_err(|e| KairosError::io(format!("读取材料文件失败：{e}")))?;
-    let incoming = material_service::parse_custom(&content)?;
+    let incoming = if path.to_ascii_lowercase().ends_with(".csv") {
+        material_service::parse_custom_csv(&content)?
+    } else {
+        material_service::parse_custom(&content)?
+    };
     let merged = material_service::merge_custom(read_custom(&app), incoming);
     material_service::write_custom_file(&custom_file(&app)?, &merged)?;
     Ok(merged)

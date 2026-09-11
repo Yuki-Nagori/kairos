@@ -3,6 +3,7 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 
 const PROJECT_FILTER = { name: "Kairos 工程", extensions: ["kairos"] };
 const JSON_FILTER = { name: "JSON", extensions: ["json"] };
+const MATERIALS_FILTER = { name: "材料文件", extensions: ["json", "csv"] };
 
 /** 选择要打开的工程文件，取消返回 null。 */
 export async function pickOpenProjectPath(): Promise<string | null> {
@@ -19,9 +20,9 @@ export async function pickSaveProjectPath(defaultName: string): Promise<string |
   return path ?? null;
 }
 
-/** 选择要导入的 JSON 文件，取消返回 null。 */
-export async function pickOpenJsonPath(): Promise<string | null> {
-  const selection = await open({ multiple: false, filters: [JSON_FILTER] });
+/** 选择材料导入文件（JSON / CSV），取消返回 null。 */
+export async function pickOpenMaterialsPath(): Promise<string | null> {
+  const selection = await open({ multiple: false, filters: [MATERIALS_FILTER] });
   return typeof selection === "string" ? selection : null;
 }
 

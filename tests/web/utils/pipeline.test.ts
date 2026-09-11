@@ -80,6 +80,7 @@ describe("evaluatePipeline", () => {
         specificHeat: [],
         conductivity: [],
         mechanics: null,
+        filler: null,
         dataNote: "",
       },
     ];

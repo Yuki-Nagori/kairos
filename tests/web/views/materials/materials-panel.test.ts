@@ -15,7 +15,7 @@ import {
   importCustomMaterials,
   upsertCustomMaterial,
 } from "../../../../src-web/api/materials";
-import { pickExportJsonPath, pickOpenJsonPath } from "../../../../src-web/api/dialog";
+import { pickExportJsonPath, pickOpenMaterialsPath } from "../../../../src-web/api/dialog";
 import type { Material, Project, Study } from "../../../../src-web/types";
 
 vi.mock("../../../../src-web/api/materials", () => ({
@@ -29,7 +29,7 @@ vi.mock("../../../../src-web/api/materials", () => ({
 vi.mock("../../../../src-web/api/dialog", () => ({
   pickOpenProjectPath: vi.fn(),
   pickSaveProjectPath: vi.fn(),
-  pickOpenJsonPath: vi.fn(),
+  pickOpenMaterialsPath: vi.fn(),
   pickExportJsonPath: vi.fn(),
   pickStlPath: vi.fn(),
 }));
@@ -54,6 +54,7 @@ function materialFixture(overrides: Partial<Material> = {}): Material {
     specificHeat: [[300, 1900]],
     conductivity: [[300, 0.22]],
     mechanics: { elasticModulus: 1.5e9, poissonRatio: 0.35 },
+    filler: null,
     dataNote: "示例数据，仅用于演示。",
     ...overrides,
   };
@@ -187,6 +188,32 @@ describe("MaterialsPanel", () => {
     expect(wrapper.text()).toContain("PP-副本（示例数据）");
   });
 
+  it("选中含填料牌号：渲染纤维 / 填料参数表", async () => {
+    const fillerFixture = materialFixture({
+      id: "mat-gf",
+      name: "PA66-GF30",
+      filler: {
+        kind: "玻纤",
+        weightFraction: 0.3,
+        aspectRatio: 20,
+        note: "短切玻纤",
+      },
+    });
+    const materials = useMaterialsStore();
+    materials.materials = { builtin: [fillerFixture], custom: [] };
+    const wrapper = mount(MaterialsPanel, { global: { plugins: [pinia] } });
+    await wrapper.vm.$nextTick();
+
+    const fillerRows = useMaterialsPanel().fillerRows;
+    expect(fillerRows.value).toEqual([
+      ["类型", "玻纤"],
+      ["质量分数", "30.0 %"],
+      ["长径比", "20"],
+      ["备注", "短切玻纤"],
+    ]);
+    expect(wrapper.text()).toContain("纤维 / 填料");
+  });
+
   it("复制为自定义：新 id 与「副本」后缀经 upsert 落库", async () => {
     const materials = useMaterialsStore();
     materials.materials = { builtin: [materialFixture()], custom: [] };
@@ -221,14 +248,14 @@ describe("MaterialsPanel", () => {
     const wrapper = mount(MaterialsPanel, { global: { plugins: [pinia] } });
 
     // 取消：不触发 IPC。
-    vi.mocked(pickOpenJsonPath).mockResolvedValue(null);
+    vi.mocked(pickOpenMaterialsPath).mockResolvedValue(null);
     await findButton(wrapper, "导入 JSON").trigger("click");
     await flushPromises();
     expect(importCustomMaterials).not.toHaveBeenCalled();
 
     // 选中自定义材料后再导入：同 id 的新对象替换清单，回退 watch 不改写选中 id。
     await listButtons(wrapper)[1]?.trigger("click");
-    vi.mocked(pickOpenJsonPath).mockResolvedValue("/库/材料.json");
+    vi.mocked(pickOpenMaterialsPath).mockResolvedValue("/库/材料.json");
     vi.mocked(importCustomMaterials).mockResolvedValue([
       materialFixture({ id: "custom-1", name: "PP-副本-新" }),
     ]);

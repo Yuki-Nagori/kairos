@@ -51,6 +51,20 @@ pub struct Mechanics {
     pub poisson_ratio: f64,
 }
 
+/// 纤维 / 填料参数组（玻纤、滑石粉等增强 / 填充体系；无填料牌号缺省）。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FillerGroup {
+    /// 填料类型，如「玻纤」「碳纤维」「滑石粉」。
+    pub kind: String,
+    /// 质量分数 (0, 1]。
+    pub weight_fraction: f64,
+    /// 平均长径比（非纤维填料填 1）。
+    pub aspect_ratio: f64,
+    /// 数据来源或工艺提示。
+    pub note: String,
+}
+
 /// 一个材料牌号的完整物理描述。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -69,6 +83,8 @@ pub struct Material {
     pub conductivity: PropertyTable,
     /// 力学参数（远期翘曲/结构分析使用）。
     pub mechanics: Option<Mechanics>,
+    /// 纤维 / 填料参数组（无填料牌号为 null）。
+    pub filler: Option<FillerGroup>,
     /// 数据来源与免责声明（内置示例材料必须标注）。
     pub data_note: String,
 }

@@ -79,6 +79,18 @@ export interface Mechanics {
   poissonRatio: number;
 }
 
+/** 对应 `kairos-core::models::material::FillerGroup`（纤维 / 填料参数组）。 */
+export interface FillerGroup {
+  /** 填料类型，如「玻纤」「碳纤维」「滑石粉」。 */
+  kind: string;
+  /** 质量分数 (0, 1]。 */
+  weightFraction: number;
+  /** 平均长径比（非纤维填料填 1）。 */
+  aspectRatio: number;
+  /** 数据来源或工艺提示。 */
+  note: string;
+}
+
 /** 对应 `kairos-core::models::material::Material`。 */
 export interface Material {
   id: string;
@@ -90,6 +102,8 @@ export interface Material {
   specificHeat: PropertyTable;
   conductivity: PropertyTable;
   mechanics: Mechanics | null;
+  /** 纤维 / 填料参数组（无填料牌号为 null）。 */
+  filler: FillerGroup | null;
   dataNote: string;
 }
 

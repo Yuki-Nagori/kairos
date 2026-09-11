@@ -109,6 +109,7 @@ describe("project store", () => {
           specificHeat: [[300, 1900]],
           conductivity: [[300, 0.22]],
           mechanics: { elasticModulus: 1.5e9, poissonRatio: 0.35 },
+          filler: null,
           dataNote: "示例数据",
         },
       ]);
