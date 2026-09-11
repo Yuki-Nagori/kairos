@@ -220,3 +220,4 @@
 - **03:10** feat(ui): B3-C7 探针时间曲线与时间轴联动（T46）——results store 增 probeTimeSeries/loadProbeTimeSeries（遍历目录时间步采样各探针值、越界回退 0、结束恢复原时间步、移除探针同步过滤）+ XY 图表「空间分布/探针时间曲线」模式与「跳转到时间步」选择器（图表→视口经既有 loadedField watch 联动）；T21 八项清单评审入 ai-docs/reviews/T46-review.md
 - **03:30** feat(ui): B3-C7 视口完整剖切（T47）——剖切条件泛化为 dot(p,normal)>offset 任意轴平面（法向 ±单位轴 + 偏移）+ setClipPlane/getMeshBounds + math.clipPlaneFromFraction 纯函数（分数映射/反向/夹取，单测覆盖）+ 视口控制条轴选择/位置滑块/反向开关；T21 八项清单评审入 ai-docs/reviews/T47-review.md
 - **04:00** feat(ui)+docs: B3-C7 渲染后端决策落地（T39）——自研 WebGPU 后端 POC（render/webgpu：最小 d.ts + WGSL 云图/剖切/线段 + 渲染器，与 WebGL2 同一 RenderMesh/场值/剖切语义）+ render/backend 后端工厂（真实适配器探测优先 WebGPU、回退 WebGL2，面板经 ViewportBackend 接口无感）+ 确定性 1M 三角形资产生成器（单测锁确定性）与基准入口（上传/首帧/中位与 P05 FPS/剖切延迟）；VTK.js 对照 POC 取消（自研已满足前提）；三端真机验收回流 T48；评审入 ai-docs/reviews/T39-review.md
+- **04:10** docs(arch): B3 后处理阶段校准——C7 五项中 XY 曲线/派生算子/探针拾取/完整剖切转正，剩余体渲染、多视口联动、大结果数据链与三端真机数字（T48）；里程碑对照 B3 ~20% → ~50%
