@@ -1,9 +1,12 @@
 # Kairos 任务索引
 
-- 已完成任务文件名以 `-done` 结尾，评审报告见 `ai-docs/reviews/`，时间线见 `ai-docs/timeline.md`；
-- 任务文件只写任务本身（目标 / 范围 / 非目标 / 交付物 / 验收标准），实现方案在开工时再定。
+- `-done` 表示该任务已有实现提交，**不等同于所有验收标准已经闭环**。功能、集成、
+  性能与外部阻塞的权威状态见 [architecture-status.md](../architecture-status.md)；评审
+  报告见 `ai-docs/reviews/`，时间线见 `ai-docs/timeline.md`。
+- 任务文件写目标、范围与验收标准；其中的“当前实现边界”用于防止文件名与实际能力
+  脱节。实现方案在开工时再定。
 
-## 已完成任务（M0–M5）
+## 已实现任务（M0–M5；验收状态另见完成度清单）
 
 | ID  | 文件                                                                 | 任务                   |
 | --- | -------------------------------------------------------------------- | ---------------------- |
@@ -28,45 +31,49 @@
 | T19 | [T19-gpu-infrastructure-done.md](T19-gpu-infrastructure-done.md)     | GPU 计算基础设施       |
 | T20 | [T20-gpu-postprocessing-done.md](T20-gpu-postprocessing-done.md)     | GPU 加速后处理算子     |
 
-## 后续完成任务
+## 后续增量实现（部分任务仍待验收）
 
-| ID  | 文件                                                             | 任务                            |
-| --- | ---------------------------------------------------------------- | ------------------------------- |
-| T22 | [T22-gmsh-evaluation-done.md](T22-gmsh-evaluation-done.md)       | Gmsh 网格引擎评估与解析原型     |
-| T23 | [T23-time-animation-done.md](T23-time-animation-done.md)         | 体素→表面场映射与时间步动画通道 |
-| T26 | [T26-cae-workbench-ui-done.md](T26-cae-workbench-ui-done.md)     | Moldflow 风格工作台 UI + 主题   |
-| T27 | [T27-component-download-done.md](T27-component-download-done.md) | 应用内组件下载                  |
-| T24 | [T24-pinn-research-done.md](T24-pinn-research-done.md)           | PINN 熔融前沿预测研究 spike     |
-| T25 | [T25-workflow-api-study-done.md](T25-workflow-api-study-done.md) | 第三方工作流 API 分层概念研究   |
-| T28 | [T28-repo-structure-done.md](T28-repo-structure-done.md)         | 仓库结构优化（state/WGSL/面板） |
+| ID  | 文件                                                                           | 任务                            |
+| --- | ------------------------------------------------------------------------------ | ------------------------------- |
+| T22 | [T22-gmsh-evaluation-done.md](T22-gmsh-evaluation-done.md)                     | Gmsh 网格引擎评估与解析原型     |
+| T23 | [T23-time-animation-done.md](T23-time-animation-done.md)                       | 体素→表面场映射与时间步动画通道 |
+| T26 | [T26-cae-workbench-ui-done.md](T26-cae-workbench-ui-done.md)                   | Moldflow 风格工作台 UI + 主题   |
+| T27 | [T27-component-download-done.md](T27-component-download-done.md)               | 应用内组件下载                  |
+| T24 | [T24-pinn-research-done.md](T24-pinn-research-done.md)                         | PINN 熔融前沿预测研究 spike     |
+| T25 | [T25-workflow-api-study-done.md](T25-workflow-api-study-done.md)               | 第三方工作流 API 分层概念研究   |
+| T28 | [T28-repo-structure-done.md](T28-repo-structure-done.md)                       | 仓库结构优化（state/WGSL/面板） |
+| T30 | [T30-gmsh-integration-done.md](T30-gmsh-integration-done.md)                   | Gmsh 网格引擎正式集成           |
+| T31 | [T31-derived-fields-done.md](T31-derived-fields-done.md)                       | 派生结果算子（基础实现）        |
+| T32 | [T32-headless-cli-done.md](T32-headless-cli-done.md)                           | 无头 CLI 与批处理入口           |
+| T34 | [T34-openfoam14-fork-entry-done.md](T34-openfoam14-fork-entry-done.md)         | OpenFOAM-14 求解入口收口        |
+| T35 | [T35-vm-adapter-done.md](T35-vm-adapter-done.md)                               | 虚拟机适配层                    |
+| T36 | [T36-contract-case-and-vm-exec-done.md](T36-contract-case-and-vm-exec-done.md) | case 契约与 VM 执行链路         |
+| T37 | [T37-vue3-migration.md](T37-vue3-migration.md)                                 | Vue 3 迁移                      |
+| T38 | [T38-frontend-architecture.md](T38-frontend-architecture.md)                   | 前端架构重构                    |
 
 > T26/T27 落地后的增量打磨（系统窗口按钮、原生应用菜单、主题注入统一、
 > 品牌图标、emoji 清理、启动窗口位置）见 `ai-docs/timeline.md` 对应条目，
 > 不单独立任务。
 
-## 待开工任务
+## 待开工 / 待验收任务
 
-| ID  | 文件                                                                           | 任务                                                          | 依赖     |
-| --- | ------------------------------------------------------------------------------ | ------------------------------------------------------------- | -------- |
-| T21 | [T21-milestone-review.md](T21-milestone-review.md)                             | 里程碑评审循环（随里程碑触发）                                | 随里程碑 |
-| T29 | [T29-real-solve-e2e.md](T29-real-solve-e2e.md)                                 | 真实求解端到端验证（OpenFOAM）                                | T09–T11  |
-| T30 | [T30-gmsh-integration.md](T30-gmsh-integration.md)                             | Gmsh 网格引擎正式集成                                         | T22      |
-| T31 | [T31-derived-fields.md](T31-derived-fields.md)                                 | 派生结果算子（对标 data_transform）                           | T19/T20  |
-| T32 | [T32-headless-cli.md](T32-headless-cli.md)                                     | 无头 CLI 与批处理入口（门面式）                               | T25 结论 |
-| T33 | [T33-updater-hardening.md](T33-updater-hardening.md)                           | 发布加固：updater + CSP 收窄                                  | T18      |
-| T34 | [T34-openfoam14-fork-entry.md](T34-openfoam14-fork-entry.md)                   | 求解入口收口：移除 openInjMoldSim，预留 OpenFOAM-14 fork 对接 | T09–T12  |
-| T35 | [T35-vm-adapter.md](T35-vm-adapter.md)                                         | 虚拟机适配层（Multipass/WSL2 一键安装 + 内嵌 Shell）          | T34      |
-| T36 | [T36-contract-case-and-vm-exec-done.md](T36-contract-case-and-vm-exec-done.md) | moldingFoam 契约 case 对接 + bundle 进虚拟机执行              | T34/T35  |
+| ID  | 文件                                                       | 任务                           | 依赖     |
+| --- | ---------------------------------------------------------- | ------------------------------ | -------- |
+| T21 | [T21-milestone-review.md](T21-milestone-review.md)         | 里程碑评审循环（随里程碑触发） | 随里程碑 |
+| T29 | [T29-real-solve-e2e.md](T29-real-solve-e2e.md)             | 真实求解端到端验证（OpenFOAM） | T09–T11  |
+| T33 | [T33-updater-hardening.md](T33-updater-hardening.md)       | 发布加固：updater + CSP 收窄   | T18      |
+| T39 | [T39-postprocess-renderer.md](T39-postprocess-renderer.md) | 后处理渲染后端 POC 与技术决策  | T13/T14  |
 
-> 上一批任务（T24/T25/T28）于 2026-09-08 完成；本批来源：T25 研究采纳建议
-> （CLI 门面 / 批处理编排 / 派生算子）、T22 后续（Gmsh 集成）与 M4 遗留
-> （真实求解验证）。T29 优先级最高——求解集成从未对接真实求解器；
-> T34 的移除部分落地后，T29 的目标环境改为 OpenFOAM 14（含 fork 对接）。
+> T29 优先级最高：真实求解仍被 moldingFoam bundle 的 SIGILL 阻塞。T13/T14/T20/
+> T23/T31 的实现已经存在，但大结果、GPU 管线与性能验收尚未闭环，不能推进为
+> “后处理已完成”。T39 在不引入生产 VTK.js 依赖的前提下，为渲染后端保留可验证的
+> 决策出口。
 
 ## 全局原则（不变）
 
 - **性能是一等约束**：新任务带明确性能验收标准，预算源自 T01；
 - **GPL 隔离红线**：GPL 代码只走子进程 + 文件交换；
-- **GPU 统一走 wgpu**：跨 NVIDIA / AMD / Intel / Apple，无 GPU 环境回退 CPU；
+- **GPU 统一走 wgpu**：跨 NVIDIA / AMD / Intel / Apple；后处理以硬件 GPU 为前提，
+  无可用 GPU 时明确显示不受支持，CPU 仅作正确性基准；
 - 领域代码进 `src-crates/kairos-core`，适配进 `src-tauri`，UI 进 `src-web`；
-- 任务完成即改名加 `-done` 并同步本索引。
+- 任务有实现提交才可加 `-done`；验收是否闭环仍须同步完成度清单和性能证据。

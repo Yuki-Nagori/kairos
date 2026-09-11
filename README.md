@@ -2,7 +2,7 @@
 
 注塑成型 CAE 仿真软件，对标行业领先的同类产品：覆盖**前处理（制品/模具建模与网格）→ 求解（填充、保压、冷却、翘曲）→ 后处理（结果可视化与报告）**的完整仿真工作流。
 
-当前处于框架搭建阶段：技术栈与工程化设施全部就位，项目管理、材料数据库、STL 几何导入（健康检查）、3D 体积网格生成（体素 + 5-四面体保形分解）、浇口流道与冷却水路、成型工艺设置、OpenFOAM 原生求解集成（foamRun 模块化求解器，作业调度 + 进度流）、结果读取与统计、3D 视口（WebGL2）、XY 曲线与探针、报告导出、GPU 探测与算子（wgpu 跨厂商）已落地。
+当前处于框架搭建阶段：技术栈与工程化设施全部就位，项目管理、材料数据库、STL 几何导入（健康检查）、3D 体积网格生成（体素 + 5-四面体保形分解）、浇口流道与冷却水路、成型工艺设置、OpenFOAM 原生求解集成（foamRun 模块化求解器，作业调度 + 进度流）、结果读取与统计、3D 视口（WebGL2 兼容后端）、XY 曲线与探针、报告导出已落地；GPU 探测与算子（wgpu 跨厂商）已有基础实现。后处理以硬件加速 GPU 为运行前提（无可用 GPU 时明确提示不受支持，不作 CPU 回退）；大结果数据链、WebGPU 主路径与性能验收仍在推进，权威状态见 [ai-docs/architecture-status.md](ai-docs/architecture-status.md)。
 
 技术栈：Tauri 2 + Bun + TypeScript + Vue 3（Composition API + Pinia）+ Vite + Tailwind CSS v4；Rust 侧为 Cargo 工作区（领域层 + Tauri 适配层）。架构与开发约定见 [AGENTS.md](AGENTS.md) 及 [ai-docs/](ai-docs/)。
 

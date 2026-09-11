@@ -22,7 +22,7 @@ Kairos：注塑成型 CAE 仿真软件，对标行业领先的同类产品（自
 - **DTO 双端镜像**：Rust `models/` ↔ `src-web/types/index.ts`，任何改动必须同步两处并让契约测试（`src-crates/kairos-core/tests/contract.rs`）通过。
 - **线程模型**：同步 Tauri 命令跑在主线程，重计算必须异步 / 另起线程；进度回传用 `tauri::ipc::Channel`；大体积数据用 `tauri::ipc::Response`。
 - **覆盖率门槛**：`kairos-core` 行覆盖 ≥ 98%（`cargo llvm-cov -p kairos-core --lib --summary-only --fail-under-lines 98`）、前端逻辑层全量 100%（`utils/` + `stores/` + `composables/` + 各 `use*.ts`，vitest coverage thresholds，行/函数/语句/分支全 100）；api / render 薄适配层不计入门槛。
-- **GPU 计算**：统一经 wgpu 抽象层覆盖 NVIDIA / AMD / Intel / Apple（Vulkan/DX12/Metal），禁止引入 CUDA 等单厂商 SDK；无 GPU 环境必须自动回退 CPU（T19/T20）。
+- **GPU 计算**：统一经 wgpu 抽象层覆盖 NVIDIA / AMD / Intel / Apple（Vulkan/DX12/Metal），禁止引入 CUDA 等单厂商 SDK；后处理以硬件加速 GPU 为运行前提，不提供 CPU 运行时回退。CPU 实现仅可作为正确性基准与测试参考；缺少可用 GPU 时必须明确提示该能力不受支持。
 - **锁文件**：根 `Cargo.lock` 与 `bun.lock` 必须提交、保持同步（整个工作区只有根目录这一份 Cargo.lock）。
 - **提交前门禁**：仓库根 `bun run verify`（typecheck + clippy -D warnings + format + test + knip，前端与 Rust 全量），通过才算完成。
 - **时间线**：每完成一个任务，在 [ai-docs/timeline.md](ai-docs/timeline.md) 末尾追加一行（时间 + 阶段 + 内容），**一行对应一个 commit**，随该任务的提交一并入库。

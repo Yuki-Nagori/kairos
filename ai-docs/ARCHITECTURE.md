@@ -14,7 +14,7 @@ flowchart TB
         ST["stores<br>按领域 defineStore（Pinia）：state + getters + actions"]
         API["api<br>Tauri 命令的领域化封装，写明返回类型"]
         UT["utils<br>ipc 网关（运行时探测、错误契约还原）、图表 / 统计等纯函数"]
-        R["render<br>WebGL2 视口渲染（图形专用层，与 utils 同属纯 TS 底座）"]
+        R["render<br>自研视口：当前 WebGL2；目标 WebGPU 主路径<br>（图形专用层，与 utils 同属纯 TS 底座）"]
         VC --> ST
         ST --> API
         API --> UT
@@ -175,7 +175,34 @@ sequenceDiagram
 - `bun.lock` 与根 `Cargo.lock` 是提交入库的文本锁文件，勿加入 ignore；
 - husky pre-commit 在每次 `git commit` 时自动执行 `bun run verify`，克隆后 `bun install` 经 `prepare` 脚本自动初始化钩子。
 
-## 7. 参考文献
+## 7. 后处理渲染决策
+
+### 运行前提与后端边界
+
+- 后处理是 **GPU 必需** 能力：受支持环境必须有可用的硬件加速 GPU。没有可用
+  GPU 时，应用必须在进入后处理前显示明确的不支持原因；不提供 CPU 渲染或 CPU
+  算子回退。CPU 实现只能用于单元测试、数值对拍和离线诊断。
+- 前端渲染后端统一抽象为 `RenderBackend`。现有实现是 WebGL2；目标是自研
+  WebGPU 主路径。WebGL2 仅可作为仍使用硬件 GPU 的兼容后端，不能被表述为
+  CPU 降级或性能验收替代。
+- Rust 的 `wgpu::Device` 与 WebView 中 JavaScript 的 WebGPU device 属于不同
+  运行时和资源上下文，**不能共享同一个 device、buffer 或纹理**。两侧只通过
+  明确的数据契约和二进制 IPC 交换数据；不得再写“渲染与 Rust 计算共享同一
+  wgpu device”的目标。
+
+### VTK.js 的位置
+
+VTK.js 不是 Kairos 的领域数据模型或主架构依赖。它可以在独立 POC 中评估其
+表面云图、裁剪、拾取和多视图能力；POC 不得将 `vtk*` 类型传入 `kairos-core`、
+DTO、store 或项目文件。只有在 Tauri 三端实测满足性能、内存、包体和交互验收后，
+才可作为可替换的前端 `RenderBackend` 实现引入。
+
+当前主路径仍是自研渲染：它能直接表达 Kairos 的四面体单元、cell/point 场关联和
+结果流式策略。VTK.js 的体渲染输入是规则 `ImageData`，不能直接替代非结构四面体
+结果的体渲染；这类能力需要独立的重采样、误差控制和缓存设计。技术取舍与 POC
+验收标准见 [T39](tasks/T39-postprocess-renderer.md)。
+
+## 8. 参考文献
 
 - Tauri 官方：Calling Rust from the Frontend（命令、线程模型、错误处理、State）— <https://v2.tauri.app/develop/calling-rust/>
 - Tauri 官方：Calling the Frontend from Rust（Channel 流式回传）— <https://v2.tauri.app/develop/calling-frontend/>
