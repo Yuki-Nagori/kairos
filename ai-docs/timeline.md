@@ -225,3 +225,4 @@
 - **05:00** feat(core+ui): B3-C7 三维体渲染 POC（T50）——core 体数据重采样（四面体包围盒栅格化 + 重心坐标判定 → VolumeFieldGrid 结构化体素场，covered_ratio 诊断，5 单测）+ render/webgpu 光线步进管线（96 步前向合成、三线性采样、冷热迁移函数、轨道相机）+ 128³ 确定性球体密度基准入口；T21 八项清单评审入 ai-docs/reviews/T50-review.md
 - **05:20** feat(core+ui): B3-C7 大结果数据链第一步（T51）——field_binary 编解码（magic+meta JSON+f64 LE 值区，魔数/截断/数量校验）+ FieldCache FIFO 有界缓存（容量 1..=64，同键覆盖去重）+ load_result_field 缓存命中跳过磁盘 + load_result_field_binary 命令（tauri ipc Response 原始字节通道）+ 前端 decodeFieldBinary 解析器（DataView 小端）与全套单测；T21 八项清单评审入 ai-docs/reviews/T51-review.md
 - **05:40** docs(arch): B3 状态终校准——C7 记账：多视口联动/剖面切片 [x]（T49/T47）、三维体渲染 △ POC（T50）、大结果二进制通道+缓存淘汰 [x]（T51）、剩余懒加载/持久关联/迁移函数 UI/三端真机数字（T48）；B3 ~70%
+- **06:00** chore(build): Dev 构建优化——依赖 profile 降为行表调试信息 + O1（app crate 全量重编译 20.4s → 17.7s，链接输入变小；wgpu/naga 在 dev 下运行不再 O0 卡顿）；行覆盖率只统计 kairos-core（保持 debug=2），verify 全绿不受影响

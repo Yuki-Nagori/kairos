@@ -25,6 +25,14 @@ edition = "2024"
 serde = { version = "1", features = ["derive"] }
 tauri = { version = "2", features = [] }
 
+# Dev 构建：依赖用行表级调试信息 + O1——链接输入显著变小（app crate 全量
+# 重编译更快），wgpu / naga 等在 O0 下运行也明显卡顿；工作区 crate 保持
+# 默认 debug=2，llvm-cov 行覆盖（coverage:rust 只统计 kairos-core）不受影响。
+# 注意：改动本节会使依赖缓存整体失效，下一次构建为一次性的全量重编译。
+[profile.dev.package."*"]
+opt-level = 1
+debug = "line-tables-only"
+
 # release 配置只能定义在工作区根目录（成员里的会被忽略）。
 [profile.release]
 codegen-units = 1
