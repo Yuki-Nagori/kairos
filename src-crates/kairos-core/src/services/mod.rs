@@ -14,6 +14,7 @@ pub mod project;
 pub mod repair;
 pub mod results;
 pub mod runners;
+pub mod step;
 pub mod system;
 pub mod vm;
 

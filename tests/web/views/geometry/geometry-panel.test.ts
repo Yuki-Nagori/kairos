@@ -14,7 +14,7 @@ import {
   importStl,
   removeGeometry,
 } from "../../../../src-web/api/geometry";
-import { pickStlPath } from "../../../../src-web/api/dialog";
+import { pickOpenGeometryPath } from "../../../../src-web/api/dialog";
 import type { GeometrySummary, MeshingReport } from "../../../../src-web/types";
 
 vi.mock("../../../../src-web/api/geometry", () => ({
@@ -30,7 +30,7 @@ vi.mock("../../../../src-web/api/dialog", () => ({
   pickSaveProjectPath: vi.fn(),
   pickOpenJsonPath: vi.fn(),
   pickExportJsonPath: vi.fn(),
-  pickStlPath: vi.fn(),
+  pickOpenGeometryPath: vi.fn(),
 }));
 
 function geometryFixture(overrides: Partial<GeometrySummary> = {}): GeometrySummary {
@@ -117,12 +117,12 @@ describe("GeometryPanel", () => {
     const geometry = useGeometryStore();
     const wrapper = mount(GeometryPanel, { global: { plugins: [pinia] } });
 
-    vi.mocked(pickStlPath).mockResolvedValue(null);
+    vi.mocked(pickOpenGeometryPath).mockResolvedValue(null);
     await findButton(wrapper, "导入 STL").trigger("click");
     await flushPromises();
     expect(importStl).not.toHaveBeenCalled();
 
-    vi.mocked(pickStlPath).mockResolvedValue("/模型/demo.stl");
+    vi.mocked(pickOpenGeometryPath).mockResolvedValue("/模型/demo.stl");
     await findButton(wrapper, "导入 STL").trigger("click");
     await flushPromises();
     expect(importStl).toHaveBeenCalledWith("/模型/demo.stl");

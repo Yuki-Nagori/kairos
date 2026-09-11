@@ -13,6 +13,7 @@ use kairos_core::services::geometry as geometry_service;
 use kairos_core::services::meshing::{self, VolumeMeshParams};
 use kairos_core::services::project::new_id;
 use kairos_core::services::repair;
+use kairos_core::services::step;
 use tauri::State;
 
 /// 单个导入几何的会话缓存（表面网格 + 生成的体积网格）。
@@ -99,6 +100,32 @@ pub async fn repair_geometry(
         let _ = report;
         summary
     })
+}
+
+/// 导入 STEP 镶嵌网格（AP242 TRIANGULATED_FACE_SET / POLY_LOOP 子集）。
+#[tauri::command]
+pub async fn import_step(store: State<'_, GeometryStore>, path: String) -> Result<GeometrySummary> {
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let mesh = step::parse_step_file(Path::new(&path))?;
+        let file_name = Path::new(&path)
+            .file_name()
+            .map(|name| name.to_string_lossy().to_string())
+            .unwrap_or_else(|| path.clone());
+        let geometry_id = new_id("geom");
+        let summary = geometry_service::summarize(geometry_id.clone(), file_name.clone(), &mesh);
+        store.lock().insert(
+            geometry_id,
+            MeshSession {
+                mesh,
+                file_name,
+                volume: None,
+            },
+        );
+        Ok(summary)
+    })
+    .await
+    .map_err(|e| KairosError::internal(format!("导入任务失败：{e}")))?
 }
 
 /// 对已导入几何生成 3D 体积网格，返回统计报告（网格保留在会话缓存中）。

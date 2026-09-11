@@ -5,10 +5,11 @@ import {
   generateVolumeMesh,
   importSampleBox,
   importStl,
+  importStep as apiImportStep,
   removeGeometry,
   repairGeometry as apiRepairGeometry,
 } from "../api/geometry";
-import { pickStlPath } from "../api/dialog";
+import { pickOpenGeometryPath } from "../api/dialog";
 import type { GeometrySummary, MeshingReport } from "../types";
 import { useAppStore } from "./app";
 
@@ -23,13 +24,17 @@ export const useGeometryStore = defineStore("geometry", {
     /** 导入 STL：弹出文件对话框，解析检查后入列表。 */
     async importGeometry(): Promise<void> {
       const app = useAppStore();
-      const path = await pickStlPath();
+      const path = await pickOpenGeometryPath();
       if (!path) {
         return;
       }
       app.beginBusy("正在导入几何…");
       try {
-        const summary = await importStl(path);
+        const extension = path.split(".").pop()?.toLowerCase();
+        const summary =
+          extension === "step" || extension === "stp"
+            ? await apiImportStep(path)
+            : await importStl(path);
         this.geometries = [...this.geometries, summary];
       } catch (error) {
         app.setError(error);

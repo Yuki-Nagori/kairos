@@ -7,13 +7,15 @@ import {
   generateVolumeMesh,
   importSampleBox,
   importStl,
+  importStep,
   removeGeometry,
 } from "../../../src-web/api/geometry";
-import { pickStlPath } from "../../../src-web/api/dialog";
+import { pickOpenGeometryPath } from "../../../src-web/api/dialog";
 import type { GeometrySummary, MeshingReport } from "../../../src-web/types";
 
 vi.mock("../../../src-web/api/geometry", () => ({
   importStl: vi.fn(),
+  importStep: vi.fn(),
   removeGeometry: vi.fn(),
   generateVolumeMesh: vi.fn(),
   importSampleBox: vi.fn(),
@@ -24,7 +26,7 @@ vi.mock("../../../src-web/api/dialog", () => ({
   pickSaveProjectPath: vi.fn(),
   pickOpenJsonPath: vi.fn(),
   pickExportJsonPath: vi.fn(),
-  pickStlPath: vi.fn(),
+  pickOpenGeometryPath: vi.fn(),
 }));
 
 function makeSummary(id = "g-1"): GeometrySummary {
@@ -64,7 +66,7 @@ describe("geometry store", () => {
 
   describe("importGeometry", () => {
     it("does nothing when the dialog is cancelled", async () => {
-      vi.mocked(pickStlPath).mockResolvedValue(null);
+      vi.mocked(pickOpenGeometryPath).mockResolvedValue(null);
 
       const app = useAppStore();
       const geometry = useGeometryStore();
@@ -76,7 +78,7 @@ describe("geometry store", () => {
     });
 
     it("appends the imported summary and clears busy", async () => {
-      vi.mocked(pickStlPath).mockResolvedValue("/models/box.stl");
+      vi.mocked(pickOpenGeometryPath).mockResolvedValue("/models/box.stl");
       const summary = makeSummary();
       vi.mocked(importStl).mockResolvedValue(summary);
 
@@ -96,8 +98,21 @@ describe("geometry store", () => {
       expect(app.error).toBeNull();
     });
 
+    it("STEP 文件分派到镶嵌导入", async () => {
+      vi.mocked(pickOpenGeometryPath).mockResolvedValue("/models/壳体.step");
+      const summary = makeSummary();
+      vi.mocked(importStep).mockResolvedValue(summary);
+
+      const geometry = useGeometryStore();
+      await geometry.importGeometry();
+
+      expect(importStep).toHaveBeenCalledWith("/models/壳体.step");
+      expect(importStl).not.toHaveBeenCalled();
+      expect(geometry.geometries).toEqual([summary]);
+    });
+
     it("reports import failures and clears busy", async () => {
-      vi.mocked(pickStlPath).mockResolvedValue("/models/broken.stl");
+      vi.mocked(pickOpenGeometryPath).mockResolvedValue("/models/broken.stl");
       vi.mocked(importStl).mockRejectedValue(new Error("STL 解析失败"));
 
       const app = useAppStore();

@@ -196,3 +196,4 @@
 - **11:20** refactor(core): 移除工程文件 schema 迁移链（v1→v4 步进），parse 仅接受当前版本——过旧 / 过新版本均明确拒绝并提示；单人早期项目无 v1~v3 存量文件，迁移属于无用兼容负担
 - **11:30** feat(core+ui): B1-C3 牌号数据集扩充与纤维/填料参数组——内置库新增 PP-CP / PA66 / POM / PMMA / PA66-GF30 五个参考牌号；Material 新增 FillerGroup 可选参数组（类型/质量分数/长径比/备注）；CSV 批量导入（约定表头 21 列，比热导热分号表，filler 列）；材料面板详情区渲染填料表
 - **11:50** feat(core+ui): 几何修复工具（B1-C1 模型修复）——repair_mesh 顶点焊接/退化面移除/孔洞填充/法向 BFS 一致化/自交检测 + repair_geometry 命令 + 几何面板修复按钮（不健康几何可用，修复后作废体积网格）
+- **12:10** feat(core+ui): B1-C1 STEP 镶嵌网格导入（AP242 TRIANGULATED_FACE_SET / POLY_LOOP 子集解析器 + import_step 命令 + 导入按扩展名分发）；几何修复工具落地（repair_mesh：焊接/去退化/填孔/法向 BFS 一致化/自交检测 + 面板修复按钮）；architecture-status 刷新
