@@ -1175,6 +1175,27 @@ mod tests {
             .fold(0.0_f64, f64::max);
         // 半径 1.2 + 单元对角线量级（补齐最近面）以内
         assert!(max_distance < 2.5, "入口面离浇口过远：{max_distance}");
+        // 等效流通面积不低于 πr²（消融「按距离补足」时该断言先红）
+        let inlet_area: f64 = (gated_inlet.start..gated_inlet.start + gated_inlet.count)
+            .map(|index| {
+                let face = faces[index];
+                let (a, b, c) = (points[face[0]], points[face[1]], points[face[2]]);
+                let (u, v) = (
+                    [b[0] - a[0], b[1] - a[1], b[2] - a[2]],
+                    [c[0] - a[0], c[1] - a[1], c[2] - a[2]],
+                );
+                let cross = [
+                    u[1] * v[2] - u[2] * v[1],
+                    u[2] * v[0] - u[0] * v[2],
+                    u[0] * v[1] - u[1] * v[0],
+                ];
+                (cross[0] * cross[0] + cross[1] * cross[1] + cross[2] * cross[2]).sqrt() / 2.0
+            })
+            .sum();
+        assert!(
+            inlet_area >= std::f64::consts::PI * gate.radius_mm * gate.radius_mm,
+            "入口等效面积 {inlet_area} 小于 πr²"
+        );
 
         std::fs::remove_dir_all(&dir).ok();
     }
