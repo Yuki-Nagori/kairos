@@ -60,9 +60,9 @@
 | T47 | [T47-full-clipping-done.md](T47-full-clipping-done.md)                         | 视口完整剖切（三轴平面）          |
 | T49 | [T49-multi-viewport-done.md](T49-multi-viewport-done.md)                       | 多视口联动（布局/相机/时间轴）    |
 | T50 | [T50-volume-rendering-poc-done.md](T50-volume-rendering-poc-done.md)           | 三维体渲染 POC（重采样+光线步进） |
-| T45 | [T45-viewport-picking-done.md](T45-viewport-picking-done.md)                   | 视口空间拾取与探针场关联          |
-| T46 | [T46-probe-time-series-done.md](T46-probe-time-series-done.md)                 | 探针时间曲线与时间轴联动          |
-| T47 | [T47-full-clipping-done.md](T47-full-clipping-done.md)                         | 视口完整剖切（三轴平面）          |
+| T51 | [T51-result-binary-chain-done.md](T51-result-binary-chain-done.md)             | 大结果二进制通道 + 有界缓存       |
+| T52 | [T52-report-content-done.md](T52-report-content-done.md)                       | 分析报告内容增强（几何/探针表）   |
+| T53 | [T53-report-template-done.md](T53-report-template-done.md)                     | 模板化自定义报告                  |
 
 > T26/T27 落地后的增量打磨（系统窗口按钮、原生应用菜单、主题注入统一、
 > 品牌图标、emoji 清理、启动窗口位置）见 `ai-docs/timeline.md` 对应条目，

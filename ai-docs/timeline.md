@@ -1,6 +1,7 @@
 # 开发时间线
 
-按 git 提交历史记录 Kairos 的开发过程。
+按 git 提交历史记录 Kairos 的开发过程：一行一 commit，条目与时间为提交真实信息
+（2026-09-12 整体重建自 git log，此前批次补记导致的日期断裂与时间漂移就此消除）。
 
 ## 2026-09-07
 
@@ -55,184 +56,248 @@
 - **07:20** docs: 时间线改用 git 历史真实时间戳
 - **07:21** fix: theme.ts 移除未使用导出
 - **07:35** feat: 三端统一使用系统窗口按钮，macOS 交通灯避让 + 头部拖拽区
+- **07:35** docs: 补入时间线最近三条记录
 - **07:40** fix: 主题样式改由 theme.ts 统一注入，兑现「新增主题零改码」
-- **07:48** fix: 头部类被覆盖致折行 + 浅色主题 zinc 映射反转（浏览器实测对比 ui.html 时发现）
-- **07:50** fix: 恢复三端标准系统标题栏，macOS 不再 Overlay 隐藏
-- **07:5x** feat: 头部左上角加入品牌图标
-- **07:5x** feat: Tauri 窗口默认全屏启动
-- **08:0x** feat: 沙漏图标统一三端 bundle 图标；macOS 最大化、Win/Linux 全屏启动
-- **08:0x** fix: 清理界面 emoji 与装饰性符号
-- **08:1x** fix: macOS 启动窗口偏左，改启动时最大化
-- **08:1x** feat: 原生应用菜单七项，菜单动作路由到前端状态
-- **08:1x** docs(T28): 仓库结构评审入库，任务索引同步真实状态
-- **08:2x** refactor: 菜单构建去样板，下拉框样式归口 ui.ts
-- **08:2x** refactor: 输入框构建归口 ui.ts，修正求解日志失实注释
-- **08:2x** fix: 网格流水线 async 化（review F4/F5/F6 兑现）
-- **08:3x** fix(ci): release 流水线工具链钉版与交叉产物收集（F7/F8 兑现）
-- **08:3x** ci: macOS 仅 arm64，补 Ubuntu 构建/门禁/产物
-- **08:3x** ci: Release 改手动触发并自动同步版本号
-- **08:4x** refactor: 版本号单一事实源 = 根 Cargo.toml
-- **08:4x** feat: 求解链路组件全部支持应用内直链下载
-- **08:5x** docs: 修正下载策略放宽后的旧口径注释
-- **09:0x** feat: 收口 F1/F10/F11/F12/F13/F14——作业日志视图 + 主题化画布
-- **09:0x** fix: CI 工具链钉版补漏；锁中毒恢复 + WebGL 上下文恢复（F2/F9）
-- **09:1x** fix(windows): 补 CommandExt 导入，修复 Windows 门禁编译
+- **07:40** docs: 补入主题注入修复时间线
+- **07:48** fix: 头部类被覆盖致折行 + 浅色主题 zinc 映射反转
+- **07:48** docs: 补入视觉对比修复时间线
+- **07:50** fix: 恢复三端标准系统标题栏（macOS 不再隐藏）
+- **07:50** docs: 补入标题栏恢复时间线
+- **07:53** feat: 头部左上角加入品牌图标（直接复用 public/icon.svg）
+- **07:53** docs: 补入品牌图标时间线
+- **07:54** feat: Tauri 窗口默认以全屏启动（退出全屏回落到最大化）
+- **07:54** docs: 补入默认全屏时间线
+- **07:56** feat: 沙漏品牌图标统一三端 bundle 图标；全屏策略按平台区分
+- **07:56** docs: 补入图标统一与平台全屏策略时间线
+- **07:58** fix: 清理界面 emoji 与装饰性符号
+- **07:58** docs: 补入 emoji 清理时间线
+- **08:00** fix: macOS 启动窗口偏左——弃用配置式 center/maximized，改为启动时最大化
+- **08:00** docs: 补入窗口位置修复时间线
+- **08:04** feat: 原生应用菜单（文件/编辑/视图/分析/结果/工具/帮助）
+- **08:04** docs: 补入原生菜单时间线
+- **08:08** docs(T28): 仓库结构评审入库——state 拆分 / 着色器外置 / 组件分组
+- **08:08** docs: 补入结构评审时间线
+- **08:11** refactor: 注释与代码质量走查——菜单构建去样板、下拉框样式归口 ui.ts
+- **08:11** docs: 补入代码质量走查时间线
+- **08:17** refactor: 输入框构建归口 ui.ts，修正求解日志失实注释
+- **08:17** docs: 补入输入框归口与注释修正时间线
+- **08:22** fix: 网格流水线线程模型合规 + 错误契约收口（review F4/F5/F6）
+- **08:22** docs: 补入线程模型合规时间线
+- **08:26** fix(ci): release 流水线钉版工具链 + 交叉产物收集路径（review F7/F8）
+- **08:26** docs: 补入 release 流水线修复时间线
+- **08:36** ci: macOS 仅保留 arm64，补齐 Ubuntu 构建与 Linux 门禁
+- **08:36** docs: 补入 Ubuntu 平台支持时间线
+- **08:41** ci: Release 手动触发 + 输入标签自动同步三处清单版本号
+- **08:41** docs: 补入手动发布时间线
+- **08:45** refactor: 版本号收敛为根 Cargo.toml 单一事实源
+- **08:45** docs: 补入版本单源化时间线
+- **08:57** feat: OpenFOAM 与 openInjMoldSim 支持应用内直接下载
+- **08:57** docs: 补入直链下载时间线
+- **08:59** docs: 修正直链下载放宽后残留的旧口径注释
+- **08:59** docs: 补入注释修正时间线
+- **09:05** feat: 收口 review 遗留 F1/F10/F11/F12/F13/F14
+- **09:06** docs: 补入遗留收口时间线
+- **09:13** fix: 修复 CI 裸 toolchain 步骤；锁中毒恢复（F2）+ WebGL 上下文恢复（F9）
+- **09:14** docs: 补入 F2/F9 修复时间线
+- **09:15** fix(windows): 补 CommandExt 导入，creation_flags 编译失败
+- **09:15** docs: 补入 Windows 编译修复时间线
 - **10:45** refactor(T28): state 按域拆分 / WGSL 外置 / 面板分组
-- **10:51** research(T24): 一维 Stefan PINN spike，前沿误差 12.2%，限定演示用途
-- **10:55** research(T25): moldflow-api 分层概念对照笔记
-- **11:0x** feat(ui): 海军蓝 CAE 色板 + 控件/面板视觉升级
-- **11:1x** docs: 入库下一阶段任务 T29–T33（真实求解验证 / Gmsh 集成 / 派生算子 / CLI / 发布加固）
-- **11:2x** feat(download): 修 Gmsh 404 死链，失败重试 + 跨会话清单
-- **11:3x** fix(ui): 布局对标 ui.html——整页锁定、卡片零裁切、视口主导
-- **12:4x** feat(download): 智能命名 + 压缩包自动解压
-- **13:0x** feat(test): TS lib 覆盖率四维 100%，Rust core 行覆盖 98.88% 门槛 98
-- **13:3x** refactor(test): 测试集结到根 tests/ 并分类（前端 + Rust 契约）
-- **13:1x** refactor(test): tests/frontend 更名 tests/web
-- **13:1x** refactor(ci): 简化为三平台单作业流水线，消除重复编译
-- **13:2x** refactor(download): 文件名推导纯函数化，修正 .tar.gz 截断
-- **13:2x** fix(test): gap_tests 临时目录幂等创建（F15 收口）
-- **13:4x** feat(deps): zip 解压修复 + 就绪检测纳入应用内受管副本
-- **13:3x** test: 删除永真式断言用例，契约测试导入合并
-- **13:5x** fix: F16 收口——大数组统计循环化，消除 spread 栈溢出
-- **13:4x** refactor(ui): materials-panel 小节标题收编 sectionLabel
-- **13:5x** docs(deps): 依赖 hint 按真实安装流程改写
-- **13:6x** fix: 清理受管路径重构残留
-- **13:5x** fix: F15 收口——gap_tests 临时目录幂等创建；依赖 hint 按真实流程改写
-- **13:6x** feat(deps): 一键下载后自动编译，日志实时滚动进面板
-- **21:0x** feat(solver): 移除 openInjMoldSim，求解入口切到 OpenFOAM 14 foamRun（T34 移除部分）
-- **21:1x** refactor(deps): 组件生命周期统一为 componentStages 阶段状态（下载/编译/失败三态 + 日志环形缓冲）
-- **13:5x** feat(vm): 虚拟机适配层——Multipass/WSL2 一键安装、内嵌 Shell 与退出联动关机（T35）
-- **14:1x** fix(vm): multipass info 非 0 退出判定为实例缺失；start 失败自动回落创建流程；日志清洗 ANSI 转义（真机反馈收口）
-- **14:1x** fix(vm): 探测/停止异步化 + 15s 超时防挂死；新增 Linux native provider——无虚拟机语义，Shell 即本地 bash（真机反馈收口）
-- **14:4x** feat(vm): Shell 模拟终端化（shell.svg 转 currentColor 图标 + 提示符行内输入），面板浮于右下角；--mem 改 --memory（真机反馈收口）
-- **14:5x** fix(vm): 虚拟机命令对齐 moldingFoam README——8核/16G/80G、显式 24.04 镜像（实例名保留 kairos）
-- **15:0x** feat(vm): 虚拟机规格按宿主机动态推导——CPU 半数收敛 [2,8]、内存一半收敛 [4,16]G、磁盘固定 80G 稀疏分配
-- **15:1x** feat(vm): 国内时区自动走清华镜像源预下载 24.04 云镜像（file:// 导入），失败自动回落官方直连
-- **15:2x** feat(ui): Shell 入口上状态栏——右侧「Shell 环境 + shell.svg 图标」按钮切换右下角终端面板显隐（默认隐藏）
-- **15:3x** fix(ci): platform_command 按 cfg 拆成 macOS / 非 macOS 两个变体，消除非 macOS 平台的 unused_mut 报错
-- **15:4x** refactor(vm): 镜像下载抽出 download_to_file；TS 动作收敛 withVmBusy 互斥模板；--memory 注释归位
-- **15:5x** fix(ci): 覆盖率步骤补装 cargo-llvm-cov（简化流水线时遗失）；Windows zip 解压显式 -xf 并回传工具 stderr
-- **15:6x** feat(deps): 求解环境改下载 moldingFoam release bundle（latest + 按架构解析资产，tar.xz 解压），应用内编译流程退役
-- **16:0x** refactor(deps): 求解环境条目身份正名为 moldingfoam——基于 OpenFOAM-14 但不是 OpenFOAM-14
-- **16:1x** feat(deps): 已安装组件支持在线检查更新——release tag 入清单，比对最新标签提示拉新并自动清理旧归档
-- **17:0x** docs(tasks): T36 立项——moldingFoam 契约 case 对接 + bundle 进虚拟机执行（契约调研完成，映射表齐备）
-- **17:2x** feat(ci): 覆盖率门禁（前端 lib 100% · Rust core ≥98%）从 ubuntu 扩展到三平台全跑
-- **17:3x** feat(case): case 生成对齐 moldingFoam case-contract v1.1——SOLVER_MODULE 切 moldingFoam， moldingDict/momentumTransport/Tait 热物理/三 patch 边界分类（T36 Part 1）
-- **17:4x** fix(vm): 镜像下载前补建 images 父目录（真机 os error 2）；终端清洗器覆盖退格重绘与 NUL（spinner 残留真机收口）
-- **17:5x** fix(vm): multipass 状态解析大小写不敏感（新版 Running 形态真机踩坑）；进入 Shell 前自动拉起已停止实例
-- **17:6x** fix(vm): Shell 子进程包 PTY（script -q /dev/null）——multipass exec 非 TTY 是批处理语义（stdin 读到 EOF 才执行），PTY 后交互全通；前端去掉手动回显防双显（真机反馈）
-- **17:7x** fix(ui): 图标改用 createElementNS 构建——WKWebView 的 CSP 下 innerHTML 内联 SVG 不渲染（浏览器正常、tauri dev 没有，真机踩坑）
-- **17:8x** feat(ui): 虚拟机动作接入原生「工具」菜单——面板/启动/Shell/关闭四项，前端 menu-action 路由
-- **17:9x** refactor(ui): shell 图标改图片资源加载（public/shell.svg + <img>，描边固定 emerald）——createElementNS 在 tauri 窗口仍不显示，彻底绕开内联 SVG
-- **18:0x** refactor(ui): 菜单动作路由抽离 menu-actions.ts；关于对话框加入 Icons8 / OpenFOAM / moldingFoam 致谢
-- **18:1x** refactor(ui): main.ts 瘦身——全局快捷键（shortcuts.ts）与虚拟机浮层（vm-dock.ts）各自成模块，main 只保留布局组合与启动编排
-- **18:2x** feat(vm): T36 Part 2 完成——vm_deploy_bundle 传输解压 bundle 进 VM；作业执行自动 multipass exec（宿主 case 1:1 挂载）+ WSL /mnt 路径换算；面板「部署到虚拟机」按钮
-- **18:3x** feat(derive): 派生结果算子 CPU 参考实现——归一化/线性映射/两场差值/阈值掩码（T31 第一批）
-- **18:4x** feat(derive): T31 完成——三算子 WGSL GPU 实现 + CPU/GPU 一致性测试 + 算子目录扩展 + 结果面板派生场 UI
-- **18:5x** feat(mesh): T30 完成——generate_gmsh_mesh 命令（STL 写出 + gmsh 子进程 + msh2 解析）、CLI gmsh 引擎分支、面板引擎选择、MeshingReport 补 engine 字段
-- **18:4x** feat(vm): 部署流程自动安装 VM 内 OpenMPI（libopenmpi-dev/openmpi-bin + ldconfig 校验），国内时区自动切清华 apt 镜像源
-- **18:5x** refactor(core): vector_magnitude CPU 参考实现归位 kairos-core（services::operators），与 T31 派生算子同住事实源层
-- **18:6x** refactor(ui): card() 工厂参数化——icon/statusHint/onRefresh 集中「标题图标 + 状态行 + 刷新按钮」共用模式，三个面板去除手写样板
-- **18:7x** feat(ui): 材料面板本构方程 LaTeX 渲染（KaTeX）+ card/dock 去阴影（扁平化视觉）
-- **18:8x** docs(ui): ui.html v2 设计稿——对标 Moldflow Insight：分析阶段选项卡/方案任务 checklist/层管理/色标视口/内嵌 VM 终端，扁平深色三列工作台
-- **19:0x** feat(ui): 分析阶段选项卡落地（v2 设计稿核心）——主页/几何/网格/工艺/求解/结果/报告，按阶段显隐各列面板
-- **19:1x** refactor(ui): 分析阶段选项卡上移顶栏——与「Kairos CAE 仿真」品牌同行（logo|标题|弹性|选项卡|主题），去除独立条
-- **19:2x** feat(ui): v2 对齐三件套——流水线求解实时物理时间、视口悬浮色标图例（min/mid/max）、中列底部日志标签组（分析/网格/VM 终端）
-- **19:3x** fix(ui): 色标图例 replaceChildren 统一填充（noUncheckedIndexedAccess 收窄）
-- **19:4x** fix(ui): 移除 main 中残留的独立阶段选项卡条（顶栏已内嵌，双渲染重复）
-- **19:4x** fix(gpu): run_scalar_pipeline 多余闭括号导致解析错误（真机反馈整理时发现）
-- **19:5x** docs(reviews): M6 评审收尾——八项清单全过，T32 流式日志回流记录
-- **19:6x** refactor(ui): stage-tabs 条嵌入顶栏后去掉独立边框/背景，选项卡改为圆角背景高亮
-- **19:6x** feat(ui): Vue 3 基础设施——@vitejs/plugin-vue + vue-tsc + env.d.ts + tsconfig SFC 支持（T37 Phase 1）
-- **19:7x** feat(ui): Vue 3 迁移启动——App.vue + Card.vue + 基础设施（T37 Phase 1/2 起步）
-- **19:7x** refactor: 全仓注释规范化——去除任务编号/真机叙事/对标引用/商标字样，新增 ai-docs/comment-style.md
-- **20:00** feat(ui): Vue 3 核心组件 SFC——Card/Button/TextInput/Dropdown/ShellIcon/StageTabs/LatexBlock/LogTabs/VmDock + @vue/test-utils 测试 + typecheck 切 vue-tsc（T37 Phase 2）
-- **20:05** feat(state): appStore 状态本体换 Vue reactive + useAppState 入口，同步订阅语义保持原生组件零改动（T37 Phase 3）
-- **20:50** feat(ui): 13 个面板全量迁移 Vue SFC + App.vue 组合根 + main.ts 挂载切换，删除原生组件层（T37 Phase 4）
-- **21:00** chore: 删除 lib/store 自定义容器与基准（Vue reactive 接管）、tinybench 依赖与 bench:web 脚本，perf-budget 标注退役基线（T37 Phase 5）
-- **21:20** bench(web): 状态层基准按 Vue reactive 语义重建（tinybench，用例与旧 store 基线一一对应），重测基线并回填 perf-budget（T37 迁移后重标定）
-- **21:30** style(ui): 任意值类换 canonical spacing 刻度——w-104 / min-h-70 / left-1.75，编译产物与原值等价
-- **21:40** lint(ui): eslint 接入 eslint-plugin-vue（flat/recommended + TS 脚本块复用），ui 基础件统一 Ui 前缀，lint 门禁加 --max-warnings 0
-- **21:10** refactor(ui): LatexBlock 改用 katex.render 直接构建 DOM，去除 v-html 与 eslint 豁免；vitest setup 补 compatMode 修复 happy-dom 下的 quirks 桩
-- **21:30** refactor(web): 目录分层对齐——services→api、lib→utils、types.ts→types/、panels→views/<module>/，配置与 AGENTS.md 契约同步（T38 Phase A）
-- **21:50** refactor(state): 状态层迁移 Pinia——八个领域 defineStore，消费端/测试全量切换，删除自定义 reactive store（T38 Phase B）
-- **22:00** refactor(views): 13 个面板逻辑全部抽 useXxx.ts（.vue 只写 UI），共享组件改文件夹+composable，theme 升级全局 useTheme（T38 Phase C）
-- **22:10** docs(web): 新增 ai-docs/web-conventions.md——前端职责边界/通信解耦/反模式清单，挂入 AGENTS.md 文档路由
-- **22:20** style(web): 注释规范化清扫——清任务编号/迁移叙事/对标引用，补 28 个文件职责头，comment-style 文件头条款对齐仓库事实
-- **22:30** build: 依赖优化——移除未启用的 updater 插件与冗余文件（vite-env.d.ts/shell.svg），接入 rollup-plugin-visualizer 体积分析，发布产物关 sourcemap（3.4M→1.6M）
-- **22:40** docs: README 技术栈补 Vue 3 + Pinia、命令表更新（vue-tsc/analyze/tauri 别名），ARCHITECTURE 分层图与命令 recipe 对齐 stores/api/utils 新结构，测试地图登记 stores 目录
-- **22:50** refactor(ui): ShellIcon 自绘原创几何替换 Icons8 素材，迁入 ui/icons/ 专用目录，撤下 Icons8 致谢
-- **23:00** fix(ui): ShellIcon 提示符上移收小，消除与窗体下边框的贴边
-- **23:10** docs: ARCHITECTURE 分层图改 mermaid flowchart、Channel 回传补 sequenceDiagram，web-conventions 增依赖方向图
-- **23:20** docs+ui: 新增 ai-docs/icon-design.md 图标设计规范（超现代双轨：Mono 按钮 / Art 彩色图示），ShellIcon 窗体改正方形并缩小提示符
-- **23:30** docs: AGENTS.md 速查新增「文档图表优先 mermaid」约定，DTO 镜像路径修正为 types/index.ts
-- **23:40** docs: icon-design 英文用词修正 Hyper-modern → Ultramodern（超现代的规范译名）
-- **23:50** test: 覆盖率口径扩至逻辑层全量（stores/composables/views useXxx），新增 31 个测试文件，前端测试 96→336，四维 100%；修复 VmPanel 提示符 ref 丢失回归
-- **00:10** docs: AGENTS 与测试地图的覆盖率口径同步为逻辑层全量
-- **00:20** fix(ui): 材料面板两处 UX 缺陷——「用于当前研究」忙碌时禁用；删除失败保留选中便于重试
-- **00:40** fix(ui): 材料面板布局重排——列表改两列网格、详情整宽在下，修复左列窄栏下详情区被挤成 0 宽不可见
-- **00:50** fix(tauri): 主窗口固定不可拖拽缩放（resizable: false），移除随之失效的最小尺寸约束
-- **01:00** test(core): 补齐 Rust 覆盖率缺口（operators/gmsh/geometry/openfoam/solver/results/vm），修复 write_stl_binary 按 f64 落盘导致 Gmsh 输入错位的真 bug，行覆盖 96.98%→98.84%
-- **01:00** test(core): 补齐 Rust 覆盖率缺口（operators/gmsh/geometry/openfoam/solver/results/vm），修复 write_stl_binary 按 f64 落盘导致 Gmsh 输入错位的真 bug，行覆盖 96.98%→98.84%
-- **01:45** feat(ui): v2 顶栏三行骨架——菜单栏（品牌+七个一级下拉菜单+⌘K 命令面板，命令与原生菜单共用动作注册表）+ 分析阶段选项卡独立成行，删除旧 AppHeader
-- **02:05** feat(ui): 阶段功能工具条 StageRibbon——按分析阶段切换命令分组（主页文件/检查、几何导入、工艺校验、求解刷新、结果导出/重扫），无工具阶段渲染引导文案；结果 store 增 rescanCatalog
-- **02:20** feat(ui): 左列对齐 v2——层管理面板（制品网格/浇口/流道/冷却水路显隐，视口新增线段叠加层渲染）+ 工程树「工程+项目徽标」头部 + 方案任务三态清单（✓/⟳/空心，进行中步骤流式进度）
-- **02:35** feat(ui): 视口 v2 对齐——悬浮视图工具条（放大/缩小/适应/复位）+ 相机注视点坐标读数 + 视口标题（几何·研究），渲染器新增 zoomBy/fitView/视角回调
-- **02:50** feat(ui): 布局收尾 v2——状态栏三段式（IPC 三态/求解进度/版本+Shell）、左右列可折叠（阶段行行尾开关+localStorage 持久化）、结果面板归位右列、XY 曲线限结果/主页阶段、日志区 200px
-- **03:10** refactor(ui): 菜单迁回系统栏——窗口内下拉菜单移除（菜单本体归 Tauri 原生：macOS 系统菜单栏 / Win-Linux 窗口标题栏下），Rust 菜单结构对齐设计稿（文件 编辑 视图 工具 结果 报告 帮助）+ macOS 应用菜单（关于/服务/隐藏/退出），⌘K 命令面板为 web 侧命令入口
-- **08:00** fix(ui): 命令面板快捷键按平台区分——macOS ⌘K / Windows·Linux Ctrl+K 严格匹配，搜索框与面板内加速键提示随 UA 切换（environment 工具新增平台判定）
-- **08:20** feat(tauri): 原生菜单系统项中文化——应用菜单（关于/服务/隐藏/退出）与编辑菜单（撤销/剪切/拷贝…）自定义中文标题；macOS 帮助菜单移除重复「关于」（应用菜单已有），帮助仅 Windows/Linux 保留
-- **08:40** feat(tauri+ui): 标题栏按平台分化——Win/Linux 无边框窗口自绘标题栏（web 菜单下拉 + Tauri 窗口 API 最小化/最大化/关闭 + 拖拽区）；macOS Overlay 标题栏（品牌/搜索内容延伸至红绿灯下）；启动统一 maximize；app.about 弹自绘关于对话框
-- **09:00** refactor(ui): 外壳适配层——utils/shell 能力矩阵（nativeMenu/nativeWindowControls/overlayTitleBar/windowControls/快捷键提示）+ useShell 入口，MenuBar 不再出现平台分支；浏览器预览下 mac 也渲染 web 菜单（系统菜单栏属于浏览器）
-- **09:15** refactor(ui): 快捷键注册表——utils/shortcuts 单一来源（SHORTCUTS 定义表 + matchesShortcut 平台严格匹配 + shortcutLabel 文案），命令面板/全局键/菜单标签/外壳能力统一消费；global-shortcuts 只做接线并补 ⇧⌘S 另存为
-- **09:30** refactor(ui): 组合根类型化——App.vue 面板配置 stages 改 Stage[]（消除逗号串解析）、折叠网格列宽收敛为 gridClass 计算属性；menu-actions 动作 id 收编为 MenuActionId 编译期约束（注册表/面板引用 id 拼写错误会在 typecheck 暴露）
-- **09:45** fix(ui+tauri): 标题栏 review 收尾——恢复最小尺寸约束（1024×640，Win/Linux 可缩放后缺失）；最大化状态经 resize 事件跟踪，最大化/还原图标与提示随之切换；菜单按钮补 aria-haspopup/aria-expanded
-- **09:55** test+refactor: 视口叠加层构造下沉 render/overlays（buildOverlayLayers 纯函数 + 单测，useViewportPanel 只做上传编排）；新增菜单动作契约测试（Rust 菜单 id ⊆ 前端动作表 + 无重复 + 核心集防回漂，解析双方源码静态断言）
-- **10:10** feat(tauri+ui): 接入 tauri-plugin-decoration——窗口装饰运行时管理：Win/Linux 无边框 + 插件内嵌控制按钮（Win11 Snap Layout 热区），macOS 红绿灯叠加；前端 activate_and_show 激活失败回退原生标题栏；移除自绘窗口控制按钮，标题栏两侧按插件 clearance 变量避让
-- **10:30** chore(tauri): 删除 tauri.macos.conf.json 平台覆盖文件——窗口装饰/标题栏已由插件三端统一管理，macOS 与 Win/Linux 行为一致（可缩放），无平台配置差异即无平台配置文件
-- **10:40** fix(tauri+ui): macOS 标题栏回归修复——插件激活路径的 set_decorations(true) 会抹掉 Overlay 样式，激活改为仅 Windows/Linux；macOS 在 setup 直接 show()（配置 Overlay 原生生效），红绿灯避让纳入外壳能力（titleBarPadding）
-- **11:00** fix(tauri): jobs.rs 平台条件编译清理——Path 导入与 safe_dir/inner 绑定补 cfg 门控（仅 mac/windows 分支消费），修复 Linux/Windows CI 的 unused 告警error
-- **11:10** chore: 全仓注释与引用清扫——lib.rs 窗口启动注释重写（移除已删配置引用）、7 个 Rust 文件头去除任务编号（comment-style 禁内部规划引用，此前清扫漏了 Rust 侧）、ARCHITECTURE 的 shortcuts.ts 旧名更新、MenuBar 头注释对齐实现
-- **11:20** refactor(core): 移除工程文件 schema 迁移链（v1→v4 步进），parse 仅接受当前版本——过旧 / 过新版本均明确拒绝并提示；单人早期项目无 v1~v3 存量文件，迁移属于无用兼容负担
-- **11:30** feat(core+ui): B1-C3 牌号数据集扩充与纤维/填料参数组——内置库新增 PP-CP / PA66 / POM / PMMA / PA66-GF30 五个参考牌号；Material 新增 FillerGroup 可选参数组（类型/质量分数/长径比/备注）；CSV 批量导入（约定表头 21 列，比热导热分号表，filler 列）；材料面板详情区渲染填料表
-- **11:50** feat(core+ui): 几何修复工具（B1-C1 模型修复）——repair_mesh 顶点焊接/退化面移除/孔洞填充/法向 BFS 一致化/自交检测 + repair_geometry 命令 + 几何面板修复按钮（不健康几何可用，修复后作废体积网格）
-- **12:10** feat(core+ui): B1-C1 STEP 镶嵌网格导入（AP242 TRIANGULATED_FACE_SET / POLY_LOOP 子集解析器 + import_step 命令 + 导入按扩展名分发）；几何修复工具落地（repair_mesh：焊接/去退化/填孔/法向 BFS 一致化/自交检测 + 面板修复按钮）；architecture-status 刷新
-- **12:20** fix(ui): 窗口拖拽范围收尾——App 根容器显式 data-tauri-drag-region="false"（子树默认禁止，防深层误挂）、body 全局 -webkit-app-region: no-drag 兜底，拖拽仅限标题栏行
-- **12:30** fix(ui): 禁用 macOS 触控板双指滚动的整页橡皮筋回弹——html/body overflow hidden + overscroll-behavior none（工作台页面本身不可滚动，双指晃动是 WKWebView 弹性滚动而非窗口拖拽）
-- **13:00** fix(ui): 标题栏 logo 改为内联 LogoIcon 组件——消除 Windows CI 上 happy-dom 加载 /icon.svg 触发 fileURLToPath 的路径错误（file:///icon.svg 无盘符），测试不再依赖外部图标资源
-- **13:10** chore(data): 内置材料库定位升级——「示例」改「公开文献典型值参考库」，牌号命名规范化（PP-REF-01 … PA66-GF30-REF-08），dataNote/厂商列与相关注释统一为参考数据免责声明
-- **13:20** chore(data): 内置参考牌号逐族参数量级校准——Tait 转变温度对齐各族熔点/Tg（PP 418K、PA66/POM-GF 552K、PC Tg 423K、ABS/PMMA Tg 378-388K）、比容对齐各族真实密度（PA66 9.5e-4 / POM 7.8e-4 / PC 8.6e-4 kg/m³³）、Cp/λ 走各族典型范围；CrossWLF 特征参数（n/τ*/D1/D2）按族差异化
-- **13:15** docs(readme): 新增「内置材料数据说明」——如实标注内置牌号参数为公开资料常见典型量级整理（无可指明的逐项文献出处、非商业牌号实测），并给出生产级数据替换路径
-- **15:00** refactor(core+ui): 结果派生算子下沉 Rust——derive_scalar_field（归一化 0-1 / 中点阈值掩码）+ ResultSession 会话缓存最近加载场 + derive_field 命令；useResultsPanel 移除 TS 侧归一化/阈值重复实现，派生改为命令分发
-- **21:27** docs(arch): 完成度口径改版——architecture-status 引入 [x]/△/[ ]/⚠ 状态语义（C7 后处理降 △，B2/B3/D0 完成度校准）、T13/T14/T19/T20/T23/T31 增补「当前实现边界」（-done 仅代表有实现提交）、tasks README 分区重构并收编 T30–T38；后处理 GPU 必需政策贯通 AGENTS/ARCHITECTURE/任务文档（CPU 仅作对拍基准、Rust 与 WebView device 不共享、无 GPU 明确提示不受支持）；新增 T39 后处理渲染后端 POC 任务（自研 WebGPU 主路径，VTK.js 仅作可删除 POC 与决策门）；README 能力清单对齐
-- **23:22** test+chore: 门禁接入测试覆盖率并冲上 100%——verify 以前端 test:coverage（四维 100%）+ coverage:rust（cargo-llvm-cov，行 100%）取代裸 test；新增 scripts/coverage-rust.mts 定位 LLVM 工具（rustc sysroot → rustup 工具链 → 系统 LLVM，兼容 Homebrew rustc 无 llvm-tools 的混合环境）；rust-toolchain.toml 升 1.98.1 并内嵌 clippy/rustfmt/llvm-tools-preview 组件，CI 同步（cargo-llvm-cov 前置到 verify 之前）；core 新增 20+ 测试覆盖 CSV/STEP/Gmsh/写入失败等错误分支，三处诚实重构（builtin_materials/serialize_* 对编译期可信数据 expect 快速失败、step 扫描器去 restart 状态机重写、orient_faces 删构造不可达死守卫），修复 fill_holes 顺序敏感缺陷的测试不稳定问题；kairos-core 行覆盖 97.70% → 100.00%（4183 行）
+- **10:51** research(T24): 一维 Stefan 问题 PINN spike——前沿误差 12.2%，限定演示用途
+- **10:55** research(T25): moldflow-api 分层概念对照笔记（仅概念借鉴，不引入依赖）
+- **10:56** docs: T24/T25/T28 标注完成，任务索引与时间线同步
+- **11:04** feat(ui): 视觉全面升级——海军蓝 CAE 色板 + 控件精修
+- **11:04** docs: 补入 UI 升级时间线
+- **11:07** docs: 入库下一阶段任务 T29–T33
+- **11:38** feat(download): 修复 Gmsh 死链 + 下载体验优化（失败重试 / 跨会话清单 / 不占全局 busy）
+- **11:38** docs: 补入下载优化时间线
+- **11:54** fix(ui): 布局对标 ui.html——整页锁定、卡片零裁切、视口主导
+- **11:54** docs: 补入布局重构时间线
+- **12:48** feat(download): 下载文件智能命名 + 压缩包自动解压
+- **12:48** docs: 补入自动解压时间线
+- **12:59** feat(test): 建立覆盖率门槛——Rust core ≥90% / 前端 lib ≥90%
+- **14:31** feat(test): 覆盖率门槛拉满——TS lib 四维 100% · Rust core 行覆盖 98.88%
+- **14:31** docs: 补入覆盖率门槛拉满时间线
+- **14:46** refactor(test): 全部测试集结到根目录 tests/ 并分类
+- **14:46** docs: 补入测试集结时间线
+- **14:47** docs: AGENTS 路由表登记测试地图
+- **14:50** refactor(test): tests/frontend 更名 tests/web，与 src-web 镜像对应
+- **14:50** docs: 补入测试目录更名时间线
+- **14:56** refactor(ci): 简化为三平台单作业流水线，消除重复编译
+- **14:56** docs: 补入 CI 简化时间线
+- **15:04** refactor(download): 文件名推导提取为纯函数并修正 .tar.gz 截断 bug
+- **15:05** docs: 补入文件名推导修正时间线
+- **15:11** docs: gap_tests 头注释去重，results expect 消息去重
+- **15:18** fix(test): gap_tests 临时目录幂等创建，消除本地重复运行的 flaky 隐患
+- **15:18** docs: 补入 F15 收口时间线
+- **15:46** feat(deps): 依赖就绪检测纳入应用内受管副本；修复 zip 解压命令
+- **15:46** docs: 补入依赖链修复时间线
+- **15:52** test: 删除永真式断言用例，契约测试导入合并
+- **15:53** docs: 补入用例清理时间线
+- **16:04** fix(stats): MinMax 类型改模块内私有（knip 无外部消费者）
+- **16:05** docs: 补入 F16 收口时间线
+- **16:13** refactor(ui): materials-panel 小节标题收编 ui.sectionLabel
+- **16:13** docs: 补入面板标题收编时间线
+- **16:21** docs(deps): 依赖 hint 按各自真实安装流程改写
+- **16:21** docs: 补入依赖 hint 改写时间线
+- **17:06** fix: F15 收口——gap_tests 临时目录幂等创建；依赖 hint 按真实流程改写
+- **17:06** docs: 补入 F15 收口时间线
+- **17:36** feat(deps): 一键下载后自动编译——日志实时滚动进依赖面板
+- **17:36** docs: 补入自动编译时间线
+- **21:06** feat(solver): 移除 openInjMoldSim，求解入口切到 OpenFOAM 14 foamRun（T34）
+- **21:07** refactor(deps): 组件生命周期统一为 componentStages 阶段状态
+
+## 2026-09-09
+
+- **13:58** feat(vm): 虚拟机适配层——Multipass/WSL2 一键安装、内嵌 Shell 与退出联动关机（T35）
+- **14:06** fix(vm): 实例探测语义修正 + 启动失败回落创建 + 日志清洗 ANSI（真机反馈）
+- **14:19** fix(vm): 探测异步化 + 超时保护；新增 Linux native provider（真机反馈）
+- **14:20** chore: 用户提供的 shell 图标素材移入 public/（沿用 icon.svg 的静态资源约定）
+- **14:24** feat(vm): Shell 模拟终端化 + 面板浮于右下角 + --memory 修正（真机反馈）
+- **14:30** fix(vm): 虚拟机命令对齐 moldingFoam README
+- **14:38** feat(vm): 虚拟机默认规格按宿主机动态推导
+- **14:48** feat(vm): 国内时区自动走国内镜像源下载 24.04 云镜像
+- **14:52** feat(ui): Shell 环境入口上状态栏，切换右下角终端面板显隐
+- **15:07** fix(ci): platform_command 按平台拆分变体，修非 macOS 的 unused_mut
+- **15:11** refactor(vm): 代码与注释优化
+- **15:25** fix(ci): 补装 cargo-llvm-cov；Windows zip 解压显式 -xf 模式位
+
+## 2026-09-10
+
+- **00:59** feat(deps): 求解环境改下载 moldingFoam release bundle，编译流程退役
+- **01:02** refactor(deps): 求解环境条目正名 moldingfoam——基于 OpenFOAM-14 但不是 OpenFOAM-14
+- **01:10** feat(deps): 已安装组件的在线检查更新
+- **01:19** docs(tasks): T36 立项——moldingFoam 契约 case 对接 + bundle 进 VM 执行
+- **01:23** feat(ci): 覆盖率门禁扩展到三平台全跑
+- **01:25** docs(tasks): T34/T35 完成转正（-done 后缀 + 索引同步）
+- **01:33** feat(case): case 生成对齐 moldingFoam case-contract v1.1（T36 Part 1）
+- **01:36** fix(vm): 镜像下载补建父目录；终端清洗覆盖退格重绘 spinner（真机反馈）
+- **03:10** fix(vm): 状态解析大小写不敏感 + Shell 前自动拉起实例（真机反馈）
+- **03:19** fix(vm): Shell 子进程包 PTY，修复输入无法到达虚拟机（真机反馈）
+- **03:21** docs: Icons8 图标署名（README 致谢 + icons.ts 来源头注）
+- **03:23** fix(ui): 图标 createElementNS 构建，修复 Tauri 窗口不显示
+- **03:25** feat(ui): 虚拟机功能接入原生工具菜单
+- **03:29** refactor(ui): shell 图标改图片资源方式加载
+- **03:31** refactor(ui): 菜单路由抽独立文件 + 关于对话框致谢
+- **03:33** refactor(ui): main.ts 瘦身——快捷键与虚拟机浮层各自成模块
+- **03:41** feat(vm): T36 Part 2——bundle 部署进虚拟机 + 作业 VM 内执行（闭环）
+- **03:42** docs(tasks): T36 完成转正（-done 后缀 + 索引同步）
+- **03:43** docs(tasks): T36 完成转正——索引链接同步 -done 文件名
+- **03:48** feat(derive): 派生结果算子 CPU 参考实现（T31 第一批）
+- **03:56** docs(tasks): T31 完成转正 + 触发 T21 评审（M6 记录：T31 批次）
+- **04:03** feat(cli): T32 无头 CLI——kairos-cli crate（project/mesh/solve/results/pipeline）
+- **04:15** feat(mesh): T30 Gmsh 引擎正式集成
+- **04:19** feat(release): T33 updater 插件接入 + CSP 收窄
+- **04:32** docs(reviews): T29 真机 E2E 报告——环境链路全通，阻塞于 bundle SIGILL（转用户）+ M6 评审触发（T32/T30/T33/T29 批次）
+- **09:07** feat(vm): bundle 部署自动安装 VM 内 OpenMPI + 国内 apt 镜像切换
+- **14:11** docs: 补完整架构与完成度清单 architecture-status.md（分支勾选 + moldingFoam 特殊标注）
+- **14:17** refactor(core): vector_magnitude CPU 参考实现归位 kairos-core
+- **14:25** refactor(ui): card 工厂参数化，收敛「状态行 + 刷新按钮」面板样板
+- **14:31** feat(ui): KaTeX 公式渲染组件 + 去卡片阴影
+- **15:56** docs(ui): ui.html v2 设计稿——参考 Moldflow Insight 优化
+- **15:57** docs(ui): 设计稿去除第三方商标字样，改为中性描述（业界商业注塑 CAE 布局）
+- **16:06** feat(ui): 分析阶段选项卡落地（v2 设计稿核心结构）
+- **16:09** docs: 修正注释漂移——jobs VM 分支 tar 复制、derive GPU 版本已落地
+- **16:12** refactor(ui): 分析阶段选项卡上移顶栏，与品牌同行（整理优化）
+- **16:24** fix(ui): 色标图例数值统一 replaceChildren 填充
+- **16:26** fix(ui): 移除 main.ts 残留的独立阶段选项卡条（顶栏已内嵌一份）
+- **16:40** fix(gpu): run_scalar_pipeline 多余闭括号导致解析错误
+- **16:41** docs(reviews): M6 评审收尾——八项清单全过
+- **16:44** refactor(ui): stage-tabs 嵌入顶栏后去掉独立边框/背景
+- **19:16** feat(ui): Vue 3 基础设施（T37 Phase 1）
+- **19:25** feat(ui): Vue 3 迁移启动——App.vue + Card.vue（T37 起步）
+- **19:28** docs: index.html 补 description / theme-color meta + Vue 挂载点注释
+- **19:31** refactor: 全仓注释规范化——去任务编号/真机叙事/对标引用
+- **19:32** refactor(ui): 去除残余注释中的对标引用与设计稿标注
+- **19:59** feat(ui): Vue 3 核心组件 SFC（T37 Phase 2）
+- **20:04** feat(state): 状态层换 Vue reactive（T37 Phase 3）
+- **20:44** feat(ui): 面板全量迁移 Vue SFC，应用切换 Vue 挂载（T37 Phase 4）
+- **20:47** chore: 清理旧状态容器与基准（T37 Phase 5）
+- **20:54** bench(web): 状态层基准按 Vue reactive 重建
+- **20:57** style(ui): 任意值类改写 canonical spacing 刻度
+- **21:02** lint(ui): eslint 覆盖 Vue SFC，ui 基础件统一 Ui 前缀
+- **21:06** refactor(ui): LatexBlock 去除 v-html，改用 katex.render 构建 DOM
+- **21:15** refactor(web): 目录分层对齐标准 Vue 工程结构（T38 Phase A）
+- **21:32** refactor(state): 状态层迁移 Pinia defineStore（T38 Phase B）
+- **21:50** refactor(views): 面板逻辑全量抽 composable，.vue 只写 UI（T38 Phase C）
+- **21:53** docs(web): 新增前端规范 web-conventions.md
+- **22:09** style(web): 注释规范化清扫
+- **22:14** build: 依赖与产物体积优化
+- **22:19** docs: README 与架构文档对齐 T38 新前端结构
+- **22:27** refactor(ui): ShellIcon 改自绘原创图标并迁入 ui/icons/（T38 后续）
+- **22:31** fix(ui): ShellIcon 提示符与下边框间距优化
+- **22:37** docs: 架构图表改用 mermaid 提升可读性
+- **22:42** docs+ui: 图标设计规范与 ShellIcon 比例修正
+- **22:44** docs: AGENTS.md 约定 md 图表优先使用 mermaid
+- **22:45** docs: 图标设计语言英文用词修正 Hyper-modern → Ultramodern
+
+## 2026-09-11
+
+- **00:07** test: 覆盖率口径扩至逻辑层全量，前端测试 96 → 336（四维 100%）
+- **00:07** docs: 覆盖率门禁口径描述同步（utils + stores + composables + use*.ts）
+- **00:13** fix(ui): 材料面板「用于当前研究」与删除动作的两处 UX 缺陷
+- **00:36** fix(ui): 材料面板详情区在窄栏下不可见
+- **00:40** fix(tauri): 主窗口固定不可拖拽缩放
+- **01:00** test(core): 补齐覆盖率缺口并修复 write_stl_binary 记录宽度 bug
+- **01:49** feat(ui): v2 顶栏三行骨架——菜单栏与阶段选项卡独立成行
+- **01:56** feat(ui): 阶段功能工具条 StageRibbon
+- **02:05** feat(ui): 左列对齐 v2——层管理面板 + 工程树徽标 + 方案任务三态清单
+- **02:09** feat(ui): 视口 v2 对齐——悬浮视图工具条 + 标题 + 坐标读数
+- **02:14** feat(ui): 布局收尾 v2——状态栏三段式 + 三列可折叠 + 面板归位
+- **07:48** refactor(ui+tauri): 菜单迁回系统栏，窗口内不再重复渲染
+- **07:55** fix(ui): 命令面板快捷键按平台区分
+- **08:07** feat(tauri): 原生菜单系统预定义项中文化
+- **08:35** feat(tauri+ui): 标题栏按平台分化——Win/Linux 自绘 + macOS Overlay
+- **08:43** refactor(ui): 外壳适配层收敛平台差异，标题栏不再写平台分支
+- **08:50** refactor(ui): 快捷键收敛到 utils/shortcuts 注册表，使用方只拿定义调用
+- **08:57** refactor(ui): 组合根类型化与动作 id 编译期约束
+- **09:04** fix(ui+tauri): 标题栏三端 review 收尾
+- **09:26** test+refactor: 视口叠加层下沉 render/overlays + 菜单动作契约测试
+- **11:51** feat(tauri+ui): 窗口装饰改由 tauri-plugin-decoration 运行时管理
+- **11:54** chore(tauri): 删除 tauri.macos.conf.json 平台覆盖文件
+- **12:03** fix(tauri+ui): macOS 不走插件激活，Overlay 标题栏由配置原生生效
+- **12:07** fix(tauri): jobs.rs 平台条件编译的未使用告警
+- **12:12** chore: 注释与引用清扫（comment-style 全仓执行收尾）
+- **12:22** refactor(core): 移除工程文件 schema 迁移链
+- **12:27** docs: architecture-status 刷新——B1 前处理标注当前阶段完成
+- **12:55** feat(core+ui): 牌号数据集扩充与纤维/填料参数组（B1-C3/C2 前处理收尾项）
+- **13:49** feat(core+ui): 几何修复工具（孔洞填充 / 法向一致化 / 自交检测）
+- **14:13** feat(core+ui): STEP 镶嵌网格导入 + 几何修复工具
+- **14:32** fix(ui): 禁用 macOS 触控板双指滚动的整页弹性晃动
+- **14:40** fix(ui): 标题栏 logo 改内联 LogoIcon，消除 Windows CI 资源加载错误
+- **14:47** chore(data): 内置材料库升级为公开文献典型值参考库
+- **14:54** chore(data): 内置参考牌号逐族参数量级校准
+- **14:58** docs(readme): 内置材料数据来源如实标注
+- **15:32** refactor(core+ui): 结果派生算子下沉 Rust，消除 TS 重复实现
+- **21:28** docs(arch): 完成度状态化与后处理 GPU 必需口径贯通，新增 T39 渲染后端 POC 任务
+- **23:23** test(gate): verify 门禁接入两端覆盖率，kairos-core 行覆盖冲上 100%
 
 ## 2026-09-12
 
-- **00:40** feat(core+ui): B1-C1 IGES 镶嵌网格导入（实体 106 Copious Data forms 0/1/2/11/12 封闭环 + 实体 63 Compact Plane Subfigure + 实体 124 变换矩阵，Hollerith 切分、开放折线与 B-rep 跳过计数）+ import_iges 命令 + 前端按扩展名分发（igs/iges）与对话框过滤器；任务 T40
-- **01:10** feat(core+ui): B1-C2 双域网格（T41）——表面三角形质心 ±法向射线厚度配对（均匀格 3D DDA 加速 + 暴力求交一致性测试）+ 流道/浇口梁单元端点捕捉耦合（BeamCoupling，自由节点按焊接容差去重）+ DualDomainReport 契约锁定 + generate_dual_domain_mesh 命令 + 几何面板「双域网格」动作与报告行（活跃方案杆系透传，修复时作废）
-- **01:25** feat(core+ui): B1-C2 中面网格（T42）——顶点配对法中面抽取（相邻面内法向多射线取近、中面节点=顶点与命中点中点、单元继承表面连接、未配对顶点丢弃单元并计数）+ 杆系梁端点捕捉中面节点与自由结点复用（复用 T41 均匀格射线加速，提为 pub(crate)）+ MidplaneReport 契约锁定 + generate_midplane_mesh 命令 + 几何面板「中面网格」动作与报告行
-- **02:00** feat(core+ui): B1-C2 局部加密/边界层（T43）——体素引擎支持 MeshRefinement 分级加密（边界层：包围盒面几何比率聚集；区域盒：相交轴区间逐级对半细分），非均匀坐标贯穿节点表/行扫描/占位填充；保形依据为奇偶对角分解与单元尺寸无关（否决四面体二分级联方案的面片对角冲突）；MeshRefinement 契约锁定 + generate_volume_mesh 可选参数 + 几何面板「边界层数」输入透传
-- **02:10** docs(arch): B1 前处理收官校准——architecture-status 状态截至 2026-09-12，C1/C2 全项 [x]（IGES、双域、中面、局部加密/边界层），里程碑对照 B1 ~75% → ~95%（余缺口：双域/中面的求解消费、精确 B-rep 导入）
-- **02:40** refactor(core+ui): B1 新增模块整体 review——删除 IGES 只有测试消费的 ImportStats/parse_iges_with_stats 死 API（与 STEP 解析器口径对齐）；DualDomainBeam 更名 ShellBeam（双域/中面共用，原名误导）；提取 dualdomain::weld_surface 复用双域/中面重复的焊接+退化剔除闭包；中面自由节点索引算术拆直；MeshSession 文档补中面缓存与存储理由；面板测试改按 placeholder 定位输入框
-- **02:20** feat(core+ui): B3-C7 派生算子产品管线补全（T44）——DeriveRequest 可辨识 DTO（normalize/threshold/linear/difference）+ derive_scalar_field 改造与 derive_difference（长度校验、命名、完整性取与）+ ResultSession 双槽（主场/对比场）+ load_result_field slot 参数 + derive_difference 命令 + 结果面板线性参数输入/槽位选择/差值按钮；契约锁定 kind 标签；T21 八项清单评审入 ai-docs/reviews/T44-review.md
-- **02:50** feat(ui): B3-C7 视口空间拾取与探针场关联（T45）——render/picking 纯函数（轨道相机指针射线 + Möller–Trumbore 逐面求交，拾取 faceCells 单元索引与场值同域）+ renderer.getCamera 快照（FOV_Y 常量提取）+ 视口 pointerdown/up 位移阈值点击判定 → 探针自动入列 → XY 图表数值随场刷新
-- **03:10** feat(ui): B3-C7 探针时间曲线与时间轴联动（T46）——results store 增 probeTimeSeries/loadProbeTimeSeries（遍历目录时间步采样各探针值、越界回退 0、结束恢复原时间步、移除探针同步过滤）+ XY 图表「空间分布/探针时间曲线」模式与「跳转到时间步」选择器（图表→视口经既有 loadedField watch 联动）；T21 八项清单评审入 ai-docs/reviews/T46-review.md
-- **03:30** feat(ui): B3-C7 视口完整剖切（T47）——剖切条件泛化为 dot(p,normal)>offset 任意轴平面（法向 ±单位轴 + 偏移）+ setClipPlane/getMeshBounds + math.clipPlaneFromFraction 纯函数（分数映射/反向/夹取，单测覆盖）+ 视口控制条轴选择/位置滑块/反向开关；T21 八项清单评审入 ai-docs/reviews/T47-review.md
-- **04:00** feat(ui)+docs: B3-C7 渲染后端决策落地（T39）——自研 WebGPU 后端 POC（render/webgpu：最小 d.ts + WGSL 云图/剖切/线段 + 渲染器，与 WebGL2 同一 RenderMesh/场值/剖切语义）+ render/backend 后端工厂（真实适配器探测优先 WebGPU、回退 WebGL2，面板经 ViewportBackend 接口无感）+ 确定性 1M 三角形资产生成器（单测锁确定性）与基准入口（上传/首帧/中位与 P05 FPS/剖切延迟）；VTK.js 对照 POC 取消（自研已满足前提）；三端真机验收回流 T48；评审入 ai-docs/reviews/T39-review.md
-- **04:10** docs(arch): B3 后处理阶段校准——C7 五项中 XY 曲线/派生算子/探针拾取/完整剖切转正，剩余体渲染、多视口联动、大结果数据链与三端真机数字（T48）；里程碑对照 B3 ~20% → ~50%
-- **04:40** feat(ui): B3-C7 多视口联动（T49）——useViewportPanel 重构为多实例槽位（单视口/四分格布局，共享网格缓存、控制条广播、拾取每实例可用）+ 双后端轨道相机 getOrbit/setOrbit 与交互事件（ViewState 扩展 yaw/pitch/distance）+ 任一实例交互联动其余实例相机 + 时间轴经全局 loadedField 按构造同步；viewport store 增 layout 状态（单测）；T21 八项清单评审入 ai-docs/reviews/T49-review.md
-- **05:00** feat(core+ui): B3-C7 三维体渲染 POC（T50）——core 体数据重采样（四面体包围盒栅格化 + 重心坐标判定 → VolumeFieldGrid 结构化体素场，covered_ratio 诊断，5 单测）+ render/webgpu 光线步进管线（96 步前向合成、三线性采样、冷热迁移函数、轨道相机）+ 128³ 确定性球体密度基准入口；T21 八项清单评审入 ai-docs/reviews/T50-review.md
-- **05:20** feat(core+ui): B3-C7 大结果数据链第一步（T51）——field_binary 编解码（magic+meta JSON+f64 LE 值区，魔数/截断/数量校验）+ FieldCache FIFO 有界缓存（容量 1..=64，同键覆盖去重）+ load_result_field 缓存命中跳过磁盘 + load_result_field_binary 命令（tauri ipc Response 原始字节通道）+ 前端 decodeFieldBinary 解析器（DataView 小端）与全套单测；T21 八项清单评审入 ai-docs/reviews/T51-review.md
-- **05:40** docs(arch): B3 状态终校准——C7 记账：多视口联动/剖面切片 [x]（T49/T47）、三维体渲染 △ POC（T50）、大结果二进制通道+缓存淘汰 [x]（T51）、剩余懒加载/持久关联/迁移函数 UI/三端真机数字（T48）；B3 ~70%
-- **06:00** chore(build): Dev 构建优化——依赖 profile 降为行表调试信息 + O1（app crate 全量重编译 20.4s → 17.7s，链接输入变小；wgpu/naga 在 dev 下运行不再 O0 卡顿）；行覆盖率只统计 kairos-core（保持 debug=2），verify 全绿不受影响
-- **05:40** feat(ui): C8 分析报告内容增强（T52）——HTML 报告新增几何摘要（三角形/尺寸/健康+体积网格质量行）、探针数值表、探针时间序列逐采样表三节（可选字段，无数据自动省略，全量转义）；util/panel 各 2 新测试；T21 八项清单评审入 ai-docs/reviews/T52-review.md
-- **06:10** feat(ui): C8 模板化自定义报告（T53）——buildReportHtml 增 ReportOptions（自定义标题 / 备注转义渲染 / 六分区开关，缺省全开兼容既有调用）+ 报告面板模板区（标题输入、备注文本域、分区勾选）透传生成；util/panel 各 2 新测试（含标题与备注转义注入用例）；T21 八项清单评审入 ai-docs/reviews/T53-review.md
-- **06:30** docs(arch): C8 报告生成收官——富文本/HTML 分析报告（T52 增强 + T53 模板化）与模板化自定义报告转 [x]；C8 剩余仅为真机无关的持久化/懒加载类延伸；B3 ~75%
-- **07:07** fix(mesh): 整体评审修复①——Gmsh 目标尺寸透传（tetrahedralize_args 增 -clmax 可选参数，generate_gmsh_mesh 校验后传入，此前被静默丢弃）；修复报告真正返回（RepairReport 迁入 models/ + 新增 RepairOutcome DTO，契约测试锁定 camelCase，前端 store 记录 repairReports、面板渲染非零修复项）；gmsh 子进程编排下沉 core services/gmsh::tetrahedralize（CLI 与桌面命令共用，消除两处重复）；CLI 网格完成消息修正引擎标识
-- **07:26** fix(jobs/downloads): 整体评审修复②——线程模型边角。multipass 的 case 目录 tar 复制（可耗时数分钟）从主线程 promote 路径移入作业线程，submit_job 立即返回不再冻结 UI；tar 启动失败由静默跳过改为明确报错（此前会无 case 目录照样启动求解器）；spawn 失败统一走「标记失败+提升下一个」保持队列推进；downloads 的 /releases/latest 资产解析（GitHub API 阻塞 IO）移入 spawn_blocking；submit_job 去除 expect 与无效 started_marker 包装
-- **07:34** feat(gpu): GPU 算子接生产——derive_field/derive_difference 改 async+spawn_blocking 走 wgpu compute（新增 derive_scalar_field_gpu/derive_difference_gpu 生产包装，命名/标志位与 core CPU 参考逐字段一致，f64→f32 可视化精度）；进程级 Device/Queue 缓存（OnceLock，失败同样缓存快速报错）；矢量模量与标量管线公共尾段合并为 dispatch_and_readback（消除 ~60 行模板重复）；清除 adapter_clone_info 死代码与误导性「CPU 回退」错误话术；GPU↔CPU 一致性新增 8 测试（归一化/阈值/线性/差值 + 空场/长度校验边界）
-- **07:50** refactor(contract): 契约统一——8 个无失败路径命令（system_info/probe_gpu/probe_openfoam/list_jobs/list_custom_materials/check_process/list_recent_projects/list_runtime_dependencies）包 Result 达成「命令一律 Result<T, KairosError>」全量合规；渲染网格提取（边界面+owner 归属、STL 展开）下沉 core services/render_mesh + models/render DTO，命令层删 65 行领域逻辑；RenderMeshData 补进 types 镜像并加契约测试；core 新增 3 项渲染提取测试（共享面排除/顶点展开/f32 窄化）
-- **07:53** refactor(web): 前端分层修复——4 处 view→api 直连全部下沉 store 并补齐错误通道（jobs 环境探测 probeOpenfoam、process 校验 checkProcess（新建 stores/process.ts，顺带改走 touchActiveStudy 消除对 project store 的绕写）、dependencies 下载目录 getDownloadsDir/openDownloadsDir、viewport 渲染网格 getRenderMesh→geometry.fetchRenderMesh）；app store 新增 withBusy 统一动作包装并推广到 materials/project/geometry/jobs 全部 busy 样板（删除 ~20 处 try/catch/finally 重复）；错误 code 契约真正生效——app.error 保留 CommandError.code，状态栏渲染 code 徽章 + 按 code 的处置提示（CODE_HINTS 五类）；EnvironmentCheck 上移 types 镜像；新增/更新 16 个测试（withBusy 三态、五类 code 锁定、新 store 动作正反向、状态栏徽章）
-- **08:00** perf(render): WebGL2 渲染专项——fitToMesh 改逐轴包围盒（修复三轴共用 min/max 导致网格不居中时视口瞄错）；uniform 位置 link 后缓存（此前每帧 ~10 次 getUniformLocation）；相机矩阵全程复用暂存缓冲（math.ts 四个矩阵函数加 out 参数，消除每帧分配）；dispose 与重复上传全量释放 GL 资源（新增 position/normal/index 缓冲句柄跟踪 + VAO/program 删除，上下文恢复同步重建 lineProgram）；法线统一——共享 render/normals.ts 平滑法线，WebGPU 主路径弃逐面覆写，两后端明暗一致；动画循环加背压（加载未完成跳过节拍防请求叠加）；图例中值改 quickselect O(n)（去逐帧全量排序）；normals 新增 3 测试
-- **08:08** refactor(web): 边界修复——exportFieldCsv 的 Blob/锚点 DOM 操作外移到 utils/download.ts（store 只管数据与文件名，依赖方向归位 stores→utils，新增 download 专项测试）；materials 自定义材料 id 加会话内序列号（custom-<ts>-<seq>，消除同一毫秒两次复制撞 id）
+- **00:46** feat(core+ui): B1-C1 IGES 镶嵌网格导入（T40）——实体 106 Copious Data forms 0/1/2/11/12 封闭环扇形三角化 + 实体 63 Compact Plane Subfigure + 实体 124 变换矩阵定位；Hollerith 整体吞除、开放折线/点列/B-rep 跳过计数、无可导入几何明确报错；import_iges 命令与 STL/STEP 共用会话登记，前端按扩展名分发（igs/iges）并入对话框过滤器
+- **01:08** feat(core+ui): B1-C2 双域网格（T41）——表面三角形质心 ±法向射线厚度配对（均匀格 3D DDA 加速 + 暴力求交一致性测试）+ 流道/浇口梁单元端点捕捉耦合（BeamCoupling，自由节点按焊接容差去重）+ DualDomainReport 契约锁定 + generate_dual_domain_mesh 命令 + 几何面板「双域网格」动作与报告行（活跃方案杆系透传，修复时作废）
+- **01:20** feat(core+ui): B1-C2 中面网格（T42）——顶点配对法中面抽取（相邻面内法向多射线取近、中面节点=顶点与命中点中点、单元继承表面连接、未配对顶点丢弃单元并计数）+ 杆系梁端点捕捉中面节点与自由结点复用（复用 T41 均匀格射线加速，提为 pub(crate)）+ MidplaneReport 契约锁定 + generate_midplane_mesh 命令 + 几何面板「中面网格」动作与报告行
+- **01:46** feat(core+ui): B1-C2 局部加密/边界层（T43）——体素引擎支持 MeshRefinement 分级加密：边界层（包围盒面几何比率聚集）与区域盒（相交轴区间逐级对半细分），非均匀坐标贯穿节点表/行扫描/占位填充；保形依据为奇偶对角分解与单元尺寸无关（否决四面体二分级联方案的面片对角冲突）；MeshRefinement 契约锁定 + generate_volume_mesh 可选参数 + 几何面板「边界层数」输入透传
+- **01:49** docs(arch): B1 前处理收官校准——状态截至 2026-09-12，C1/C2 全项 [x]，里程碑对照 B1 ~75% → ~95%（余缺口：双域/中面的求解消费、精确 B-rep 导入）
+- **01:57** refactor(core+ui): B1 新增模块整体 review——删除 IGES 只有测试消费的 ImportStats/parse_iges_with_stats 死 API（与 STEP 解析器口径对齐）；DualDomainBeam 更名 ShellBeam（双域/中面共用，原名误导）；提取 dualdomain::weld_surface 消除双域/中面重复的焊接+退化剔除闭包；中面自由节点索引算术拆直；MeshSession 文档补中面缓存与存储理由；面板测试改按 placeholder 定位输入框
+- **02:14** feat(core+ui): B3-C7 派生算子产品管线补全（T44）——DeriveRequest 可辨识 DTO（normalize/threshold/linear/difference）+ derive_scalar_field 改造与 derive_difference（长度校验、命名、完整性取与）+ ResultSession 双槽（主场/对比场）+ load_result_field slot 参数 + derive_difference 命令 + 结果面板线性参数输入/槽位选择/差值按钮；契约锁定 kind 标签；T21 八项清单评审入 ai-docs/reviews/T44-review.md
+- **02:23** feat(ui): B3-C7 视口空间拾取与探针场关联（T45）——render/picking 纯函数（轨道相机指针射线 + Möller–Trumbore 逐面求交，拾取 faceCells 单元索引与场值同域）+ renderer.getCamera 快照（FOV_Y 常量提取）+ 视口 pointerdown/up 位移阈值点击判定 → 探针自动入列 → XY 图表数值随场刷新；T21 八项清单评审入 ai-docs/reviews/T45-review.md
+- **02:38** feat(ui): B3-C7 探针时间曲线与时间轴联动（T46）——results store 增 probeTimeSeries/loadProbeTimeSeries（遍历目录时间步采样各探针值、越界回退 0、结束恢复原时间步、移除探针同步过滤）+ XY 图表「空间分布/探针时间曲线」模式与「跳转到时间步」选择器（图表→视口经既有 loadedField watch 联动）；T21 八项清单评审入 ai-docs/reviews/T46-review.md
+- **02:44** feat(ui): B3-C7 视口完整剖切（T47）——剖切条件泛化为 dot(p,normal)>offset 任意轴平面（法向 ±单位轴 + 偏移）+ setClipPlane/getMeshBounds + math.clipPlaneFromFraction 纯函数（分数映射/反向/夹取，单测覆盖）+ 视口控制条轴选择/位置滑块/反向开关；T21 八项清单评审入 ai-docs/reviews/T47-review.md
+- **02:59** feat(ui): B3-C7 渲染后端决策落地（T39）——自研 WebGPU 后端 POC（render/webgpu：最小 d.ts + WGSL 云图/剖切/线段 + 渲染器，与 WebGL2 同一 RenderMesh/场值/剖切语义）+ render/backend 后端工厂（真实适配器探测优先 WebGPU、回退 WebGL2，面板经 ViewportBackend 接口无感）+ 确定性 1M 三角形资产生成器（单测锁确定性）与基准入口（上传/首帧/中位与 P05 FPS/剖切延迟）；VTK.js 对照 POC 取消（自研已满足前提）；三端真机验收回流 T48；评审入 ai-docs/reviews/T39-review.md
+- **03:00** docs(arch): B3 后处理阶段校准——C7 剩余缺口收敛为体渲染/多视口/大结果数据链与三端真机数字（T48），里程碑对照 B3 ~20% → ~50%
+- **03:10** feat(ui): B3-C7 多视口联动（T49）——useViewportPanel 重构为多实例槽位（单视口/四分格布局，共享网格缓存、控制条广播、拾取每实例可用）+ 双后端轨道相机 getOrbit/setOrbit 与交互事件（ViewState 扩展 yaw/pitch/distance）+ 任一实例交互联动其余实例相机 + 时间轴经全局 loadedField 按构造同步；viewport store 增 layout 状态（单测）；T21 八项清单评审入 ai-docs/reviews/T49-review.md
+- **03:23** feat(core+ui): B3-C7 三维体渲染 POC（T50）——core 体数据重采样（四面体包围盒栅格化 + 重心坐标判定 → VolumeFieldGrid 结构化体素场，covered_ratio 诊断，5 单测）+ render/webgpu 光线步进管线（96 步前向合成、三线性采样、冷热迁移函数、轨道相机）+ 128³ 确定性球体密度基准入口；T21 八项清单评审入 ai-docs/reviews/T50-review.md
+- **03:53** feat(core+ui): B3-C7 大结果数据链第一步（T51）——field_binary 编解码（magic+meta JSON+f64 LE 值区，魔数/截断/数量校验）+ FieldCache FIFO 有界缓存（容量 1..=64，同键覆盖去重）+ load_result_field 缓存命中跳过磁盘 + load_result_field_binary 命令（tauri ipc Response 原始字节通道）+ 前端 decodeFieldBinary 解析器（DataView 小端）与全套单测；T21 八项清单评审入 ai-docs/reviews/T51-review.md
+- **03:54** docs(arch): B3 状态终校准——多视口联动/剖面切片 [x]（T49/T47）、三维体渲染 △ POC（T50）、大结果二进制通道+缓存淘汰（T51）；剩余：迁移函数 UI、懒加载/持久关联、三端真机数字（T48）；B3 ~70%
+- **05:22** chore(build): Dev 构建优化——依赖 profile 降为行表调试信息 + O1（app crate 全量重编译 20.4s → 17.7s，链接输入变小；wgpu/naga 在 dev 下运行不再 O0 卡顿）；工作区 crate 保持 debug=2，llvm-cov 行覆盖不受影响。future-incompat 警告（wgpu-hal→metal→block 0.1.6）保留不屏蔽，wgpu 迁移 objc2 后自然消失
+- **05:36** feat(ui): C8 分析报告内容增强（T52）——HTML 报告新增几何摘要（三角形/尺寸/网格健康+体积网格质量行）、探针数值表（越界占位）、探针时间序列逐采样表三节（可选字段无数据自动省略，全量转义）；util/panel 各 2 新测试；T21 八项清单评审入 ai-docs/reviews/T52-review.md
+- **05:47** feat(ui): C8 模板化自定义报告（T53）——buildReportHtml 增 ReportOptions（自定义标题 / 备注转义渲染 / 六分区开关，缺省全开兼容既有调用）+ 报告面板模板区（标题输入、备注文本域、分区勾选）透传生成；util/panel 各 2 新测试（含标题与备注转义注入用例）；T21 八项清单评审入 ai-docs/reviews/T53-review.md
+- **05:48** docs(arch): C8 报告生成收官——富文本/HTML 分析报告（T52+T53）与模板化自定义报告转 [x]；B3 ~75%
+- **07:19** fix(mesh): Gmsh 目标尺寸透传(-clmax)+修复报告真正返回(RepairOutcome DTO);gmsh 子进程编排下沉 core 供 CLI/桌面共用
+- **07:26** fix(jobs/downloads): multipass tar 复制移入作业线程不再冻结 UI;downloads 网络解析移入 spawn_blocking
+- **07:34** feat(gpu): 派生命令接入 wgpu compute 生产路径;device 进程级缓存;管线尾段合并
+- **07:41** refactor(contract): 8 个命令统一 Result 契约;渲染网格提取下沉 core
+- **07:53** refactor(web): view→api 直连下沉 store;withBusy 统一动作包装;错误 code 契约生效
+- **08:04** perf(render): WebGL2 渲染专项——fitToMesh 逐轴/uniform 缓存/矩阵复用/GL 资源释放/法线统一/动画背压
+- **08:09** refactor(web): store 内 DOM 下载外移 utils/download;materials 自定义 id 防撞
+- **08:18** docs(arch): 整体评审文档整理——architecture-status 立「完成度只在里程碑表维护」单一事实源条款并修正 B3 ~20% → ~75% 实锤矛盾（头部状态补 T44–T53+评审修复批次、C7 派生算子条目改 wgpu compute 主路径口径）；README 阶段句从「框架搭建」更新为能力补全阶段（补 VM 执行层/STEP/IGES/双域中面/WebGPU/GPU 派生/模板化报告）+ OpenFOAM 版本口径修正；tasks/README 补 T51/T52/T53 索引并去重 T45–T47 重复行；AGENTS.md 契约测试路径纠偏（tests/rust/contract/main.rs）；timeline 整体重建——从 git log 生成一行一 commit 完整台账（280 条，真实时间，消除日期断裂/时间漂移/重复行/56 条漏记）；整体评审发现与闭环记录入 ai-docs/reviews/R1-full-project-review.md

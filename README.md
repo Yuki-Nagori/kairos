@@ -2,7 +2,7 @@
 
 注塑成型 CAE 仿真软件，对标行业领先的同类产品：覆盖**前处理（制品/模具建模与网格）→ 求解（填充、保压、冷却、翘曲）→ 后处理（结果可视化与报告）**的完整仿真工作流。
 
-当前处于框架搭建阶段：技术栈与工程化设施全部就位，项目管理、材料数据库、STL 几何导入（健康检查）、3D 体积网格生成（体素 + 5-四面体保形分解）、浇口流道与冷却水路、成型工艺设置、OpenFOAM 原生求解集成（foamRun 模块化求解器，作业调度 + 进度流）、结果读取与统计、3D 视口（WebGL2 兼容后端）、XY 曲线与探针、报告导出已落地；GPU 探测与算子（wgpu 跨厂商）已有基础实现。后处理以硬件加速 GPU 为运行前提（无可用 GPU 时明确提示不受支持，不作 CPU 回退）；大结果数据链、WebGPU 主路径与性能验收仍在推进，权威状态见 [ai-docs/architecture-status.md](ai-docs/architecture-status.md)。
+M0–M5 里程碑已收官，当前处于按架构分支的能力补全阶段：前处理（STL/STEP/IGES 导入与健康检查、体素 + Gmsh 双引擎 3D 网格、双域/中面网格、局部加密、修复工具）、材料库、浇口流道与冷却水路、成型工艺设置、OpenFOAM 原生求解集成（moldingFoam 模块化求解器 + VM 执行链路）、后处理（3D 视口云图/剖切/拾取/多视口、派生算子 GPU 主路径、XY 曲线与探针、二进制大结果通道、模板化 HTML 报告）与无头 CLI 均已落地。真实求解 E2E 验收与渲染真机数字仍在推进，权威状态见 [ai-docs/architecture-status.md](ai-docs/architecture-status.md)。
 
 技术栈：Tauri 2 + Bun + TypeScript + Vue 3（Composition API + Pinia）+ Vite + Tailwind CSS v4；Rust 侧为 Cargo 工作区（领域层 + Tauri 适配层）。架构与开发约定见 [AGENTS.md](AGENTS.md) 及 [ai-docs/](ai-docs/)。
 
@@ -10,7 +10,7 @@
 
 ```console
 $ cargo run -p kairos-cli -- pipeline run --sample-box --out-dir kairos-case
-$ cargo run -p kairos-cli -- solve submit --case-dir kairos-case   # 需本机 OpenFOAM 11+
+$ cargo run -p kairos-cli -- solve submit --case-dir kairos-case   # 需本机 OpenFOAM（moldingFoam 口径为 14）
 $ cargo run -p kairos-cli -- results list --case-dir kairos-case
 ```
 

@@ -19,7 +19,7 @@ Kairos：注塑成型 CAE 仿真软件，对标行业领先的同类产品（自
 - **目录职责**：`src-web/` 前端（TypeScript）；`src-crates/` Rust 领域层 crate；`src-tauri/` Tauri 桌面适配层。各目录内部的 `src/` 是 Rust crate 固定结构，勿混淆。
 - **依赖方向**：前端 `views / components → stores → api → utils / render`；Rust `src-tauri → kairos-core`。`kairos-core` 禁止依赖 tauri；命令层不写业务逻辑，业务只住 core。
 - **错误契约**：命令一律返回 `Result<T, KairosError>`，跨 IPC 序列化为 `{ code, message }`；`code ∈ validation / not_found / io / solver / internal`。前端按 `code` 分支，禁止文本匹配 message。
-- **DTO 双端镜像**：Rust `models/` ↔ `src-web/types/index.ts`，任何改动必须同步两处并让契约测试（`src-crates/kairos-core/tests/contract.rs`）通过。
+- **DTO 双端镜像**：Rust `models/` ↔ `src-web/types/index.ts`，任何改动必须同步两处并让契约测试（`tests/rust/contract/main.rs`）通过。
 - **线程模型**：同步 Tauri 命令跑在主线程，重计算必须异步 / 另起线程；进度回传用 `tauri::ipc::Channel`；大体积数据用 `tauri::ipc::Response`。
 - **覆盖率门槛**：`kairos-core` 行覆盖 100%（`bun run coverage:rust`，cargo-llvm-cov）、前端逻辑层全量 100%（`utils/` + `stores/` + `composables/` + 各 `use*.ts`，`bun run test:coverage`，行/函数/语句/分支全 100）；api / render 薄适配层不计入门槛。两端均已并入 verify 门禁。
 - **GPU 计算**：统一经 wgpu 抽象层覆盖 NVIDIA / AMD / Intel / Apple（Vulkan/DX12/Metal），禁止引入 CUDA 等单厂商 SDK；后处理以硬件加速 GPU 为运行前提，不提供 CPU 运行时回退。CPU 实现仅可作为正确性基准与测试参考；缺少可用 GPU 时必须明确提示该能力不受支持。
