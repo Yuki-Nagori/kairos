@@ -133,6 +133,31 @@ export function mat4RotateX(radians: number): Mat4 {
   return new Float32Array([1, 0, 0, 0, 0, c, s, 0, 0, -s, c, 0, 0, 0, 0, 1]);
 }
 
+/** 视口适配：从网格包围盒（逐轴）计算轨道相机距离、注视点与剖切偏移。
+ *  distance 取最大轴跨度 × 2.5；注视点为逐轴中点——此前三轴共用同一
+ *  min/max，网格不居中时视口会瞄错位置（回归测试锁定）。 */
+export function fitCameraToBounds(
+  bounds: { min: Vec3; max: Vec3 },
+  clipNormal: Vec3,
+): { distance: number; target: Vec3; clipOffset: number } {
+  const target: Vec3 = [
+    (bounds.min[0] + bounds.max[0]) / 2,
+    (bounds.min[1] + bounds.max[1]) / 2,
+    (bounds.min[2] + bounds.max[2]) / 2,
+  ];
+  const span = Math.max(
+    bounds.max[0] - bounds.min[0],
+    bounds.max[1] - bounds.min[1],
+    bounds.max[2] - bounds.min[2],
+    1e-6,
+  );
+  return {
+    distance: span * 2.5,
+    target,
+    clipOffset: dot(target, clipNormal),
+  };
+}
+
 /** 剖切平面：按轴与 0..1 位置分数生成（法向 ±单位轴向量）与平面偏移。 */
 export function clipPlaneFromFraction(
   min: Vec3,

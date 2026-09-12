@@ -13,7 +13,7 @@ import { buildOverlayLayers, OVERLAY_IDS } from "../../render/overlays";
 import { detectRenderCapabilityInBrowser } from "../../render/capability";
 import { registerSnapshot } from "../../render/snapshot";
 import { clipPlaneFromFraction } from "../../render/math";
-import { minMax } from "../../utils/stats";
+import { minMax, quickselect } from "../../utils/stats";
 
 interface ViewportSlot {
   id: number;
@@ -75,18 +75,9 @@ export function useViewportPanel() {
       return;
     }
     const values = field.values;
-    // min/max 一趟线性扫描；中值用 quickselect（O(n) 平均），大场动画
-    // 逐帧调用时不做 O(n log n) 全量排序。
-    let min = Infinity;
-    let max = -Infinity;
-    for (const value of values) {
-      if (value < min) {
-        min = value;
-      }
-      if (value > max) {
-        max = value;
-      }
-    }
+    // min/max 线性扫描；中值 quickselect（O(n) 平均），大场动画逐帧调用
+    // 时不做 O(n log n) 全量排序。
+    const { min, max } = minMax(values);
     const mid = quickselect([...values], Math.floor(values.length / 2));
     legendValues.value = [max, mid, min];
   }
@@ -450,43 +441,4 @@ export function useViewportPanel() {
     zoomBy,
     fitView,
   };
-}
-
-/** 就地 quickselect：返回数组第 k 小（副本上操作，均值 O(n)）。 */
-function quickselect(values: number[], k: number): number {
-  if (values.length === 0) {
-    return 0;
-  }
-  let left = 0;
-  let right = values.length - 1;
-  for (;;) {
-    if (left === right) {
-      return values[left] ?? 0;
-    }
-    const pivot = values[(left + right) >> 1] ?? 0;
-    let low = left;
-    let high = right;
-    while (low <= high) {
-      while ((values[low] ?? 0) < pivot) {
-        low += 1;
-      }
-      while ((values[high] ?? 0) > pivot) {
-        high -= 1;
-      }
-      if (low <= high) {
-        const tmp = values[low] as number;
-        values[low] = values[high] as number;
-        values[high] = tmp;
-        low += 1;
-        high -= 1;
-      }
-    }
-    if (k <= high) {
-      right = high;
-    } else if (k >= low) {
-      left = low;
-    } else {
-      return values[k] ?? 0;
-    }
-  }
 }

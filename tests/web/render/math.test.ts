@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   clipPlaneFromFraction,
+  fitCameraToBounds,
   cross,
   type Mat4,
   dot,
@@ -85,5 +86,31 @@ describe("math", () => {
     // 分数越界被夹取到 0..1。
     expect(clipPlaneFromFraction(min, max, "z", 2, false).offset).toBeCloseTo(30, 9);
     expect(clipPlaneFromFraction(min, max, "z", -1, false).offset).toBeCloseTo(0, 9);
+  });
+});
+
+describe("fitCameraToBounds（逐轴适配，回归锁定）", () => {
+  it("不居中的网格按逐轴中点取注视点（修复三轴共用 min/max 的回归）", () => {
+    // x ∈ [10,11]、y ∈ [0,100]、z ∈ [0,1]：旧单轴算法会把三轴中心都算错
+    const fit = fitCameraToBounds({ min: [10, 0, 0], max: [11, 100, 1] }, [0, 1, 0]);
+    expect(fit.target).toEqual([10.5, 50, 0.5]);
+    expect(fit.distance).toBe(250); // 最大轴跨度 100 × 2.5
+    expect(fit.clipOffset).toBe(50); // dot(center, [0,1,0])
+  });
+
+  it("退化包围盒（单点）跨度取 1e-6 下限", () => {
+    const fit = fitCameraToBounds({ min: [3, 4, 5], max: [3, 4, 5] }, [0, 0, 1]);
+    expect(fit.distance).toBeCloseTo(2.5e-6, 12);
+    expect(fit.target).toEqual([3, 4, 5]);
+    expect(fit.clipOffset).toBe(5);
+  });
+
+  it("斜剖切法向的偏移为注视点在法向上的投影", () => {
+    const fit = fitCameraToBounds({ min: [0, 0, 0], max: [2, 2, 2] }, [
+      0,
+      Math.SQRT1_2,
+      Math.SQRT1_2,
+    ]);
+    expect(fit.clipOffset).toBeCloseTo(2 * Math.SQRT1_2, 12);
   });
 });

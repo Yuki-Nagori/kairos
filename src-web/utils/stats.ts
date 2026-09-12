@@ -28,3 +28,46 @@ export function minMax(values: ArrayLike<number>): MinMax {
   }
   return { min, max };
 }
+
+/**
+ * 就地 quickselect：返回副本第 k 小（均值 O(n)，最坏 O(n²)——图例中值
+ * 这类一次性统计可接受，替代对 10⁶ 量级结果场的全量 O(n log n) 排序）。
+ * 输入数组会被重排；空数组返回 0。Hoare 分区 + 中位枢轴。
+ */
+export function quickselect(values: number[], k: number): number {
+  if (values.length === 0) {
+    return 0;
+  }
+  let left = 0;
+  let right = values.length - 1;
+  for (;;) {
+    if (left === right) {
+      return values[left]!;
+    }
+    const pivot = values[(left + right) >> 1]!;
+    let low = left;
+    let high = right;
+    while (low <= high) {
+      while (values[low]! < pivot) {
+        low += 1;
+      }
+      while (values[high]! > pivot) {
+        high -= 1;
+      }
+      if (low <= high) {
+        const tmp = values[low]!;
+        values[low] = values[high]!;
+        values[high] = tmp;
+        low += 1;
+        high -= 1;
+      }
+    }
+    if (k <= high) {
+      right = high;
+    } else if (k >= low) {
+      left = low;
+    } else {
+      return values[k]!;
+    }
+  }
+}

@@ -301,3 +301,4 @@
 - **08:04** perf(render): WebGL2 渲染专项——fitToMesh 逐轴/uniform 缓存/矩阵复用/GL 资源释放/法线统一/动画背压
 - **08:09** refactor(web): store 内 DOM 下载外移 utils/download;materials 自定义 id 防撞
 - **08:18** docs(arch): 整体评审文档整理——architecture-status 立「完成度只在里程碑表维护」单一事实源条款并修正 B3 ~20% → ~75% 实锤矛盾（头部状态补 T44–T53+评审修复批次、C7 派生算子条目改 wgpu compute 主路径口径）；README 阶段句从「框架搭建」更新为能力补全阶段（补 VM 执行层/STEP/IGES/双域中面/WebGPU/GPU 派生/模板化报告）+ OpenFOAM 版本口径修正；tasks/README 补 T51/T52/T53 索引并去重 T45–T47 重复行；AGENTS.md 契约测试路径纠偏（tests/rust/contract/main.rs）；timeline 整体重建——从 git log 生成一行一 commit 完整台账（280 条，真实时间，消除日期断裂/时间漂移/重复行/56 条漏记）；整体评审发现与闭环记录入 ai-docs/reviews/R1-full-project-review.md
+- **08:41** refactor(web): 消融测试前置加固——fitToMesh 的适配计算抽纯函数 fitCameraToBounds 入 render/math.ts（逐轴中点回归测试 + 退化包围盒 + 斜法向偏移 3 用例，消融可验证）；quickselect 从 useViewportPanel（覆盖率口径外的最大 composable）迁入 utils/stats.ts 并补 6 用例（对拍全量排序中位数 + 10⁶ 冒烟），口径外逻辑继续收窄；视口面板 min/max 复用既有 minMax

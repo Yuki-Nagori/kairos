@@ -1,5 +1,5 @@
 import {
-  dot,
+  fitCameraToBounds,
   mat4Identity,
   mat4LookAt,
   mat4Multiply,
@@ -728,15 +728,11 @@ export class ViewportRenderer {
   }
 
   private fitToMesh(positions: Float32Array): void {
-    // 逐轴包围盒：x/y/z 各自求中心与跨度（此前三轴共用同一 min/max，
-    // 网格不居中时注视点会瞄错位置）。
-    const { min, max } = boundsOf(positions);
-    const center: Vec3 = [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2];
-    const span = Math.max(max[0] - min[0], max[1] - min[1], max[2] - min[2], 1e-6);
-    this.distance = span * 2.5;
-    this.target = center;
+    const fit = fitCameraToBounds(boundsOf(positions), this.clipNormal);
+    this.distance = fit.distance;
+    this.target = fit.target;
     // 视角重置后剖切面回到过包围盒中心（沿当前剖切法向）。
-    this.clipOffset = dot(center, this.clipNormal);
+    this.clipOffset = fit.clipOffset;
   }
 }
 
