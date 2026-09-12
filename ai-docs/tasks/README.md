@@ -6,7 +6,7 @@
 - 任务文件写目标、范围与验收标准；其中的“当前实现边界”用于防止文件名与实际能力
   脱节。实现方案在开工时再定。
 
-## 已实现任务（M0–M5；验收状态另见完成度清单）
+## 已实现任务（M0–M6 里程碑主线；验收状态另见完成度清单）
 
 | ID  | 文件                                                                 | 任务                   |
 | --- | -------------------------------------------------------------------- | ---------------------- |
@@ -31,7 +31,7 @@
 | T19 | [T19-gpu-infrastructure-done.md](T19-gpu-infrastructure-done.md)     | GPU 计算基础设施       |
 | T20 | [T20-gpu-postprocessing-done.md](T20-gpu-postprocessing-done.md)     | GPU 加速后处理算子     |
 
-## 后续增量实现（部分任务仍待验收）
+## 增量阶段已实现（B1/B2/B3/D0 分支补全；验收状态另见完成度清单）
 
 | ID  | 文件                                                                           | 任务                              |
 | --- | ------------------------------------------------------------------------------ | --------------------------------- |
@@ -48,8 +48,9 @@
 | T34 | [T34-openfoam14-fork-entry-done.md](T34-openfoam14-fork-entry-done.md)         | OpenFOAM-14 求解入口收口          |
 | T35 | [T35-vm-adapter-done.md](T35-vm-adapter-done.md)                               | 虚拟机适配层                      |
 | T36 | [T36-contract-case-and-vm-exec-done.md](T36-contract-case-and-vm-exec-done.md) | case 契约与 VM 执行链路           |
-| T37 | [T37-vue3-migration.md](T37-vue3-migration.md)                                 | Vue 3 迁移                        |
-| T38 | [T38-frontend-architecture.md](T38-frontend-architecture.md)                   | 前端架构重构                      |
+| T39 | [T39-postprocess-renderer-done.md](T39-postprocess-renderer-done.md)           | 后处理渲染后端决策与 WebGPU POC   |
+| T37 | [T37-vue3-migration-done.md](T37-vue3-migration-done.md)                       | Vue 3 迁移                        |
+| T38 | [T38-frontend-architecture-done.md](T38-frontend-architecture-done.md)         | 前端架构重构                      |
 | T40 | [T40-iges-import-done.md](T40-iges-import-done.md)                             | IGES 导入（106/63 镶嵌子集）      |
 | T41 | [T41-dual-domain-mesh-done.md](T41-dual-domain-mesh-done.md)                   | 双域网格（表面 + 杆系耦合）       |
 | T42 | [T42-midplane-mesh-done.md](T42-midplane-mesh-done.md)                         | 中面网格（1D/2.5D 快速路线）      |
@@ -64,12 +65,6 @@
 | T52 | [T52-report-content-done.md](T52-report-content-done.md)                       | 分析报告内容增强（几何/探针表）   |
 | T53 | [T53-report-template-done.md](T53-report-template-done.md)                     | 模板化自定义报告                  |
 | T54 | [T54-vm-deploy-version-hint-done.md](T54-vm-deploy-version-hint-done.md)       | 求解环境"更新未部署"提醒          |
-| T55 | [T55-gate-location-analysis.md](T55-gate-location-analysis.md)                 | 浇口位置分析序列（P1，最大缺口）  |
-| T56 | [T56-mesh-aspect-match-rate.md](T56-mesh-aspect-match-rate.md)                 | 网格纵横比 + 双域匹配率（立即做） |
-| T57 | [T57-mesh-estimate-preview.md](T57-mesh-estimate-preview.md)                   | 网格预估单元数（立即做）          |
-| T58 | [T58-viewport-gate-picking.md](T58-viewport-gate-picking.md)                   | 视口拾取放浇口 + 节点吸附         |
-| T59 | [T59-fill-preview.md](T59-fill-preview.md)                                     | 填充预览（依赖 T55）              |
-| T60 | [T60-import-log-and-pptx.md](T60-import-log-and-pptx.md)                       | 导入日志流 + PPT 报告（低优先）   |
 
 > T26/T27 落地后的增量打磨（系统窗口按钮、原生应用菜单、主题注入统一、
 > 品牌图标、emoji 清理、启动窗口位置）见 `ai-docs/timeline.md` 对应条目，
@@ -77,18 +72,23 @@
 
 ## 待开工 / 待验收任务
 
-| ID  | 文件                                                                 | 任务                            | 依赖     |
-| --- | -------------------------------------------------------------------- | ------------------------------- | -------- |
-| T21 | [T21-milestone-review.md](T21-milestone-review.md)                   | 里程碑评审循环（随里程碑触发）  | 随里程碑 |
-| T29 | [T29-real-solve-e2e.md](T29-real-solve-e2e.md)                       | 真实求解端到端验证（OpenFOAM）  | T09–T11  |
-| T33 | [T33-updater-hardening.md](T33-updater-hardening.md)                 | 发布加固：updater + CSP 收窄    | T18      |
-| T39 | [T39-postprocess-renderer.md](T39-postprocess-renderer.md)           | 后处理渲染后端 POC 与技术决策   | T13/T14  |
-| T48 | [T48-renderer-bench-realdevice.md](T48-renderer-bench-realdevice.md) | 渲染后端三端真机验收与 FPS 回填 | T39      |
+| ID  | 文件                                                                 | 任务                              | 依赖     |
+| --- | -------------------------------------------------------------------- | --------------------------------- | -------- |
+| T21 | [T21-milestone-review.md](T21-milestone-review.md)                   | 里程碑评审循环（随里程碑触发）    | 随里程碑 |
+| T29 | [T29-real-solve-e2e.md](T29-real-solve-e2e.md)                       | 真实求解端到端验证（OpenFOAM）    | T09–T11  |
+| T33 | [T33-updater-hardening.md](T33-updater-hardening.md)                 | 发布加固：updater + CSP 收窄      | T18      |
+| T48 | [T48-renderer-bench-realdevice.md](T48-renderer-bench-realdevice.md) | 渲染后端三端真机验收与 FPS 回填   | T39      |
+| T55 | [T55-gate-location-analysis.md](T55-gate-location-analysis.md)       | 浇口位置分析序列（P1，最大缺口）  | T11/T44  |
+| T56 | [T56-mesh-aspect-match-rate.md](T56-mesh-aspect-match-rate.md)       | 网格纵横比 + 双域匹配率（立即做） | T06/T41  |
+| T57 | [T57-mesh-estimate-preview.md](T57-mesh-estimate-preview.md)         | 网格预估单元数（立即做）          | T06      |
+| T58 | [T58-viewport-gate-picking.md](T58-viewport-gate-picking.md)         | 视口拾取放浇口 + 节点吸附         | T45/T07  |
+| T59 | [T59-fill-preview.md](T59-fill-preview.md)                           | 填充预览（依赖 T55）              | T55      |
+| T60 | [T60-import-log-and-pptx.md](T60-import-log-and-pptx.md)             | 导入日志流 + PPT 报告（低优先）   | T52      |
 
-> T29 优先级最高：真实求解仍被 moldingFoam bundle 的 SIGILL 阻塞。T13/T14/T20/
-> T23/T31 的实现已经存在，但大结果、GPU 管线与性能验收尚未闭环，不能推进为
-> “后处理已完成”。T39 在不引入生产 VTK.js 依赖的前提下，为渲染后端保留可验证的
-> 决策出口。
+> T29 优先级最高：真实求解仍被 moldingFoam bundle 的 SIGILL 阻塞。数值侧已
+> 闭环：大结果二进制通道（T51）、派生算子 GPU 生产化、渲染双后端（T39）均已
+> 落地；剩余性能与三端验收归 T48。T55–T60 为 Moldflow 对照评审新增缺口，
+> 详见各自任务文件。
 
 ## 全局原则（不变）
 

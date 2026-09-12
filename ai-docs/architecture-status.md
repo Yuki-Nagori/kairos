@@ -22,7 +22,7 @@
 
 “完成度”仅衡量实现覆盖，**不替代性能、三端兼容与真实求解验收**。后处理以
 硬件加速 GPU 为运行前提：无可用 GPU 时显示能力不受支持，CPU 代码只作数值对拍，
-不再作为运行时回退。后处理渲染路线见 [T39](tasks/T39-postprocess-renderer.md)。
+不再作为运行时回退。后处理渲染路线见 [T39](tasks/T39-postprocess-renderer-done.md)。
 
 ## A · 商业注塑成型软件（Kairos）
 

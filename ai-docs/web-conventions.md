@@ -96,4 +96,4 @@ flowchart LR
 
 - 分层依赖方向、覆盖率门禁：[AGENTS.md](../AGENTS.md)
 - 注释风格（中文、Why-only）：[comment-style.md](comment-style.md)
-- 分层落地的任务背景：[tasks/T38-frontend-architecture.md](tasks/T38-frontend-architecture.md)
+- 分层落地的任务背景：[tasks/T38-frontend-architecture-done.md](tasks/T38-frontend-architecture-done.md)

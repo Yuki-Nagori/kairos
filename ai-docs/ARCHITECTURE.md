@@ -221,7 +221,7 @@ DTO、store 或项目文件。只有在 Tauri 三端实测满足性能、内存�
 当前主路径仍是自研渲染：它能直接表达 Kairos 的四面体单元、cell/point 场关联和
 结果流式策略。VTK.js 的体渲染输入是规则 `ImageData`，不能直接替代非结构四面体
 结果的体渲染；这类能力需要独立的重采样、误差控制和缓存设计。技术取舍与 POC
-验收标准见 [T39](tasks/T39-postprocess-renderer.md)。
+验收标准见 [T39](tasks/T39-postprocess-renderer-done.md)。
 
 ## 8. 参考文献
 
