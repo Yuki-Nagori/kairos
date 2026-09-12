@@ -3,11 +3,10 @@
  * 中列始终保留——视口是工作台主角，不随折叠消失。
  */
 import { ref } from "vue";
-
-const STORAGE_KEY = "kairos-layout";
+import { storageGet, storageKey, storageSet } from "../utils/storage";
 
 function readCollapsed(side: "left" | "right"): boolean {
-  return localStorage.getItem(`${STORAGE_KEY}:${side}`) === "1";
+  return storageGet(storageKey("layout", side), false);
 }
 
 const leftCollapsed = ref(false);
@@ -24,12 +23,12 @@ export function useLayout() {
 
   function toggleLeft(): void {
     leftCollapsed.value = !leftCollapsed.value;
-    localStorage.setItem(`${STORAGE_KEY}:left`, leftCollapsed.value ? "1" : "0");
+    storageSet(storageKey("layout", "left"), leftCollapsed.value);
   }
 
   function toggleRight(): void {
     rightCollapsed.value = !rightCollapsed.value;
-    localStorage.setItem(`${STORAGE_KEY}:right`, rightCollapsed.value ? "1" : "0");
+    storageSet(storageKey("layout", "right"), rightCollapsed.value);
   }
 
   return { leftCollapsed, rightCollapsed, toggleLeft, toggleRight };

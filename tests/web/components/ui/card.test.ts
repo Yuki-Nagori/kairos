@@ -30,7 +30,7 @@ describe("Card", () => {
     const wrapper = mount(Card, { props: { title: "流程引导", collapsible: true } });
     expect(wrapper.text()).toContain("▾");
     await wrapper.find("h2").trigger("click");
-    expect(localStorage.getItem("kairos-panel:流程引导")).toBe("1");
+    expect(localStorage.getItem("kairos:panel:流程引导")).toBe("true");
     expect(wrapper.text()).toContain("▸");
 
     const remounted = mount(Card, { props: { title: "流程引导", collapsible: true } });

@@ -9,9 +9,12 @@ import { useAppStore } from "../../stores/app";
 import { useProcessStore } from "../../stores/process";
 import { useProjectStore } from "../../stores/project";
 import type { ProcessSettings } from "../../types";
+import { storageGet, storageIndex, storageKey, storageSet } from "../../utils/storage";
 
 export function useProcessPanel() {
-  const PRESETS_KEY = "kairos-process-presets";
+  /** 预设存储域：清单在 kairos:process-preset:index，条目在 kairos:process-preset:<名>。 */
+  const PRESET_DOMAIN = "process-preset";
+  const presets = storageIndex();
 
   /** 出厂默认工艺（量级取通用热塑性塑料的典型值，用户可覆盖）。 */
   function defaultProcess(): ProcessSettings {
@@ -123,21 +126,13 @@ export function useProcessPanel() {
   }
 
   // —— 预设（localStorage，随应用保留）——
-  const presetPrefix = `${PRESETS_KEY}:`;
   const presetName = ref("");
   const selectedPreset = ref("");
   const presetNames = ref<string[]>([]);
 
   // localStorage 非响应式，选项清单以显式刷新驱动（保存后面板内同步重建一次）。
   function refreshPresetSelect(): void {
-    const names: string[] = [];
-    for (let index = 0; index < localStorage.length; index += 1) {
-      const key = localStorage.key(index);
-      if (key?.startsWith(presetPrefix)) {
-        names.push(key.slice(presetPrefix.length));
-      }
-    }
-    presetNames.value = names;
+    presetNames.value = presets.list(PRESET_DOMAIN);
   }
 
   function savePreset(): void {
@@ -145,15 +140,19 @@ export function useProcessPanel() {
     if (!name) {
       return;
     }
-    localStorage.setItem(`${presetPrefix}${name}`, JSON.stringify(collectSettings()));
+    storageSet(storageKey(PRESET_DOMAIN, name), collectSettings());
+    presets.add(PRESET_DOMAIN, name);
     refreshPresetSelect();
     selectedPreset.value = name;
   }
 
   function loadPreset(): void {
-    const raw = localStorage.getItem(`${presetPrefix}${selectedPreset.value}`);
-    if (raw) {
-      backfill(JSON.parse(raw) as ProcessSettings);
+    const saved = storageGet<ProcessSettings | null>(
+      storageKey(PRESET_DOMAIN, selectedPreset.value),
+      null,
+    );
+    if (saved !== null) {
+      backfill(saved);
     }
   }
 

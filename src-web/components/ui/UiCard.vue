@@ -5,6 +5,7 @@
  */
 import { ref } from "vue";
 import UiButton from "./UiButton.vue";
+import { storageGet, storageKey, storageSet } from "../../utils/storage";
 
 const props = withDefaults(
   defineProps<{
@@ -20,12 +21,12 @@ const props = withDefaults(
 defineEmits<{ refresh: [] }>();
 
 const collapsed = ref(
-  props.collapsible ? localStorage.getItem(`kairos-panel:${props.title}`) === "1" : false,
+  props.collapsible ? storageGet(storageKey("panel", props.title), false) : false,
 );
 
 function toggleCollapse(): void {
   collapsed.value = !collapsed.value;
-  localStorage.setItem(`kairos-panel:${props.title}`, collapsed.value ? "1" : "0");
+  storageSet(storageKey("panel", props.title), collapsed.value);
 }
 </script>
 

@@ -14,6 +14,7 @@ import { detectRenderCapabilityInBrowser } from "../../render/capability";
 import { registerSnapshot } from "../../render/snapshot";
 import { clipPlaneFromFraction } from "../../render/math";
 import { minMax, quickselect } from "../../utils/stats";
+import { createFieldAnimation } from "../../utils/animation";
 
 interface ViewportSlot {
   id: number;
@@ -99,10 +100,8 @@ export function useViewportPanel() {
 
   /** 共享网格数据：一次获取，所有实例（含后续新增）复用上传。 */
   let sharedMesh: PickMesh | null = null;
-  let playTimer: ReturnType<typeof setInterval> | null = null;
-  let playIndex = 0;
-  /** 场加载进行中标记（动画节拍背压）。 */
-  let loadInFlight = false;
+  /** 时间步动画节拍器：背压/回绕/停止逻辑在 utils/animation（可单测）。 */
+  let animation: ReturnType<typeof createFieldAnimation> | null = null;
 
   // —— 空间拾取 ——
   // pointerdown/up 位移小于阈值视为点击（大于阈值是旋转拖拽），命中单元加入探针。
@@ -173,10 +172,7 @@ export function useViewportPanel() {
 
   function stopPlay(): void {
     playing.value = false;
-    if (playTimer !== null) {
-      clearInterval(playTimer);
-      playTimer = null;
-    }
+    animation?.stop();
   }
 
   function startPlay(): void {
@@ -188,28 +184,14 @@ export function useViewportPanel() {
     const caseDir = catalog.caseDir;
     const fieldName = results.loadedField?.field ?? "T";
     playing.value = true;
-    playIndex = 0;
-    playTimer = setInterval(() => {
-      if (!playing.value) {
-        stopPlay();
-        return;
-      }
-      // 背压保护：上一步还在加载时跳过本拍，避免大场加载慢于节拍导致请求叠加排队。
-      if (loadInFlight) {
-        return;
-      }
-      loadInFlight = true;
-      const step = catalog.times[playIndex % catalog.times.length]!;
-      playIndex += 1;
-      void results
-        .loadField(caseDir, step.dirName, fieldName)
-        .then(() => {
-          applyField(results.loadedField);
-        })
-        .finally(() => {
-          loadInFlight = false;
-        });
-    }, 400);
+    animation ??= createFieldAnimation(400);
+    animation.start(
+      catalog.times.map((step) => step.dirName),
+      async (dirName) => {
+        await results.loadField(caseDir, dirName, fieldName);
+        applyField(results.loadedField);
+      },
+    );
   }
 
   function togglePlay(): void {

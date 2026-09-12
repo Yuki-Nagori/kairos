@@ -6,6 +6,7 @@
  * CSS 通过 `[data-theme="名称"]` 选择器定义变量，`<html data-theme="...">` 激活。
  */
 import { onUnmounted, ref } from "vue";
+import { storageGet, storageKey, storageSet } from "../utils/storage";
 
 /** 主题名 → CSS 原文（构建期从 theme/*.css 提取）；按文件名排序注入，后注入者覆盖先注入者。 */
 const THEME_STYLES: [string, string][] = Object.entries(
@@ -17,13 +18,14 @@ const THEME_STYLES: [string, string][] = Object.entries(
   )
   .sort(([a], [b]) => a.localeCompare(b));
 
-const STORAGE_KEY = "kairos-theme";
+/** 主题持久化 key（统一网关，值为 JSON 字符串）。 */
+const STORAGE_KEY = storageKey("theme", "active");
 
 /** 主题切换后广播的窗口事件：标题栏图标、图表与视口重绘都监听它。 */
 export const THEME_CHANGED_EVENT = "kairos:theme-changed";
 
 function resolveSaved(): string {
-  const saved = localStorage.getItem(STORAGE_KEY);
+  const saved = storageGet<string | null>(STORAGE_KEY, null);
   const names = THEME_STYLES.map(([name]) => name);
   return saved !== null && names.includes(saved) ? saved : (names[0] ?? "dark");
 }
@@ -51,7 +53,7 @@ export function getActiveTheme(): string {
 
 function setTheme(name: string): void {
   apply(name);
-  localStorage.setItem(STORAGE_KEY, name);
+  storageSet(STORAGE_KEY, name);
 }
 
 /** 循环切换到下一个可用主题。 */

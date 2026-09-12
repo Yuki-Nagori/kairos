@@ -9,7 +9,7 @@ import {
   useTheme,
 } from "../../../src-web/composables/useTheme";
 
-const STORAGE_KEY = "kairos-theme";
+const STORAGE_KEY = "kairos:theme:active";
 
 function injectedStyles() {
   return Array.from(document.head.querySelectorAll<HTMLElement>("style[data-kairos-theme]"));
@@ -51,7 +51,7 @@ describe("initTheme", () => {
   });
 
   it("恢复持久化的有效偏好", () => {
-    localStorage.setItem(STORAGE_KEY, "light");
+    localStorage.setItem(STORAGE_KEY, '"light"');
     expect(initTheme()).toBe("light");
     expect(getActiveTheme()).toBe("light");
   });
@@ -82,9 +82,9 @@ describe("getActiveTheme / cycleTheme", () => {
     initTheme();
     expect(cycleTheme()).toBe("light");
     expect(getActiveTheme()).toBe("light");
-    expect(localStorage.getItem(STORAGE_KEY)).toBe("light");
+    expect(localStorage.getItem(STORAGE_KEY)).toBe('"light"');
     expect(cycleTheme()).toBe("dark");
-    expect(localStorage.getItem(STORAGE_KEY)).toBe("dark");
+    expect(localStorage.getItem(STORAGE_KEY)).toBe('"dark"');
   });
 
   it("每次切换广播 THEME_CHANGED_EVENT", () => {

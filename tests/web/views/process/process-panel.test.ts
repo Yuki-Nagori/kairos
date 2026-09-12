@@ -248,7 +248,7 @@ describe("ProcessPanel", () => {
     await fieldInputs(wrapper)[9]?.setValue("快速启动");
     await findButton(wrapper, "保存预设").trigger("click");
 
-    const raw = localStorage.getItem("kairos-process-presets:快速启动");
+    const raw = localStorage.getItem("kairos:process-preset:快速启动");
     expect(raw).not.toBeNull();
     expect(JSON.parse(raw ?? "{}")).toMatchObject({ meltTempC: 250 });
     // 下拉出现新选项并自动选中。
