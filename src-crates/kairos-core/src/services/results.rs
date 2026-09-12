@@ -17,6 +17,24 @@ fn parse_time_dir_name(name: &str) -> Option<f64> {
     (value >= 0.0 && value.is_finite()).then_some(value)
 }
 
+/// 从 `ls -d [0-9]*` 一类的目录清单里筛出时间目录名，按时间升序去重。
+///
+/// 用途：VM 内求解结束后把结果时间目录回传宿主（见 src-tauri 作业层），
+/// 筛查与 `scan_times` 用同一套目录名判定，避免回传宿主无法识别的东西。
+pub fn time_dir_names(listing: &str) -> Vec<String> {
+    let mut names: Vec<(f64, String)> = listing
+        .split_whitespace()
+        .filter_map(|name| parse_time_dir_name(name).map(|time_s| (time_s, name.to_string())))
+        .collect();
+    names.sort_by(|left, right| {
+        left.0
+            .partial_cmp(&right.0)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    names.dedup_by(|left, right| left.1 == right.1);
+    names.into_iter().map(|(_, name)| name).collect()
+}
+
 /// 扫描 case 目录下的时间步与场文件；解析失败的时间步跳过（不完整结果容错）。
 pub fn scan_times(case_dir: &Path) -> Result<ResultCatalog> {
     if !case_dir.exists() {
@@ -178,6 +196,15 @@ pub fn read_field(case_dir: &Path, time_dir: &str, field: &str) -> Result<Scalar
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn time_dir_names_filters_and_sorts_listing() {
+        // `ls -d [0-9]*` 的典型输出：混入 processor 目录与非数字名时只留时间目录，
+        // 且按时间数值排序——字典序会把 10 排到 9 前面，数值序不会。
+        let listing = "0  0.05  0.9  10  9  processor0  postProcessing  log.foamRun";
+        assert_eq!(time_dir_names(listing), vec!["0", "0.05", "0.9", "9", "10"]);
+        assert!(time_dir_names("").is_empty());
+    }
 
     const SCALAR_UNIFORM: &str = r#"FoamFile
 {

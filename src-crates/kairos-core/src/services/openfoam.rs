@@ -375,6 +375,46 @@ fn write(path: &Path, content: &str) -> Result<()> {
     fs::write(path, content).map_err(|e| KairosError::io(format!("写入 {path:?} 失败：{e}")))
 }
 
+/// 求解命令（不含 cd 与环境 source）：分解网格后以 mpirun 拉起并行 foamRun，
+/// 最后重建 case 级结果目录。
+///
+/// `foamRun` 不会自行调用 mpirun——直接 `foamRun -parallel` 会以
+/// "attempt to run parallel on 1 processor" 退出；`-np` 必须与
+/// decomposeParDict 的 numberOfSubdomains（同一 `cores`）一致。
+///
+/// 并行求解把结果写在 `processor*/` 下，必须 `reconstructPar` 之后宿主侧的
+/// results 服务才读得到 case 级时间目录；用 `;` 而非 `&&` 串接，使求解器退出
+/// 码异常时仍尽力重建已写出的部分结果（部分结果对排查有用）。
+pub fn solve_command(cores: u32) -> String {
+    format!("decomposePar -force && mpirun -np {cores} foamRun -parallel; reconstructPar")
+}
+
+/// 求解器输出里的收尾信号。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SolverSignal {
+    /// 正常走完时间循环（OpenFOAM 打印 `End`）。
+    Completed,
+    /// 异常退出路径（打印 `FOAM FATAL ERROR` / `FOAM exiting` / `FOAM aborting`）。
+    Aborted,
+}
+
+/// 识别求解器输出行的收尾信号；普通日志行返回 `None`。
+///
+/// 用途：作业收尾判定。上游 bundle 存在退出期堆破坏（`argList::~argList`
+/// 里 malloc_consolidate 报错，moldingFoam 自带 case-contract 同样复现），
+/// 跑完整段求解后进程仍以非零码退出；只有「没有任何异常标记 + 见过正常结束
+/// 标记」才把非零退出码当作该崩溃，而不是求解失败。
+pub fn solver_signal(line: &str) -> Option<SolverSignal> {
+    let trimmed = line.trim();
+    if trimmed.contains("FOAM FATAL")
+        || trimmed.contains("FOAM exiting")
+        || trimmed.contains("FOAM aborting")
+    {
+        return Some(SolverSignal::Aborted);
+    }
+    (trimmed == "End").then_some(SolverSignal::Completed)
+}
+
 /// FoamFile 头（无横幅注释的精简形态，OpenFOAM 原生接受）。
 fn foam_header(class: &str, object: &str) -> String {
     format!(
@@ -700,6 +740,33 @@ mod tests {
         // 空曲线：单点大气压表且不写切换压力（求解器 Table 仍需至少一点）
         assert!(dict.contains("(0 1e5)"));
         assert!(!dict.contains("switchPressure"));
+    }
+
+    #[test]
+    fn solve_command_decomposes_then_runs_under_mpirun() {
+        let command = solve_command(6);
+        assert_eq!(
+            command,
+            "decomposePar -force && mpirun -np 6 foamRun -parallel; reconstructPar"
+        );
+    }
+
+    #[test]
+    fn solver_signal_separates_completion_from_abort() {
+        assert_eq!(solver_signal("End"), Some(SolverSignal::Completed));
+        assert_eq!(solver_signal("  End  "), Some(SolverSignal::Completed));
+        assert_eq!(
+            solver_signal("--> FOAM FATAL ERROR: "),
+            Some(SolverSignal::Aborted)
+        );
+        assert_eq!(solver_signal("FOAM exiting"), Some(SolverSignal::Aborted));
+        assert_eq!(
+            solver_signal("[1] FOAM aborting"),
+            Some(SolverSignal::Aborted)
+        );
+        // 普通日志行（含 Time/EndTime 之类的词）不构成收尾信号
+        assert_eq!(solver_signal("Time = 0.5s"), None);
+        assert_eq!(solver_signal("ExecutionTime = 4 s"), None);
     }
 
     /// 写出的 polyMesh 四个列表：点、三角面、owner、neighbour。

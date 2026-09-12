@@ -70,7 +70,7 @@ enum PipelineAction {
         out_dir: String,
         /// 并行核数
         #[arg(long, default_value_t = 4)]
-        cores: usize,
+        cores: u32,
         /// 实际调用求解器（缺环境时以结构化错误退出）
         #[arg(long)]
         solve: bool,
@@ -113,7 +113,7 @@ enum SolveAction {
         #[arg(long)]
         case_dir: String,
         #[arg(long, default_value_t = 4)]
-        cores: usize,
+        cores: u32,
     },
 }
 
@@ -274,10 +274,14 @@ fn run_solve(action: SolveAction, json: bool) -> kairos_core::error::Result<()> 
                     "case 目录缺少 system/controlDict，请先生成 case。",
                 ));
             }
+            let safe_dir = case_dir.replace('\'', "'\\''");
+            // 求解输出落 log.foamRun：管道后接 tail 会让退出码被 tail 覆盖，
+            // 求解失败反被报成成功，故先判码再截取尾部日志。
+            let solve = kairos_core::services::openfoam::solve_command(cores);
             let status = Command::new("bash")
                 .arg("-lc")
                 .arg(format!(
-                    "cd '{case_dir}' && decomposePar -force && foamRun -parallel 2>&1 | tail -5"
+                    "cd '{safe_dir}' && {solve} > log.foamRun 2>&1; status=$?; tail -20 log.foamRun; exit $status"
                 ))
                 .status()
                 .map_err(|e| {
@@ -332,7 +336,7 @@ fn run_pipeline(
     sample_box: bool,
     stl: Option<String>,
     out_dir: String,
-    cores: usize,
+    cores: u32,
     solve: bool,
     json: bool,
 ) -> kairos_core::error::Result<()> {
@@ -363,7 +367,7 @@ fn run_pipeline(
         &material,
         &default_process(),
         &AnalysisStage::Fill,
-        cores,
+        cores as usize,
     )?;
     if json {
         emit_json(&serde_json::json!({

@@ -433,7 +433,11 @@ pub async fn vm_deploy_bundle(app: AppHandle, progress: Channel<String>) -> Resu
                 "--",
                 "bash",
                 "-lc",
-                "mkdir -p ~/moldingfoam-env && tar -xJf ~/moldingfoam-bundle.tar.xz -C ~/moldingfoam-env && test -f ~/moldingfoam-env/openfoam14/etc/bashrc",
+                &format!(
+                    "mkdir -p {root} && tar -xJf ~/moldingfoam-bundle.tar.xz -C {root} && {probe}",
+                    root = vm_logic::ENV_ROOT,
+                    probe = vm_logic::env_probe_command()
+                ),
             ])
             .status()
             .map_err(|e| KairosError::io(format!("解压启动失败：{e}")))?;

@@ -182,6 +182,36 @@ pub fn shell_args(provider: VmProviderKind) -> Vec<String> {
     }
 }
 
+/// case 目录在 VM 内的暂存路径。multipass 的 sshfs 挂载权限映射不可用，
+/// 作业执行前用 tar 管道把 case 复制进 VM 原生文件系统，两侧同名。
+pub fn vm_case_dir(case_dir: &str) -> String {
+    let name = std::path::Path::new(case_dir)
+        .file_name()
+        .map(|name| name.to_string_lossy().to_string())
+        .unwrap_or_else(|| "case".to_string());
+    format!("/home/ubuntu/{name}")
+}
+
+/// VM 内求解环境的部署根目录（vm_deploy_bundle 解压 bundle 的目标）。
+pub const ENV_ROOT: &str = "~/moldingfoam-env";
+
+/// 环境树 bashrc 在 bundle 内的相对路径。
+///
+/// `openfoam14/` 是**上游 release 产物的目录名**（资产名同样是
+/// `moldingFoam-openfoam14-<arch>-<date>.tar.xz`），Kairos 只消费不重命名；
+/// 上游若调整 bundle 布局，改动集中在这里与 ENV_ROOT 两处。
+pub const ENV_BASHRC: &str = "openfoam14/etc/bashrc";
+
+/// 求解脚本首段：加载求解环境（`source ~/moldingfoam-env/openfoam14/etc/bashrc`）。
+pub fn env_source_command() -> String {
+    format!("source {ENV_ROOT}/{ENV_BASHRC}")
+}
+
+/// 环境就绪探测命令：部署后确认 bashrc 存在（bundle 结构校验）。
+pub fn env_probe_command() -> String {
+    format!("test -f {ENV_ROOT}/{ENV_BASHRC}")
+}
+
 /// 停止受管实例（退出联动时以 detached 方式派发，不等其退出）。
 pub fn stop_args(provider: VmProviderKind) -> Vec<String> {
     match provider {
@@ -595,5 +625,31 @@ mod tests {
     fn terminal_line_cleaner_skips_non_csi_escape() {
         // ESC 后跟非 '[' 的单字符转义：连同转义符一起丢弃
         assert_eq!(clean_terminal_line("a\u{1b}Xb"), "ab");
+    }
+
+    #[test]
+    fn vm_case_dir_keeps_leaf_name() {
+        assert_eq!(
+            vm_case_dir("/Users/me/Library/Application Support/com.yuki.kairos/cases/study-1"),
+            "/home/ubuntu/study-1"
+        );
+        // 尾斜杠与空路径都归一到同一形态（回退名 "case"）
+        assert_eq!(vm_case_dir("/tmp/case/"), "/home/ubuntu/case");
+        assert_eq!(vm_case_dir(""), "/home/ubuntu/case");
+    }
+
+    #[test]
+    fn env_paths_come_from_the_bundle_layout() {
+        // 环境树目录名是上游 bundle 产物（资产名同带 openfoam14），Kairos 只消费
+        assert_eq!(ENV_ROOT, "~/moldingfoam-env");
+        assert_eq!(ENV_BASHRC, "openfoam14/etc/bashrc");
+        assert_eq!(
+            env_source_command(),
+            "source ~/moldingfoam-env/openfoam14/etc/bashrc"
+        );
+        assert_eq!(
+            env_probe_command(),
+            "test -f ~/moldingfoam-env/openfoam14/etc/bashrc"
+        );
     }
 }
