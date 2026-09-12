@@ -6,6 +6,7 @@ import type { Pinia } from "pinia";
 import ProcessPanel from "../../../../src-web/views/process/ProcessPanel.vue";
 import { useProcessPanel } from "../../../../src-web/views/process/useProcessPanel";
 import { useAppStore } from "../../../../src-web/stores/app";
+import { useGeometryStore } from "../../../../src-web/stores/geometry";
 import { useProjectStore } from "../../../../src-web/stores/project";
 import { checkProcess } from "../../../../src-web/api/process";
 import type { ProcessSettings, Project, Study } from "../../../../src-web/types";
@@ -70,6 +71,82 @@ function projectFixture(studies: Study[]): Project {
     studies,
   };
 }
+
+describe("ProcessPanel 填充工况上下文", () => {
+  let pinia: Pinia;
+
+  beforeEach(() => {
+    pinia = createPinia();
+    setActivePinia(pinia);
+  });
+
+  it("校验时携带网格体积与浇口半径（供 core 做量级检查）", async () => {
+    const project = useProjectStore(pinia);
+    const study = studyFixture("s-1", processP1());
+    study.runnerElements = [
+      {
+        id: "r-1",
+        kind: "runner",
+        diameterMm: 6,
+        start: [0, 0, 0],
+        end: [0, 0, 1],
+      },
+      {
+        id: "g-1",
+        kind: "gate",
+        diameterMm: 1.5,
+        start: [0, 0, 1],
+        end: [0, 0, 2],
+      },
+    ];
+    project.project = projectFixture([study]);
+    project.activeStudyId = "s-1";
+    const geometry = useGeometryStore(pinia);
+    geometry.geometries = [
+      {
+        geometryId: "geo-1",
+        fileName: "part.stl",
+        triangleCount: 12,
+        size: [10, 10, 10],
+        surfaceArea: 600,
+        signedVolume: 1000,
+        suggestedUnit: "mm",
+        issues: {
+          degenerate: 0,
+          openEdges: 0,
+          nonManifoldEdges: 0,
+          normalInconsistentEdges: 0,
+        },
+      },
+    ];
+    geometry.meshReports = {
+      "geo-1": {
+        engine: "voxel",
+        nodeCount: 10,
+        elementCount: 20,
+        surfaceFaceCount: 30,
+        totalVolume: 880000,
+        quality: {
+          minEdgeRatio: 1,
+          avgEdgeRatio: 1,
+          maxEdgeRatio: 1,
+          minVolume: 1,
+        },
+      },
+    };
+    vi.mocked(checkProcess).mockResolvedValue([]);
+
+    const wrapper = mount(ProcessPanel, { global: { plugins: [pinia] } });
+    await findButton(wrapper, "校验并应用到研究").trigger("click");
+    await flushPromises();
+
+    // 工艺字段的取值由面板重算（保压曲线末点 80% 等），此处只锁新增上下文。
+    expect(checkProcess).toHaveBeenCalledWith(expect.anything(), {
+      volumeMm3: 880000,
+      gateRadiusMm: 0.75,
+    });
+  });
+});
 
 function findButton(wrapper: ReturnType<typeof mount>, label: string) {
   const found = wrapper.findAll("button").find((candidate) => candidate.text() === label);
@@ -176,7 +253,7 @@ describe("ProcessPanel", () => {
       coolingTimeS: 20,
       coolantTempC: 30,
     };
-    expect(checkProcess).toHaveBeenCalledWith(expected);
+    expect(checkProcess).toHaveBeenCalledWith(expected, expect.anything());
     expect(project.project?.studies[0]?.process).toEqual(expected);
     // 非活跃研究不受影响。
     expect(project.project?.studies[1]?.process).toEqual(processP2());

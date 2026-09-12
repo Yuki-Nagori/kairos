@@ -7,6 +7,7 @@
 import { reactive, ref, watch } from "vue";
 import { useAppStore } from "../../stores/app";
 import { useProcessStore } from "../../stores/process";
+import { useGeometryStore } from "../../stores/geometry";
 import { useProjectStore } from "../../stores/project";
 import type { ProcessSettings } from "../../types";
 import { storageGet, storageIndex, storageKey, storageSet } from "../../utils/storage";
@@ -37,6 +38,7 @@ export function useProcessPanel() {
   const app = useAppStore();
   const processStore = useProcessStore();
   const project = useProjectStore();
+  const geometryStore = useGeometryStore();
   const defaults = defaultProcess();
 
   const form = reactive({
@@ -103,11 +105,24 @@ export function useProcessPanel() {
   const issueLines = ref<string[]>([]);
   const notice = ref<string | null>(null);
 
+  /** 填充工况上下文：活跃几何的网格体积 + 研究上第一个浇口的半径。 */
+  function fillLoadContext(): { volumeMm3?: number; gateRadiusMm?: number } {
+    const geometry = geometryStore.geometries[0];
+    const report = geometry ? geometryStore.meshReports[geometry.geometryId] : undefined;
+    const gate = project.activeStudy?.runnerElements.find(
+      (element) => element.kind === "gate" && element.diameterMm > 0,
+    );
+    return {
+      volumeMm3: report?.totalVolume,
+      gateRadiusMm: gate === undefined ? undefined : gate.diameterMm / 2,
+    };
+  }
+
   function applyProcess(): void {
     const settings = collectSettings();
     // 校验经 process store（check_process 命令），应用经 touchActiveStudy
     // （不可变更新 + updatedMs 盖章统一走 project store 入口）。
-    void processStore.checkProcess(settings).then((clean) => {
+    void processStore.checkProcess(settings, fillLoadContext()).then((clean) => {
       notice.value = null;
       if (!clean) {
         issueLines.value = [...processStore.issues];

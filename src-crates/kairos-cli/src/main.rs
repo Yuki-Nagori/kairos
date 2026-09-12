@@ -419,12 +419,20 @@ fn run_pipeline(
         cores as usize,
         &gates,
     )?;
+    // 填充工况量级提示（与工艺面板同一套 core 校验）
+    let volume_mm3 = services::moldingfoam::mesh_volume(&volume);
+    let load_hints = services::process::fill_load_hints(
+        volume_mm3,
+        &default_process(),
+        gates.first().map(|gate| gate.radius_mm),
+    );
     if json {
         emit_json(&serde_json::json!({
             "caseDir": out_dir,
             "nodes": volume.nodes.len(),
             "tets": volume.tets.len(),
             "solved": solve,
+            "loadHints": load_hints,
         }));
     } else {
         println!(
@@ -433,6 +441,9 @@ fn run_pipeline(
             volume.nodes.len(),
             volume.tets.len()
         );
+        for hint in &load_hints {
+            println!("工况提示：{hint}");
+        }
     }
     // 4. 求解（可选；缺 OpenFOAM 环境时输出结构化错误，供脚本捕获）
     if solve {
