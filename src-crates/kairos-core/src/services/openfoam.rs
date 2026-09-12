@@ -457,6 +457,25 @@ mod tests {
     use crate::models::process::ProcessSettings;
 
     #[test]
+    fn boundary_bands_classify_bottom_inlet_top_vent() {
+        // 分带方向锁定：底带 = 浇口 inlet、顶带 = 排气 vent、中段 = 模壁
+        // （消融 B5 锁定——分带翻转或交换时该用例失败）。
+        let (z_min, z_max) = (0.0_f64, 10.0_f64);
+        assert!(matches!(
+            classify_face(0.0, z_min, z_max),
+            BoundaryBand::Inlet
+        ));
+        assert!(matches!(
+            classify_face(10.0, z_min, z_max),
+            BoundaryBand::Vent
+        ));
+        assert!(matches!(
+            classify_face(5.0, z_min, z_max),
+            BoundaryBand::Walls
+        ));
+    }
+
+    #[test]
     fn generate_case_reports_constant_and_stage_dir_collisions() {
         let material = &crate::services::material::builtin_materials()[0];
         // 预埋 case 目录本身为文件：polyMesh 目录创建失败（首个写点）。

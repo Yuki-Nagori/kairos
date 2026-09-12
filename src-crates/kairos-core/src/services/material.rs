@@ -386,6 +386,20 @@ mod tests {
         let error = parse_custom_csv(bad_header).unwrap_err();
         assert!(error.to_string().contains("表头"));
 
+        // 列数正确但列名错：必须命中表头校验本身，而不是行级错误消息
+        // （消融 B8 锁定——跳过表头校验时该输入会解析成功）。
+        let mut wrong_names = CSV_HEADER;
+        wrong_names[0] = "not-an-id";
+        let content = format!(
+            "{}\n牌号,厂,PP,x,20000,1e13,263,0,31,51.6,1.3e-3,1.24e-3,7.5e-7,3e-7,1.4e8,0.003,0.0015,418,300:1900,300:0.2,",
+            wrong_names.join(",")
+        );
+        let error = parse_custom_csv(&content).unwrap_err();
+        assert!(
+            error.to_string().contains("表头与约定列序不一致"),
+            "{error}"
+        );
+
         let good_header = CSV_HEADER.join(",");
         let bad_count = format!("{good_header}\n只有三列");
         let error = parse_custom_csv(&bad_count).unwrap_err();

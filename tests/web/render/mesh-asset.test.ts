@@ -10,6 +10,12 @@ describe("deterministicGridMesh", () => {
     expect(mesh.positions.length).toBe(9 * 3);
   });
 
+  it("顶点坐标精确落在单位网格上（布局锁定）", () => {
+    // n = 1：四个角点精确为 (0/1, 0/1, 0)——步长漂移（消融 B24）会破坏精确值。
+    const mesh = deterministicGridMesh(2);
+    expect([...mesh.positions]).toEqual([0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 1, 0]);
+  });
+
   it("同一参数两次生成结果逐字节一致（确定性）", () => {
     const a = deterministicGridMesh(512);
     const b = deterministicGridMesh(512);

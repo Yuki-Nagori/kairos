@@ -83,3 +83,68 @@ derive_field / derive_difference 直接崩溃**，与「大结果数据链」目
 - 消融矩阵 12 轮全部还原，每轮后 `git diff` 为空；
 - 全量 `bun run verify` 通过（前端 507 测试四维 100%、Rust core 255 测试
   行覆盖 100%、clippy -D warnings、knip）。
+
+---
+
+# 第二阶段：全项目消融（2026-09-12）
+
+范围从「R1 修复批次」扩展到**整个项目**：Rust core 领域服务、Tauri 命令层、
+前端 stores/utils/render 逐模块选代表性消融点，临时还原/破坏行为 → 跑定向
+测试 → 还原（工作树逐轮核对干净）。前置修复（动画节拍器与 storage 抽
+util）使上一阶段的 A12 口径外缺口变为可消融验证。
+
+## 消融矩阵
+
+| #   | 模块               | 消融点（破坏方式）                    | 结果                                                                                                                                    | 保护测试                                                       |
+| --- | ------------------ | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| B1  | core/gmsh          | msh 节点索引去掉 1-based→0-based 偏移 | ✅ 捕获                                                                                                                                 | parses_two_tet_mesh                                            |
+| B2  | core/repair        | 顶点焊接容差归零（只焊完全重合）      | ⚠ 未捕获 → 加固后 ✅                                                                                                                    | near_duplicate_vertices_weld_within_tolerance（1e-9 噪声顶点） |
+| B3  | core/jobs          | promote 忽略核数预算                  | ✅ 捕获                                                                                                                                 | 并发预算用例                                                   |
+| B4  | core/dualdomain    | 厚度配对「双向取近」改取远            | ✅ 捕获                                                                                                                                 | pairing 用例                                                   |
+| B5  | core/openfoam      | inlet/vent 分带判定翻转               | ⚠ 未捕获 → 加固后 ✅                                                                                                                    | boundary_bands_classify_bottom_inlet_top_vent                  |
+| B6  | core/results       | FieldCache FIFO 淘汰改淘汰最新        | ✅ 捕获                                                                                                                                 | cache_evicts_oldest_beyond_capacity                            |
+| B7  | core/results       | 阈值掩码 ≥ 改 >                       | ✅ 捕获                                                                                                                                 | threshold 用例                                                 |
+| B8  | core/material      | CSV 表头校验跳过                      | ⚠ 未捕获 → 加固后 ✅（旧断言 `contains("表头")` 被行级错误消息误满足；增 21 列错名用例）                                                | csv_import_rejects_bad_header_row_count_and_number             |
+| B9  | core/project       | schema 版本门移除                     | ✅ 捕获                                                                                                                                 | 版本拒绝用例                                                   |
+| B10 | core/process       | 熔体温度上界移除                      | ✅ 捕获                                                                                                                                 | validate 用例                                                  |
+| B11 | core/render_mesh   | face_cells owner 归属错位             | ✅ 捕获                                                                                                                                 | owner 归属用例                                                 |
+| B12 | core/geometry      | check_mesh 开放边不计数               | ✅ 捕获                                                                                                                                 | summarize 用例 ×2                                              |
+| B13 | cmd/gpu_ops        | dispatch 切块移除（3 倍限值模拟）     | ✅ 捕获（精确复现原始 panic：196605 > 65535）                                                                                           | derive_gpu_handles_over_dispatch_limit_lengths                 |
+| B14 | cmd/gpu_ops        | 两场差值长度校验移除                  | ✅ 捕获                                                                                                                                 | rejects_length_mismatch                                        |
+| B16 | web/field-binary   | 解码端序小端→大端                     | ✅ 捕获                                                                                                                                 | decode 用例                                                    |
+| B17 | web/report         | escapeHtml 的 `<` 转义移除            | ✅ 捕获                                                                                                                                 | XSS 注入用例 ×4                                                |
+| B18 | web/shortcuts      | 平台判定翻转（⌘↔Ctrl）                | ✅ 捕获                                                                                                                                 | 匹配用例 ×5                                                    |
+| B19 | web/pipeline store | 几何前置校验移除                      | ✅ 捕获                                                                                                                                 | 防御校验用例                                                   |
+| B20 | web/project store  | touchActiveStudy 不盖 updatedMs       | ⚠ 未捕获 → 加固后 ✅（旧断言 `toBeGreaterThanOrEqual` 连不盖章都通过；改假计时器严格相等）                                              | stamps updatedMs                                               |
+| B21 | web/animation      | 背压移除（上阶段 A12 缺口）           | ✅ 捕获（前置修复后受保护）                                                                                                             | 背压跳拍用例                                                   |
+| B22 | web/storage        | 损坏 JSON 不兜底                      | ✅ 捕获                                                                                                                                 | 损坏回退用例                                                   |
+| B23 | web/picking        | 射线方向 right 分量丢弃               | ✅ 捕获                                                                                                                                 | 拾取用例 ×2                                                    |
+| B24 | web/mesh-asset     | 网格步长漂移                          | ⚠ 未捕获 → 加固后 ✅（旧测试只验证两次运行互相一致；增单位网格精确布局断言。注：2e-16 级漂移经 Float32 窄化不可见，复验用 1e-2 级漂移） | 顶点坐标精确落格用例                                           |
+
+**统计：23 点，加固前 18 捕获（78%），5 缺口全部加固后 23/23 可捕获（100%）。**
+
+## 加固清单（本阶段落盘的测试）
+
+1. core/repair：`near_duplicate_vertices_weld_within_tolerance`——容差焊接语义
+   （此前只覆盖完全重合顶点）；
+2. core/openfoam：`boundary_bands_classify_bottom_inlet_top_vent`——分带方向；
+3. core/material：21 列错名表头用例——表头校验本身（旧断言可被行级消息误满足）；
+4. web/project：盖章断言改假计时器严格相等（旧断言过弱）；
+5. web/mesh-asset：单位网格精确布局（旧测试只验证运行间一致，不验证布局正确）。
+
+## 经验
+
+- 「测试存在」≠「语义被锁定」：5 个缺口里 3 个（B8/B20/B24）是断言过弱
+  （宽松比较 / 只验一致性不验正确性），2 个（B2/B5）是语义完全无覆盖；
+- 消融驱动的测试加固能精确暴露弱断言，建议随 T21 评审常态化（对关键
+  纯函数做定期抽样消融）；
+- Float32 顶点缓冲使 <1e-7 级的布局漂移不可检测——确定性锁定断言要按
+  目标精度设计。
+
+## 验证
+
+- 每轮消融后工作树核对干净（一处例外：复验阶段 git checkout 误还原了
+  未提交的加固测试，已重新应用并全量验证——流程教训：消融还原应使用
+  文件级暂存而非 checkout）；
+- 全量 `bun run verify` 通过：前端 516 测试四维 100%、core 257 测试行覆盖
+  100%、clippy -D warnings、knip。

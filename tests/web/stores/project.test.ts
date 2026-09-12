@@ -353,18 +353,26 @@ describe("project store", () => {
     });
 
     it("applies the mutation and stamps updatedMs", () => {
-      const app = useAppStore();
-      const { project, study } = primeActiveStudy();
-      const before = project.project?.updatedMs ?? 0;
+      // 假计时器锁定盖章语义：updatedMs 必须等于 mutate 时刻（此前
+      // toBeGreaterThanOrEqual 连「不盖章」都能通过——消融 B20 的加固点）。
+      vi.useFakeTimers();
+      vi.setSystemTime(1000);
+      try {
+        const app = useAppStore();
+        const { project, study } = primeActiveStudy();
 
-      project.touchActiveStudy((target) => {
-        target.name = "改名后";
-      });
+        vi.setSystemTime(1500);
+        project.touchActiveStudy((target) => {
+          target.name = "改名后";
+        });
 
-      expect(app.error).toBeNull();
-      expect(project.activeStudy?.name).toBe("改名后");
-      expect(project.project?.updatedMs).toBeGreaterThanOrEqual(before);
-      expect(study.name).toBe("改名后");
+        expect(app.error).toBeNull();
+        expect(project.activeStudy?.name).toBe("改名后");
+        expect(project.project?.updatedMs).toBe(1500);
+        expect(study.name).toBe("改名后");
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 

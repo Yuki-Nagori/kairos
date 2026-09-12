@@ -460,6 +460,22 @@ mod tests {
     }
 
     #[test]
+    fn near_duplicate_vertices_weld_within_tolerance() {
+        // 容差 = 对角线 × 1e-6：1e-9 级浮点噪声顶点必须焊掉（消融 B2 锁定——
+        // 容差为 0 时该用例失败，恰好重合的顶点才合并是不够的）。
+        let triangles = vec![
+            tri([0.0, 0.0, 0.0], [10.0, 0.0, 0.0], [0.0, 10.0, 0.0]),
+            tri([0.0, 1e-9, 0.0], [0.0, 10.0, 0.0], [10.0, 0.0, 0.0]),
+        ];
+        let (repaired, report) = repair_mesh(&TriangleMesh { triangles }).unwrap();
+        assert!(
+            report.merged_vertices >= 1,
+            "近重复顶点未被焊接：{report:?}"
+        );
+        assert_eq!(repaired.triangle_count(), 2);
+    }
+
+    #[test]
     fn crossing_triangles_are_counted_as_self_intersection() {
         // 直接测检测函数：repair_mesh 会先填孔，交叉对外轮廓会被扇形补面。
         let triangles = vec![
