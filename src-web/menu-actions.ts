@@ -42,10 +42,11 @@ const menuActions: Record<string, () => void> = {
 
 /** 注册原生菜单事件监听（main 启动时调用一次）。 */
 export function setupMenuActions(): void {
-  listen<string>("menu-action", (event) => {
-    // 载荷来自 Rust 菜单的字符串 id：只在命中注册表时触发，其余静默忽略。
-    const id = event.payload as MenuActionId;
-    if (id in menuActions) {
+  listen<unknown>("menu-action", (event) => {
+    // 载荷来自 Rust 菜单的字符串 id：先验证类型再查注册表（IPC 载荷不做
+    // 无验证断言），命中才触发，其余静默忽略。
+    const id = event.payload;
+    if (typeof id === "string" && id in menuActions) {
       menuActions[id]?.();
     }
   }).catch(() => undefined);

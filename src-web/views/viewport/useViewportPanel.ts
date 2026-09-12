@@ -49,12 +49,16 @@ export function useViewportPanel() {
     return slots[id] as ViewportSlot;
   }
 
-  /** 模板 ref 回调：画布挂载 / 卸载时维护实例的元素并按需补建渲染器。 */
+  /** 模板 ref 回调：画布挂载 / 卸载时维护实例的元素，就绪即建渲染器（幂等），
+   *  已有共享网格数据则立即补上传（切到四分格后新增实例的场景）。 */
   function attachCanvas(id: number, el: unknown): void {
     const slot = slotById(id);
     slot.el = (el as HTMLCanvasElement | null) ?? null;
-    // 已有共享网格数据而该实例尚未就绪（如切到四分格后新增实例）→ 立即补建。
-    if (slot.el !== null && sharedMesh !== null) {
+    if (slot.el === null) {
+      return;
+    }
+    void ensureSlotRenderer(slot);
+    if (sharedMesh !== null) {
       void setupSlot(slot);
     }
   }
@@ -100,6 +104,9 @@ export function useViewportPanel() {
 
   /** 共享网格数据：一次获取，所有实例（含后续新增）复用上传。 */
   let sharedMesh: PickMesh | null = null;
+  /** 在途渲染器创建（按实例 id）：attachCanvas 与 setupSlot 可能并发触发
+   *  同一实例的创建，去重避免重复建渲染器 / 重复注册指针与回调。 */
+  const creating = new Map<number, Promise<void>>();
   /** 时间步动画节拍器：背压/回绕/停止逻辑在 utils/animation（可单测）。 */
   let animation: ReturnType<typeof createFieldAnimation> | null = null;
 
@@ -246,31 +253,43 @@ export function useViewportPanel() {
     }
   }
 
-  async function ensureSlotRenderer(slot: ViewportSlot): Promise<void> {
-    if (slot.renderer !== null || slot.el === null) {
-      return;
+  /** 幂等创建实例渲染器（并发去重）；创建失败时主视口给出环境不支持提示。 */
+  function ensureSlotRenderer(slot: ViewportSlot): Promise<void> {
+    if (slot.renderer !== null) {
+      return Promise.resolve();
     }
-    const created = await createViewportRenderer(
-      slot.el,
-      slot.id === 0
-        ? (fps) => {
-            fpsText.value = `FPS: ${fps}`;
-          }
-        : undefined,
-      (state) => {
-        viewCenter.value = state;
-        syncOrbitFrom(slot);
-      },
-    );
-    if (created === null) {
-      if (slot.id === 0) {
-        emptyText.value = "当前环境不支持 WebGL2 / WebGPU，无法渲染视口。";
-        emptyError.value = true;
+    const inFlight = creating.get(slot.id);
+    if (inFlight !== undefined) {
+      return inFlight;
+    }
+    const task = (async () => {
+      const created = await createViewportRenderer(
+        slot.el!,
+        slot.id === 0
+          ? (fps) => {
+              fpsText.value = `FPS: ${fps}`;
+            }
+          : undefined,
+        (state) => {
+          viewCenter.value = state;
+          syncOrbitFrom(slot);
+        },
+      );
+      if (created === null) {
+        if (slot.id === 0) {
+          emptyText.value = "当前环境不支持 WebGL2 / WebGPU，无法渲染视口。";
+          emptyError.value = true;
+        }
+        return;
       }
-      return;
-    }
-    slot.renderer = created.backend;
-    attachPointerHandlers(slot);
+      slot.renderer = created.backend;
+      attachPointerHandlers(slot);
+    })();
+    creating.set(slot.id, task);
+    void task.finally(() => {
+      creating.delete(slot.id);
+    });
+    return task;
   }
 
   /** 单实例就绪：建渲染器 + 上传共享网格 + 应用云图 / 剖切 / 图层。 */
@@ -283,6 +302,9 @@ export function useViewportPanel() {
     if (renderer === null) {
       return;
     }
+    // 共享网格入槽：applyField / applyClip / 空间拾取都按槽读取
+    // （T49 重构曾丢失此赋值，三个功能随之静默失效——回归锁定）。
+    slot.renderMesh = sharedMesh;
     renderer.uploadMesh({
       positions: sharedMesh.positions,
       indices: sharedMesh.indices,
@@ -359,9 +381,11 @@ export function useViewportPanel() {
       if (slot.renderer === null || slot.renderMesh === null) {
         continue;
       }
-      const perFace = new Float32Array(slot.renderMesh.faceCells.length);
-      for (let face = 0; face < perFace.length; face += 1) {
-        perFace[face] = field.values[slot.renderMesh.faceCells[face] ?? 0] ?? 0;
+      const faceCells = slot.renderMesh.faceCells;
+      const perFace = new Float32Array(faceCells.length);
+      for (let face = 0; face < faceCells.length; face += 1) {
+        // face < faceCells.length ⇒ 索引必在界内（不变量，按非空处理）
+        perFace[face] = field.values[faceCells[face] as number] ?? 0;
       }
       slot.renderer.setFaceValues(perFace);
       const { min, max } = minMax(field.values);

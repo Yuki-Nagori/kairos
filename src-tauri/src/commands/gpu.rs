@@ -58,7 +58,16 @@ mod tests {
 
     #[test]
     fn probe_returns_adapters_on_machines_with_gpu() {
-        // 在有 GPU 的机器上（CI runner 与开发机均有），至少能枚举一个适配器。
+        // 在有 GPU 的机器上（开发机与 macOS CI），至少能枚举一个适配器；
+        // 无适配器环境按 D0「GPU 必需但 CI 可验证」策略显式跳过。
+        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::default());
+        if instance
+            .enumerate_adapters(wgpu::Backends::all())
+            .is_empty()
+        {
+            println!("跳过：无可用 GPU 适配器（无 GPU 环境按策略跳过，真机验收归 T48）");
+            return;
+        }
         let adapters = pollster::block_on(probe_gpu()).expect("GPU 探测不应失败");
         assert!(!adapters.is_empty(), "应有至少一个可用适配器");
     }

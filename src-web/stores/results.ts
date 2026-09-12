@@ -39,14 +39,9 @@ export const useResultsStore = defineStore("results", {
     /** 扫描 case 结果目录（时间步 + 场清单）。 */
     async loadResultsCatalog(caseDir: string): Promise<void> {
       const app = useAppStore();
-      app.beginBusy("正在扫描结果…");
-      try {
+      await app.withBusy("正在扫描结果…", async () => {
         this.resultCatalog = await listResultTimes(caseDir);
-      } catch (error) {
-        app.setError(error);
-      } finally {
-        app.endBusy();
-      }
+      });
     },
     /** 用上次扫描的目录重扫（工具条入口）；尚无目录时引导先在结果面板扫描。 */
     async rescanCatalog(): Promise<void> {
@@ -65,19 +60,14 @@ export const useResultsStore = defineStore("results", {
       slot: FieldSlot = "primary",
     ): Promise<void> {
       const app = useAppStore();
-      app.beginBusy("正在加载场数据…");
-      try {
+      await app.withBusy("正在加载场数据…", async () => {
         const loaded = await loadResultField(caseDir, timeDir, field, slot);
         if (slot === "compare") {
           this.compareField = loaded;
         } else {
           this.loadedField = loaded;
         }
-      } catch (error) {
-        app.setError(error);
-      } finally {
-        app.endBusy();
-      }
+      });
     },
     /** 添加探针（整数、非负、不重复、且在已加载场的范围内）。 */
     addProbe(nodeIndex: number): void {
@@ -110,8 +100,7 @@ export const useResultsStore = defineStore("results", {
       if (catalog === null || probes.length === 0 || source === null || rawField === "") {
         return;
       }
-      app.beginBusy("正在加载探针时间曲线…");
-      try {
+      await app.withBusy("正在加载探针时间曲线…", async () => {
         const originalTimeDir = source.timeDir;
         const series: ProbeTimeSeries[] = probes.map((probe) => ({
           probeId: probe.id,
@@ -130,11 +119,7 @@ export const useResultsStore = defineStore("results", {
         }
         this.probeTimeSeries = series;
         this.probeSeriesField = rawField;
-      } catch (error) {
-        app.setError(error);
-      } finally {
-        app.endBusy();
-      }
+      });
     },
     /** 对主场执行单场派生（normalize / threshold / linear），写回 loadedField。 */
     async deriveField(request: DeriveRequest): Promise<void> {

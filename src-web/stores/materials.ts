@@ -108,10 +108,10 @@ export const useMaterialsStore = defineStore("materials", {
         app.setError("材料不存在。");
         return;
       }
-      const studies = project.studies.map((study) =>
-        study.id === activeStudyId ? { ...study, materialId } : study,
-      );
-      projectStore.project = { ...project, studies, updatedMs: Date.now() };
+      // 登记走 project store 统一入口（不可变更新 + updatedMs 盖章单一来源）。
+      projectStore.touchActiveStudy((study) => {
+        study.materialId = materialId;
+      });
     },
   },
 });

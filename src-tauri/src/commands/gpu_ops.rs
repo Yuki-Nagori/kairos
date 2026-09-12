@@ -504,6 +504,17 @@ pub fn operator_catalog() -> Vec<GpuOperatorInfo> {
 mod tests {
     use super::*;
 
+    /// GPU 测试的 CI 门控：无适配器环境显式跳过（GPU 为运行前提、无 CPU
+    /// 回退，但测试套件须可在无 GPU 的 CI runner 验证其余逻辑——D0
+    /// 「GPU 必需但 CI 可验证」策略）。探测经进程级设备缓存复用。
+    fn skip_without_gpu() -> bool {
+        if compute_device().is_ok() {
+            return false;
+        }
+        println!("跳过：无可用 GPU 适配器（无 GPU 环境按策略跳过，真机验收归 T48）");
+        true
+    }
+
     fn deterministic_vectors(count: usize) -> Vec<[f32; 3]> {
         // 确定性伪随机（LCG），保证测试可复现。
         let mut state: u32 = 0x1234_5678;
@@ -557,6 +568,10 @@ mod tests {
 
     #[test]
     fn scalar_linear_gpu_matches_cpu() {
+        if skip_without_gpu() {
+            return;
+        }
+
         let values = deterministic_scalars(1000);
         let gpu = scalar_linear_gpu(&values, 0.5, -2.0).expect("GPU 线性映射");
         let reference: Vec<f32> = values.iter().map(|&v| v * 0.5 - 2.0).collect();
@@ -567,6 +582,10 @@ mod tests {
 
     #[test]
     fn scalar_threshold_gpu_matches_cpu() {
+        if skip_without_gpu() {
+            return;
+        }
+
         let values = deterministic_scalars(1000);
         let gpu = scalar_threshold_gpu(&values, 5.0).expect("GPU 阈值掩码");
         for (g, &v) in gpu.iter().zip(&values) {
@@ -576,6 +595,10 @@ mod tests {
 
     #[test]
     fn scalar_difference_gpu_matches_cpu() {
+        if skip_without_gpu() {
+            return;
+        }
+
         let a = deterministic_scalars(1000);
         let b = deterministic_scalars(1000);
         let gpu = scalar_difference_gpu(&a, &b).expect("GPU 两场差值");
@@ -586,6 +609,10 @@ mod tests {
 
     #[test]
     fn gpu_magnitudes_match_cpu_reference() {
+        if skip_without_gpu() {
+            return;
+        }
+
         let vectors = deterministic_vectors(1024);
         let gpu = vector_magnitude_gpu(&vectors).expect("GPU 管线应在本机可用");
         let cpu = vector_magnitude_cpu(&vectors);
@@ -629,6 +656,10 @@ mod tests {
 
     #[test]
     fn derive_normalize_gpu_matches_cpu_reference() {
+        if skip_without_gpu() {
+            return;
+        }
+
         let field = sample_field("T", 256);
         let gpu = derive_scalar_field_gpu(&field, &DeriveRequest::Normalize).expect("GPU 归一化");
         let cpu = derive_scalar_field_cpu(&field, &DeriveRequest::Normalize).unwrap();
@@ -637,6 +668,10 @@ mod tests {
 
     #[test]
     fn derive_threshold_gpu_matches_cpu_reference() {
+        if skip_without_gpu() {
+            return;
+        }
+
         let field = sample_field("T", 256);
         let gpu = derive_scalar_field_gpu(&field, &DeriveRequest::Threshold).expect("GPU 阈值");
         let cpu = derive_scalar_field_cpu(&field, &DeriveRequest::Threshold).unwrap();
@@ -645,6 +680,10 @@ mod tests {
 
     #[test]
     fn derive_linear_gpu_matches_cpu_reference() {
+        if skip_without_gpu() {
+            return;
+        }
+
         let field = sample_field("p", 256);
         let request = DeriveRequest::Linear {
             scale: 2.0,
@@ -657,6 +696,10 @@ mod tests {
 
     #[test]
     fn derive_normalize_flat_field_maps_to_zeros_on_gpu() {
+        if skip_without_gpu() {
+            return;
+        }
+
         let field = ScalarField {
             field: "T".into(),
             time_dir: "100".into(),
@@ -683,6 +726,10 @@ mod tests {
 
     #[test]
     fn derive_difference_gpu_matches_cpu_reference() {
+        if skip_without_gpu() {
+            return;
+        }
+
         let primary = sample_field("T", 256);
         let compare = sample_field("T0", 256);
         let gpu = derive_difference_gpu(&primary, &compare).expect("GPU 两场差值");
@@ -699,6 +746,10 @@ mod tests {
 
     #[test]
     fn derive_gpu_handles_over_dispatch_limit_lengths() {
+        if skip_without_gpu() {
+            return;
+        }
+
         // 回归：> 4.19M 值时单次 dispatch 超 Metal/Vulkan 每维 65535 workgroup
         // 硬限会 panic（消融计时实测）——按块切分后必须与 CPU 参考一致。
         let n = MAX_ELEMENTS_PER_DISPATCH + 7;

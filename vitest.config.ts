@@ -19,13 +19,9 @@ export default defineConfig({
         "src-web/components/**/use*.ts",
         "src-web/views/**/use*.ts",
       ],
-      exclude: [
-        "src-web/main.ts",
-        "src-web/**/*.test.ts",
-        "src-web/utils/bench/**",
-        // 命令式 WebGL 集成：happy-dom 无法提供 WebGL2 上下文，行为由真机验证
-        "src-web/views/viewport/useViewportPanel.ts",
-      ],
+      // useViewportPanel 曾在此排除（happy-dom 无 WebGL2）；后端 mock 化测试
+      // 落地后已收编（该排除期间 T49 重构曾丢失 renderMesh 赋值而无人察觉）。
+      exclude: ["src-web/main.ts", "src-web/**/*.test.ts", "src-web/utils/bench/**"],
       thresholds: { lines: 100, functions: 100, branches: 100, statements: 100 },
     },
   },
