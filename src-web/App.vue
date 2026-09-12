@@ -24,6 +24,7 @@ import ResultsPanel from "./views/results/ResultsPanel.vue";
 import ProjectTree from "./views/project-tree/ProjectTree.vue";
 import LayersPanel from "./views/layers/LayersPanel.vue";
 import StudyTasksPanel from "./views/study-tasks/StudyTasksPanel.vue";
+import StudySummaryPanel from "./views/study-summary/StudySummaryPanel.vue";
 import MaterialsPanel from "./views/materials/MaterialsPanel.vue";
 import GeometryPanel from "./views/geometry/GeometryPanel.vue";
 import MoldPanel from "./views/mold/MoldPanel.vue";
@@ -54,6 +55,8 @@ const LEFT_PANELS: PanelConfig[] = [
 ];
 
 const RIGHT_PANELS: PanelConfig[] = [
+  // 方案摘要（Moldflow 式配置速览）：材料 / 工艺 / 最新作业，常驻右列首位
+  { component: StudySummaryPanel, stages: ALL_STAGES },
   { component: MoldPanel, stages: ["home", "process"] },
   { component: ProcessPanel, stages: ["home", "process"] },
   { component: DependenciesPanel, stages: ["home", "solve"] },

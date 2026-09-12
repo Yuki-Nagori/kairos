@@ -7,7 +7,18 @@ import Dropdown from "../../components/ui/UiDropdown.vue";
 import TextInput from "../../components/ui/UiTextInput.vue";
 import UiButton from "../../components/ui/UiButton.vue";
 
-const { tasks, submitDisabled, openTask, submit, stage, cores } = useStudyTasks();
+const {
+  tasks,
+  submitDisabled,
+  openTask,
+  submit,
+  stage,
+  cores,
+  menu,
+  openMenu,
+  closeMenu,
+  taskMenuCommands,
+} = useStudyTasks();
 </script>
 
 <template>
@@ -17,8 +28,9 @@ const { tasks, submitDisabled, openTask, submit, stage, cores } = useStudyTasks(
         <button
           type="button"
           class="flex w-full gap-2.5 rounded-md px-1 py-1 text-left transition-colors hover:bg-zinc-800/50"
-          :title="`双击打开「${task.label}」编辑`"
+          :title="`双击打开「${task.label}」编辑，右键更多命令`"
           @dblclick="openTask(task)"
+          @contextmenu.prevent="openMenu(task, $event)"
         >
           <!-- Moldflow 六态图标：✓ 成功 / ! 警告 / ✕ 失败 / ⧖ 排队 / ⟳ 执行中 / 空 未开始 -->
           <span
@@ -63,6 +75,27 @@ const { tasks, submitDisabled, openTask, submit, stage, cores } = useStudyTasks(
         </button>
       </li>
     </ol>
+    <!-- 任务右键菜单：定位在指针处，点击任意处 / Esc 关闭（监听在 composable） -->
+    <div
+      v-if="menu"
+      class="fixed z-50 min-w-36 rounded-lg border border-zinc-700 bg-zinc-900 py-1 shadow-xl"
+      :style="{ left: `${menu.x}px`, top: `${menu.y}px` }"
+      @click.stop
+    >
+      <button
+        v-for="item in taskMenuCommands(menu.task)"
+        :key="item.label"
+        type="button"
+        class="block w-full px-3 py-1.5 text-left text-xs transition-colors hover:bg-zinc-800"
+        :class="item.danger ? 'text-red-400' : 'text-zinc-300'"
+        @click="
+          item.run();
+          closeMenu();
+        "
+      >
+        {{ item.label }}
+      </button>
+    </div>
     <div class="mt-2 flex flex-wrap items-center gap-2 border-t border-zinc-800 pt-2">
       <Dropdown v-model="stage">
         <option value="fill">填充</option>

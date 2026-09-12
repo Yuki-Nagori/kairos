@@ -185,6 +185,40 @@ export function evaluateStudyTasks(input: StudyTasksInput): StudyTask[] {
   return tasks;
 }
 
+/** 阶段选项卡角标：把任务序列的「需要立即注意」状态投射到对应工作台阶段
+ *  选项卡上（几何 ← 网格健康告警；求解 ← 作业运行 / 排队 / 失败）。
+ *  已完成与待办不产生角标——角标只提示后台正在发生或需要处理的事。 */
+export interface StageBadge {
+  icon: string;
+  /** Tailwind 文字配色类（字面量出现在本文件，供扫描）。 */
+  cls: string;
+  title: string;
+}
+
+export function stageBadges(tasks: StudyTask[]): Partial<Record<Stage, StageBadge>> {
+  const badges: Partial<Record<Stage, StageBadge>> = {};
+  for (const task of tasks) {
+    // 修复任务存在即几何不健康（未划分网格或划分后有告警，均需到几何阶段修复）
+    if (task.id === "repair") {
+      badges.geometry = {
+        icon: "!",
+        cls: "text-amber-400",
+        title: "几何健康检查有告警，建议修复",
+      };
+    }
+    if (task.id === "analysis") {
+      if (task.state === "running") {
+        badges.solve = { icon: "⟳", cls: "text-amber-400", title: "分析执行中" };
+      } else if (task.state === "queued") {
+        badges.solve = { icon: "⧖", cls: "text-sky-400", title: "分析排队中" };
+      } else if (task.state === "failed") {
+        badges.solve = { icon: "✕", cls: "text-red-400", title: "分析失败" };
+      }
+    }
+  }
+  return badges;
+}
+
 /** 提交前置是否就绪：分析与其后的任务是提交的产物，不参与前置判断。 */
 export function prerequisitesReady(tasks: StudyTask[]): boolean {
   const POST_SUBMIT = new Set(["analysis", "results"]);

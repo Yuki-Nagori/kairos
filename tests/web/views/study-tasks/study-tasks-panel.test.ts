@@ -28,7 +28,8 @@ vi.mock("../../../../src-web/api/project", () => ({
 vi.mock("../../../../src-web/api/jobs", () => ({
   submitJob: vi.fn(),
   cancelJob: vi.fn(),
-  listJobs: vi.fn(),
+  // refreshJobs 会把返回值写入 store.jobs：必须返回数组，否则污染任务快照
+  listJobs: vi.fn(async () => []),
 }));
 // Channel 在 happy-dom 无 Tauri IPC 内部对象，构造即抛——桩掉
 vi.mock("@tauri-apps/api/core", () => ({
@@ -176,6 +177,111 @@ describe("StudyTasksPanel（方案任务窗格）", () => {
     const wrapper = mount(StudyTasksPanel, { global: { plugins: [pinia] } });
     expect(wrapper.text()).toContain("分析作业失败");
     expect(wrapper.text()).toContain("✕");
+  });
+
+  it("右键任务弹出上下文菜单：打开编辑恒有，Esc / 点击外部关闭", async () => {
+    prime(pinia);
+    const app = (await import("../../../../src-web/stores/app")).useAppStore();
+    const wrapper = mount(StudyTasksPanel, { global: { plugins: [pinia] } });
+    const buttons = wrapper.findAll("ol li button");
+
+    // 右键几何任务 → 菜单出现，含「打开编辑」
+    await buttons[0]!.trigger("contextmenu", { clientX: 40, clientY: 60 });
+    const menu = wrapper.find("div.fixed");
+    expect(menu.exists()).toBe(true);
+    expect(menu.text()).toContain("打开编辑");
+    const labels = menu.findAll("button").map((node) => node.text());
+    expect(labels).toEqual(["打开编辑"]);
+
+    // 点击菜单项 → 切换阶段并关闭菜单
+    await menu.findAll("button")[0]!.trigger("click");
+    expect(app.stage).toBe("geometry");
+    expect(wrapper.find("div.fixed").exists()).toBe(false);
+  });
+
+  it("右键分析任务：运行中出现「取消作业」并调用取消；结果任务已扫描出现「重扫」", async () => {
+    prime(pinia);
+    const jobsStore = useJobsStore();
+    const results = useResultsStore();
+    const { cancelJob } = (await import("../../../../src-web/api/jobs")) as unknown as {
+      cancelJob: ReturnType<typeof vi.fn>;
+    };
+    jobsStore.jobs = [jobFixture({ status: "running", lastTimeS: 0.5 })];
+    const wrapper = mount(StudyTasksPanel, { global: { plugins: [pinia] } });
+    const buttons = wrapper.findAll("ol li button");
+
+    // 分析任务（倒数第二）右键 → 取消作业
+    await buttons[buttons.length - 2]!.trigger("contextmenu", { clientX: 10, clientY: 10 });
+    let menu = wrapper.find("div.fixed");
+    expect(menu.text()).toContain("取消作业");
+    await menu
+      .findAll("button")
+      .find((node) => node.text() === "取消作业")!
+      .trigger("click");
+    await flushPromises();
+    expect(cancelJob).toHaveBeenCalledWith("job-1");
+    expect(wrapper.find("div.fixed").exists()).toBe(false);
+
+    // 结果任务：已扫描 → 重扫结果目录
+    results.resultCatalog = {
+      caseDir: "/case/run",
+      times: [{ dirName: "1", timeS: 1, fields: ["p"] }],
+    };
+    await wrapper.vm.$nextTick();
+    const rescanSpy = vi.spyOn(results, "rescanCatalog").mockResolvedValue(undefined);
+    await buttons[buttons.length - 1]!.trigger("contextmenu", { clientX: 10, clientY: 10 });
+    menu = wrapper.find("div.fixed");
+    expect(menu.text()).toContain("重扫结果目录");
+    await menu
+      .findAll("button")
+      .find((node) => node.text() === "重扫结果目录")!
+      .trigger("click");
+    expect(rescanSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("Esc 关闭右键菜单", async () => {
+    prime(pinia);
+    const wrapper = mount(StudyTasksPanel, { global: { plugins: [pinia] } });
+    await wrapper.findAll("ol li button")[0]!.trigger("contextmenu", { clientX: 1, clientY: 1 });
+    expect(wrapper.find("div.fixed").exists()).toBe(true);
+
+    // 非 Esc 按键不关闭菜单
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find("div.fixed").exists()).toBe(true);
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find("div.fixed").exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it("分析待办时右键：只有「打开编辑」（无作业可取消）", async () => {
+    prime(pinia);
+    const wrapper = mount(StudyTasksPanel, { global: { plugins: [pinia] } });
+    const buttons = wrapper.findAll("ol li button");
+    await buttons[buttons.length - 2]!.trigger("contextmenu", { clientX: 1, clientY: 1 });
+    const labels = wrapper
+      .find("div.fixed")
+      .findAll("button")
+      .map((node) => node.text());
+    expect(labels).toEqual(["打开编辑"]);
+    wrapper.unmount();
+  });
+
+  it("分析排队中右键：取消作业同样可用（⧖ 态）", async () => {
+    prime(pinia);
+    const jobsStore = useJobsStore();
+    jobsStore.jobs = [jobFixture({ status: "queued" })];
+    const wrapper = mount(StudyTasksPanel, { global: { plugins: [pinia] } });
+    const buttons = wrapper.findAll("ol li button");
+    await buttons[buttons.length - 2]!.trigger("contextmenu", { clientX: 1, clientY: 1 });
+    const labels = wrapper
+      .find("div.fixed")
+      .findAll("button")
+      .map((node) => node.text());
+    expect(labels).toEqual(["打开编辑", "取消作业"]);
+    wrapper.unmount();
   });
 
   it("前置未就绪时提交按钮禁用；就绪后可用并调用提交", async () => {

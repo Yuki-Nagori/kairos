@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   evaluateStudyTasks,
   prerequisitesReady,
+  stageBadges,
   type StudyTasksInput,
 } from "../../../src-web/utils/study-tasks";
 import type { GeometrySummary, Job, Material, Project } from "../../../src-web/types";
@@ -264,5 +265,68 @@ describe("evaluateStudyTasks（方案任务序列）", () => {
     );
     // 网格 warning + 修复任务 todo —— 修复任务未完成则不可提交
     expect(prerequisitesReady(unhealthy)).toBe(false);
+  });
+});
+
+describe("stageBadges（阶段选项卡角标）", () => {
+  it("空任务与完成态不产生角标（角标只提示进行中 / 异常）", () => {
+    expect(stageBadges(evaluateStudyTasks(input()))).toEqual({});
+    const allDone = evaluateStudyTasks(
+      input({
+        geometries: [geometry()],
+        meshReports: { "g-1": { elementCount: 5000 } },
+        jobs: [job({ status: "done", finishedMs: 2 })],
+        resultCatalog: { caseDir: "/c", times: [{ dirName: "1", timeS: 1, fields: [] }] },
+      }),
+    );
+    expect(stageBadges(allDone)).toEqual({});
+  });
+
+  it("几何不健康 → 几何阶段 ! 角标（未划分网格同样提示）", () => {
+    const tasks = evaluateStudyTasks(
+      input({
+        geometries: [
+          geometry({
+            issues: {
+              degenerate: 1,
+              openEdges: 0,
+              nonManifoldEdges: 0,
+              normalInconsistentEdges: 0,
+            },
+          }),
+        ],
+        meshReports: { "g-1": { elementCount: 5000 } },
+      }),
+    );
+    const badges = stageBadges(tasks);
+    expect(badges.geometry?.icon).toBe("!");
+    expect(badges.geometry?.cls).toContain("text-amber-400");
+    expect(badges.solve).toBeUndefined();
+    // 尚未划分网格（导入即不健康）→ 同样出角标
+    const preMesh = evaluateStudyTasks(
+      input({
+        geometries: [
+          geometry({
+            issues: {
+              degenerate: 0,
+              openEdges: 3,
+              nonManifoldEdges: 0,
+              normalInconsistentEdges: 0,
+            },
+          }),
+        ],
+      }),
+    );
+    expect(stageBadges(preMesh).geometry?.icon).toBe("!");
+  });
+
+  it("分析运行 / 排队 / 失败 → 求解阶段 ⟳ / ⧖ / ✕ 角标", () => {
+    const mk = (status: Job["status"]) =>
+      stageBadges(evaluateStudyTasks(input({ jobs: [job({ status })] })));
+    expect(mk("running").solve?.icon).toBe("⟳");
+    expect(mk("queued").solve?.icon).toBe("⧖");
+    const failed = mk("failed");
+    expect(failed.solve?.icon).toBe("✕");
+    expect(failed.solve?.cls).toContain("text-red-400");
   });
 });
