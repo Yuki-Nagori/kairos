@@ -444,6 +444,8 @@ pub fn report(volume_mesh: &VolumeMesh) -> MeshingReport {
         surface_face_count: volume_mesh.surface_faces.len(),
         total_volume,
         quality,
+        // 由命令层按输入三角面网格补充（这里只有体积网格，拿不到原始特征）
+        thin_feature_hints: Vec::new(),
     }
 }
 

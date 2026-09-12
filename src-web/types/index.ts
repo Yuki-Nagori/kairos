@@ -172,6 +172,8 @@ export interface MeshingReport {
   surfaceFaceCount: number;
   totalVolume: number;
   quality: MeshQuality;
+  /** 网格尺寸与最小特征的匹配提示（空 = 通过）。 */
+  thinFeatureHints: string[];
 }
 
 /** 对应 `kairos-core::models::mesh::DualDomainReport`。 */

@@ -113,6 +113,11 @@ export function useGeometryPanel() {
     void geometry.generateMesh(item.geometryId, size, refinement);
   }
 
+  /** 网格尺寸与最小特征的匹配提示（网格报告里的警告行）。 */
+  function thinFeatureHints(report: MeshingReport | undefined): string[] {
+    return report?.thinFeatureHints ?? [];
+  }
+
   function reportText(report: MeshingReport | undefined): string {
     if (!report) {
       return "划分体积网格供求解使用。";
@@ -191,6 +196,7 @@ export function useGeometryPanel() {
     statsText,
     generate,
     reportText,
+    thinFeatureHints,
     dualReportText,
     repairReportText,
     generateDual,

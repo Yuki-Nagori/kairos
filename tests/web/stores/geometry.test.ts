@@ -73,6 +73,7 @@ function makeReport(): MeshingReport {
     surfaceFaceCount: 12,
     totalVolume: 1000,
     quality: { minEdgeRatio: 1, avgEdgeRatio: 1.2, maxEdgeRatio: 2, minVolume: 0.5 },
+    thinFeatureHints: [],
   };
 }
 
@@ -240,6 +241,7 @@ describe("geometry store", () => {
         surfaceFaceCount: 120,
         totalVolume: 1000,
         quality: { minEdgeRatio: 0.4, avgEdgeRatio: 0.8, maxEdgeRatio: 1.2, minVolume: 0.01 },
+        thinFeatureHints: [],
       };
 
       await geometry.repairGeometryById("g-1");
@@ -275,6 +277,7 @@ describe("geometry store", () => {
         surfaceFaceCount: 120,
         totalVolume: 1000,
         quality: { minEdgeRatio: 0.4, avgEdgeRatio: 0.8, maxEdgeRatio: 1.2, minVolume: 0.01 },
+        thinFeatureHints: [],
       };
       vi.mocked(repairGeometry).mockRejectedValueOnce(new Error("修复失败"));
       await geometry.repairGeometryById("g-1");

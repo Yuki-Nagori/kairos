@@ -247,6 +247,7 @@ describe("ReportPanel", () => {
       surfaceFaceCount: 60,
       totalVolume: 200,
       quality: { minEdgeRatio: 1, avgEdgeRatio: 1.2, maxEdgeRatio: 2, minVolume: 0.5 },
+      thinFeatureHints: [],
     };
     const results = useResultsStore();
     results.loadedField = fieldFixture({ values: [10, 20, 30] });

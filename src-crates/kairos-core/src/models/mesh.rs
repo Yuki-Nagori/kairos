@@ -92,6 +92,9 @@ pub struct MeshingReport {
     /// 网格总体积（与制品体积对比可评估占用率）。
     pub total_volume: f64,
     pub quality: MeshQuality,
+    /// 网格尺寸与最小特征的匹配提示（空 = 通过；见 services::thickness）。
+    #[serde(default)]
+    pub thin_feature_hints: Vec<String>,
 }
 
 /// 加密区域包围盒（模型单位）；min/max 分量对应，min ≤ max。

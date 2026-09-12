@@ -16,6 +16,7 @@ const {
   repair,
   repairDisabled,
   reportText,
+  thinFeatureHints,
   dualReportText,
   midplaneReportText,
   repairReportText,
@@ -102,6 +103,13 @@ const {
           </UiButton>
           <p class="text-xs text-zinc-500">
             {{ reportText(geometry.meshReports[row.geometry.geometryId]) }}
+          </p>
+          <p
+            v-for="hint in thinFeatureHints(geometry.meshReports[row.geometry.geometryId])"
+            :key="hint"
+            class="text-xs text-amber-400"
+          >
+            {{ hint }}
           </p>
           <p class="text-xs text-zinc-500">
             {{ dualReportText(geometry.dualDomainReports[row.geometry.geometryId]) }}

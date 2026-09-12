@@ -332,6 +332,32 @@ impl TriangleGrid {
         dir: Point,
         diagonal: f64,
     ) -> Option<f64> {
+        self.first_hit_where(nodes, triangles, origin, dir, diagonal, false)
+    }
+
+    /// 只接受「背面命中」的最近距离：命中三角面的几何法向与射线方向同侧
+    /// （射线打在它的背面）。薄壁探测用它排除擦边命中相邻同向面造成的假近距离
+    /// ——真实件的 20×20×2 类薄壁若不做这层过滤，会量出 0.0x mm 的伪厚度。
+    pub(crate) fn first_opposing_hit(
+        &self,
+        nodes: &[Point],
+        triangles: &[[usize; 3]],
+        origin: Point,
+        dir: Point,
+        diagonal: f64,
+    ) -> Option<f64> {
+        self.first_hit_where(nodes, triangles, origin, dir, diagonal, true)
+    }
+
+    fn first_hit_where(
+        &self,
+        nodes: &[Point],
+        triangles: &[[usize; 3]],
+        origin: Point,
+        dir: Point,
+        diagonal: f64,
+        opposing_only: bool,
+    ) -> Option<f64> {
         // 起点位于自身三角形平面上的邻接面命中按此下限过滤。
         let min_hit = diagonal * 1e-9;
         let local: [f64; 3] = std::array::from_fn(|axis| origin[axis] - self.origin[axis]);
@@ -367,6 +393,7 @@ impl TriangleGrid {
                         nodes[indices[2]],
                     ) && t >= min_hit
                         && best.is_none_or(|current_best| t < current_best)
+                        && (!opposing_only || triangle_opposes(nodes, indices, dir))
                     {
                         best = Some(t);
                     }
@@ -386,6 +413,19 @@ impl TriangleGrid {
         }
         best
     }
+}
+
+/// 命中三角面是否背向射线：几何法向（未归一化叉积）与射线方向同向即为背面命中。
+fn triangle_opposes(nodes: &[Point], indices: &[usize; 3], dir: Point) -> bool {
+    let (a, b, c) = (nodes[indices[0]], nodes[indices[1]], nodes[indices[2]]);
+    let u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+    let v = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+    let cross = [
+        u[1] * v[2] - u[2] * v[1],
+        u[2] * v[0] - u[0] * v[2],
+        u[0] * v[1] - u[1] * v[0],
+    ];
+    cross[0] * dir[0] + cross[1] * dir[1] + cross[2] * dir[2] > 0.0
 }
 
 #[cfg(test)]

@@ -147,6 +147,9 @@ fn meshing_report_serializes_with_camel_case() {
             max_edge_ratio: 1.73,
             min_volume: 0.01,
         },
+        thin_feature_hints: vec![
+            "目标尺寸 5.00 mm 超过最薄特征的 1/2（5% 分位壁厚 3.00 mm）。".into(),
+        ],
     };
     let json = serde_json::to_value(&report).unwrap();
     assert_eq!(json["engine"], "voxel");
@@ -156,6 +159,10 @@ fn meshing_report_serializes_with_camel_case() {
     assert_eq!(json["totalVolume"], 1.0);
     assert_eq!(json["quality"]["minEdgeRatio"], 1.0);
     assert_eq!(json["quality"]["minVolume"], 0.01);
+    assert_eq!(
+        json["thinFeatureHints"][0],
+        "目标尺寸 5.00 mm 超过最薄特征的 1/2（5% 分位壁厚 3.00 mm）。"
+    );
 }
 
 /// DualDomainReport 的形状：统计字段 camelCase，前端几何面板与之对应。

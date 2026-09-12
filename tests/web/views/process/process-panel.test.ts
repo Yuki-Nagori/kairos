@@ -132,6 +132,7 @@ describe("ProcessPanel 填充工况上下文", () => {
           maxEdgeRatio: 1,
           minVolume: 1,
         },
+        thinFeatureHints: [],
       },
     };
     vi.mocked(checkProcess).mockResolvedValue([]);

@@ -59,6 +59,7 @@ const meshReport: MeshingReport = {
   surfaceFaceCount: 12,
   totalVolume: 1000,
   quality: { minEdgeRatio: 1, avgEdgeRatio: 1.2, maxEdgeRatio: 2, minVolume: 0.5 },
+  thinFeatureHints: [],
 };
 
 const process: ProcessSettings = {

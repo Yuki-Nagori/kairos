@@ -220,7 +220,11 @@ pub async fn generate_volume_mesh(
             session.mesh.clone()
         };
         let volume = meshing::generate(&mesh, &params)?;
-        let report = meshing::report(&volume);
+        let mut report = meshing::report(&volume);
+        report.thin_feature_hints = kairos_core::services::thickness::thin_feature_hints(
+            params.target_size,
+            &kairos_core::services::thickness::probe_thickness(&mesh),
+        );
         if let Some(session) = store.lock().get_mut(&geometry_id) {
             session.volume = Some(volume);
         }
@@ -278,6 +282,10 @@ pub async fn generate_gmsh_mesh(
         )?;
         let mut report = kairos_core::services::meshing::report(&volume);
         report.engine = "gmsh".into();
+        report.thin_feature_hints = kairos_core::services::thickness::thin_feature_hints(
+            target_size,
+            &kairos_core::services::thickness::probe_thickness(&mesh),
+        );
 
         if let Some(session) = store_clone.lock().get_mut(&geometry_id) {
             session.volume = Some(volume);

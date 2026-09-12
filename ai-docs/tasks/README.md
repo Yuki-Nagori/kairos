@@ -63,6 +63,7 @@
 | T50 | [T50-volume-rendering-poc-done.md](T50-volume-rendering-poc-done.md)           | 三维体渲染 POC（重采样+光线步进）     |
 | T61 | [T61-gate-geometry-landing-done.md](T61-gate-geometry-landing-done.md)         | 浇口几何落地（模具网络 → case inlet） |
 | T62 | [T62-fill-load-validation-done.md](T62-fill-load-validation-done.md)           | 工艺参数合理性校验（填充工况量级）    |
+| T63 | [T63-thin-feature-hint-done.md](T63-thin-feature-hint-done.md)                 | 网格最小特征提示（体素尺寸 vs 壁厚）  |
 | T51 | [T51-result-binary-chain-done.md](T51-result-binary-chain-done.md)             | 大结果二进制通道 + 有界缓存           |
 | T52 | [T52-report-content-done.md](T52-report-content-done.md)                       | 分析报告内容增强（几何/探针表）       |
 | T53 | [T53-report-template-done.md](T53-report-template-done.md)                     | 模板化自定义报告                      |

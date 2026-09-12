@@ -62,6 +62,7 @@ function meshReportFixture(): MeshingReport {
     surfaceFaceCount: 6,
     totalVolume: 1000,
     quality: { minEdgeRatio: 0.7, avgEdgeRatio: 0.85, maxEdgeRatio: 0.99, minVolume: 1 },
+    thinFeatureHints: [],
   };
 }
 
@@ -260,6 +261,23 @@ describe("GeometryPanel", () => {
     expect(wrapper.text()).toContain(
       "节点 8 · 四面体 12 · 表面 6 · 体积 1000.000 · 质量比 min 0.70 / avg 0.85 / max 0.99",
     );
+  });
+
+  it("网格报告带薄壁提示时以警告行渲染", async () => {
+    const geometry = useGeometryStore();
+    geometry.geometries = [geometryFixture()];
+    geometry.meshReports = {
+      "geo-1": {
+        ...meshReportFixture(),
+        thinFeatureHints: ["目标尺寸 5.00 mm 超过最薄特征的 1/2。"],
+      },
+    };
+    const wrapper = mount(GeometryPanel, { global: { plugins: [pinia] } });
+    await flushPromises();
+
+    const hint = wrapper.findAll("p").find((node) => node.text().includes("最薄特征"));
+    expect(hint).toBeDefined();
+    expect(hint?.classes()).toContain("text-amber-400");
   });
 
   it("体素引擎填写边界层数后透传分级加密选项", async () => {

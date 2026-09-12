@@ -50,6 +50,7 @@ function reportFixture(): MeshingReport {
       maxEdgeRatio: 1.2,
       minVolume: 0.01,
     },
+    thinFeatureHints: [],
   };
 }
 

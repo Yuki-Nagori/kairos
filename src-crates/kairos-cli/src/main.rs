@@ -419,6 +419,9 @@ fn run_pipeline(
         cores as usize,
         &gates,
     )?;
+    // 网格尺寸 vs 最小特征提示（与几何面板同一套 core 探测）
+    let thickness = services::thickness::probe_thickness(&mesh_tri);
+    let thickness_hints = services::thickness::thin_feature_hints(target_size, &thickness);
     // 填充工况量级提示（与工艺面板同一套 core 校验）
     let volume_mm3 = services::moldingfoam::mesh_volume(&volume);
     let load_hints = services::process::fill_load_hints(
@@ -433,6 +436,13 @@ fn run_pipeline(
             "tets": volume.tets.len(),
             "solved": solve,
             "loadHints": load_hints,
+            "thicknessHints": thickness_hints,
+            "thickness": {
+                "minMm": thickness.min_mm(),
+                "p05Mm": thickness.quantile_mm(0.05),
+                "medianMm": thickness.median_mm(),
+                "samples": thickness.count(),
+            },
         }));
     } else {
         println!(
@@ -441,6 +451,9 @@ fn run_pipeline(
             volume.nodes.len(),
             volume.tets.len()
         );
+        for hint in &thickness_hints {
+            println!("网格提示：{hint}");
+        }
         for hint in &load_hints {
             println!("工况提示：{hint}");
         }
