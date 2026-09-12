@@ -1,6 +1,12 @@
 /** 求解器 IPC：生成 moldingFoam case 与运行环境探测。 */
 import { invokeCommand } from "../utils/ipc";
-import type { AnalysisStage, EnvironmentCheck, Material, ProcessSettings } from "../types";
+import type {
+  AnalysisStage,
+  EnvironmentCheck,
+  Material,
+  ProcessSettings,
+  RunnerElement,
+} from "../types";
 
 interface GenerateCaseInput {
   geometryId: string;
@@ -9,6 +15,8 @@ interface GenerateCaseInput {
   process: ProcessSettings;
   stage: AnalysisStage;
   cores: number;
+  /** 研究的模具网络：浇口单元决定 case 的 inlet patch。 */
+  runnerElements: RunnerElement[];
 }
 
 /** 生成 moldingFoam case（polyMesh + 场 + 字典）。 */
@@ -20,6 +28,7 @@ export function generateMoldingfoamCase(input: GenerateCaseInput): Promise<strin
     process: input.process,
     stage: input.stage,
     cores: input.cores,
+    runnerElements: input.runnerElements,
   });
 }
 

@@ -89,12 +89,12 @@
       跑通（checkMesh Mesh OK、exit 0、结果回传后 `results` 可读）；期间修复
       6 项 Kairos 侧集成缺陷、确认上游 2 项（SIGILL、打包重复库）已修，
       见 ai-docs/reviews/e2e-solve-report.md
-- [ ] 浇口几何落地：case 的 inlet 目前是包围盒 z 分带启发式
-      （`classify_face`），未消费 T07 的流道网络（`RunnerElement{kind: Gate}`）；
-      真实阶梯边界下分带还会把 39% 的侧向面当浇口（熔体从外壁注入）。
-      落地内容：`generate_case` 接受浇口/流道描述 → inlet patch 取浇口端点
-      邻域边界面，无浇口时回退分带并**按面法向过滤**；多型腔/流道参与填充
-      依赖此项
+- [x] 浇口几何落地（T61）：`generate_case` 接受模具网络的浇口
+      （`GatePortal`：Gate 单元的型腔端 + 直径/2，等效面积 πr² 保底），
+      inlet patch 取浇口邻域边界面；无浇口时回退 z 分带并**按外法向过滤**
+      （阶梯侧向面归 walls）。实测：样例盒 inlet 240 → 200 面、带浇口 16 面；
+      真实件（控制器支架）382 → 21 面，checkMesh 均 Mesh OK。多型腔/流道
+      参与填充仍待流道体参与网格（后续任务）
 - [ ] 工艺参数合理性校验（core 纯函数）：按件体积 + 材料 + 注射时间估算
       所需注射流量/压力，超量程给出提示与建议值。真实件实测（880 cm³、
       默认 1 s 注射）在填充 1% 时门控压力已 5 MPa、3% 时 10² MPa 量级，

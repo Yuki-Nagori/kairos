@@ -13,6 +13,7 @@ use crate::error::{KairosError, Result};
 use crate::models::material::Material;
 use crate::models::mesh::VolumeMesh;
 use crate::models::process::ProcessSettings;
+use crate::models::runners::{RunnerElement, RunnerKind};
 use crate::models::solver::AnalysisStage;
 
 /// 求解入口单点：foamRun 框架的求解模块名。bundle 自带
@@ -45,29 +46,103 @@ fn table_value_at(table: &[(f64, f64)], temperature: f64) -> Option<f64> {
     table.last().map(|(_, v)| *v)
 }
 
-/// 网格包围盒 z 高度带分类（v1 轴向模具启发式）。
-#[derive(Clone, Copy, PartialEq, Eq)]
+/// 网格包围盒 z 高度带分类（无浇口时的回退启发式）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum BoundaryBand {
     Inlet,
     Vent,
     Walls,
 }
 
-fn classify_face(z_centroid: f64, z_min: f64, z_max: f64) -> BoundaryBand {
+/// 边界面外法向 z 分量的下限：低于它不算「朝下/朝上」的面。
+/// 体素网格的边界是阶梯面，底/顶带里混着大量侧向面；把它们计入 inlet/vent
+/// 会让熔体从零件外壁注入（真实件实测该误差占入口面的 39%）。
+const NORMAL_Z_MIN: f64 = 0.5;
+
+/// 边界面 → patch（无浇口回退）：底带且朝下 = inlet，顶带且朝上 = vent，
+/// 其余（含阶梯侧向面）归 walls。
+fn classify_boundary_face(z_centroid: f64, normal_z: f64, z_min: f64, z_max: f64) -> BoundaryBand {
     let height = (z_max - z_min).max(1e-9);
-    if z_centroid <= z_min + INLET_BAND * height {
+    if z_centroid <= z_min + INLET_BAND * height && normal_z <= -NORMAL_Z_MIN {
         BoundaryBand::Inlet
-    } else if z_centroid >= z_max - VENT_BAND * height {
+    } else if z_centroid >= z_max - VENT_BAND * height && normal_z >= NORMAL_Z_MIN {
         BoundaryBand::Vent
     } else {
         BoundaryBand::Walls
     }
 }
 
+/// 浇口入口：与型腔相接的位置（网格坐标 mm）与等效半径（mm）。
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GatePortal {
+    pub center: [f64; 3],
+    pub radius_mm: f64,
+}
+
+/// 浇口半径下限：体素网格上浇口常小于一个单元，靠「最近面补齐」保底，
+/// 下限只用于避免半径为 0。
+const GATE_MIN_RADIUS_MM: f64 = 0.5;
+
+/// 流道网络 → 浇口入口表：取 `kind == Gate` 的单元，入口位置取 `end`
+/// （约定：Gate 的 `start` 接流道、`end` 接型腔），半径 = 直径 / 2。
+pub fn gate_portals(runners: &[RunnerElement]) -> Vec<GatePortal> {
+    runners
+        .iter()
+        .filter(|runner| runner.kind == RunnerKind::Gate)
+        .map(|runner| GatePortal {
+            center: runner.end,
+            radius_mm: (runner.diameter_mm / 2.0).max(GATE_MIN_RADIUS_MM),
+        })
+        .collect()
+}
+
+fn distance(left: [f64; 3], right: [f64; 3]) -> f64 {
+    ((left[0] - right[0]).powi(2) + (left[1] - right[1]).powi(2) + (left[2] - right[2]).powi(2))
+        .sqrt()
+}
+
+/// 按浇口圈定入口面：半径内的边界面全取；等效面积（πr²）不足时按距离从近到远
+/// 继续补足——体素网格上浇口常小于一个单元，没有补足就会出现「入口为空」的
+/// case（求解器直接没有进料口）。
+fn gate_inlet_faces(
+    boundary: &[usize],
+    centres: &[[f64; 3]],
+    areas: &[f64],
+    gates: &[GatePortal],
+) -> Vec<usize> {
+    let mut inlet: Vec<usize> = Vec::new();
+    for gate in gates {
+        let target_area = std::f64::consts::PI * gate.radius_mm * gate.radius_mm;
+        let mut candidates: Vec<(f64, usize)> = boundary
+            .iter()
+            .map(|&index| (distance(centres[index], gate.center), index))
+            .collect();
+        candidates.sort_by(|left, right| {
+            left.0
+                .partial_cmp(&right.0)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        let mut area = 0.0;
+        for (distance, index) in candidates {
+            if distance > gate.radius_mm && area >= target_area {
+                break;
+            }
+            inlet.push(index);
+            area += areas[index];
+        }
+    }
+    inlet.sort_unstable();
+    inlet.dedup();
+    inlet
+}
+
 /// 从体积网格写出 constant/polyMesh（points/faces/owner/neighbour/boundary）。
 /// 四面体绕向已在生成时保证正体积；面法向按 owner 外法向定向。
-/// 边界面按 z 分带重排为 inlet / vent / walls 三个连续 patch 区段。
-pub fn write_poly_mesh(case_dir: &Path, mesh: &VolumeMesh) -> Result<()> {
+///
+/// 边界面重排为 inlet / vent / walls 三个连续 patch 区段：
+/// - 给了浇口（`gates` 非空）→ inlet 只取浇口圈定的面；
+/// - 没给浇口 → 回退 z 分带启发式，且只认朝下/朝上的面（阶梯侧向面归 walls）。
+pub fn write_poly_mesh(case_dir: &Path, mesh: &VolumeMesh, gates: &[GatePortal]) -> Result<()> {
     let poly = case_dir.join("constant/polyMesh");
     fs::create_dir_all(&poly)
         .map_err(|e| KairosError::io(format!("创建 polyMesh 目录失败：{e}")))?;
@@ -103,6 +178,9 @@ pub fn write_poly_mesh(case_dir: &Path, mesh: &VolumeMesh) -> Result<()> {
 
     // 面法向按 owner 外法向定向（点积判定，反向则交换后两点）。
     let mut face_lines = Vec::with_capacity(faces.len());
+    let mut face_centres: Vec<[f64; 3]> = Vec::with_capacity(faces.len());
+    let mut face_areas: Vec<f64> = Vec::with_capacity(faces.len());
+    let mut face_normal_z: Vec<f64> = Vec::with_capacity(faces.len());
     for (index, face) in faces.iter().enumerate() {
         let (p0, p1, p2) = (
             mesh.nodes[face[0]],
@@ -157,6 +235,16 @@ pub fn write_poly_mesh(case_dir: &Path, mesh: &VolumeMesh) -> Result<()> {
         } else if ordered_face[2] < ordered_face[0] {
             ordered_face.rotate_right(1);
         }
+        // |cross| = 2 × 面积；法向符号已由 outward 定向，朝下时取负 z 分量。
+        let length = (normal[0].powi(2) + normal[1].powi(2) + normal[2].powi(2)).sqrt();
+        let unit_z = if length > 0.0 {
+            (if outward { normal[2] } else { -normal[2] }) / length
+        } else {
+            0.0
+        };
+        face_centres.push(face_centre);
+        face_areas.push(length / 2.0);
+        face_normal_z.push(unit_z);
         face_lines.push(format!(
             "3({} {} {})",
             ordered_face[0], ordered_face[1], ordered_face[2]
@@ -177,6 +265,15 @@ pub fn write_poly_mesh(case_dir: &Path, mesh: &VolumeMesh) -> Result<()> {
             order.push(index);
         }
     }
+    // 边界面：先由浇口圈定 inlet，其余按分带回退（给了浇口时底带不再是入口）。
+    let boundary: Vec<usize> = (0..faces.len())
+        .filter(|index| neighbour[*index].is_none())
+        .collect();
+    let gate_faces = gate_inlet_faces(&boundary, &face_centres, &face_areas, gates);
+    let mut is_gate_face = vec![false; faces.len()];
+    for &index in &gate_faces {
+        is_gate_face[index] = true;
+    }
     // OpenFOAM 要求内部面按 (owner, neighbour) 升序（"upper triangular order"）：
     // 每个单元的面按其邻居升序排列，否则 checkMesh 报 faces not in upper
     // triangular order。
@@ -186,12 +283,19 @@ pub fn write_poly_mesh(case_dir: &Path, mesh: &VolumeMesh) -> Result<()> {
         if slot.is_some() {
             continue;
         }
-        let z_centroid = (mesh.nodes[faces[index][0]][2]
-            + mesh.nodes[faces[index][1]][2]
-            + mesh.nodes[faces[index][2]][2])
-            / 3.0;
-        let slot = match classify_face(z_centroid, z_min, z_max) {
-            BoundaryBand::Inlet => 0,
+        // 浇口圈定的面直接进 inlet；其余按分带，且给了浇口时底带不再算入口。
+        if is_gate_face[index] {
+            band_faces[0].push(index);
+            continue;
+        }
+        let slot = match classify_boundary_face(
+            face_centres[index][2],
+            face_normal_z[index],
+            z_min,
+            z_max,
+        ) {
+            BoundaryBand::Inlet if gates.is_empty() => 0,
+            BoundaryBand::Inlet => 2,
             BoundaryBand::Vent => 1,
             BoundaryBand::Walls => 2,
         };
@@ -355,8 +459,9 @@ pub fn generate_case(
     process: &ProcessSettings,
     stage: &AnalysisStage,
     cores: usize,
+    gates: &[GatePortal],
 ) -> Result<()> {
-    write_poly_mesh(case_dir, mesh)?;
+    write_poly_mesh(case_dir, mesh, gates)?;
     write_case_files(case_dir, mesh, material, process, stage, cores)
 }
 
@@ -529,6 +634,7 @@ pub fn expected_fields(stage: &AnalysisStage) -> &'static [&'static str] {
 mod tests {
     use super::*;
     use crate::models::process::ProcessSettings;
+    use crate::models::runners::{RunnerElement, RunnerKind};
 
     #[test]
     fn boundary_bands_classify_bottom_inlet_top_vent() {
@@ -536,15 +642,15 @@ mod tests {
         // （消融 B5 锁定——分带翻转或交换时该用例失败）。
         let (z_min, z_max) = (0.0_f64, 10.0_f64);
         assert!(matches!(
-            classify_face(0.0, z_min, z_max),
+            classify_boundary_face(0.0, -1.0, z_min, z_max),
             BoundaryBand::Inlet
         ));
         assert!(matches!(
-            classify_face(10.0, z_min, z_max),
+            classify_boundary_face(10.0, 1.0, z_min, z_max),
             BoundaryBand::Vent
         ));
         assert!(matches!(
-            classify_face(5.0, z_min, z_max),
+            classify_boundary_face(5.0, 0.0, z_min, z_max),
             BoundaryBand::Walls
         ));
     }
@@ -562,6 +668,7 @@ mod tests {
             &process(),
             &AnalysisStage::Fill,
             4,
+            &[],
         )
         .unwrap_err();
         assert!(error.to_string().contains("创建 polyMesh 目录失败"));
@@ -579,6 +686,7 @@ mod tests {
             &process(),
             &AnalysisStage::Fill,
             4,
+            &[],
         )
         .unwrap_err();
         assert!(error.to_string().contains("创建"), "{error}");
@@ -653,6 +761,7 @@ mod tests {
             &process(),
             &AnalysisStage::Fill,
             4,
+            &[],
         )
         .unwrap();
 
@@ -824,7 +933,7 @@ mod tests {
             },
         )
         .unwrap();
-        write_poly_mesh(&case, &mesh).unwrap();
+        write_poly_mesh(&case, &mesh, &[]).unwrap();
         let (points, faces, owner, neighbour) = parse_poly_mesh(&case.join("constant/polyMesh"));
 
         assert_eq!(faces.len(), owner.len());
@@ -861,6 +970,53 @@ mod tests {
         fs::remove_dir_all(&dir).ok();
     }
 
+    /// 解析 boundary 文件的 patch 区段（名字 → startFace/nFaces）。
+    /// 写出的格式里 patch 名与 `{` 分行，故用「上一个非空行」作为候选名。
+    fn parse_patches(case: &Path) -> std::collections::HashMap<String, PatchSpan> {
+        let text = fs::read_to_string(case.join("constant/polyMesh/boundary")).unwrap();
+        let mut patches: std::collections::HashMap<String, PatchSpan> =
+            std::collections::HashMap::new();
+        let mut name: Option<String> = None;
+        let mut previous = String::new();
+        for line in text.lines() {
+            let trimmed = line.trim();
+            if trimmed == "{" {
+                if !previous.is_empty()
+                    && previous != "FoamFile"
+                    && !previous.contains([';', ':', '{', '}'])
+                {
+                    name = Some(previous.clone());
+                }
+            } else if let Some(value) = trimmed.strip_prefix("nFaces ") {
+                if let (Some(current), Ok(count)) = (
+                    name.clone(),
+                    value.trim_end_matches(';').trim().parse::<usize>(),
+                ) {
+                    patches.insert(current, PatchSpan { start: 0, count });
+                }
+            } else if let Some(value) = trimmed.strip_prefix("startFace ")
+                && let (Some(current), Ok(start)) = (
+                    name.clone(),
+                    value.trim_end_matches(';').trim().parse::<usize>(),
+                )
+                && let Some(span) = patches.get_mut(&current)
+            {
+                span.start = start;
+            }
+            if !trimmed.is_empty() {
+                previous = trimmed.to_string();
+            }
+        }
+        patches
+    }
+
+    /// patch 在 faces 列表里的区段。
+    #[derive(Debug, Clone, Copy)]
+    struct PatchSpan {
+        start: usize,
+        count: usize,
+    }
+
     /// boundary 文件中所有 patch 的 nFaces 之和。
     fn boundary_face_count(case: &Path) -> usize {
         fs::read_to_string(case.join("constant/polyMesh/boundary"))
@@ -869,6 +1025,158 @@ mod tests {
             .filter_map(|line| line.trim().strip_prefix("nFaces "))
             .filter_map(|value| value.trim_end_matches(';').parse::<usize>().ok())
             .sum()
+    }
+
+    #[test]
+    fn degenerate_face_normal_stays_zero_and_classifies_as_walls() {
+        // 共线三点构成零面积面：法向长度为 0 时 z 分量取 0，不参与朝下/朝上判定
+        // （防御分支：真实网格里不出现，但写面时不应对零向量做除法）。
+        let dir = std::env::temp_dir().join(format!("kairos-deg-{}", std::process::id()));
+        let case = dir.join("case");
+        let mesh = VolumeMesh {
+            nodes: vec![
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [2.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+            ],
+            tets: vec![[0, 1, 2, 3]],
+            surface_faces: Vec::new(),
+        };
+        write_poly_mesh(&case, &mesh, &[]).unwrap();
+        let patches = parse_patches(&case);
+        // 三个面落在 z=0 平面上（朝下 → inlet），零面积面法向 z 记 0 → walls
+        assert_eq!(patches.get("inlet").map(|span| span.count), Some(3));
+        assert_eq!(patches.get("walls").map(|span| span.count), Some(1));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn gate_portals_take_cavity_end_of_gate_units_only() {
+        let runners = vec![
+            RunnerElement {
+                id: "r-1".into(),
+                kind: RunnerKind::Runner,
+                diameter_mm: 6.0,
+                start: [0.0, 0.0, 5.0],
+                end: [0.0, 0.0, 0.0],
+            },
+            RunnerElement {
+                id: "g-1".into(),
+                kind: RunnerKind::Gate,
+                diameter_mm: 1.5,
+                start: [0.0, 0.0, 0.0],
+                end: [10.0, 20.0, 0.0],
+            },
+            RunnerElement {
+                id: "g-2".into(),
+                kind: RunnerKind::Gate,
+                diameter_mm: 0.2,
+                start: [0.0, 0.0, 0.0],
+                end: [1.0, 2.0, 3.0],
+            },
+        ];
+        let portals = gate_portals(&runners);
+        // 只取 Gate 单元，入口在型腔侧的一端（end），半径 = 直径/2
+        assert_eq!(portals.len(), 2);
+        assert_eq!(portals[0].center, [10.0, 20.0, 0.0]);
+        assert!((portals[0].radius_mm - 0.75).abs() < 1e-12);
+        // 直径细小 → 半径下限保底（靠最近面补齐，避免入口为空）
+        assert!((portals[1].radius_mm - GATE_MIN_RADIUS_MM).abs() < 1e-12);
+    }
+
+    #[test]
+    fn boundary_face_classification_needs_outward_normal() {
+        // 底带 + 朝下 = inlet；同带的阶梯侧向面归 walls（否则熔体从外壁注入）
+        assert_eq!(
+            classify_boundary_face(0.0, -1.0, 0.0, 10.0),
+            BoundaryBand::Inlet
+        );
+        assert_eq!(
+            classify_boundary_face(0.4, 0.0, 0.0, 10.0),
+            BoundaryBand::Walls
+        );
+        // 顶带 + 朝上 = vent；同带的侧向面归 walls
+        assert_eq!(
+            classify_boundary_face(10.0, 1.0, 0.0, 10.0),
+            BoundaryBand::Vent
+        );
+        assert_eq!(
+            classify_boundary_face(9.7, 0.2, 0.0, 10.0),
+            BoundaryBand::Walls
+        );
+        // 中段无论朝向都归 walls
+        assert_eq!(
+            classify_boundary_face(5.0, -1.0, 0.0, 10.0),
+            BoundaryBand::Walls
+        );
+    }
+
+    #[test]
+    fn gate_inlet_faces_fill_up_to_equivalent_area() {
+        // 面心沿 x 等距排列、面积各 0.4；半径 0.5 只圈到第一个面，
+        // 等效面积 πr² ≈ 0.785 未达标 → 按距离补足一个面后停手。
+        let centres: Vec<[f64; 3]> = (0..5).map(|i| [i as f64, 0.0, 0.0]).collect();
+        let areas = vec![0.4; 5];
+        let boundary: Vec<usize> = (0..5).collect();
+        let gates = vec![GatePortal {
+            center: [0.0, 0.0, 0.0],
+            radius_mm: 0.5,
+        }];
+        assert_eq!(
+            gate_inlet_faces(&boundary, &centres, &areas, &gates),
+            vec![0, 1]
+        );
+    }
+
+    #[test]
+    fn write_poly_mesh_puts_gate_faces_on_inlet_patch() {
+        let dir = std::env::temp_dir().join(format!("kairos-gate-{}", std::process::id()));
+        let case = dir.join("case");
+        let mesh = crate::services::meshing::generate(
+            &crate::models::geometry::TriangleMesh::sample_box(4.0),
+            &crate::services::meshing::VolumeMeshParams {
+                refinement: None,
+                target_size: 1.0,
+            },
+        )
+        .unwrap();
+
+        // 无浇口：回退分带，inlet = 底面朝下的那圈面
+        write_poly_mesh(&case, &mesh, &[]).unwrap();
+        let (_, _, _, _) = parse_poly_mesh(&case.join("constant/polyMesh"));
+        let band_inlet = parse_patches(&case).remove("inlet").unwrap();
+
+        // 有浇口：inlet 收缩到浇口邻域（面数变少、且都落在浇口附近）
+        let gate = GatePortal {
+            center: [2.0, 2.0, 0.0],
+            radius_mm: 1.2,
+        };
+        write_poly_mesh(&case, &mesh, &[gate]).unwrap();
+        let (points, faces, _, _) = parse_poly_mesh(&case.join("constant/polyMesh"));
+        let gated_inlet = parse_patches(&case).remove("inlet").unwrap();
+        assert!(gated_inlet.count > 0, "浇口圈定的入口不能为空");
+        assert!(
+            gated_inlet.count < band_inlet.count,
+            "浇口入口面数应少于分带回退（{} vs {}）",
+            gated_inlet.count,
+            band_inlet.count
+        );
+        let max_distance = (gated_inlet.start..gated_inlet.start + gated_inlet.count)
+            .map(|index| {
+                let face = faces[index];
+                let centroid = [
+                    (points[face[0]][0] + points[face[1]][0] + points[face[2]][0]) / 3.0,
+                    (points[face[0]][1] + points[face[1]][1] + points[face[2]][1]) / 3.0,
+                    (points[face[0]][2] + points[face[1]][2] + points[face[2]][2]) / 3.0,
+                ];
+                distance(centroid, gate.center)
+            })
+            .fold(0.0_f64, f64::max);
+        // 半径 1.2 + 单元对角线量级（补齐最近面）以内
+        assert!(max_distance < 2.5, "入口面离浇口过远：{max_distance}");
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
@@ -914,6 +1222,7 @@ mod tests {
             &process(),
             &crate::models::solver::AnalysisStage::FillPackCool,
             4,
+            &[],
         )
         .unwrap();
 

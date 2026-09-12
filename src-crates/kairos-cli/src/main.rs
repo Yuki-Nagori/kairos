@@ -74,6 +74,9 @@ enum PipelineAction {
         /// 体素目标尺寸（mm；真实零件按壁厚/算力调整）
         #[arg(long, default_value_t = 1.0)]
         target_size: f64,
+        /// 浇口入口 `x,y,z[,半径]`（mm，可重复；不填则回退 z 分带启发式）
+        #[arg(long = "gate")]
+        gates: Vec<String>,
         /// 实际调用求解器（缺环境时以结构化错误退出）
         #[arg(long)]
         solve: bool,
@@ -151,6 +154,32 @@ fn emit_error(error: &KairosError) {
 }
 
 /// 默认工艺参数（v1 与内置测试夹具一致；正式工艺来自工程文档）。
+/// 未给半径时的浇口默认半径（mm）。
+const DEFAULT_GATE_RADIUS_MM: f64 = 2.0;
+
+/// 解析 `--gate x,y,z[,半径]`（坐标与网格同单位，mm）。
+fn parse_gate(
+    spec: &str,
+) -> kairos_core::error::Result<kairos_core::services::moldingfoam::GatePortal> {
+    let parts: Vec<&str> = spec.split(',').map(str::trim).collect();
+    if !(3..=4).contains(&parts.len()) {
+        return Err(KairosError::validation(format!(
+            "浇口格式应为 x,y,z[,半径]：{spec}"
+        )));
+    }
+    let mut values = Vec::with_capacity(parts.len());
+    for part in &parts {
+        values.push(
+            part.parse::<f64>()
+                .map_err(|_| KairosError::validation(format!("浇口坐标/半径不是数字：{part}")))?,
+        );
+    }
+    Ok(kairos_core::services::moldingfoam::GatePortal {
+        center: [values[0], values[1], values[2]],
+        radius_mm: values.get(3).copied().unwrap_or(DEFAULT_GATE_RADIUS_MM),
+    })
+}
+
 fn default_process() -> ProcessSettings {
     ProcessSettings {
         melt_temp_c: 230.0,
@@ -190,8 +219,18 @@ fn run(command: Commands, json: bool) -> kairos_core::error::Result<()> {
                 out_dir,
                 cores,
                 target_size,
+                gates,
                 solve,
-            } => run_pipeline(sample_box, stl, out_dir, cores, target_size, solve, json),
+            } => run_pipeline(
+                sample_box,
+                stl,
+                out_dir,
+                cores,
+                target_size,
+                gates,
+                solve,
+                json,
+            ),
         },
     }
 }
@@ -342,6 +381,7 @@ fn run_pipeline(
     out_dir: String,
     cores: u32,
     target_size: f64,
+    gate_specs: Vec<String>,
     solve: bool,
     json: bool,
 ) -> kairos_core::error::Result<()> {
@@ -366,6 +406,10 @@ fn run_pipeline(
     )?;
     // 3. case（首个内置材料 + 默认工艺 + 填充阶段）
     let material = services::material::builtin_materials()[0].clone();
+    let gates = gate_specs
+        .iter()
+        .map(|spec| parse_gate(spec))
+        .collect::<kairos_core::error::Result<Vec<_>>>()?;
     moldingfoam::generate_case(
         out,
         &volume,
@@ -373,6 +417,7 @@ fn run_pipeline(
         &default_process(),
         &AnalysisStage::Fill,
         cores as usize,
+        &gates,
     )?;
     if json {
         emit_json(&serde_json::json!({

@@ -232,6 +232,7 @@ describe("pipeline store", () => {
       process,
       stage: "fill_pack",
       cores: 4,
+      runnerElements: expect.any(Array),
     });
     // 作业提交走 jobs store：同一 case 目录 + 核数 + 活跃研究 id。
     expect(submitJob).toHaveBeenCalledWith("/data/cases/s-1", 4, "s-1", expect.anything());

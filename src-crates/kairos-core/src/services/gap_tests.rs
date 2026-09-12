@@ -543,6 +543,7 @@ fn generate_case_reports_write_failure_when_target_is_directory() {
         &valid_process(),
         &AnalysisStage::Fill,
         2,
+        &[],
     )
     .unwrap_err();
     assert!(error.message().contains("写入") || error.message().contains("创建目录"));
@@ -576,6 +577,7 @@ fn generate_case_reports_write_failure_at_constant_dictionaries() {
             &valid_process(),
             &AnalysisStage::Fill,
             2,
+            &[],
         )
         .unwrap_err();
         assert!(error.message().contains("写入"), "{target}");

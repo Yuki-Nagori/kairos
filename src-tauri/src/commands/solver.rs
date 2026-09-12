@@ -8,6 +8,7 @@ use kairos_core::error::{KairosError, Result};
 use kairos_core::models::material::Material;
 use kairos_core::models::mesh::VolumeMesh;
 use kairos_core::models::process::ProcessSettings;
+use kairos_core::models::runners::RunnerElement;
 use kairos_core::models::solver::AnalysisStage;
 use kairos_core::services::moldingfoam;
 use serde::Serialize;
@@ -55,6 +56,10 @@ pub fn probe_moldingfoam() -> Result<EnvironmentCheck> {
 }
 
 /// 由已导入几何生成求解 case（polyMesh + 场 + 字典）。
+/// `runner_elements` 来自研究的模具网络：其中的浇口单元决定 inlet patch
+/// （不传则回退 z 分带启发式）。
+// IPC 命令保持平铺入参（前端载荷稳定）：参数个数超 clippy 默认阈值属预期。
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn generate_moldingfoam_case(
     store: State<'_, GeometryStore>,
@@ -64,8 +69,10 @@ pub async fn generate_moldingfoam_case(
     process: ProcessSettings,
     stage: AnalysisStage,
     cores: u32,
+    runner_elements: Vec<RunnerElement>,
 ) -> Result<String> {
     let cores = cores.clamp(1, 64) as usize;
+    let gates = moldingfoam::gate_portals(&runner_elements);
     // 锁只用于取网格快照；polyMesh 与场文件的写入在锁外、阻塞线程池中进行。
     let volume_mesh: VolumeMesh = {
         let sessions = store.lock();
@@ -86,6 +93,7 @@ pub async fn generate_moldingfoam_case(
             &process,
             &stage,
             cores,
+            &gates,
         )?;
         Ok(case_dir)
     })

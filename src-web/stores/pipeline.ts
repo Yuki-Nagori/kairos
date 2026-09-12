@@ -57,6 +57,7 @@ export const usePipelineStore = defineStore("pipeline", {
           process,
           stage,
           cores,
+          runnerElements: activeStudy.runnerElements,
         });
         await useJobsStore().submitJob(caseDir, cores);
       });
