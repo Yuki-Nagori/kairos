@@ -173,9 +173,9 @@
 - [x] 求解环境分发：moldingFoam release bundle（OpenFOAM-14 环境树 +
       libmoldingFoam），替代源码全量编译
 - [x] 无头 CLI（T32）
-- △ 覆盖率门槛已并入 verify 门禁（前端逻辑层 100% · Rust core 行 100%）+
-  cargo audit；当前 GPU 测试在无适配器环境会直接失败，尚未符合“GPU 必需但
-  CI 可验证”的新策略
+- [x] 覆盖率门槛已并入 verify 门禁（前端逻辑层 100% · Rust core 行 100%）+
+      cargo audit；GPU 测试经适配器探测门控——无 GPU 环境显式跳过并在测试报告
+      提示（不静默），有 GPU 环境全量验证，「GPU 必需但 CI 可验证」策略落地
 - [ ] updater 签名证书（T33 尾项：证书就绪后启用 macOS 公证 / Windows
       signtool）
 - [ ] Linux 原生执行通道（当前 Linux 走本机 bash，OpenFOAM 需自装）
