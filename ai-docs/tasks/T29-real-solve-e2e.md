@@ -1,6 +1,6 @@
 # T29 · 真实求解端到端验证（OpenFOAM 环境）
 
-- 阶段：进行中（环境链路已全通；阻塞于 bundle SIGILL——见 e2e-solve-report.md，待求解器侧修复后复跑）
+- 阶段：进行中（链路已跑通：bundle v0.2.1 上 case 生成 → checkMesh → 并行求解 → 结果回传 → CLI 读取全程 exit 0；Kairos 侧 6 项集成缺陷已修。剩余：前端视口/图表验证（桌面控制权限未授权）与真实 STL 一轮（本机无几何素材）。见 e2e-solve-report.md）
 - 依赖：T09、T10、T11（已完成的求解集成代码）、T34（求解入口收口）
 - 优先级：**P1**
 
