@@ -10,7 +10,7 @@
    `SOLVER_MODULE` 切为 `moldingFoam`；
 2. 下载到宿主的 bundle 自动传输进虚拟机，求解作业在 VM 内执行。
 
-## Part 1 · case 生成重写（kairos-core services/openfoam.rs）
+## Part 1 · case 生成重写（kairos-core services/moldingfoam.rs）
 
 ### 已核实的契约事实（~/eit/moldingFoam/case-contract/ v1.1）
 
@@ -98,5 +98,5 @@ decomposePar -force && foamRun -parallel'`；case 目录经
 
 ## 验收标准
 
-- `bun run verify` 全绿；openfoam.rs 模板与契约逐文件比对通过；
+- `bun run verify` 全绿；moldingfoam.rs 模板与契约逐文件比对通过；
 - VM 内跑通 Kairos 生成 case 的填充分析（T29 合并执行）。

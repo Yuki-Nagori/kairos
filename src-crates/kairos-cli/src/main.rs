@@ -8,7 +8,7 @@ use clap::{Parser, Subcommand};
 use kairos_core::error::KairosError;
 use kairos_core::models::process::ProcessSettings;
 use kairos_core::models::solver::AnalysisStage;
-use kairos_core::services::{self, geometry, meshing, openfoam, project, results};
+use kairos_core::services::{self, geometry, meshing, moldingfoam, project, results};
 use serde::Serialize;
 
 #[derive(Parser)]
@@ -277,7 +277,7 @@ fn run_solve(action: SolveAction, json: bool) -> kairos_core::error::Result<()> 
             let safe_dir = case_dir.replace('\'', "'\\''");
             // 求解输出落 log.foamRun：管道后接 tail 会让退出码被 tail 覆盖，
             // 求解失败反被报成成功，故先判码再截取尾部日志。
-            let solve = kairos_core::services::openfoam::solve_command(cores);
+            let solve = kairos_core::services::moldingfoam::solve_command(cores);
             let status = Command::new("bash")
                 .arg("-lc")
                 .arg(format!(
@@ -361,7 +361,7 @@ fn run_pipeline(
     )?;
     // 3. case（首个内置材料 + 默认工艺 + 填充阶段）
     let material = services::material::builtin_materials()[0].clone();
-    openfoam::generate_case(
+    moldingfoam::generate_case(
         out,
         &volume,
         &material,

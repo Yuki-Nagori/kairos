@@ -51,14 +51,14 @@ export function useJobsPanel() {
   }
 
   // 环境探测行：探测经 jobs store（错误进全局管道），完成后整体替换样式。
-  void jobsStore.probeOpenfoam();
-  const envHint = computed(() => jobsStore.envCheck?.hint ?? "正在探测 OpenFOAM 环境…");
+  void jobsStore.probeMoldingfoam();
+  const envHint = computed(() => jobsStore.envCheck?.hint ?? "正在探测求解环境…");
   const envClass = computed(() => {
     const check = jobsStore.envCheck;
     if (!check) {
       return "text-xs text-zinc-500";
     }
-    return check.openfoam && check.solver ? "text-emerald-400" : "text-amber-400";
+    return check.moldingfoam && check.solver ? "text-emerald-400" : "text-amber-400";
   });
 
   function jobLogsTail(jobId: string): string[] {

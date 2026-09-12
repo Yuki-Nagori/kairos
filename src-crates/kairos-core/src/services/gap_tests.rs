@@ -13,7 +13,7 @@ use crate::models::runners::{RunnerElement, RunnerKind};
 use crate::models::solver::AnalysisStage;
 use crate::services::system::system_info;
 use crate::services::{
-    geometry, gmsh, jobs as job_service, material as material_service, meshing, openfoam,
+    geometry, gmsh, jobs as job_service, material as material_service, meshing, moldingfoam,
     process as process_service, project as project_service, results as results_service,
     runners as runners_service,
 };
@@ -525,7 +525,7 @@ fn runner_check_flags_nan_coordinates() {
     assert!(issues.iter().any(|issue| issue.contains("非法数值")));
 }
 
-// ---------- services/openfoam.rs ----------
+// ---------- services/moldingfoam.rs ----------
 
 #[test]
 fn generate_case_reports_write_failure_when_target_is_directory() {
@@ -536,7 +536,7 @@ fn generate_case_reports_write_failure_when_target_is_directory() {
         target_size: 2.5,
     };
     let volume_mesh = meshing::generate(&sample_mesh(), &params).unwrap();
-    let error = openfoam::generate_case(
+    let error = moldingfoam::generate_case(
         &dir,
         &volume_mesh,
         &valid_material(),
@@ -569,7 +569,7 @@ fn generate_case_reports_write_failure_at_constant_dictionaries() {
             std::process::id()
         ));
         std::fs::create_dir_all(dir.join(target)).unwrap();
-        let error = openfoam::generate_case(
+        let error = moldingfoam::generate_case(
             &dir,
             &volume_mesh,
             &valid_material(),

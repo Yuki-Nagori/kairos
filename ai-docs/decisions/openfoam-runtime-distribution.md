@@ -13,9 +13,14 @@
 
 ## 实现要点（已落地部分）
 
-- `probe_openfoam` 命令：检测 `blockMesh` 与 `openInjMoldSim` 是否在 PATH；
-- 未就绪时前端展示安装指引（openfoam.org + 求解器编译说明）；
+- `probe_moldingfoam` 命令：检测 `blockMesh`（环境工具链）与 `foamRun`
+  （模块化运行器）是否在 PATH；
+- 未就绪时前端展示安装指引（依赖面板）；
 - `OPENFOAM_HOME` 环境变量预留：后续版本用于定位非标准安装路径。
+
+> 现状（2026-09-12）：v1 的「引导安装」已被**官方 release 预编译 bundle**
+> 取代（T34/T35/T36）——依赖面板直接下载 moldingFoam bundle（基于 OpenFOAM-14
+> 环境树），macOS 经 multipass 部署进虚拟机执行。上表保留为决策历史。
 
 ## 签名与公证
 

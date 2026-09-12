@@ -7,12 +7,12 @@ import { useAppStore } from "../../../../src-web/stores/app";
 import { useJobsStore } from "../../../../src-web/stores/jobs";
 import { useDependenciesStore } from "../../../../src-web/stores/dependencies";
 import { useVmStore } from "../../../../src-web/stores/vm";
-import { probeOpenfoam } from "../../../../src-web/api/solver";
+import { probeMoldingfoam } from "../../../../src-web/api/solver";
 import { cancelJob, listJobs, submitJob } from "../../../../src-web/api/jobs";
 import type { Job } from "../../../../src-web/types";
 
 vi.mock("../../../../src-web/api/solver", () => ({
-  probeOpenfoam: vi.fn(),
+  probeMoldingfoam: vi.fn(),
 }));
 vi.mock("../../../../src-web/api/jobs", () => ({
   submitJob: vi.fn(),
@@ -58,10 +58,10 @@ describe("JobsPanel 环境探测行", () => {
     setActivePinia(pinia);
     vi.resetAllMocks();
     vi.mocked(listJobs).mockResolvedValue([]);
-    vi.mocked(probeOpenfoam).mockResolvedValue({
-      openfoam: true,
+    vi.mocked(probeMoldingfoam).mockResolvedValue({
+      moldingfoam: true,
       solver: true,
-      hint: "OpenFOAM 环境就绪。",
+      hint: "求解环境就绪。",
     });
   });
 
@@ -89,29 +89,29 @@ describe("JobsPanel 环境探测行", () => {
 
   it("探测完成前显示探测中文案", () => {
     // 永不落定的探测 promise：维持「探测中」占位。
-    vi.mocked(probeOpenfoam).mockReturnValue(new Promise(() => {}));
+    vi.mocked(probeMoldingfoam).mockReturnValue(new Promise(() => {}));
     const wrapper = mount(JobsPanel, { global: { plugins: [pinia] } });
-    expect(wrapper.text()).toContain("正在探测 OpenFOAM 环境…");
+    expect(wrapper.text()).toContain("正在探测求解环境…");
   });
 
   it("工具链与求解器齐备显示绿色就绪提示", async () => {
-    vi.mocked(probeOpenfoam).mockResolvedValue({
-      openfoam: true,
+    vi.mocked(probeMoldingfoam).mockResolvedValue({
+      moldingfoam: true,
       solver: true,
-      hint: "OpenFOAM 环境就绪。",
+      hint: "求解环境就绪。",
     });
     const wrapper = mount(JobsPanel, { global: { plugins: [pinia] } });
-    await vi.waitFor(() => expect(wrapper.text()).toContain("OpenFOAM 环境就绪。"));
-    const hint = wrapper.findAll("p").find((p) => p.text() === "OpenFOAM 环境就绪。");
+    await vi.waitFor(() => expect(wrapper.text()).toContain("求解环境就绪。"));
+    const hint = wrapper.findAll("p").find((p) => p.text() === "求解环境就绪。");
     expect(hint?.classes()).toContain("text-emerald-400");
     expect(hint?.classes()).not.toContain("text-xs");
   });
 
   it("缺少模块化求解器显示琥珀提示", async () => {
-    vi.mocked(probeOpenfoam).mockResolvedValue({
-      openfoam: true,
+    vi.mocked(probeMoldingfoam).mockResolvedValue({
+      moldingfoam: true,
       solver: false,
-      hint: "缺少 foamRun，请升级 OpenFOAM。",
+      hint: "缺少 foamRun，请更新求解环境。",
     });
     const wrapper = mount(JobsPanel, { global: { plugins: [pinia] } });
     await vi.waitFor(() => expect(wrapper.text()).toContain("缺少 foamRun"));
@@ -119,15 +119,15 @@ describe("JobsPanel 环境探测行", () => {
     expect(hint?.classes()).toContain("text-amber-400");
   });
 
-  it("缺少 OpenFOAM 本体显示琥珀提示", async () => {
-    vi.mocked(probeOpenfoam).mockResolvedValue({
-      openfoam: false,
+  it("缺少求解环境本体显示琥珀提示", async () => {
+    vi.mocked(probeMoldingfoam).mockResolvedValue({
+      moldingfoam: false,
       solver: false,
-      hint: "未检测到 OpenFOAM。",
+      hint: "未检测到求解环境。",
     });
     const wrapper = mount(JobsPanel, { global: { plugins: [pinia] } });
-    await vi.waitFor(() => expect(wrapper.text()).toContain("未检测到 OpenFOAM。"));
-    const hint = wrapper.findAll("p").find((p) => p.text() === "未检测到 OpenFOAM。");
+    await vi.waitFor(() => expect(wrapper.text()).toContain("未检测到求解环境。"));
+    const hint = wrapper.findAll("p").find((p) => p.text() === "未检测到求解环境。");
     expect(hint?.classes()).toContain("text-amber-400");
   });
 });
@@ -139,7 +139,11 @@ describe("JobsPanel 作业列表与提交", () => {
     pinia = createPinia();
     setActivePinia(pinia);
     vi.resetAllMocks();
-    vi.mocked(probeOpenfoam).mockResolvedValue({ openfoam: true, solver: true, hint: "就绪。" });
+    vi.mocked(probeMoldingfoam).mockResolvedValue({
+      moldingfoam: true,
+      solver: true,
+      hint: "就绪。",
+    });
     vi.mocked(listJobs).mockResolvedValue([]);
   });
 

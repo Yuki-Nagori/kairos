@@ -85,10 +85,12 @@
 | T59 | [T59-fill-preview.md](T59-fill-preview.md)                           | 填充预览（依赖 T55）              | T55      |
 | T60 | [T60-import-log-and-pptx.md](T60-import-log-and-pptx.md)             | 导入日志流 + PPT 报告（低优先）   | T52      |
 
-> T29 优先级最高：真实求解仍被 moldingFoam bundle 的 SIGILL 阻塞。数值侧已
-> 闭环：大结果二进制通道（T51）、派生算子 GPU 生产化、渲染双后端（T39）均已
-> 落地；剩余性能与三端验收归 T48。T55–T60 为 Moldflow 对照评审新增缺口，
-> 详见各自任务文件。
+> T29 优先级最高：bundle v0.2.0 已修掉 v0.1.1 的 SIGILL，VM 内可跑通
+> 0 → endTime 全段（Kairos 侧 case/作业链路缺陷已修）；剩余阻塞是 bundle
+> 退出期堆破坏（求解器侧，正常跑完也非零退出，已移交 moldingFoam 修复）。
+> 数值侧已闭环：大结果二进制通道（T51）、派生算子 GPU 生产化、渲染双后端
+> （T39）均已落地；剩余性能与三端验收归 T48。T55–T60 为 Moldflow 对照评审
+> 新增缺口，详见各自任务文件。
 
 ## 全局原则（不变）
 

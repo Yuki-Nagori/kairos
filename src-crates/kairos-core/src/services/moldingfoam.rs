@@ -1,4 +1,4 @@
-//! OpenFOAM case 生成与进度解析（纯函数，无进程操作）。
+//! moldingFoam case 生成与进度解析（纯函数，无进程操作）。
 //! 输出为标准 OpenFOAM case 目录：constant/polyMesh + 0/ 场 + system/ 字典。
 //! 字典布局对齐 moldingFoam 的 `case-contract/` v1.1 对接规范（关键字冻结）：
 //! 求解入口为 foamRun + moldingFoam 模块（libs 加载 libmoldingFoam.so）。

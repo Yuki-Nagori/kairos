@@ -13,7 +13,7 @@ use kairos_core::error::{KairosError, Result};
 use kairos_core::models::jobs::Job;
 use kairos_core::services::jobs as job_logic;
 use kairos_core::services::jobs::SchedulerLimits;
-use kairos_core::services::openfoam;
+use kairos_core::services::moldingfoam;
 use kairos_core::services::project::new_id;
 use kairos_core::services::results;
 use kairos_core::services::vm as vm_logic;
@@ -237,7 +237,7 @@ fn spawn_run_script(
     managed_path: Option<&str>,
     vm_shell: Option<&str>,
 ) -> Result<Child> {
-    let solve = openfoam::solve_command(cores);
+    let solve = moldingfoam::solve_command(cores);
     if let Some(shell) = vm_shell {
         // macOS：宿主路径在 VM 内不存在，必须用 tar 复制后的 VM 路径。
         #[cfg(target_os = "macos")]
@@ -273,8 +273,8 @@ fn spawn_run_script(
     // 单引号内的 shell 转义：' → '\''（防路径注入）。
     let safe_dir = case_dir.replace('\'', "'\\''");
     // 求解入口：foamRun 是 OpenFOAM 11+ 的模块化运行器，具体求解模块由
-    // case 的 controlDict（solver 键，见 openfoam.rs::SOLVER_MODULE）提供；
-    // 并行由 mpirun 发起（见 openfoam::solve_command）。
+    // case 的 controlDict（solver 键，见 moldingfoam.rs::SOLVER_MODULE）提供；
+    // 并行由 mpirun 发起（见 moldingfoam::solve_command）。
     let script = format!("{path_export}cd '{safe_dir}' && {solve}");
     let mut command = Command::new("bash");
     command
@@ -396,12 +396,12 @@ fn run_job_body(
     if let Some(pipe) = stdout.take() {
         let reader = BufReader::new(pipe);
         for line in reader.lines().map_while(std::result::Result::ok) {
-            match openfoam::solver_signal(&line) {
-                Some(openfoam::SolverSignal::Aborted) => abort_marker = true,
-                Some(openfoam::SolverSignal::Completed) => completion_marker = true,
+            match moldingfoam::solver_signal(&line) {
+                Some(moldingfoam::SolverSignal::Aborted) => abort_marker = true,
+                Some(moldingfoam::SolverSignal::Completed) => completion_marker = true,
                 None => {}
             }
-            let time_s = openfoam::parse_time_line(&line);
+            let time_s = moldingfoam::parse_time_line(&line);
             let forward = {
                 let mut guard = inner
                     .lock()

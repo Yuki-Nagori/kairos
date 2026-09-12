@@ -10,7 +10,7 @@ pub mod jobs;
 pub mod material;
 pub mod meshing;
 pub mod midplane;
-pub mod openfoam;
+pub mod moldingfoam;
 pub mod operators;
 pub mod process;
 pub mod project;

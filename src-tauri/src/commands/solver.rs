@@ -1,4 +1,4 @@
-//! 求解器命令：环境探测与 OpenFOAM case 生成（GPL 隔离：仅子进程 + 文件交换）。
+//! 求解器命令：环境探测与求解 case 生成（GPL 隔离：仅子进程 + 文件交换）。
 //! 作业的启动 / 取消 / 列表由 T10 的调度器（commands::jobs）负责。
 //! 见 ai-docs/decisions/openfoam-gpl-compliance.md。
 
@@ -9,18 +9,18 @@ use kairos_core::models::material::Material;
 use kairos_core::models::mesh::VolumeMesh;
 use kairos_core::models::process::ProcessSettings;
 use kairos_core::models::solver::AnalysisStage;
-use kairos_core::services::openfoam;
+use kairos_core::services::moldingfoam;
 use serde::Serialize;
 use tauri::State;
 
 use crate::commands::geometry::GeometryStore;
 
-/// OpenFOAM 环境探测结果。
+/// 求解环境探测结果（环境 = moldingFoam bundle：OpenFOAM-14 环境树 + 注塑模块）。
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EnvironmentCheck {
-    /// OpenFOAM 工具链（以 blockMesh 为代表）是否可用。
-    pub openfoam: bool,
+    /// 环境工具链（以 blockMesh 为代表）是否可用。
+    pub moldingfoam: bool,
     /// foamRun 模块化运行器是否可用（OpenFOAM 11+ 才有；求解模块由
     /// case 的 controlDict 指定，无需第三方求解器二进制）。
     pub solver: bool,
@@ -29,7 +29,7 @@ pub struct EnvironmentCheck {
 }
 
 #[tauri::command]
-pub fn probe_openfoam() -> Result<EnvironmentCheck> {
+pub fn probe_moldingfoam() -> Result<EnvironmentCheck> {
     let check = |command: &str| -> bool {
         Command::new("sh")
             .arg("-c")
@@ -38,25 +38,25 @@ pub fn probe_openfoam() -> Result<EnvironmentCheck> {
             .map(|output| output.status.success())
             .unwrap_or(false)
     };
-    let (openfoam, solver) = (check("blockMesh"), check("foamRun"));
-    let hint = if openfoam && solver {
-        "OpenFOAM 已就绪（foamRun 模块化求解器可用）。".into()
-    } else if !openfoam {
-        "未检测到 OpenFOAM（.org 版，需 11+，推荐 14）。可在依赖面板应用内下载，或参考 openfoam.org。"
+    let (moldingfoam, solver) = (check("blockMesh"), check("foamRun"));
+    let hint = if moldingfoam && solver {
+        "求解环境已就绪（foamRun 模块化求解器可用）。".into()
+    } else if !moldingfoam {
+        "未检测到求解环境（moldingFoam bundle，基于 OpenFOAM 14）。可在依赖面板下载官方预编译包。"
             .into()
     } else {
-        "OpenFOAM 版本过旧：缺少 foamRun 模块化运行器，请升级到 11+（推荐 14）。".into()
+        "求解环境版本过旧：缺少 foamRun 模块化运行器，请更新到 OpenFOAM 11+ 口径的 bundle。".into()
     };
     Ok(EnvironmentCheck {
-        openfoam,
+        moldingfoam,
         solver,
         hint,
     })
 }
 
-/// 由已导入几何生成 OpenFOAM case（polyMesh + 场 + 字典）。
+/// 由已导入几何生成求解 case（polyMesh + 场 + 字典）。
 #[tauri::command]
-pub async fn generate_openfoam_case(
+pub async fn generate_moldingfoam_case(
     store: State<'_, GeometryStore>,
     geometry_id: String,
     case_dir: String,
@@ -79,7 +79,7 @@ pub async fn generate_openfoam_case(
             .clone()
     };
     tauri::async_runtime::spawn_blocking(move || {
-        openfoam::generate_case(
+        moldingfoam::generate_case(
             std::path::Path::new(&case_dir),
             &volume_mesh,
             &material,

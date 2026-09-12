@@ -1,7 +1,7 @@
 /** 流水线编排（Pinia）：跨 store 读取前置条件并端到端提交，无自有状态。 */
 import { defineStore } from "pinia";
 import { defaultCaseDir } from "../api/project";
-import { generateOpenfoamCase } from "../api/solver";
+import { generateMoldingfoamCase } from "../api/solver";
 import type { AnalysisStage } from "../types";
 import { useAppStore } from "./app";
 import { useGeometryStore } from "./geometry";
@@ -50,7 +50,7 @@ export const usePipelineStore = defineStore("pipeline", {
 
       await app.withBusy("正在准备求解…", async () => {
         const caseDir = await defaultCaseDir(activeStudy.id);
-        await generateOpenfoamCase({
+        await generateMoldingfoamCase({
           geometryId: geometry.geometryId,
           caseDir,
           material,

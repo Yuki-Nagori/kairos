@@ -18,8 +18,8 @@ vi.mock("../../../src-web/api/jobs", () => ({
   cancelJob: vi.fn(),
   listJobs: vi.fn(),
 }));
-const { probeOpenfoam } = vi.hoisted(() => ({ probeOpenfoam: vi.fn() }));
-vi.mock("../../../src-web/api/solver", () => ({ probeOpenfoam }));
+const { probeMoldingfoam } = vi.hoisted(() => ({ probeMoldingfoam: vi.fn() }));
+vi.mock("../../../src-web/api/solver", () => ({ probeMoldingfoam }));
 
 function makeJob(id = "job-1"): Job {
   return {
@@ -169,20 +169,24 @@ describe("jobs store", () => {
     });
   });
 
-  describe("probeOpenfoam", () => {
+  describe("probeMoldingfoam", () => {
     it("探测结果入 store 状态", async () => {
-      probeOpenfoam.mockResolvedValue({ openfoam: true, solver: true, hint: "OpenFOAM 已就绪" });
+      probeMoldingfoam.mockResolvedValue({
+        moldingfoam: true,
+        solver: true,
+        hint: "求解环境已就绪",
+      });
       const jobs = useJobsStore();
-      await jobs.probeOpenfoam();
-      expect(jobs.envCheck).toEqual({ openfoam: true, solver: true, hint: "OpenFOAM 已就绪" });
+      await jobs.probeMoldingfoam();
+      expect(jobs.envCheck).toEqual({ moldingfoam: true, solver: true, hint: "求解环境已就绪" });
       expect(useAppStore().error).toBeNull();
     });
 
     it("探测失败进全局错误，状态保持 null", async () => {
-      probeOpenfoam.mockRejectedValue(new Error("探测失败"));
+      probeMoldingfoam.mockRejectedValue(new Error("探测失败"));
       const app = useAppStore();
       const jobs = useJobsStore();
-      await jobs.probeOpenfoam();
+      await jobs.probeMoldingfoam();
       expect(jobs.envCheck).toBeNull();
       expect(app.error?.message).toBe("探测失败");
     });

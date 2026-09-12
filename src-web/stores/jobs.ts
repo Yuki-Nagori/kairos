@@ -2,7 +2,7 @@
 import { Channel } from "@tauri-apps/api/core";
 import { defineStore } from "pinia";
 import { cancelJob as apiCancelJob, listJobs, submitJob as apiSubmitJob } from "../api/jobs";
-import { probeOpenfoam as apiProbeOpenfoam } from "../api/solver";
+import { probeMoldingfoam as apiProbeMoldingfoam } from "../api/solver";
 import type { EnvironmentCheck, Job } from "../types";
 import { useAppStore } from "./app";
 import { useProjectStore } from "./project";
@@ -16,15 +16,15 @@ export const useJobsStore = defineStore("jobs", {
     jobs: [] as Job[],
     /** 每作业的求解日志尾部（环形缓冲，key = 作业 id）。 */
     jobLogs: {} as Record<string, string[]>,
-    /** OpenFOAM 环境探测结果（null = 尚未完成）。 */
+    /** 求解环境探测结果（null = 尚未完成）。 */
     envCheck: null as EnvironmentCheck | null,
   }),
   actions: {
-    /** 探测 OpenFOAM 环境（作业面板顶部环境行）；失败进全局错误。 */
-    async probeOpenfoam(): Promise<void> {
+    /** 探测求解环境（作业面板顶部环境行）；失败进全局错误。 */
+    async probeMoldingfoam(): Promise<void> {
       const app = useAppStore();
       try {
-        this.envCheck = await apiProbeOpenfoam();
+        this.envCheck = await apiProbeMoldingfoam();
       } catch (error) {
         app.setError(error);
       }

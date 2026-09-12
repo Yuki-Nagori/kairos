@@ -312,10 +312,10 @@ export type ComponentStageState =
 
 /** 对应 `kairos-core::models::vm`：虚拟机 provider（平台固定；native = Linux
  * 原生环境，无虚拟机，Shell 即本地 bash）与实例状态。 */
-/** OpenFOAM 环境探测结果（solver = foamRun 模块化运行器，11+ 才有）。
+/** 求解环境探测结果（solver = foamRun 模块化运行器，11+ 才有）。
  *  对应 `src-tauri/src/commands/solver.rs` 的 EnvironmentCheck。 */
 export interface EnvironmentCheck {
-  openfoam: boolean;
+  moldingfoam: boolean;
   solver: boolean;
   hint: string;
 }

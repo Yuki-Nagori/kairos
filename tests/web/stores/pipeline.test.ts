@@ -7,7 +7,7 @@ import { useMaterialsStore } from "../../../src-web/stores/materials";
 import { usePipelineStore } from "../../../src-web/stores/pipeline";
 import { useProjectStore } from "../../../src-web/stores/project";
 import { defaultCaseDir } from "../../../src-web/api/project";
-import { generateOpenfoamCase } from "../../../src-web/api/solver";
+import { generateMoldingfoamCase } from "../../../src-web/api/solver";
 import { listJobs, submitJob } from "../../../src-web/api/jobs";
 import type {
   GeometrySummary,
@@ -32,8 +32,8 @@ vi.mock("../../../src-web/api/project", () => ({
   defaultCaseDir: vi.fn(),
 }));
 vi.mock("../../../src-web/api/solver", () => ({
-  generateOpenfoamCase: vi.fn(),
-  probeOpenfoam: vi.fn(),
+  generateMoldingfoamCase: vi.fn(),
+  probeMoldingfoam: vi.fn(),
 }));
 vi.mock("../../../src-web/api/jobs", () => ({
   submitJob: vi.fn(),
@@ -162,7 +162,7 @@ describe("pipeline store", () => {
     await pipeline.submitPipeline(4, "fill");
 
     expect(app.error?.message).toBe("请先导入几何。");
-    expect(generateOpenfoamCase).not.toHaveBeenCalled();
+    expect(generateMoldingfoamCase).not.toHaveBeenCalled();
     expect(app.busy).toBeNull();
   });
 
@@ -174,7 +174,7 @@ describe("pipeline store", () => {
     await pipeline.submitPipeline(4, "fill");
 
     expect(app.error?.message).toBe("请先生成体积网格。");
-    expect(generateOpenfoamCase).not.toHaveBeenCalled();
+    expect(generateMoldingfoamCase).not.toHaveBeenCalled();
   });
 
   it("refuses to run without a registered material", async () => {
@@ -185,7 +185,7 @@ describe("pipeline store", () => {
     await pipeline.submitPipeline(4, "fill");
 
     expect(app.error?.message).toBe("请先在研究上登记材料。");
-    expect(generateOpenfoamCase).not.toHaveBeenCalled();
+    expect(generateMoldingfoamCase).not.toHaveBeenCalled();
   });
 
   it("refuses to run when the registered material id is unknown", async () => {
@@ -206,7 +206,7 @@ describe("pipeline store", () => {
     await pipeline.submitPipeline(4, "fill");
 
     expect(app.error?.message).toBe("请先设置工艺并应用到研究。");
-    expect(generateOpenfoamCase).not.toHaveBeenCalled();
+    expect(generateMoldingfoamCase).not.toHaveBeenCalled();
   });
 
   it("generates the case and submits the job end to end", async () => {
@@ -217,7 +217,7 @@ describe("pipeline store", () => {
     const app = useAppStore();
     const pipeline = usePipelineStore();
     const busyDuring: (string | null)[] = [];
-    vi.mocked(generateOpenfoamCase).mockImplementation(async () => {
+    vi.mocked(generateMoldingfoamCase).mockImplementation(async () => {
       busyDuring.push(useAppStore().busy);
       return "/data/cases/s-1";
     });
@@ -225,7 +225,7 @@ describe("pipeline store", () => {
     await pipeline.submitPipeline(4, "fill_pack");
 
     expect(defaultCaseDir).toHaveBeenCalledWith("s-1");
-    expect(generateOpenfoamCase).toHaveBeenCalledWith({
+    expect(generateMoldingfoamCase).toHaveBeenCalledWith({
       geometryId: "g-1",
       caseDir: "/data/cases/s-1",
       material,
@@ -244,7 +244,7 @@ describe("pipeline store", () => {
   it("reports case generation failures and clears busy", async () => {
     primeStores({});
     vi.mocked(defaultCaseDir).mockResolvedValue("/data/cases/s-1");
-    vi.mocked(generateOpenfoamCase).mockRejectedValue(new Error("case 生成失败"));
+    vi.mocked(generateMoldingfoamCase).mockRejectedValue(new Error("case 生成失败"));
 
     const app = useAppStore();
     const pipeline = usePipelineStore();
@@ -265,6 +265,6 @@ describe("pipeline store", () => {
 
     expect(app.error?.message).toBe("数据目录不可用");
     expect(app.busy).toBeNull();
-    expect(generateOpenfoamCase).not.toHaveBeenCalled();
+    expect(generateMoldingfoamCase).not.toHaveBeenCalled();
   });
 });

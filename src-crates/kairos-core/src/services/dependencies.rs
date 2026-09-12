@@ -8,8 +8,9 @@
 //!   装好后重新探测。
 //!
 //! 许可分级（LicenseKind）只决定徽标颜色与合规口径，与安装策略正交。
-//! 注意：DirectDownload 只负责「拿到文件」；OpenFOAM 的编译安装步骤
-//! 仍需在应用内编译流程或终端完成（hint 字段向用户说明）。
+//! 注意：DirectDownload 只负责「拿到文件」；moldingFoam 走官方 release 的
+//! 预编译 bundle（OpenFOAM-14 完整环境树 + 求解模块），解压即用、无需编译，
+//! 虚拟机内的部署见 src-tauri 的 vm_deploy_bundle。
 
 use crate::models::dependencies::{DownloadSpec, InstallStrategy, LicenseKind, RuntimeDependency};
 

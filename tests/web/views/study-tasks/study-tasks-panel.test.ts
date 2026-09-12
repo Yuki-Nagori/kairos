@@ -19,8 +19,8 @@ vi.mock("../../../../src-web/api/results", () => ({
   deriveDifference: vi.fn(),
 }));
 vi.mock("../../../../src-web/api/solver", () => ({
-  generateOpenfoamCase: vi.fn(),
-  probeOpenfoam: vi.fn(),
+  generateMoldingfoamCase: vi.fn(),
+  probeMoldingfoam: vi.fn(),
 }));
 vi.mock("../../../../src-web/api/project", () => ({
   defaultCaseDir: vi.fn(async () => "/case/run"),
@@ -306,12 +306,14 @@ describe("StudyTasksPanel（方案任务窗格）", () => {
     await flushPromises();
     await submit.trigger("click");
     await flushPromises();
-    const { generateOpenfoamCase } =
-      (await import("../../../../src-web/api/solver")) as unknown as { generateOpenfoamCase: Mock };
+    const { generateMoldingfoamCase } =
+      (await import("../../../../src-web/api/solver")) as unknown as {
+        generateMoldingfoamCase: Mock;
+      };
     const { submitJob } = (await import("../../../../src-web/api/jobs")) as unknown as {
       submitJob: Mock;
     };
-    expect(generateOpenfoamCase).toHaveBeenCalledTimes(1);
+    expect(generateMoldingfoamCase).toHaveBeenCalledTimes(1);
     expect(submitJob).toHaveBeenCalledTimes(1);
   });
 });
