@@ -15,10 +15,11 @@
 
 ## 基准与运行方式
 
-| 套件 | 命令                                    | 当前覆盖                                                         |
-| ---- | --------------------------------------- | ---------------------------------------------------------------- |
-| 前端 | `bun run bench:web`（tinybench）        | 状态层（Vue reactive 写入通知、computed 切片追踪、订阅生命周期） |
-| Rust | `cargo bench`（criterion，kairos-core） | IPC DTO 序列化（SystemInfo / KairosError，命令层往返的热路径）   |
+| 套件 | 命令                                                                                | 当前覆盖                                                         |
+| ---- | ----------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| 前端 | `bun run bench:web`（tinybench）                                                    | 状态层（Vue reactive 写入通知、computed 切片追踪、订阅生命周期） |
+| Rust | `cargo bench`（criterion，kairos-core）                                             | IPC DTO 序列化（SystemInfo / KairosError，命令层往返的热路径）   |
+| GPU  | `cargo test -p kairos --lib --release gpu_derive_ablation -- --ignored --nocapture` | 派生算子 GPU/CPU 消融计时（规模扫描 1e5~3e7 值，见下方基线）     |
 
 - 数字以本机环境为准，横向比较须同机器同资产；
 - CI 在 Ubuntu 作业的基准步骤运行基准并上传报告（见 T02），只记录趋势、不作为卡点。
@@ -55,3 +56,19 @@ Vue 的依赖追踪通知比裸 pub-sub 贵一个量级以上（写入传播 µs
 | 前端 store：subscribe + unsubscribe    | ~41 ns/次                           |
 | Rust SystemInfo 序列化（serde_json）   | ~86 ns/次                           |
 | Rust KairosError 序列化（serde_json）  | ~80 ns/次量级（criterion 报告为准） |
+
+**GPU 派生算子消融基线**（2026-09-12，M 系列开发机 / Apple GPU / release；测量入口见上表，
+消融报告见 [reviews/R1-ablation-report.md](reviews/R1-ablation-report.md)）：
+
+| 规模（值） | GPU cold（含 device 创建） | GPU warm | CPU 参考 | CPU/GPU |
+| ---------: | -------------------------- | -------- | -------- | ------- |
+|    100 000 | 32.4 ms                    | 2.23 ms  | 0.39 ms  | 0.2×    |
+|  1 000 000 | —（进程内一次）            | 9.79 ms  | 3.88 ms  | 0.4×    |
+| 10 000 000 | —                          | 87.2 ms  | 39.2 ms  | 0.4×    |
+| 30 000 000 | —                          | 266.9 ms | 113.3 ms | 0.4×    |
+
+要点：①device OnceLock 缓存冷/热相差一个量级，缓存必要；②简单逐元素派生算子
+全尺寸段 GPU 慢于 CPU（内存带宽受限 + 上传/回读固定开销），≥5× 预算不适用于
+本类算子，其 GPU 主路径价值在架构一致性（GPU 驻留、后续重算子免 CPU 往返）；
+③per-op 回读是瓶颈，多算子串联合并 dispatch 是后续优化方向；④> 4.19M 值需
+切块 dispatch（wgpu 每维 65535 workgroup 硬限），已落地并带回归测试。

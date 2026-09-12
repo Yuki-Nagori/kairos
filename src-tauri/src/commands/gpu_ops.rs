@@ -16,6 +16,11 @@ const VECTOR_MAGNITUDE_SHADER: &str = include_str!("../../shaders/vector_magnitu
 
 const WORKGROUP_SIZE: usize = 64;
 
+/// 单次 dispatch 的元素上限：Metal/Vulkan 限制每维 workgroup 数 ≤ 65535，
+/// 超限结果场（> 4.19M 值，100MB 级结果即触发）必须按块切分多次 dispatch，
+/// 否则 wgpu 校验直接 panic（GPU 消融计时实测发现）。
+const MAX_ELEMENTS_PER_DISPATCH: usize = 65_535 * WORKGROUP_SIZE;
+
 #[cfg(test)]
 use kairos_core::services::{operators::vector_magnitude_cpu, results};
 
@@ -121,21 +126,6 @@ pub fn vector_magnitude_gpu(vectors: &[[f32; 3]]) -> Result<Vec<f32>, KairosErro
     }
     let (device, queue) = compute_device()?;
 
-    let mut flat: Vec<f32> = Vec::with_capacity(vectors.len() * 4);
-    for vector in vectors {
-        flat.extend_from_slice(&[vector[0], vector[1], vector[2], 0.0]);
-    }
-    let input_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some("vector_magnitude_input"),
-        contents: bytemuck::cast_slice(&flat),
-        usage: wgpu::BufferUsages::STORAGE,
-    });
-    let output_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some("vector_magnitude_out"),
-        contents: vec![0u8; vectors.len() * 4].as_slice(),
-        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
-    });
-
     let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("vector_magnitude"),
         source: wgpu::ShaderSource::Wgsl(VECTOR_MAGNITUDE_SHADER.into()),
@@ -149,30 +139,50 @@ pub fn vector_magnitude_gpu(vectors: &[[f32; 3]]) -> Result<Vec<f32>, KairosErro
         cache: None,
     });
 
-    let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: Some("vector_magnitude_bind"),
-        layout: &pipeline.get_bind_group_layout(0),
-        entries: &[
-            wgpu::BindGroupEntry {
-                binding: 0,
-                resource: input_buffer.as_entire_binding(),
-            },
-            wgpu::BindGroupEntry {
-                binding: 1,
-                resource: output_buffer.as_entire_binding(),
-            },
-        ],
-    });
-
-    dispatch_and_readback(
-        device,
-        queue,
-        "vector_magnitude",
-        &pipeline,
-        &bind_group,
-        &output_buffer,
-        vectors.len(),
-    )
+    // vec4 对齐展开 + 超限按块切分多次 dispatch（管线只建一次），逐块回读拼接。
+    let mut result = Vec::with_capacity(vectors.len());
+    for chunk_start in (0..vectors.len()).step_by(MAX_ELEMENTS_PER_DISPATCH) {
+        let chunk =
+            &vectors[chunk_start..(chunk_start + MAX_ELEMENTS_PER_DISPATCH).min(vectors.len())];
+        let mut flat: Vec<f32> = Vec::with_capacity(chunk.len() * 4);
+        for vector in chunk {
+            flat.extend_from_slice(&[vector[0], vector[1], vector[2], 0.0]);
+        }
+        let input_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("vector_magnitude_input"),
+            contents: bytemuck::cast_slice(&flat),
+            usage: wgpu::BufferUsages::STORAGE,
+        });
+        let output_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("vector_magnitude_out"),
+            contents: vec![0u8; chunk.len() * 4].as_slice(),
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
+        });
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("vector_magnitude_bind"),
+            layout: &pipeline.get_bind_group_layout(0),
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: input_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: output_buffer.as_entire_binding(),
+                },
+            ],
+        });
+        result.extend(dispatch_and_readback(
+            device,
+            queue,
+            "vector_magnitude",
+            &pipeline,
+            &bind_group,
+            &output_buffer,
+            chunk.len(),
+        )?);
+    }
+    Ok(result)
 }
 
 // ─── 派生标量算子：线性映射 / 阈值掩码 / 两场差值 ───
@@ -195,6 +205,51 @@ fn run_scalar_pipeline(
     }
     let (device, queue) = compute_device()?;
 
+    let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some(label),
+        source: wgpu::ShaderSource::Wgsl(shader.into()),
+    });
+    let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+        label: Some(label),
+        layout: None,
+        module: &module,
+        entry_point: Some("main"),
+        compilation_options: Default::default(),
+        cache: None,
+    });
+
+    // 超限结果场按块切分多次 dispatch（管线只建一次），逐块回读拼接。
+    let mut result = Vec::with_capacity(len);
+    for chunk_start in (0..len).step_by(MAX_ELEMENTS_PER_DISPATCH) {
+        let chunk_len = MAX_ELEMENTS_PER_DISPATCH.min(len - chunk_start);
+        result.extend(run_scalar_chunk(
+            device,
+            queue,
+            label,
+            &pipeline,
+            &inputs[0][chunk_start..chunk_start + chunk_len],
+            inputs
+                .get(1)
+                .map(|data| &data[chunk_start..chunk_start + chunk_len]),
+            params,
+            chunk_len,
+        )?);
+    }
+    Ok(result)
+}
+
+/// 单块（≤ MAX_ELEMENTS_PER_DISPATCH 值）的缓冲构建 + dispatch + 回读。
+#[allow(clippy::too_many_arguments)]
+fn run_scalar_chunk(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    label: &str,
+    pipeline: &wgpu::ComputePipeline,
+    input_a: &[f32],
+    input_b: Option<&[f32]>,
+    params: &[f32; 4],
+    chunk_len: usize,
+) -> Result<Vec<f32>, KairosError> {
     let make_buffer = |name: &str, data: &[u8], read_back: bool| {
         let mut usage = wgpu::BufferUsages::STORAGE;
         if read_back {
@@ -207,13 +262,12 @@ fn run_scalar_pipeline(
         })
     };
 
-    let input_a = make_buffer(
+    let input_a_buffer = make_buffer(
         &format!("{label}_in_a"),
-        bytemuck::cast_slice(inputs[0]),
+        bytemuck::cast_slice(input_a),
         false,
     );
-    let input_b = inputs
-        .get(1)
+    let input_b_buffer = input_b
         .map(|data| make_buffer(&format!("{label}_in_b"), bytemuck::cast_slice(data), false));
     // 参数缓冲：非空时创建（差值算子等无参着色器跳过，避免无用分配）
     let params_buffer = if params.is_empty() {
@@ -229,26 +283,13 @@ fn run_scalar_pipeline(
     };
     let output_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: Some(&format!("{label}_out")),
-        contents: vec![0u8; len * 4].as_slice(),
+        contents: vec![0u8; chunk_len * 4].as_slice(),
         usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
-    });
-
-    let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-        label: Some(label),
-        source: wgpu::ShaderSource::Wgsl(shader.into()),
-    });
-    let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-        label: Some(label),
-        layout: None,
-        module: &module,
-        entry_point: Some("main"),
-        compilation_options: Default::default(),
-        cache: None,
     });
 
     // 两种绑定布局：带参数（线性/阈值：in@0, params@1, out@2）
     // 与双输入（差值：a@0, b@1, out@2，无参数缓冲）。
-    let entries: Vec<wgpu::BindGroupEntry> = match &input_b {
+    let entries: Vec<wgpu::BindGroupEntry> = match &input_b_buffer {
         None => {
             let pb = params_buffer
                 .as_ref()
@@ -256,7 +297,7 @@ fn run_scalar_pipeline(
             vec![
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: input_a.as_entire_binding(),
+                    resource: input_a_buffer.as_entire_binding(),
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
@@ -271,7 +312,7 @@ fn run_scalar_pipeline(
         Some(b) => vec![
             wgpu::BindGroupEntry {
                 binding: 0,
-                resource: input_a.as_entire_binding(),
+                resource: input_a_buffer.as_entire_binding(),
             },
             wgpu::BindGroupEntry {
                 binding: 1,
@@ -293,10 +334,10 @@ fn run_scalar_pipeline(
         device,
         queue,
         label,
-        &pipeline,
+        pipeline,
         &bind_group,
         &output_buffer,
-        len,
+        chunk_len,
     )
 }
 
@@ -654,6 +695,122 @@ mod tests {
         let error =
             derive_difference_gpu(&sample_field("T", 8), &sample_field("T0", 16)).unwrap_err();
         assert!(error.to_string().contains("两场长度不一致"));
+    }
+
+    #[test]
+    fn derive_gpu_handles_over_dispatch_limit_lengths() {
+        // 回归：> 4.19M 值时单次 dispatch 超 Metal/Vulkan 每维 65535 workgroup
+        // 硬限会 panic（消融计时实测）——按块切分后必须与 CPU 参考一致。
+        let n = MAX_ELEMENTS_PER_DISPATCH + 7;
+        let mut state: u32 = 0x7654_3210;
+        let values: Vec<f64> = (0..n)
+            .map(|_| {
+                state = state.wrapping_mul(1664525).wrapping_add(1013904223);
+                ((state >> 8) as f64) / 16_777_216.0 * 50.0
+            })
+            .collect();
+        let field = ScalarField {
+            field: "T".into(),
+            time_dir: "1".into(),
+            time_s: 1.0,
+            values,
+            is_magnitude: false,
+            complete: true,
+        };
+        let gpu = derive_scalar_field_gpu(
+            &field,
+            &DeriveRequest::Linear {
+                scale: 2.0,
+                offset: -1.0,
+            },
+        )
+        .expect("GPU 超限长度");
+        let cpu = results::derive_scalar_field(
+            &field,
+            &DeriveRequest::Linear {
+                scale: 2.0,
+                offset: -1.0,
+            },
+        )
+        .unwrap();
+        assert_eq!(gpu.values.len(), cpu.values.len());
+        for (g, c) in gpu.values.iter().zip(&cpu.values) {
+            assert!((g - c).abs() < 1e-5, "GPU {g} vs CPU {c}");
+        }
+    }
+
+    /// GPU/CPU 消融计时（perf-budget「GPU 辅助算子 ≥5×」预算的测量入口）：
+    /// `cargo test -p kairos --lib --release gpu_derive_ablation -- --ignored --nocapture`
+    /// 冷启动含 device 创建（缓存消融的「无缓存」对照），warm 为 OnceLock 缓存后的
+    /// 稳态；CPU 为 core 参考实现（唯一事实源）。确定性数据，数字可复现可横向比较。
+    /// 规模扫描（1e5 / 1e6 / 1e7 / 3e7 值）用于定位 GPU 相对 CPU 的数据量交叉点。
+    #[test]
+    #[ignore]
+    fn gpu_derive_ablation_timing() {
+        let request = DeriveRequest::Linear {
+            scale: 2.0,
+            offset: -1.0,
+        };
+        // 冷启动：进程内第一次 GPU 调用含 wgpu device 枚举与创建（OnceLock 缓存的
+        // 「无缓存」对照——每次调用重建 device 即每块都付出这一成本）。
+        let mut cold: Option<std::time::Duration> = None;
+        let mut state: u32 = 0xABCD_1234;
+        let mut rng = move || {
+            state = state.wrapping_mul(1664525).wrapping_add(1013904223);
+            ((state >> 8) as f64) / 16_777_216.0 * 100.0
+        };
+
+        println!();
+        println!("=== GPU/CPU 派生消融（Linear 2.0/-1.0，确定性数据）===");
+        println!(
+            "{:>10} {:>14} {:>12} {:>12} {:>10}",
+            "规模", "GPU cold", "GPU warm", "CPU", "CPU/GPU"
+        );
+
+        for &n in &[100_000usize, 1_000_000, 10_000_000, 30_000_000] {
+            let values: Vec<f64> = (0..n).map(|_| rng()).collect();
+            let field = ScalarField {
+                field: "T".into(),
+                time_dir: "bench".into(),
+                time_s: 0.0,
+                values,
+                is_magnitude: false,
+                complete: true,
+            };
+
+            // 冷启动只发生在首个规模段。
+            if cold.is_none() {
+                let t0 = std::time::Instant::now();
+                let r = derive_scalar_field_gpu(&field, &request).expect("GPU cold");
+                assert_eq!(r.values.len(), n);
+                cold = Some(t0.elapsed());
+            }
+
+            // 稳态：缓存后的 GPU 派生（5 次取均值）。
+            let t0 = std::time::Instant::now();
+            for _ in 0..5 {
+                let _ = derive_scalar_field_gpu(&field, &request).expect("GPU warm");
+            }
+            let warm = t0.elapsed() / 5;
+
+            // CPU 参考实现（消融 GPU 后的唯一可用路径，作为对照基准）。
+            let t0 = std::time::Instant::now();
+            let cpu_result = results::derive_scalar_field(&field, &request).unwrap();
+            let cpu_time = t0.elapsed();
+            assert_eq!(cpu_result.values.len(), n);
+
+            let speedup = cpu_time.as_secs_f64() / warm.as_secs_f64();
+            match cold {
+                Some(c) => println!(
+                    "{n:>10} {:>13?} {:>12?} {:>12?} {:>9.1}×",
+                    c, warm, cpu_time, speedup
+                ),
+                None => println!(
+                    "{n:>10} {:>14} {:>12?} {:>12?} {:>9.1}×",
+                    "—", warm, cpu_time, speedup
+                ),
+            }
+        }
     }
 
     #[test]
