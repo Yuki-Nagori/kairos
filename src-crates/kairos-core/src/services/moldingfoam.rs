@@ -389,58 +389,16 @@ pub fn solve_command(cores: u32) -> String {
     format!("decomposePar -force && mpirun -np {cores} foamRun -parallel; reconstructPar")
 }
 
-/// 求解器输出里的收尾信号。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SolverSignal {
-    /// 正常走完时间循环（OpenFOAM 打印 `End`）。
-    Completed,
-    /// 异常退出路径（打印 `FOAM FATAL ERROR` / `FOAM exiting` / `FOAM aborting`）。
-    Aborted,
-}
-
-/// 识别求解器输出行的收尾信号；普通日志行返回 `None`。
-pub fn solver_signal(line: &str) -> Option<SolverSignal> {
+/// 求解器输出行是否表示异常退出路径。
+///
+/// 求解器（含 OpenFOAM 的 argList 级失败）报错时必打印 `FOAM FATAL ERROR` /
+/// `FOAM exiting` / `FOAM aborting`，据此把「求解器主动报错退出」与「进程被
+/// 终止 / 崩溃（无任何求解器错误标记）」在作业失败信息里区分开。
+pub fn is_abort_line(line: &str) -> bool {
     let trimmed = line.trim();
-    if trimmed.contains("FOAM FATAL")
+    trimmed.contains("FOAM FATAL")
         || trimmed.contains("FOAM exiting")
         || trimmed.contains("FOAM aborting")
-    {
-        return Some(SolverSignal::Aborted);
-    }
-    (trimmed == "End").then_some(SolverSignal::Completed)
-}
-
-/// 求解输出的收尾状态累积器（逐行喂入，见作业层的流式读取）。
-///
-/// 判定规则：一次 `Aborted` 即定案——求解器的异常路径必打印
-/// `FOAM FATAL` / `FOAM exiting` / `FOAM aborting`；`Completed` 只表示
-/// 见过 `End`（decomposePar / reconstructPar 等工具也会打印它，因此单独
-/// 不足以证明求解正常收尾）。
-///
-/// 用途：作业收尾判定需要区分「求解失败」与「求解跑完但进程在退出期崩溃」
-/// ——后者指上游 bundle 的打包缺陷（同一模块被打包成两份独立 .so，运行期
-/// 两份都被加载，退出析构时 glibc 报 malloc_consolidate）；跑完的求解因此
-/// 以非零码退出。只有 `completed_cleanly` 时才把该非零码当作退出期崩溃。
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub struct SolverOutcome {
-    aborted: bool,
-    completed: bool,
-}
-
-impl SolverOutcome {
-    /// 吸收一行求解器输出（普通日志行不影响状态）。
-    pub fn observe(&mut self, line: &str) {
-        match solver_signal(line) {
-            Some(SolverSignal::Aborted) => self.aborted = true,
-            Some(SolverSignal::Completed) => self.completed = true,
-            None => {}
-        }
-    }
-
-    /// 走完时间循环且全程没有出现异常标记。
-    pub fn completed_cleanly(&self) -> bool {
-        self.completed && !self.aborted
-    }
 }
 
 /// FoamFile 头（无横幅注释的精简形态，OpenFOAM 原生接受）。
@@ -780,36 +738,14 @@ mod tests {
     }
 
     #[test]
-    fn solver_outcome_is_clean_only_after_end_without_abort() {
-        let mut outcome = SolverOutcome::default();
-        assert!(!outcome.completed_cleanly(), "空输出不算干净收尾");
-        outcome.observe("Time = 0.5s");
-        assert!(!outcome.completed_cleanly(), "普通日志行不改变状态");
-        outcome.observe("End");
-        assert!(outcome.completed_cleanly());
-        // 异常标记粘滞：之后再打印 End 也不算干净收尾
-        outcome.observe("[1] --> FOAM FATAL ERROR: ");
-        assert!(!outcome.completed_cleanly());
-        outcome.observe("End");
-        assert!(!outcome.completed_cleanly());
-    }
-
-    #[test]
-    fn solver_signal_separates_completion_from_abort() {
-        assert_eq!(solver_signal("End"), Some(SolverSignal::Completed));
-        assert_eq!(solver_signal("  End  "), Some(SolverSignal::Completed));
-        assert_eq!(
-            solver_signal("--> FOAM FATAL ERROR: "),
-            Some(SolverSignal::Aborted)
-        );
-        assert_eq!(solver_signal("FOAM exiting"), Some(SolverSignal::Aborted));
-        assert_eq!(
-            solver_signal("[1] FOAM aborting"),
-            Some(SolverSignal::Aborted)
-        );
-        // 普通日志行（含 Time/EndTime 之类的词）不构成收尾信号
-        assert_eq!(solver_signal("Time = 0.5s"), None);
-        assert_eq!(solver_signal("ExecutionTime = 4 s"), None);
+    fn abort_line_matches_solver_error_markers_only() {
+        assert!(is_abort_line("--> FOAM FATAL ERROR: "));
+        assert!(is_abort_line("FOAM exiting"));
+        assert!(is_abort_line("[1] FOAM aborting"));
+        // 正常日志行与正常收尾标记都不是异常标记
+        assert!(!is_abort_line("Time = 0.5s"));
+        assert!(!is_abort_line("End"));
+        assert!(!is_abort_line("ExecutionTime = 4 s"));
     }
 
     /// 写出的 polyMesh 四个列表：点、三角面、owner、neighbour。

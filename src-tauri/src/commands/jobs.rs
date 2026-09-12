@@ -391,11 +391,13 @@ fn run_job_body(
     vm_shell: Option<String>,
 ) {
     let mut stdout = child.stdout.take();
-    let mut outcome = moldingfoam::SolverOutcome::default();
+    let mut solver_aborted = false;
     if let Some(pipe) = stdout.take() {
         let reader = BufReader::new(pipe);
         for line in reader.lines().map_while(std::result::Result::ok) {
-            outcome.observe(&line);
+            if moldingfoam::is_abort_line(&line) {
+                solver_aborted = true;
+            }
             let time_s = moldingfoam::parse_time_line(&line);
             let forward = {
                 let mut guard = inner
@@ -417,27 +419,21 @@ fn run_job_body(
     // 失败当作作业失败，避免用回传问题覆盖求解本身的失败原因。
     let copy_back = copy_results_from_vm(&case_dir, vm_case.as_deref());
     let copy_back_error = copy_back.err().map(|error| error.message().to_string());
-    // 求解诊断输出（非零码来自上游 bundle 的退出期崩溃）在日志里说明清楚，
-    // 但作业本身按完成处理：结果已回传、时间循环走完、没有任何求解器异常标记。
-    let teardown_crash = !exit_ok && outcome.completed_cleanly() && copy_back_error.is_none();
-    let failure = if exit_ok || teardown_crash {
-        // 成功路径下回传失败仍算失败，避免静默丢结果
+    // 求解失败按输出里的异常标记区分原因：求解器主动报错（FOAM FATAL 等）与
+    // 进程被终止 / 崩溃（无任何求解器错误标记）；成功路径下回传失败仍算失败，
+    // 避免静默丢结果。
+    let failure = if exit_ok {
         copy_back_error
+    } else if solver_aborted {
+        Some("求解器报错退出（输出含 FOAM FATAL，详见作业日志）".to_string())
     } else {
-        Some("进程异常退出".to_string())
+        Some("进程异常退出（输出无求解器错误标记）".to_string())
     };
     let now = now_ms();
     {
         let mut guard = inner
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        if teardown_crash && let Some(channel) = guard.channels.get(&job_id) {
-            let _ = channel.send(
-                "求解已走完时间循环；非零退出码来自上游 bundle 退出期崩溃（同一模块\
-                 被打包成两份 .so），结果仍有效。"
-                    .to_string(),
-            );
-        }
         match &failure {
             None => {
                 let _ = job_logic::mark_done(&mut guard.jobs, &job_id, now);
