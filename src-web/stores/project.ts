@@ -148,6 +148,12 @@ export const useProjectStore = defineStore("project", {
       };
       this.activeStudyId = study.id;
     },
+    /** 切换活跃研究（工程树方案层 / 命令面板的入口）。 */
+    selectStudy(id: string): void {
+      if (this.project?.studies.some((study) => study.id === id)) {
+        this.activeStudyId = id;
+      }
+    },
     /** 活跃研究原地改一格式的公共尾部：不可变字段由调用方改，这里只负责
      * 触发响应式更新并盖章 updatedMs。 */
     touchActiveStudy(mutate: (study: Study) => void): void {

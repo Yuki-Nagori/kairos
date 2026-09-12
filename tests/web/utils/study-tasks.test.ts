@@ -184,6 +184,26 @@ describe("evaluateStudyTasks（方案任务序列）", () => {
     );
     expect(byId(mk([job({ status: "done", finishedMs: 2 })]), "analysis").state).toBe("done");
     expect(byId(mk([job({ status: "failed", message: "boom" })]), "analysis").state).toBe("failed");
+    // 混合队列：执行中优先于排队（消融 T1 锁定——单一状态夹具区分不了优先级）
+    expect(
+      byId(
+        mk([
+          job({ id: "job-q", status: "queued" }),
+          job({ id: "job-r", status: "running", lastTimeS: 0.3 }),
+        ]),
+        "analysis",
+      ).state,
+    ).toBe("running");
+    // 终态混合：以最后一个作业为准（失败 > 完成）
+    expect(
+      byId(
+        mk([
+          job({ id: "job-d", status: "done", finishedMs: 2 }),
+          job({ id: "job-f", status: "failed", message: "boom" }),
+        ]),
+        "analysis",
+      ).state,
+    ).toBe("failed");
     // 全部已取消 → 回到未开始（可重新提交）
     expect(byId(mk([job({ status: "cancelled", finishedMs: 3 })]), "analysis").state).toBe("todo");
   });

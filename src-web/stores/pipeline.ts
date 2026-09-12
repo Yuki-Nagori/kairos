@@ -41,28 +41,25 @@ export const usePipelineStore = defineStore("pipeline", {
         app.setError("请先在研究上登记材料。");
         return;
       }
-      if (study?.process == null) {
+      const activeStudy = study;
+      const process = activeStudy?.process ?? null;
+      if (activeStudy === null || process === null) {
         app.setError("请先设置工艺并应用到研究。");
         return;
       }
 
-      app.beginBusy("正在准备求解…");
-      try {
-        const caseDir = await defaultCaseDir(study.id);
+      await app.withBusy("正在准备求解…", async () => {
+        const caseDir = await defaultCaseDir(activeStudy.id);
         await generateOpenfoamCase({
           geometryId: geometry.geometryId,
           caseDir,
           material,
-          process: study.process,
+          process,
           stage,
           cores,
         });
         await useJobsStore().submitJob(caseDir, cores);
-      } catch (error) {
-        app.setError(error);
-      } finally {
-        app.endBusy();
-      }
+      });
     },
   },
 });

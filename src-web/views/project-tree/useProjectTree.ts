@@ -47,7 +47,7 @@ export function useProjectTree() {
 
   /** 点击方案 → 切换活跃研究（对齐 Moldflow 工程视图的方案选择）。 */
   function selectStudy(id: string): void {
-    project.activeStudyId = id;
+    project.selectStudy(id);
   }
 
   return { studies, groups, projectName, selectStudy };

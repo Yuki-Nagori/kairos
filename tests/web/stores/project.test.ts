@@ -376,6 +376,28 @@ describe("project store", () => {
     });
   });
 
+  describe("selectStudy", () => {
+    it("切换到存在的方案；未知 id 不改变当前选择（防御分支）", () => {
+      const project = useProjectStore();
+      project.project = makeProject({
+        studies: [makeStudy({ id: "study-1" }), makeStudy({ id: "study-2", name: "方案 B" })],
+      });
+      project.activeStudyId = "study-1";
+
+      project.selectStudy("study-2");
+      expect(project.activeStudyId).toBe("study-2");
+
+      project.selectStudy("study-x");
+      expect(project.activeStudyId).toBe("study-2");
+    });
+
+    it("未打开项目时安全空转", () => {
+      const project = useProjectStore();
+      project.selectStudy("study-1");
+      expect(project.project).toBeNull();
+    });
+  });
+
   describe("runner / cooling element editing", () => {
     it("adds and removes runner elements on the active study", () => {
       const { project } = primeActiveStudy();
