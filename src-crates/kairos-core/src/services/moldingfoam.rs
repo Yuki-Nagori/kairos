@@ -20,6 +20,20 @@ use crate::models::solver::AnalysisStage;
 /// libmoldingFoamSolver.so 探测链接，libs 行同时显式加载（双保险）。
 pub const SOLVER_MODULE: &str = "moldingFoam";
 
+/// 网格坐标单位 → SI 换算。网格与工艺侧一律用 mm；case 必须写米——契约的
+/// blockMeshDict 是「mm 顶点 + scale 0.001」，Kairos 直接写 polyMesh，
+/// 换算在这里落地（否则求解器把 10 mm 读成 10 m，与 SI 物性组合后量纲整体
+/// 放大，静水压与前沿/逃逸行为都不是目标件的物理）。
+const MM_TO_M: f64 = 1e-3;
+
+/// 排气口密封判据：排气口熔体体积分数达到该值后 vent 密封（契约的
+/// ventSealAlpha；密封期间闸口封冻、型腔停止排料）。
+const VENT_SEAL_ALPHA: f64 = 0.9;
+
+/// 质量预算诊断间隔（步）：逐 patch 打印熔体通量，填充停滞或逃逸时可直接
+/// 看到 `patch vent: alphaPhi1` 的量级。
+const MASS_BUDGET_INTERVAL: u32 = 200;
+
 /// 边界分带比例：底带 = 浇口（inlet），顶带 = 排气（vent），其余 = 模壁。
 const INLET_BAND: f64 = 0.05;
 const VENT_BAND: f64 = 0.05;
@@ -77,6 +91,15 @@ fn classify_boundary_face(z_centroid: f64, normal_z: f64, z_min: f64, z_max: f64
 pub struct GatePortal {
     pub center: [f64; 3],
     pub radius_mm: f64,
+}
+
+/// 写出的三个 patch 的面积（m²，SI）：排气口用等效流通面积 `CdA`，其余供
+/// 诊断与后续边界条件使用。
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PatchAreas {
+    pub inlet_m2: f64,
+    pub vent_m2: f64,
+    pub walls_m2: f64,
 }
 
 /// 浇口半径下限：体素网格上浇口常小于一个单元，靠「最近面补齐」保底，
@@ -179,7 +202,11 @@ fn classify_boundary_faces(
 /// 边界面重排为 inlet / vent / walls 三个连续 patch 区段：
 /// - 给了浇口（`gates` 非空）→ inlet 只取浇口圈定的面；
 /// - 没给浇口 → 回退 z 分带启发式，且只认朝下/朝上的面（阶梯侧向面归 walls）。
-pub fn write_poly_mesh(case_dir: &Path, mesh: &VolumeMesh, gates: &[GatePortal]) -> Result<()> {
+pub fn write_poly_mesh(
+    case_dir: &Path,
+    mesh: &VolumeMesh,
+    gates: &[GatePortal],
+) -> Result<PatchAreas> {
     let poly = case_dir.join("constant/polyMesh");
     fs::create_dir_all(&poly)
         .map_err(|e| KairosError::io(format!("创建 polyMesh 目录失败：{e}")))?;
@@ -326,6 +353,20 @@ pub fn write_poly_mesh(case_dir: &Path, mesh: &VolumeMesh, gates: &[GatePortal])
         start_face += band_faces[slot].len();
     }
 
+    let patch_area_m2 = |slot: usize| -> f64 {
+        band_faces[slot]
+            .iter()
+            .map(|&index| face_areas[index])
+            .sum::<f64>()
+            * MM_TO_M
+            * MM_TO_M
+    };
+    let areas = PatchAreas {
+        inlet_m2: patch_area_m2(0),
+        vent_m2: patch_area_m2(1),
+        walls_m2: patch_area_m2(2),
+    };
+
     let ordered = |pick: &dyn Fn(usize) -> String| -> Vec<String> {
         order.iter().map(|&index| pick(index)).collect()
     };
@@ -340,7 +381,15 @@ pub fn write_poly_mesh(case_dir: &Path, mesh: &VolumeMesh, gates: &[GatePortal])
         mesh.nodes.len(),
         mesh.nodes
             .iter()
-            .map(|p| format!("({:.6} {:.6} {:.6})", p[0], p[1], p[2]))
+            // 坐标换算到米：求解器把数值当 SI 读，写 mm 数值会让整件事放大千倍
+            .map(|p| {
+                format!(
+                    "({:.6} {:.6} {:.6})",
+                    p[0] * MM_TO_M,
+                    p[1] * MM_TO_M,
+                    p[2] * MM_TO_M
+                )
+            })
             .collect::<Vec<_>>()
             .join("\n")
     );
@@ -382,7 +431,7 @@ pub fn write_poly_mesh(case_dir: &Path, mesh: &VolumeMesh, gates: &[GatePortal])
     write(&poly.join("owner"), &owner_content)?;
     write(&poly.join("neighbour"), &neighbour_content)?;
     write(&poly.join("boundary"), &boundary_content)?;
-    Ok(())
+    Ok(areas)
 }
 
 /// 网格体积（m³）：四面体有向体积求和（绕向已保证正值）。
@@ -417,6 +466,7 @@ pub fn write_case_files(
     process: &ProcessSettings,
     stage: &AnalysisStage,
     cores: usize,
+    areas: &PatchAreas,
 ) -> Result<()> {
     let zero = case_dir.join("0");
     let system = case_dir.join("system");
@@ -454,12 +504,12 @@ pub fn write_case_files(
 
     let melt_k = kelvin(process.melt_temp_c);
     let mold_k = kelvin(process.mold_temp_c);
-    // 注射流量 = 型腔体积 / 注射时间（moldingInletVelocity 的体积流量口径）。
-    let flow_rate = mesh_volume(mesh) / process.injection_time_s.max(1e-9);
+    // 注射流量 = 型腔体积 / 注射时间（moldingInletVelocity 体积流量口径，m³/s）。
+    let flow_rate = mesh_volume(mesh) * MM_TO_M.powi(3) / process.injection_time_s.max(1e-9);
     write(&zero.join("alpha.melt"), ALPHA_MELT)?;
     write(&zero.join("U"), &u_dict(flow_rate))?;
     write(&zero.join("p"), P_DICT)?;
-    write(&zero.join("p_rgh"), P_RGH_DICT)?;
+    write(&zero.join("p_rgh"), &p_rgh_dict(areas.vent_m2))?;
     write(&zero.join("T"), &t_dict(melt_k, mold_k))?;
     Ok(())
 }
@@ -474,8 +524,8 @@ pub fn generate_case(
     cores: usize,
     gates: &[GatePortal],
 ) -> Result<()> {
-    write_poly_mesh(case_dir, mesh, gates)?;
-    write_case_files(case_dir, mesh, material, process, stage, cores)
+    let areas = write_poly_mesh(case_dir, mesh, gates)?;
+    write_case_files(case_dir, mesh, material, process, stage, cores, &areas)
 }
 
 /// 解析求解器 stdout 中的时间步行（如 "Time = 0.05"），返回物理进度秒数。
@@ -564,7 +614,7 @@ fn molding_dict(process: &ProcessSettings) -> String {
         .unwrap_or_default();
     foam_header("dictionary", "moldingDict")
         + &format!(
-            "injection\n{{\n    meltTemperature  {:.4};\n}}\npacking\n{{\n    switchFraction   {:.4};\n{switch_pressure}    pressure\n    {{\n        type            table;\n        values\n        (\n{table}        );\n    }}\n}}\ncooling\n{{\n    ejectionTemperature  {:.4};\n    releasePressure  1e5;\n}}\n",
+            "injection\n{{\n    meltTemperature  {:.4};\n}}\npacking\n{{\n    switchFraction   {:.4};\n{switch_pressure}    pressure\n    {{\n        type            table;\n        values\n        (\n{table}        );\n    }}\n}}\nventSealAlpha  {VENT_SEAL_ALPHA:.4};\nmassBudget  true;\nmassBudgetInterval  {MASS_BUDGET_INTERVAL};\ncooling\n{{\n    ejectionTemperature  {:.4};\n    releasePressure  1e5;\n}}\n",
             kelvin(process.melt_temp_c),
             process.vp_switch_volume_percent / 100.0,
             kelvin(process.ejection_temp_c)
@@ -599,7 +649,7 @@ fn physical_properties_melt(material: &Material, process: &ProcessSettings) -> R
 fn u_dict(flow_rate: f64) -> String {
     foam_header("volVectorField", "U")
         + &format!(
-            "dimensions      [0 1 -1 0 0 0 0];\n\ninternalField   uniform (0 0 0);\n\nboundaryField\n{{\n    #includeEtc \"caseDicts/setConstraintTypes\"\n\n    inlet\n    {{\n        type                moldingInletVelocity;\n        volumetricFlowRate  {flow_rate:.6e};\n        value               uniform (0 0 0);\n    }}\n\n    vent\n    {{\n        type            pressureInletOutletVelocity;\n        value           uniform (0 0 0);\n    }}\n\n    walls\n    {{\n        type            noSlip;\n    }}\n}}\n"
+            "dimensions      [0 1 -1 0 0 0 0];\n\ninternalField   uniform (0 0 0);\n\nboundaryField\n{{\n    #includeEtc \"caseDicts/setConstraintTypes\"\n\n    inlet\n    {{\n        type                moldingInletVelocity;\n        volumetricFlowRate  {flow_rate:.6e};\n        value               uniform (0 0 0);\n    }}\n\n    vent\n    {{\n        type            moldingVentVelocity;\n        value           uniform (0 0 0);\n    }}\n\n    walls\n    {{\n        type            noSlip;\n    }}\n}}\n"
         )
 }
 
@@ -615,7 +665,14 @@ const ALPHA_MELT: &str = "FoamFile\n{\n    version 2.0;\n    format ascii;\n    
 
 const P_DICT: &str = "FoamFile\n{\n    version 2.0;\n    format ascii;\n    class \"volScalarField\";\n    object p;\n}\ndimensions      [1 -1 -2 0 0 0 0];\ninternalField   uniform 1e5;\nboundaryField\n{\n    #includeEtc \"caseDicts/setConstraintTypes\"\n\n    inlet\n    {\n        type            calculated;\n        value           $internalField;\n    }\n\n    vent\n    {\n        type            calculated;\n        value           $internalField;\n    }\n\n    walls\n    {\n        type            calculated;\n        value           $internalField;\n    }\n}\n";
 
-const P_RGH_DICT: &str = "FoamFile\n{\n    version 2.0;\n    format ascii;\n    class \"volScalarField\";\n    object p_rgh;\n}\ndimensions      [1 -1 -2 0 0 0 0];\ninternalField   uniform 1e5;\nboundaryField\n{\n    #includeEtc \"caseDicts/setConstraintTypes\"\n\n    inlet\n    {\n        type            moldingPrghPressure;\n        refValue        uniform 1e5;\n        refGradient     uniform 0;\n        valueFraction   uniform 0;\n        value           uniform 1e5;\n    }\n\n    vent\n    {\n        type            prghTotalPressure;\n        p0              uniform 1e5;\n        value           $internalField;\n    }\n\n    walls\n    {\n        type            fixedFluxPressure;\n        value           $internalField;\n    }\n}\n";
+/// 压力场：浇口与排气口都用 moldingFoam 的双模式边界（排气口带等效流通面积
+/// `CdA`，与 `ventSealAlpha` 一起构成密封逻辑）。
+fn p_rgh_dict(cda_m2: f64) -> String {
+    foam_header("volScalarField", "p_rgh")
+        + &format!(
+            "dimensions      [1 -1 -2 0 0 0 0];\ninternalField   uniform 1e5;\nboundaryField\n{{\n    #includeEtc \"caseDicts/setConstraintTypes\"\n\n    inlet\n    {{\n        type            moldingPrghPressure;\n        refValue        uniform 1e5;\n        refGradient     uniform 0;\n        valueFraction   uniform 0;\n        value           uniform 1e5;\n    }}\n\n    vent\n    {{\n        type            moldingVentPressure;\n        p0              1e5;\n        CdA             {cda_m2:.6e};\n        value           $internalField;\n    }}\n\n    walls\n    {{\n        type            fixedFluxPressure;\n        value           $internalField;\n    }}\n}}\n"
+        )
+}
 
 const PHASE_PROPERTIES: &str = "FoamFile\n{\n    version 2.0;\n    format ascii;\n    class dictionary;\n    location \"constant\";\n    object phaseProperties;\n}\nphases (melt air);\n\nsigma\n{\n    type    constant;\n    sigma   [1 0 -2 0 0 0 0] 0.025;\n}\n";
 
@@ -1183,11 +1240,19 @@ mod tests {
                     (points[face[0]][1] + points[face[1]][1] + points[face[2]][1]) / 3.0,
                     (points[face[0]][2] + points[face[1]][2] + points[face[2]][2]) / 3.0,
                 ];
-                distance(centroid, gate.center)
+                // 写出的点是米：把浇口坐标一并换算后再比距离
+                distance(
+                    centroid,
+                    [
+                        gate.center[0] * MM_TO_M,
+                        gate.center[1] * MM_TO_M,
+                        gate.center[2] * MM_TO_M,
+                    ],
+                )
             })
             .fold(0.0_f64, f64::max);
-        // 半径 1.2 + 单元对角线量级（补齐最近面）以内
-        assert!(max_distance < 2.5, "入口面离浇口过远：{max_distance}");
+        // 半径 1.2 mm + 单元对角线量级（补齐最近面）以内 → 米制 □ 2.5e-3
+        assert!(max_distance < 2.5e-3, "入口面离浇口过远：{max_distance}");
         // 等效流通面积不低于 πr²（消融「按距离补足」时该断言先红）
         let inlet_area: f64 = (gated_inlet.start..gated_inlet.start + gated_inlet.count)
             .map(|index| {
@@ -1205,11 +1270,44 @@ mod tests {
                 (cross[0] * cross[0] + cross[1] * cross[1] + cross[2] * cross[2]).sqrt() / 2.0
             })
             .sum();
+        let gate_area_m2 =
+            std::f64::consts::PI * gate.radius_mm * gate.radius_mm * MM_TO_M * MM_TO_M;
         assert!(
-            inlet_area >= std::f64::consts::PI * gate.radius_mm * gate.radius_mm,
-            "入口等效面积 {inlet_area} 小于 πr²"
+            inlet_area >= gate_area_m2,
+            "入口等效面积 {inlet_area} 小于 πr²（{gate_area_m2}）"
         );
 
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn written_mesh_is_si_with_patch_areas() {
+        // 4 mm 立方体、1 mm 体素：写出的点应在米制（≤ 4e-3），
+        // patch 面积为 SI（底面 16 个 1×1 mm 面元 = 16 mm² = 1.6e-5 m²）。
+        let dir = std::env::temp_dir().join(format!("kairos-si-{}", std::process::id()));
+        let case = dir.join("case");
+        let mesh = crate::services::meshing::generate(
+            &crate::models::geometry::TriangleMesh::sample_box(4.0),
+            &crate::services::meshing::VolumeMeshParams {
+                refinement: None,
+                target_size: 1.0,
+            },
+        )
+        .unwrap();
+        let areas = write_poly_mesh(&case, &mesh, &[]).unwrap();
+
+        let (points, _, _, _) = parse_poly_mesh(&case.join("constant/polyMesh"));
+        let max_coordinate = points.iter().flatten().fold(f64::MIN, |acc, v| acc.max(*v));
+        assert!(max_coordinate <= 4.0e-3, "坐标应为米：{max_coordinate}");
+
+        let expected = 1.6e-5;
+        assert!(
+            (areas.inlet_m2 - expected).abs() < expected * 0.01,
+            "inlet 面积 {:#e} 应为 {expected:#e}",
+            areas.inlet_m2
+        );
+        assert!((areas.vent_m2 - expected).abs() < expected * 0.01);
+        assert!(areas.walls_m2 > 0.0);
         std::fs::remove_dir_all(&dir).ok();
     }
 

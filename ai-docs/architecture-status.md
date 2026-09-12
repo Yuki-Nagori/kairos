@@ -85,6 +85,11 @@
       phaseProperties / 0/ 五场）
 - [x] Kairos 侧 VM 执行链路：bundle 部署 + tar 复制 + multipass exec
       （T36）
+- [x] case 单位制与排气边界对齐契约（T66）：坐标写米（mm×1e-3）、流量 SI、
+      排气口用 `moldingVentVelocity` / `moldingVentPressure`（`CdA` = 排气面积）+ `ventSealAlpha`、`moldingDict` 打开质量预算。旧配置的排气口是通用开放
+      边界（密封逻辑不生效，入口流量 92% 逃逸）且 mm-as-m 使 10 mm 件在求解器里
+      成为 10 m。真机复跑：V/P 切换 t ≈ 1.16 s（填充 0.95）触发、t = 2 s 填充
+      0.9731、无 NaN、exit 0（上游参考用例 0.9614 / 0.9786）
 - [x] 真机求解复跑（2026-09-12，bundle v0.2.1）：样例方盒 0 → endTime 全段
       跑通（checkMesh Mesh OK、exit 0、结果回传后 `results` 可读）；期间修复
       6 项 Kairos 侧集成缺陷、确认上游 2 项（SIGILL、打包重复库）已修，
