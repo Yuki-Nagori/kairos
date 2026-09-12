@@ -9,6 +9,8 @@ import {
   upsertCustomMaterial,
 } from "../api/materials";
 import { pickExportJsonPath, pickOpenMaterialsPath } from "../api/dialog";
+/** 自定义材料 id 的会话内序列号：同一毫秒连续复制也不撞 id（与 project store 同策略）。 */
+let customMaterialSeq = 0;
 import type { Material, MaterialLibrary } from "../types";
 import { useAppStore } from "./app";
 import { useProjectStore } from "./project";
@@ -81,7 +83,7 @@ export const useMaterialsStore = defineStore("materials", {
       }
       const copy: Material = {
         ...source,
-        id: `custom-${Date.now()}`,
+        id: `custom-${Date.now()}-${++customMaterialSeq}`,
         name: `${source.name}-副本`,
         dataNote: source.dataNote.startsWith("自定义")
           ? source.dataNote

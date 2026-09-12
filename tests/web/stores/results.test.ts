@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 import { useAppStore } from "../../../src-web/stores/app";
+import { downloadTextFile } from "../../../src-web/utils/download";
 import { useResultsStore } from "../../../src-web/stores/results";
 import {
   deriveDifference as deriveDifferenceApi,
@@ -16,6 +17,7 @@ vi.mock("../../../src-web/api/results", () => ({
   deriveField: vi.fn(),
   deriveDifference: vi.fn(),
 }));
+vi.mock("../../../src-web/utils/download", () => ({ downloadTextFile: vi.fn() }));
 
 const catalog: ResultCatalog = {
   caseDir: "/case/run",
@@ -191,20 +193,6 @@ describe("results store", () => {
   });
 
   describe("exportFieldCsv", () => {
-    function stubDownloads(): { blobs: Blob[]; createObjectURL: ReturnType<typeof vi.fn> } {
-      const blobs: Blob[] = [];
-      const createObjectURL = vi.fn((blob: Blob) => {
-        blobs.push(blob);
-        return "blob:mock";
-      });
-      const FakeURL = class extends URL {
-        static createObjectURL = createObjectURL;
-        static revokeObjectURL = vi.fn();
-      };
-      vi.stubGlobal("URL", FakeURL);
-      return { blobs, createObjectURL };
-    }
-
     it("reports when no field has been loaded", () => {
       const app = useAppStore();
       const results = useResultsStore();
@@ -212,6 +200,7 @@ describe("results store", () => {
       results.exportFieldCsv();
 
       expect(app.error?.message).toContain("暂无可导出的场数据");
+      expect(downloadTextFile).not.toHaveBeenCalled();
     });
 
     it("reports when the loaded field has no values", () => {
@@ -224,37 +213,27 @@ describe("results store", () => {
       expect(app.error?.message).toContain("暂无可导出的场数据");
     });
 
-    it("downloads a magnitude CSV named after the field and time", async () => {
-      const { blobs, createObjectURL } = stubDownloads();
-      const anchorSpy = vi.spyOn(document, "createElement");
-
+    it("downloads a magnitude CSV named after the field and time", () => {
       const app = useAppStore();
       const results = useResultsStore();
       results.loadedField = makeField();
       results.exportFieldCsv();
 
-      const anchor = anchorSpy.mock.results
-        .map((result) => result.value)
-        .at(-1) as HTMLAnchorElement;
-      expect(anchor.tagName).toBe("A");
-      expect(anchor.download).toBe("p-0.100.csv");
-      expect(anchor.href).toBe("blob:mock");
-      expect(createObjectURL).toHaveBeenCalledTimes(1);
-
-      const csv = await blobs[0]?.text();
-      expect(csv).toBe("node,p (magnitude)\n0,1\n1,2\n2,3");
+      // DOM 机制在 utils/download（其自身测试覆盖）；这里只断言数据与文件名。
+      expect(downloadTextFile).toHaveBeenCalledTimes(1);
+      expect(downloadTextFile).toHaveBeenCalledWith(
+        "p-0.100.csv",
+        "node,p (magnitude)\n0,1\n1,2\n2,3",
+      );
       expect(app.error).toBeNull();
     });
 
-    it("keeps the plain header for non-magnitude fields", async () => {
-      const { blobs } = stubDownloads();
-
+    it("keeps the plain header for non-magnitude fields", () => {
       const results = useResultsStore();
       results.loadedField = makeField({ field: "T", isMagnitude: false });
       results.exportFieldCsv();
 
-      const csv = await blobs[0]?.text();
-      expect(csv).toBe("node,T\n0,1\n1,2\n2,3");
+      expect(downloadTextFile).toHaveBeenCalledWith("T-0.100.csv", "node,T\n0,1\n1,2\n2,3");
     });
   });
 

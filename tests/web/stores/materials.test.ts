@@ -264,7 +264,7 @@ describe("materials store", () => {
 
       expect(upsertCustomMaterial).toHaveBeenCalledTimes(1);
       const inserted = vi.mocked(upsertCustomMaterial).mock.calls[0]?.[0];
-      expect(inserted?.id).toMatch(/^custom-\d+$/);
+      expect(inserted?.id).toMatch(/^custom-\d+-\d+$/);
       expect(inserted?.name).toBe("材料-builtin-pp-副本");
       expect(inserted?.dataNote).toBe("自定义副本。示例数据");
       expect(materials.materials.custom).toEqual([copy]);

@@ -15,6 +15,7 @@ import type {
   ScalarField,
 } from "../types";
 import { toCsv } from "../utils/chart";
+import { downloadTextFile } from "../utils/download";
 import { useAppStore } from "./app";
 
 let probeSeq = 0;
@@ -174,13 +175,8 @@ export const useResultsStore = defineStore("results", {
       ];
       const rows = loadedField.values.map((value, index) => [index, value]);
       const csv = toCsv(headers, rows);
-      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = `${loadedField.field}-${loadedField.timeDir}.csv`;
-      anchor.click();
-      URL.revokeObjectURL(url);
+      // Blob/锚点的 DOM 操作集中在 util 层，store 只负责数据与文件名。
+      downloadTextFile(`${loadedField.field}-${loadedField.timeDir}.csv`, csv);
     },
   },
 });
