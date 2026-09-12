@@ -71,6 +71,9 @@ enum PipelineAction {
         /// 并行核数
         #[arg(long, default_value_t = 4)]
         cores: u32,
+        /// 体素目标尺寸（mm；真实零件按壁厚/算力调整）
+        #[arg(long, default_value_t = 1.0)]
+        target_size: f64,
         /// 实际调用求解器（缺环境时以结构化错误退出）
         #[arg(long)]
         solve: bool,
@@ -186,8 +189,9 @@ fn run(command: Commands, json: bool) -> kairos_core::error::Result<()> {
                 stl,
                 out_dir,
                 cores,
+                target_size,
                 solve,
-            } => run_pipeline(sample_box, stl, out_dir, cores, solve, json),
+            } => run_pipeline(sample_box, stl, out_dir, cores, target_size, solve, json),
         },
     }
 }
@@ -337,6 +341,7 @@ fn run_pipeline(
     stl: Option<String>,
     out_dir: String,
     cores: u32,
+    target_size: f64,
     solve: bool,
     json: bool,
 ) -> kairos_core::error::Result<()> {
@@ -356,7 +361,7 @@ fn run_pipeline(
         &mesh_tri,
         &meshing::VolumeMeshParams {
             refinement: None,
-            target_size: 1.0,
+            target_size,
         },
     )?;
     // 3. case（首个内置材料 + 默认工艺 + 填充阶段）

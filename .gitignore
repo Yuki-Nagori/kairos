@@ -27,3 +27,5 @@ src-tauri/gen/schemas/
 
 # Husky runtime files
 .husky/_/
+
+samples/
