@@ -85,9 +85,24 @@
       phaseProperties / 0/ 五场）
 - [x] Kairos 侧 VM 执行链路：bundle 部署 + tar 复制 + multipass exec
       （T36）
-- [ ] 真机求解复跑：阻塞于 bundle SIGILL（CPU 指令兼容性，已移交
-      moldingFoam 侧修复，见 ai-docs/reviews/e2e-solve-report.md）
-- [ ] 多型腔 / 流道系统参与填充（依赖浇口几何落地）
+- [x] 真机求解复跑（2026-09-12，bundle v0.2.1）：样例方盒 0 → endTime 全段
+      跑通（checkMesh Mesh OK、exit 0、结果回传后 `results` 可读）；期间修复
+      6 项 Kairos 侧集成缺陷、确认上游 2 项（SIGILL、打包重复库）已修，
+      见 ai-docs/reviews/e2e-solve-report.md
+- [ ] 浇口几何落地：case 的 inlet 目前是包围盒 z 分带启发式
+      （`classify_face`），未消费 T07 的流道网络（`RunnerElement{kind: Gate}`）；
+      真实阶梯边界下分带还会把 39% 的侧向面当浇口（熔体从外壁注入）。
+      落地内容：`generate_case` 接受浇口/流道描述 → inlet patch 取浇口端点
+      邻域边界面，无浇口时回退分带并**按面法向过滤**；多型腔/流道参与填充
+      依赖此项
+- [ ] 工艺参数合理性校验（core 纯函数）：按件体积 + 材料 + 注射时间估算
+      所需注射流量/压力，超量程给出提示与建议值。真实件实测（880 cm³、
+      默认 1 s 注射）在填充 1% 时门控压力已 5 MPa、3% 时 10² MPa 量级，
+      压力 runaway → Courant 10⁷ → NaN，属参数不适配而非链路缺陷
+      （见 e2e 报告 §5）
+- [ ] 网格最小特征提示（与 T56/T57 同族）：体素尺寸 vs 壁厚/最小特征，
+      薄于约 2 个体素的区域给出警告。真实件以 5 mm 体素网格化时底座被压成
+      单层单元，流动路径退化为薄板，润滑压降随 1/h² 放大
 
 ### C5 冷却分析
 
