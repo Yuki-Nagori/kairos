@@ -399,11 +399,6 @@ pub enum SolverSignal {
 }
 
 /// 识别求解器输出行的收尾信号；普通日志行返回 `None`。
-///
-/// 用途：作业收尾判定。上游 bundle 存在退出期堆破坏（`argList::~argList`
-/// 里 malloc_consolidate 报错，moldingFoam 自带 case-contract 同样复现），
-/// 跑完整段求解后进程仍以非零码退出；只有「没有任何异常标记 + 见过正常结束
-/// 标记」才把非零退出码当作该崩溃，而不是求解失败。
 pub fn solver_signal(line: &str) -> Option<SolverSignal> {
     let trimmed = line.trim();
     if trimmed.contains("FOAM FATAL")
@@ -413,6 +408,39 @@ pub fn solver_signal(line: &str) -> Option<SolverSignal> {
         return Some(SolverSignal::Aborted);
     }
     (trimmed == "End").then_some(SolverSignal::Completed)
+}
+
+/// 求解输出的收尾状态累积器（逐行喂入，见作业层的流式读取）。
+///
+/// 判定规则：一次 `Aborted` 即定案——求解器的异常路径必打印
+/// `FOAM FATAL` / `FOAM exiting` / `FOAM aborting`；`Completed` 只表示
+/// 见过 `End`（decomposePar / reconstructPar 等工具也会打印它，因此单独
+/// 不足以证明求解正常收尾）。
+///
+/// 用途：作业收尾判定需要区分「求解失败」与「求解跑完但进程在退出期崩溃」
+/// ——后者指上游 bundle 的打包缺陷（同一模块被打包成两份独立 .so，运行期
+/// 两份都被加载，退出析构时 glibc 报 malloc_consolidate）；跑完的求解因此
+/// 以非零码退出。只有 `completed_cleanly` 时才把该非零码当作退出期崩溃。
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct SolverOutcome {
+    aborted: bool,
+    completed: bool,
+}
+
+impl SolverOutcome {
+    /// 吸收一行求解器输出（普通日志行不影响状态）。
+    pub fn observe(&mut self, line: &str) {
+        match solver_signal(line) {
+            Some(SolverSignal::Aborted) => self.aborted = true,
+            Some(SolverSignal::Completed) => self.completed = true,
+            None => {}
+        }
+    }
+
+    /// 走完时间循环且全程没有出现异常标记。
+    pub fn completed_cleanly(&self) -> bool {
+        self.completed && !self.aborted
+    }
 }
 
 /// FoamFile 头（无横幅注释的精简形态，OpenFOAM 原生接受）。
@@ -749,6 +777,21 @@ mod tests {
             command,
             "decomposePar -force && mpirun -np 6 foamRun -parallel; reconstructPar"
         );
+    }
+
+    #[test]
+    fn solver_outcome_is_clean_only_after_end_without_abort() {
+        let mut outcome = SolverOutcome::default();
+        assert!(!outcome.completed_cleanly(), "空输出不算干净收尾");
+        outcome.observe("Time = 0.5s");
+        assert!(!outcome.completed_cleanly(), "普通日志行不改变状态");
+        outcome.observe("End");
+        assert!(outcome.completed_cleanly());
+        // 异常标记粘滞：之后再打印 End 也不算干净收尾
+        outcome.observe("[1] --> FOAM FATAL ERROR: ");
+        assert!(!outcome.completed_cleanly());
+        outcome.observe("End");
+        assert!(!outcome.completed_cleanly());
     }
 
     #[test]

@@ -64,9 +64,15 @@
 ## 遗留（非本任务范围）
 
 - moldingFoam bundle 在**退出期**发生堆破坏（`malloc_consolidate` 报错，
-  argList 析构中触发），正常跑完也以非零码退出；零步运行同样复现，已定位到
-  初始化路径，对照实验确认与 bundle 内 OpenFOAM 本体无关（原版算例 exit 0），
-  属求解器侧问题，已按约定移交 moldingFoam 仓库修复。
+  argList 析构中触发），正常跑完也以非零码退出。根因已在真实 bundle 上定位
+  （2026-09-12 A/B 验证）：**同一求解模块被打包成两份独立的 .so**
+  （`libmoldingFoam.so` 新构建 + `libmoldingFoamSolver.so` 陈旧构建），
+  controlDict 的 `libs` 行与 foamRun 的模块探测各加载一份，运行期同模块代码
+  存在两份（日志 18 条 `Duplicate entry … in runtime selection table`），
+  退出析构时堆破坏；把 `libmoldingFoamSolver.so` 改为指向
+  `libmoldingFoam.so` 的符号链接后，完整链路 exit 0、无重复警告与堆报告。
+  属 bundle 打包侧问题，已按约定移交 moldingFoam 仓库修复；Kairos 侧在此之前
+  保留收尾判定兜底（`SolverOutcome`），修复版 bundle 落地后复跑再撤。
 
 ## 非目标
 

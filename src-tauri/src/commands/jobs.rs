@@ -391,16 +391,11 @@ fn run_job_body(
     vm_shell: Option<String>,
 ) {
     let mut stdout = child.stdout.take();
-    let mut abort_marker = false;
-    let mut completion_marker = false;
+    let mut outcome = moldingfoam::SolverOutcome::default();
     if let Some(pipe) = stdout.take() {
         let reader = BufReader::new(pipe);
         for line in reader.lines().map_while(std::result::Result::ok) {
-            match moldingfoam::solver_signal(&line) {
-                Some(moldingfoam::SolverSignal::Aborted) => abort_marker = true,
-                Some(moldingfoam::SolverSignal::Completed) => completion_marker = true,
-                None => {}
-            }
+            outcome.observe(&line);
             let time_s = moldingfoam::parse_time_line(&line);
             let forward = {
                 let mut guard = inner
@@ -421,34 +416,34 @@ fn run_job_body(
     // 也走一遍回传——已写出的部分时间目录对排查有用——但只有成功路径把回传
     // 失败当作作业失败，避免用回传问题覆盖求解本身的失败原因。
     let copy_back = copy_results_from_vm(&case_dir, vm_case.as_deref());
-    // 求解器退出码不可信时（上游 bundle 退出期堆破坏）以输出里的收尾标记为准：
-    // 没有异常标记且见过 "End" → 该非零码来自退出期崩溃，不是求解失败。
-    let teardown_crash = !exit_ok && !abort_marker && completion_marker && copy_back.is_ok();
+    let copy_back_error = copy_back.err().map(|error| error.message().to_string());
+    // 求解诊断输出（非零码来自上游 bundle 的退出期崩溃）在日志里说明清楚，
+    // 但作业本身按完成处理：结果已回传、时间循环走完、没有任何求解器异常标记。
+    let teardown_crash = !exit_ok && outcome.completed_cleanly() && copy_back_error.is_none();
+    let failure = if exit_ok || teardown_crash {
+        // 成功路径下回传失败仍算失败，避免静默丢结果
+        copy_back_error
+    } else {
+        Some("进程异常退出".to_string())
+    };
     let now = now_ms();
     {
         let mut guard = inner
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        if teardown_crash {
-            if let Some(channel) = guard.channels.get(&job_id) {
-                let _ = channel.send(
-                    "求解已走完时间循环（输出以 End 收尾）；非零退出码来自已知的上游\
-                     bundle 退出期崩溃，结果仍有效。"
-                        .to_string(),
-                );
+        if teardown_crash && let Some(channel) = guard.channels.get(&job_id) {
+            let _ = channel.send(
+                "求解已走完时间循环；非零退出码来自上游 bundle 退出期崩溃（同一模块\
+                 被打包成两份 .so），结果仍有效。"
+                    .to_string(),
+            );
+        }
+        match &failure {
+            None => {
+                let _ = job_logic::mark_done(&mut guard.jobs, &job_id, now);
             }
-            let _ = job_logic::mark_done(&mut guard.jobs, &job_id, now);
-        } else {
-            match (exit_ok, copy_back) {
-                (true, Ok(())) => {
-                    let _ = job_logic::mark_done(&mut guard.jobs, &job_id, now);
-                }
-                (true, Err(e)) => {
-                    let _ = job_logic::mark_failed(&mut guard.jobs, &job_id, e.message(), now);
-                }
-                (false, _) => {
-                    let _ = job_logic::mark_failed(&mut guard.jobs, &job_id, "进程异常退出", now);
-                }
+            Some(message) => {
+                let _ = job_logic::mark_failed(&mut guard.jobs, &job_id, message, now);
             }
         }
         guard.children.remove(&job_id);
