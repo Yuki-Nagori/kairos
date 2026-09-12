@@ -1,15 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { mount } from "@vue/test-utils";
+import { flushPromises, mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import type { Pinia } from "pinia";
 import DependenciesPanel from "../../../../src-web/views/dependencies/DependenciesPanel.vue";
 import { useAppStore } from "../../../../src-web/stores/app";
 import { useDependenciesStore } from "../../../../src-web/stores/dependencies";
+import { useVmStore } from "../../../../src-web/stores/vm";
 import {
   checkDependencyUpdate,
   listRuntimeDependencies,
   openDependencyPage,
 } from "../../../../src-web/api/dependencies";
+import { getDeployedReleaseTag } from "../../../../src-web/api/vm";
 import {
   downloadComponentFile,
   getDownloadsDir,
@@ -38,6 +40,7 @@ vi.mock("../../../../src-web/api/downloads", () => ({
 }));
 vi.mock("../../../../src-web/api/vm", () => ({
   getVmStatus: vi.fn(),
+  getDeployedReleaseTag: vi.fn(async () => null),
   installVm: vi.fn(),
   startVm: vi.fn(),
   vmShellStart: vi.fn(),
@@ -206,9 +209,64 @@ describe("DependenciesPanel", () => {
     await vi.waitFor(() => expect(wrapper.text()).toContain("下载失败：网络中断"));
   });
 
+  it("T54：moldingFoam 更新未部署 → 横幅提示；部署比对一致 → 无横幅", async () => {
+    const vm = useVmStore();
+    // VM 侧未知（未部署）+ 已下载 v0.2.0 → 提示（清单经 listDownloads mock 提供）
+    vi.mocked(listDownloads).mockResolvedValue({
+      moldingfoam: {
+        fileName: "moldingFoam.tar.xz",
+        sizeBytes: 1,
+        downloadedAtMs: 0,
+        extractDir: "/downloads/moldingfoam",
+        releaseTag: "v0.2.0",
+      },
+    });
+    vm.deployedReleaseTag = null;
+    let wrapper = await mountPanel([makeDep()]);
+    await flushPromises();
+    expect(wrapper.text()).toContain("有更新未部署");
+    expect(wrapper.text()).toContain("v0.2.0");
+    wrapper.unmount();
+
+    // VM 侧有旧版本且不一致 → 文案含旧版本号
+    vi.mocked(getDeployedReleaseTag).mockResolvedValue("v0.1.1");
+    wrapper = await mountPanel([makeDep()]);
+    await flushPromises();
+    expect(wrapper.text()).toContain("VM 内 v0.1.1");
+    wrapper.unmount();
+
+    // 部署后标签一致 → 无横幅（setup 会拉取 VM 内标记，mock 返回同版本）
+    vi.mocked(getDeployedReleaseTag).mockResolvedValue("v0.2.0");
+    wrapper = await mountPanel([makeDep()]);
+    await flushPromises();
+    expect(wrapper.text()).not.toContain("有更新未部署");
+    wrapper.unmount();
+
+    // 旧 manifest 条目无版本标签（静态直链残留）→ 无法比对，不提示
+    vi.mocked(listDownloads).mockResolvedValue({
+      moldingfoam: {
+        fileName: "moldingFoam.tar.xz",
+        sizeBytes: 1,
+        downloadedAtMs: 0,
+        extractDir: null,
+        releaseTag: null,
+      },
+    });
+    wrapper = await mountPanel([makeDep()]);
+    await flushPromises();
+    expect(wrapper.text()).not.toContain("有更新未部署");
+    wrapper.unmount();
+  });
+
   it("跨会话已下载清单恢复：重新下载按钮与已下载文案", async () => {
     vi.mocked(listDownloads).mockResolvedValue({
-      gmsh: { fileName: "gmsh.tgz", sizeBytes: 1024, downloadedAtMs: 0, extractDir: null },
+      gmsh: {
+        fileName: "gmsh.tgz",
+        sizeBytes: 1024,
+        downloadedAtMs: 0,
+        extractDir: null,
+        releaseTag: "v0.1.1",
+      },
     });
     const wrapper = await mountPanel([makeDep()]);
     await vi.waitFor(() => expect(wrapper.text()).toContain("已下载 gmsh.tgz（0.0 MB）"));

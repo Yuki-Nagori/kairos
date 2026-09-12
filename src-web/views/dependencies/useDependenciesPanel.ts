@@ -6,6 +6,7 @@ import { computed } from "vue";
 import { useAppStore } from "../../stores/app";
 import { useVmStore } from "../../stores/vm";
 import { useDependenciesStore } from "../../stores/dependencies";
+import { isPendingDeploy } from "../../utils/deploy";
 import type { DependencyStatus } from "../../types";
 
 /** 单行依赖的展示模型：模板分支与文案集中此处算清，避免模板里重复取值。 */
@@ -125,6 +126,25 @@ export function useDependenciesPanel() {
   void deps.refreshDownloadsDir();
 
   void deps.refreshDependencies();
+  // VM 内已部署版本（T54「更新未部署」提醒的比对源）
+  void vm.refreshDeployedReleaseTag();
 
-  return { app, vm, deps, rows, downloadsDir, openDownloadsDir: deps.openDownloadsDir };
+  /** 待部署提示文案（版本从 → 到；VM 侧未知显示「未部署」）。 */
+  const pendingDeployText = computed(() => {
+    const downloaded = deps.downloadedFiles["moldingfoam"]?.releaseTag ?? null;
+    if (downloaded === null || !isPendingDeploy(downloaded, vm.deployedReleaseTag)) {
+      return null;
+    }
+    return `求解环境有更新未部署：${downloaded} → VM 内 ${vm.deployedReleaseTag ?? "未部署"}，请部署到虚拟机后提交作业`;
+  });
+
+  return {
+    app,
+    vm,
+    deps,
+    rows,
+    downloadsDir,
+    pendingDeployText,
+    openDownloadsDir: deps.openDownloadsDir,
+  };
 }

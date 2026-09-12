@@ -8,6 +8,7 @@ import UiButton from "../../components/ui/UiButton.vue";
 const {
   app,
   jobsStore,
+  pendingDeployText,
   caseDir,
   cores,
   submitJob,
@@ -21,6 +22,13 @@ const {
 
 <template>
   <Card title="求解作业">
+    <!-- T54：求解环境「已下载新版本但 VM 未部署」提醒 -->
+    <p
+      v-if="pendingDeployText"
+      class="mb-2 rounded-lg border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-xs text-amber-300"
+    >
+      {{ pendingDeployText }}
+    </p>
     <p :class="envClass">{{ envHint }}</p>
     <div class="flex flex-wrap items-center gap-2">
       <TextInput

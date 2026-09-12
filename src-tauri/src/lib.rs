@@ -222,6 +222,7 @@ pub fn run() {
             commands::vm::vm_install,
             commands::vm::vm_start,
             commands::vm::vm_deploy_bundle,
+            commands::vm::vm_deployed_release_tag,
             commands::vm::vm_shell_start,
             commands::vm::vm_shell_send,
             commands::vm::vm_shell_stop,

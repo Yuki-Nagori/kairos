@@ -10,6 +10,8 @@ const SHELL_LOG_LIMIT = 500;
 export const useVmStore = defineStore("vm", {
   state: () => ({
     vmStatus: null as VmStatus | null,
+    /** VM 内已部署的求解环境版本标签（null = 非 multipass / 未部署 / 未知）。 */
+    deployedReleaseTag: null as string | null,
     /** 应用内 Shell 输出（环形缓冲）。 */
     vmShellLogs: [] as string[],
     /** 进行中的动作（同一时刻至多一个）。 */
@@ -40,12 +42,23 @@ export const useVmStore = defineStore("vm", {
         this.vmBusy = null;
       }
     },
-    /** 部署求解环境：传输 bundle 进虚拟机并解压，日志实时滚动进终端面板。 */
+    /** 部署求解环境：传输 bundle 进虚拟机并解压，日志实时滚动进终端面板；
+     *  成功后刷新 VM 内版本标记（供「更新未部署」提醒比对）。 */
     async deployVmBundle(): Promise<void> {
       await this.withBusy("shell", async () => {
         await api.deployVmBundle((line) => this.appendShellLog(line));
         await this.refreshVmStatus();
+        await this.refreshDeployedReleaseTag();
       });
+    },
+    /** 读取 VM 内已部署版本标签（multipass 通道；其余平台恒为 null）。 */
+    async refreshDeployedReleaseTag(): Promise<void> {
+      const app = useAppStore();
+      try {
+        this.deployedReleaseTag = await api.getDeployedReleaseTag();
+      } catch (error) {
+        app.setError(error);
+      }
     },
     /** 展开虚拟机终端面板（原生菜单入口触发，非切换）。 */
     showPanel(): void {

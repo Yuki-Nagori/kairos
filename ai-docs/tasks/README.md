@@ -63,6 +63,7 @@
 | T51 | [T51-result-binary-chain-done.md](T51-result-binary-chain-done.md)             | 大结果二进制通道 + 有界缓存       |
 | T52 | [T52-report-content-done.md](T52-report-content-done.md)                       | 分析报告内容增强（几何/探针表）   |
 | T53 | [T53-report-template-done.md](T53-report-template-done.md)                     | 模板化自定义报告                  |
+| T54 | [T54-vm-deploy-version-hint-done.md](T54-vm-deploy-version-hint-done.md)       | 求解环境"更新未部署"提醒          |
 
 > T26/T27 落地后的增量打磨（系统窗口按钮、原生应用菜单、主题注入统一、
 > 品牌图标、emoji 清理、启动窗口位置）见 `ai-docs/timeline.md` 对应条目，

@@ -349,6 +349,8 @@ export interface DownloadedEntry {
   sizeBytes: number;
   downloadedAtMs: number;
   extractDir: string | null;
+  /** release 流组件的来源版本标签；静态直链组件为 null。 */
+  releaseTag: string | null;
 }
 
 /** 依赖状态视图（目录项 + 就绪探测）。 */

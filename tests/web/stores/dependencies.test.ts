@@ -169,6 +169,7 @@ describe("dependencies store", () => {
         sizeBytes: 1024,
         downloadedAtMs: 7,
         extractDir: "/downloads/gmsh",
+        releaseTag: "v0.1.1",
       },
     });
 

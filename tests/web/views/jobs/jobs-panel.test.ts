@@ -5,6 +5,8 @@ import type { Pinia } from "pinia";
 import JobsPanel from "../../../../src-web/views/jobs/JobsPanel.vue";
 import { useAppStore } from "../../../../src-web/stores/app";
 import { useJobsStore } from "../../../../src-web/stores/jobs";
+import { useDependenciesStore } from "../../../../src-web/stores/dependencies";
+import { useVmStore } from "../../../../src-web/stores/vm";
 import { probeOpenfoam } from "../../../../src-web/api/solver";
 import { cancelJob, listJobs, submitJob } from "../../../../src-web/api/jobs";
 import type { Job } from "../../../../src-web/types";
@@ -61,6 +63,28 @@ describe("JobsPanel 环境探测行", () => {
       solver: true,
       hint: "OpenFOAM 环境就绪。",
     });
+  });
+
+  it("T54：求解环境更新未部署 → 顶部横幅提示；一致则无", async () => {
+    const deps = useDependenciesStore();
+    const vm = useVmStore();
+    deps.downloadedFiles = {
+      moldingfoam: {
+        fileName: "moldingFoam.tar.xz",
+        sizeBytes: 1,
+        downloadedAtMs: 0,
+        extractDir: null,
+        releaseTag: "v0.2.0",
+      },
+    };
+    vm.deployedReleaseTag = "v0.1.1";
+    const wrapper = mount(JobsPanel, { global: { plugins: [pinia] } });
+    expect(wrapper.text()).toContain("有更新未部署");
+    expect(wrapper.text()).toContain("部署到虚拟机");
+
+    vm.deployedReleaseTag = "v0.2.0";
+    await wrapper.vm.$nextTick();
+    expect(wrapper.text()).not.toContain("有更新未部署");
   });
 
   it("探测完成前显示探测中文案", () => {

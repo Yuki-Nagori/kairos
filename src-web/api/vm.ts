@@ -50,3 +50,8 @@ export function deployVmBundle(onLog: (line: string) => void): Promise<string> {
   channel.onmessage = onLog;
   return invokeCommand("vm_deploy_bundle", { progress: channel });
 }
+
+/** 读取 VM 内已部署的求解环境版本标签（非 multipass / 未部署 → null）。 */
+export function getDeployedReleaseTag(): Promise<string | null> {
+  return invokeCommand("vm_deployed_release_tag");
+}

@@ -16,6 +16,7 @@ import type { VmStatus } from "../../../src-web/types";
 
 vi.mock("../../../src-web/api/vm", () => ({
   getVmStatus: vi.fn(),
+  getDeployedReleaseTag: vi.fn(async () => null),
   installVm: vi.fn(),
   startVm: vi.fn(),
   vmShellStart: vi.fn(),
@@ -111,12 +112,29 @@ describe("vm store", () => {
 
     const app = useAppStore();
     const vm = useVmStore();
+    const { getDeployedReleaseTag } = (await import("../../../src-web/api/vm")) as unknown as {
+      getDeployedReleaseTag: ReturnType<typeof vi.fn>;
+    };
+    vi.mocked(getDeployedReleaseTag).mockResolvedValue("v0.2.0");
     await vm.deployVmBundle();
 
     expect(vm.vmShellLogs).toEqual(["传输 bundle 中"]);
     expect(vm.vmStatus).toEqual(runningStatus);
     expect(vm.vmBusy).toBeNull();
+    expect(vm.deployedReleaseTag).toBe("v0.2.0");
     expect(app.error).toBeNull();
+  });
+
+  it("刷新已部署版本失败进全局错误", async () => {
+    const { getDeployedReleaseTag } = (await import("../../../src-web/api/vm")) as unknown as {
+      getDeployedReleaseTag: ReturnType<typeof vi.fn>;
+    };
+    vi.mocked(getDeployedReleaseTag).mockRejectedValueOnce(new Error("multipass 不可用"));
+    const app = useAppStore();
+    const vm = useVmStore();
+    await vm.refreshDeployedReleaseTag();
+    expect(app.error?.message).toBe("multipass 不可用");
+    expect(vm.deployedReleaseTag).toBeNull();
   });
 
   it("deploy failures surface as errors and clear busy", async () => {

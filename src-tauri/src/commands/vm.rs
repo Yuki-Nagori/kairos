@@ -353,6 +353,47 @@ fn download_to_file(url: &str, dest: &Path, progress: &Channel<String>) -> Resul
     Ok(())
 }
 
+/// 解析 VM 内标记文件内容为已部署版本标签：空白 / 缺失 → None。
+pub fn parse_deployed_tag(stdout: &str) -> Option<String> {
+    let trimmed = stdout.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+/// 读取 VM 内已部署的求解环境版本标记（「更新未部署」提醒的比对源，
+/// T54）。非 multipass 平台无部署概念、VM 未启动 / multipass 缺失均返回
+/// null——提示只在真正可比对的环境中出现。
+#[tauri::command]
+pub async fn vm_deployed_release_tag(app: AppHandle) -> Result<Option<String>> {
+    if provider()? != VmProviderKind::Multipass {
+        return Ok(None);
+    }
+    let _ = app;
+    tauri::async_runtime::spawn_blocking(move || {
+        let output = platform_command("multipass")
+            .args([
+                "exec",
+                "kairos",
+                "--",
+                "bash",
+                "-lc",
+                "cat ~/moldingfoam-env/.kairos-release-tag 2>/dev/null || true",
+            ])
+            .output()
+            .map_err(|e| KairosError::io(format!("读取版本标记失败：{e}")))?;
+        if !output.status.success() {
+            // VM 未启动等场景：视为版本未知（null），不作为错误打断 UI
+            return Ok(None);
+        }
+        Ok(parse_deployed_tag(&String::from_utf8_lossy(&output.stdout)))
+    })
+    .await
+    .map_err(|e| KairosError::internal(format!("读取部署版本失败：{e}")))?
+}
+
 /// 部署求解环境：把受管的 moldingFoam bundle 传输进虚拟机并解压到
 /// ~/moldingfoam-env（multipass 平台；作业执行依赖该环境树）。
 #[tauri::command]
@@ -398,6 +439,26 @@ pub async fn vm_deploy_bundle(app: AppHandle, progress: Channel<String>) -> Resu
             .map_err(|e| KairosError::io(format!("解压启动失败：{e}")))?;
         if !extract.success() {
             return Err(KairosError::io("解压失败，请确认 bundle 完整后重试。"));
+        }
+        // 版本标记：把 releaseTag 写进 VM，供「更新未部署」提醒比对
+        //（T54）。非 release 流组件无标签，跳过标记（比对端视为未部署）。
+        if let Some(tag) = &entry.release_tag {
+            let marker = platform_command("multipass")
+                .args([
+                    "exec",
+                    "kairos",
+                    "--",
+                    "bash",
+                    "-lc",
+                    &format!(
+                        "printf '%s' '{tag}' > ~/moldingfoam-env/.kairos-release-tag"
+                    ),
+                ])
+                .status()
+                .map_err(|e| KairosError::io(format!("写入版本标记失败：{e}")))?;
+            if !marker.success() {
+                return Err(KairosError::io("版本标记写入失败，请重试部署。"));
+            }
         }
         // 求解器运行时依赖：foamRun 链接 libmpi.so.40，VM 内必须
         // 有 OpenMPI。ubuntu 用户免密 sudo，非交互安装无阻碍。
@@ -710,4 +771,18 @@ pub fn cleanup_on_exit(shell: &VmShellState) {
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_deployed_tag;
+
+    #[test]
+    fn parse_deployed_tag_trims_and_handles_empty() {
+        assert_eq!(parse_deployed_tag("v0.2.0\n"), Some("v0.2.0".into()));
+        assert_eq!(parse_deployed_tag("  v0.2.0  "), Some("v0.2.0".into()));
+        // 标记文件缺失（cat 失败被 || true 吞掉）→ 空输出 → 未部署
+        assert_eq!(parse_deployed_tag(""), None);
+        assert_eq!(parse_deployed_tag("\n  \n"), None);
+    }
 }
