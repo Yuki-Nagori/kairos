@@ -103,8 +103,6 @@ pub fn write_poly_mesh(case_dir: &Path, mesh: &VolumeMesh) -> Result<()> {
 
     // 面法向按 owner 外法向定向（点积判定，反向则交换后两点）。
     let mut face_lines = Vec::with_capacity(faces.len());
-    let mut owner_lines = Vec::with_capacity(faces.len());
-    let mut neighbour_lines = Vec::new();
     for (index, face) in faces.iter().enumerate() {
         let (p0, p1, p2) = (
             mesh.nodes[face[0]],
@@ -146,28 +144,52 @@ pub fn write_poly_mesh(case_dir: &Path, mesh: &VolumeMesh) -> Result<()> {
         ];
         let outward =
             normal[0] * to_owner[0] + normal[1] * to_owner[1] + normal[2] * to_owner[2] < 0.0;
-        let (a, b, c) = if outward {
-            (face[0], face[1], face[2])
+        // 定向下标后按最小节点开头循环（OpenFOAM 的 upper-triangular 约定，
+        // 循环不改变绕向）：违反该约定 checkMesh 报 "Faces not in upper
+        // triangular order"。
+        let mut ordered_face = if outward {
+            [face[0], face[1], face[2]]
         } else {
-            (face[0], face[2], face[1])
+            [face[0], face[2], face[1]]
         };
-        face_lines.push(format!("3({a} {b} {c})"));
-        owner_lines.push(owner[index].to_string());
-        if let Some(n) = neighbour[index] {
-            neighbour_lines.push(n.to_string());
+        if ordered_face[1] < ordered_face[0] && ordered_face[1] < ordered_face[2] {
+            ordered_face.rotate_left(1);
+        } else if ordered_face[2] < ordered_face[0] {
+            ordered_face.rotate_right(1);
         }
+        face_lines.push(format!(
+            "3({} {} {})",
+            ordered_face[0], ordered_face[1], ordered_face[2]
+        ));
     }
-    let n_internal = neighbour_lines.len();
 
-    // 边界面按 z 分带分类，并重排为「内部面 → inlet → vent → walls」连续区段
-    // （boundary 文件的 startFace/nFaces 要求每个 patch 的面连续）。
+    // 输出顺序：内部面 → inlet → vent → walls。三个数组必须**逐项对齐**——
+    // faces/owner/neighbour 是并行列表，任何单独重排都会让 owner 与面错位，
+    // 单元体积随即出现负值（checkMesh: zero or negative cell volume）。
+    // 边界面按 z 分带分类，每个 patch 的面保持连续（boundary 的 startFace）。
     let (z_min, z_max) = mesh.nodes.iter().fold((f64::MAX, f64::MIN), |(lo, hi), p| {
         (lo.min(p[2]), hi.max(p[2]))
     });
+    let mut order: Vec<usize> = Vec::with_capacity(faces.len());
     let mut band_faces: [Vec<usize>; 3] = [Vec::new(), Vec::new(), Vec::new()];
-    for (index, face) in faces.iter().enumerate().skip(n_internal) {
-        let z_centroid =
-            (mesh.nodes[face[0]][2] + mesh.nodes[face[1]][2] + mesh.nodes[face[2]][2]) / 3.0;
+    for (index, slot) in neighbour.iter().enumerate() {
+        if slot.is_some() {
+            order.push(index);
+        }
+    }
+    // OpenFOAM 要求内部面按 (owner, neighbour) 升序（"upper triangular order"）：
+    // 每个单元的面按其邻居升序排列，否则 checkMesh 报 faces not in upper
+    // triangular order。
+    order.sort_by_key(|&index| (owner[index], neighbour[index].unwrap_or(0)));
+    let n_internal = order.len();
+    for (index, slot) in neighbour.iter().enumerate() {
+        if slot.is_some() {
+            continue;
+        }
+        let z_centroid = (mesh.nodes[faces[index][0]][2]
+            + mesh.nodes[faces[index][1]][2]
+            + mesh.nodes[faces[index][2]][2])
+            / 3.0;
         let slot = match classify_face(z_centroid, z_min, z_max) {
             BoundaryBand::Inlet => 0,
             BoundaryBand::Vent => 1,
@@ -175,20 +197,26 @@ pub fn write_poly_mesh(case_dir: &Path, mesh: &VolumeMesh) -> Result<()> {
         };
         band_faces[slot].push(index);
     }
-
-    let mut ordered_face_lines = face_lines[..n_internal].to_vec();
-    let mut ordered_owner_lines = owner_lines[..n_internal].to_vec();
-    let mut boundary_patches: Vec<(&str, usize, usize)> = Vec::new();
+    let mut boundary_patches: Vec<(&str, &str, usize, usize)> = Vec::new();
     let mut start_face = n_internal;
-    for (slot, patch_name) in ["inlet", "vent", "walls"].iter().enumerate() {
-        let count = band_faces[slot].len();
-        for &index in &band_faces[slot] {
-            ordered_face_lines.push(face_lines[index].clone());
-            ordered_owner_lines.push(owner_lines[index].clone());
-        }
-        boundary_patches.push((patch_name, start_face, count));
-        start_face += count;
+    for (slot, (name, patch_type)) in ["inlet", "vent", "walls"]
+        .iter()
+        .zip(["wall", "patch", "wall"])
+        .enumerate()
+    {
+        order.extend_from_slice(&band_faces[slot]);
+        boundary_patches.push((name, patch_type, start_face, band_faces[slot].len()));
+        start_face += band_faces[slot].len();
     }
+
+    let ordered = |pick: &dyn Fn(usize) -> String| -> Vec<String> {
+        order.iter().map(|&index| pick(index)).collect()
+    };
+    let owner_lines = ordered(&|index| owner[index].to_string());
+    let neighbour_lines: Vec<String> = order[..n_internal]
+        .iter()
+        .map(|&index| neighbour[index].map(|n| n.to_string()).unwrap_or_default())
+        .collect();
 
     let points_content = format!(
         "FoamFile\n{{\n    version 2.0;\n    format ascii;\n    class \"vectorField\";\n    object points;\n}}\n{}\n(\n{})\n",
@@ -202,12 +230,12 @@ pub fn write_poly_mesh(case_dir: &Path, mesh: &VolumeMesh) -> Result<()> {
     let faces_content = format!(
         "FoamFile\n{{\n    version 2.0;\n    format ascii;\n    class \"faceList\";\n    object faces;\n}}\n{}\n(\n{})\n",
         faces.len(),
-        ordered_face_lines.join("\n")
+        ordered(&|index| face_lines[index].clone()).join("\n")
     );
     let owner_content = format!(
         "FoamFile\n{{\n    version 2.0;\n    format ascii;\n    class \"labelList\";\n    object owner;\n}}\n{}\n(\n{})\n",
         faces.len(),
-        ordered_owner_lines.join("\n")
+        owner_lines.join("\n")
     );
     let neighbour_content = format!(
         "FoamFile\n{{\n    version 2.0;\n    format ascii;\n    class \"labelList\";\n    object neighbour;\n}}\n{}\n(\n{})\n",
@@ -218,9 +246,16 @@ pub fn write_poly_mesh(case_dir: &Path, mesh: &VolumeMesh) -> Result<()> {
         "FoamFile\n{{\n    version 2.0;\n    format ascii;\n    class \"polyBoundaryMesh\";\n    object boundary;\n}}\n{}\n(\n",
         boundary_patches.len()
     );
-    for (patch_name, patch_start, patch_count) in &boundary_patches {
+    for (patch_name, patch_type, patch_start, patch_count) in &boundary_patches {
+        // inlet/vent 是进出口而非壁面（vent 与契约 case 同为 patch 类型），
+        // 只有 walls 进 wall 组。
+        let in_groups = if *patch_type == "wall" {
+            "        inGroups 1(wall);\n"
+        } else {
+            ""
+        };
         boundary_content.push_str(&format!(
-            "    {patch_name}\n    {{\n        type wall;\n        inGroups 1(wall);\n        nFaces {patch_count};\n        startFace {patch_start};\n    }}\n"
+            "    {patch_name}\n    {{\n        type {patch_type};\n{in_groups}        nFaces {patch_count};\n        startFace {patch_start};\n    }}\n"
         ));
     }
     boundary_content.push_str(")\n");
@@ -359,22 +394,35 @@ fn decompose_dict(cores: usize) -> String {
         + &format!("numberOfSubdomains {cores};\nmethod          scotch;\n")
 }
 
-/// 工艺字典：V/P 切换分数、保压压力表（首点大气压防阶跃）、顶出判据。
+/// 工艺字典：V/P 切换分数与切换压力、保压压力表、顶出判据。
+///
+/// 保压曲线相对 V/P 切换时刻计时（moldingFoam README「保压（M2）」）：
+/// 切换压力取曲线起点，使闸口压力在切换瞬间连续、无压力阶跃。不能再额外
+/// 写一个大气压首点——曲线起点在 t=0 时会出现重复横坐标，被求解器的
+/// `Function1s::Table::check` 判为 out-of-order 而拒绝启动。
 fn molding_dict(process: &ProcessSettings) -> String {
-    let mut curve = String::new();
-    curve.push_str("            (0 1e5)\n");
-    for (time_s, pressure_mpa) in &process.packing_pressure_mpa_curve {
-        curve.push_str(&format!(
+    let curve = &process.packing_pressure_mpa_curve;
+    let mut table = String::new();
+    // 空曲线兜底：services::process::validate 会拦下，但生成器被直接调用时
+    // 仍要写出求解器可接受的表（单点）。
+    if curve.is_empty() {
+        table.push_str("            (0 1e5)\n");
+    }
+    for (time_s, pressure_mpa) in curve {
+        table.push_str(&format!(
             "            ({time_s:.4} {:.6e})\n",
             pressure_mpa * 1e6
         ));
     }
+    let switch_pressure = curve
+        .first()
+        .map(|(_, pressure_mpa)| format!("    switchPressure  {:.6e};\n", pressure_mpa * 1e6))
+        .unwrap_or_default();
     foam_header("dictionary", "moldingDict")
         + &format!(
-            "injection\n{{\n    meltTemperature  {:.4};\n}}\npacking\n{{\n    switchFraction   {:.4};\n    pressure\n    {{\n        type            table;\n        values\n        (\n{}        );\n    }}\n}}\ncooling\n{{\n    ejectionTemperature  {:.4};\n    releasePressure  1e5;\n}}\n",
+            "injection\n{{\n    meltTemperature  {:.4};\n}}\npacking\n{{\n    switchFraction   {:.4};\n{switch_pressure}    pressure\n    {{\n        type            table;\n        values\n        (\n{table}        );\n    }}\n}}\ncooling\n{{\n    ejectionTemperature  {:.4};\n    releasePressure  1e5;\n}}\n",
             kelvin(process.melt_temp_c),
             process.vp_switch_volume_percent / 100.0,
-            curve,
             kelvin(process.ejection_temp_c)
         )
 }
@@ -632,15 +680,149 @@ mod tests {
         let material = crate::services::material::builtin_materials()[0].clone();
         let dict = molding_dict(&process());
         assert!(dict.contains("switchFraction   0.96"));
-        assert!(dict.contains("(0 1e5)"));
-        // MPa → Pa
-        assert!(dict.contains("6.000000e7"));
+        // 切换压力 = 曲线起点，避免切换瞬间压力阶跃（MPa → Pa）
+        assert!(dict.contains("switchPressure  6.000000e7;"));
+        assert!(dict.contains("(0.0000 6.000000e7)"));
+        assert!(dict.contains("(8.0000 4.000000e7)"));
         assert!(dict.contains("ejectionTemperature  363.15"));
         let momentum = momentum_transport_dict(&material);
         assert!(momentum.contains("viscosityModel  CrossWlf;"));
         let melt = physical_properties_melt(&material, &process()).unwrap();
         assert!(melt.contains("equationOfState Tait;"));
         assert!(melt.contains("latentHeat  0;"));
+    }
+
+    #[test]
+    fn molding_dict_falls_back_on_empty_curve() {
+        let mut settings = process();
+        settings.packing_pressure_mpa_curve = vec![];
+        let dict = molding_dict(&settings);
+        // 空曲线：单点大气压表且不写切换压力（求解器 Table 仍需至少一点）
+        assert!(dict.contains("(0 1e5)"));
+        assert!(!dict.contains("switchPressure"));
+    }
+
+    /// 写出的 polyMesh 四个列表：点、三角面、owner、neighbour。
+    type RawPolyMesh = (Vec<[f64; 3]>, Vec<[usize; 3]>, Vec<usize>, Vec<usize>);
+
+    /// 解析写出的 polyMesh（测试用）。
+    fn parse_poly_mesh(poly: &Path) -> RawPolyMesh {
+        let text = |name: &str| fs::read_to_string(poly.join(name)).unwrap();
+        let numbers = |line: &str| -> Vec<f64> {
+            line.split(|c: char| {
+                !(c.is_ascii_digit() || c == '.' || c == '-' || c == '+' || c == 'e' || c == 'E')
+            })
+            .filter(|token| !token.is_empty())
+            .filter_map(|token| token.parse::<f64>().ok())
+            .collect()
+        };
+        let points = text("points")
+            .lines()
+            .filter(|line| line.starts_with('('))
+            .map(numbers)
+            .filter(|values| values.len() >= 3)
+            .map(|values| [values[0], values[1], values[2]])
+            .collect();
+        let faces = text("faces")
+            .lines()
+            .filter(|line| line.starts_with("3("))
+            .map(|line| {
+                // 首个 token 是面点数（3），节点编号从第二个 token 起
+                let values = numbers(line);
+                [values[1] as usize, values[2] as usize, values[3] as usize]
+            })
+            .collect();
+        let labels = |name: &str| -> Vec<usize> {
+            text(name)
+                .lines()
+                // 最后一项与列表收尾的 ")" 同行
+                .filter_map(|line| line.trim().trim_end_matches(')').parse::<usize>().ok())
+                // 首个可解析行是条目数（列表头），不是 label
+                .skip(1)
+                .collect()
+        };
+        (points, faces, labels("owner"), labels("neighbour"))
+    }
+
+    /// 闭合三角面集合的带符号体积（发散定理，用于校验单元体积为正）。
+    fn closed_volume(points: &[[f64; 3]], faces: &[[usize; 3]]) -> f64 {
+        faces
+            .iter()
+            .map(|face| {
+                let a = points[face[0]];
+                let b = points[face[1]];
+                let c = points[face[2]];
+                let cross = [
+                    b[1] * c[2] - b[2] * c[1],
+                    b[2] * c[0] - b[0] * c[2],
+                    b[0] * c[1] - b[1] * c[0],
+                ];
+                a[0] * cross[0] + a[1] * cross[1] + a[2] * cross[2]
+            })
+            .sum::<f64>()
+            / 6.0
+    }
+
+    /// 写出的 polyMesh 必须自洽：faces/owner/neighbour 逐项对齐、内部面在前、
+    /// 每个单元 4 个面且体积为正。此前 faces/owner 被单独重排而 neighbour 未
+    /// 同步，导致 owner 与面错位、1968/5000 个单元体积为负（求解第一步即 NaN）。
+    #[test]
+    fn written_poly_mesh_is_consistent() {
+        let dir = std::env::temp_dir().join(format!("kairos-mesh-{}", std::process::id()));
+        let case = dir.join("case");
+        let mesh = crate::services::meshing::generate(
+            &crate::models::geometry::TriangleMesh::sample_box(2.0),
+            &crate::services::meshing::VolumeMeshParams {
+                refinement: None,
+                target_size: 1.0,
+            },
+        )
+        .unwrap();
+        write_poly_mesh(&case, &mesh).unwrap();
+        let (points, faces, owner, neighbour) = parse_poly_mesh(&case.join("constant/polyMesh"));
+
+        assert_eq!(faces.len(), owner.len());
+        assert!(neighbour.len() < faces.len());
+        // 内部面在前：boundary 的 startFace 依赖该区段划分
+        assert_eq!(neighbour.len() + boundary_face_count(&case), faces.len());
+
+        // (面序号, 该单元是否为 owner)：neighbour 一侧的面朝向相反
+        let mut cell_faces: Vec<Vec<(usize, bool)>> = vec![Vec::new(); mesh.tets.len()];
+        for (index, cell) in owner.iter().enumerate() {
+            cell_faces[*cell].push((index, true));
+        }
+        for (index, cell) in neighbour.iter().enumerate() {
+            cell_faces[*cell].push((index, false));
+        }
+        for (cell, face_ids) in cell_faces.iter().enumerate() {
+            assert_eq!(face_ids.len(), 4, "单元 {cell} 的面数不为 4");
+            let tris: Vec<[usize; 3]> = face_ids
+                .iter()
+                .map(|&(face, is_owner)| {
+                    let mut tri = faces[face];
+                    if !is_owner {
+                        tri.swap(1, 2);
+                    }
+                    tri
+                })
+                .collect();
+            assert!(
+                closed_volume(&points, &tris) > 0.0,
+                "单元 {cell} 体积非正：faces={face_ids:?}"
+            );
+        }
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    /// boundary 文件中所有 patch 的 nFaces 之和。
+    fn boundary_face_count(case: &Path) -> usize {
+        fs::read_to_string(case.join("constant/polyMesh/boundary"))
+            .unwrap()
+            .lines()
+            .filter_map(|line| line.trim().strip_prefix("nFaces "))
+            .filter_map(|value| value.trim_end_matches(';').parse::<usize>().ok())
+            .sum()
     }
 
     #[test]
