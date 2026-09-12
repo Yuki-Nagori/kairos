@@ -3,17 +3,28 @@
 export type Mat4 = Float32Array;
 export type Vec3 = [number, number, number];
 
-export function mat4Identity(): Mat4 {
-  const m = new Float32Array(16);
+export function mat4Identity(out: Mat4 = new Float32Array(16)): Mat4 {
+  const m = out;
   m[0] = 1;
+  m[1] = 0;
+  m[2] = 0;
+  m[3] = 0;
+  m[4] = 0;
   m[5] = 1;
+  m[6] = 0;
+  m[7] = 0;
+  m[8] = 0;
+  m[9] = 0;
   m[10] = 1;
+  m[11] = 0;
+  m[12] = 0;
+  m[13] = 0;
+  m[14] = 0;
   m[15] = 1;
   return m;
 }
 
-export function mat4Multiply(a: Mat4, b: Mat4): Mat4 {
-  const out = new Float32Array(16);
+export function mat4Multiply(a: Mat4, b: Mat4, out: Mat4 = new Float32Array(16)): Mat4 {
   for (let column = 0; column < 4; column += 1) {
     for (let row = 0; row < 4; row += 1) {
       let sum = 0;
@@ -31,10 +42,22 @@ export function mat4Perspective(
   aspect: number,
   near: number,
   far: number,
+  out: Mat4 = new Float32Array(16),
 ): Mat4 {
   const f = 1 / Math.tan(fovYRadians / 2);
   const nf = 1 / (near - far);
-  const m = new Float32Array(16);
+  const m = out;
+  m[1] = 0;
+  m[2] = 0;
+  m[3] = 0;
+  m[4] = 0;
+  m[6] = 0;
+  m[7] = 0;
+  m[8] = 0;
+  m[9] = 0;
+  m[12] = 0;
+  m[13] = 0;
+  m[15] = 0;
   m[0] = f / aspect;
   m[5] = f;
   m[10] = (far + near) * nf;
@@ -43,11 +66,16 @@ export function mat4Perspective(
   return m;
 }
 
-export function mat4LookAt(eye: Vec3, target: Vec3, up: Vec3): Mat4 {
+export function mat4LookAt(
+  eye: Vec3,
+  target: Vec3,
+  up: Vec3,
+  out: Mat4 = new Float32Array(16),
+): Mat4 {
   const zAxis = normalize(sub(eye, target));
   const xAxis = normalize(cross(up, zAxis));
   const yAxis = cross(zAxis, xAxis);
-  return new Float32Array([
+  const values = [
     xAxis[0],
     yAxis[0],
     zAxis[0],
@@ -64,7 +92,11 @@ export function mat4LookAt(eye: Vec3, target: Vec3, up: Vec3): Mat4 {
     -dot(yAxis, eye),
     -dot(zAxis, eye),
     1,
-  ]);
+  ];
+  for (let index = 0; index < 16; index += 1) {
+    out[index] = values[index] as number;
+  }
+  return out;
 }
 
 export function sub(a: Vec3, b: Vec3): Vec3 {

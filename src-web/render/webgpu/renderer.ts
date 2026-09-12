@@ -6,6 +6,7 @@
  * - 相机平移（右键拖拽）未实现，旋转 / 缩放 / 视角重置可用。
  */
 import { mat4Identity, mat4LookAt, mat4Multiply, mat4Perspective, type Vec3 } from "../math";
+import { computeVertexNormals } from "../normals";
 import {
   LINE_FRAGMENT_SHADER,
   LINE_VERTEX_SHADER,
@@ -198,7 +199,7 @@ export class WebGPURenderer {
   uploadMesh(mesh: WebGPURenderMesh): void {
     this.positions = mesh.positions;
     this.replaceVertexBuffer(0, mesh.positions);
-    this.replaceVertexBuffer(1, computeFaceNormals(mesh.positions, mesh.indices));
+    this.replaceVertexBuffer(1, computeVertexNormals(mesh.positions, mesh.indices));
     this.replaceVertexBuffer(2, new Float32Array(mesh.positions.length / 3));
     this.indexBuffer?.destroy();
     this.indexBuffer = this.device.createBuffer({
@@ -513,34 +514,4 @@ export class WebGPURenderer {
 
 function align4(size: number): number {
   return Math.ceil(size / 4) * 4;
-}
-
-/** 逐面法向（复制到三个顶点），与 WebGL2 主后端同算法。 */
-function computeFaceNormals(positions: Float32Array, indices: Uint32Array): Float32Array {
-  const normals = new Float32Array(positions.length);
-  const faceCount = indices.length / 3;
-  for (let face = 0; face < faceCount; face += 1) {
-    const ia = indices[face * 3] ?? 0;
-    const ib = indices[face * 3 + 1] ?? 0;
-    const ic = indices[face * 3 + 2] ?? 0;
-    const ax = positions[ia * 3] ?? 0;
-    const ay = positions[ia * 3 + 1] ?? 0;
-    const az = positions[ia * 3 + 2] ?? 0;
-    const e1x = (positions[ib * 3] ?? 0) - ax;
-    const e1y = (positions[ib * 3 + 1] ?? 0) - ay;
-    const e1z = (positions[ib * 3 + 2] ?? 0) - az;
-    const e2x = (positions[ic * 3] ?? 0) - ax;
-    const e2y = (positions[ic * 3 + 1] ?? 0) - ay;
-    const e2z = (positions[ic * 3 + 2] ?? 0) - az;
-    const nx = e1y * e2z - e1z * e2y;
-    const ny = e1z * e2x - e1x * e2z;
-    const nz = e1x * e2y - e1y * e2x;
-    const length = Math.hypot(nx, ny, nz) || 1;
-    for (const index of [ia, ib, ic]) {
-      normals[index * 3] = nx / length;
-      normals[index * 3 + 1] = ny / length;
-      normals[index * 3 + 2] = nz / length;
-    }
-  }
-  return normals;
 }

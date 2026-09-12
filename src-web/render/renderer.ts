@@ -1,4 +1,13 @@
-import { dot, mat4Identity, mat4LookAt, mat4Multiply, mat4Perspective, type Vec3 } from "./math";
+import {
+  dot,
+  mat4Identity,
+  mat4LookAt,
+  mat4Multiply,
+  mat4Perspective,
+  type Mat4,
+  type Vec3,
+} from "./math";
+import { computeVertexNormals } from "./normals";
 import type { CameraSnapshot } from "./picking";
 
 /** 垂直视场角：渲染循环与拾取共用同一常量。 */
@@ -40,41 +49,22 @@ interface ViewState {
   distance: number;
 }
 
-/** 每顶点法向（按三角形面法向展开，非索引共享）。 */
-function computeNormals(positions: Float32Array, indices: Uint32Array): Float32Array {
-  const normals = new Float32Array(positions.length);
-  for (let face = 0; face < indices.length; face += 3) {
-    const a = (indices[face] ?? 0) * 3;
-    const b = (indices[face + 1] ?? 0) * 3;
-    const c = (indices[face + 2] ?? 0) * 3;
-    const e1x = (positions[b] ?? 0) - (positions[a] ?? 0);
-    const e1y = (positions[b + 1] ?? 0) - (positions[a + 1] ?? 0);
-    const e1z = (positions[b + 2] ?? 0) - (positions[a + 2] ?? 0);
-    const e2x = (positions[c] ?? 0) - (positions[a] ?? 0);
-    const e2y = (positions[c + 1] ?? 0) - (positions[a + 1] ?? 0);
-    const e2z = (positions[c + 2] ?? 0) - (positions[a + 2] ?? 0);
-    const nx = e1y * e2z - e1z * e2y;
-    const ny = e1z * e2x - e1x * e2z;
-    const nz = e1x * e2y - e1y * e2x;
-    for (const base of [a, b, c]) {
-      normals[base] = (normals[base] ?? 0) + nx;
-      normals[base + 1] = (normals[base + 1] ?? 0) + ny;
-      normals[base + 2] = (normals[base + 2] ?? 0) + nz;
+/** 逐轴包围盒（渲染网格顶点集）。 */
+function boundsOf(positions: Float32Array): { min: Vec3; max: Vec3 } {
+  const min: Vec3 = [Infinity, Infinity, Infinity];
+  const max: Vec3 = [-Infinity, -Infinity, -Infinity];
+  for (let i = 0; i < positions.length; i += 3) {
+    for (let axis = 0; axis < 3; axis += 1) {
+      const value = positions[i + axis] as number;
+      if (value < (min[axis] as number)) {
+        min[axis] = value;
+      }
+      if (value > (max[axis] as number)) {
+        max[axis] = value;
+      }
     }
   }
-  for (let index = 0; index < normals.length; index += 3) {
-    const length = Math.hypot(
-      normals[index] ?? 0,
-      normals[index + 1] ?? 0,
-      normals[index + 2] ?? 0,
-    );
-    if (length > 0) {
-      normals[index] = (normals[index] ?? 0) / length;
-      normals[index + 1] = (normals[index + 1] ?? 0) / length;
-      normals[index + 2] = (normals[index + 2] ?? 0) / length;
-    }
-  }
-  return normals;
+  return { min, max };
 }
 
 const VERTEX_SHADER = `#version 300 es
@@ -142,8 +132,24 @@ export class ViewportRenderer {
   private program: WebGLProgram;
   private vao: WebGLVertexArrayObject | null = null;
   private valueBuffer: WebGLBuffer | null = null;
+  private positionBuffer: WebGLBuffer | null = null;
+  private normalBuffer: WebGLBuffer | null = null;
+  private indexBuffer: WebGLBuffer | null = null;
   private indexCount = 0;
   private indexType = 0;
+  /** uniform 位置缓存：program link 后一次查询，逐帧复用（约 10 次/帧的重复查询）。 */
+  private meshUniforms = new Map<string, WebGLUniformLocation | null>();
+  private lineUniforms = new Map<string, WebGLUniformLocation | null>();
+  /** 逐帧变换暂存：相机矩阵全程复用同一块缓冲，避免每帧分配 GC 压力。 */
+  private readonly viewScratch = {
+    eye: [0, 0, 0] as Vec3,
+    projection: new Float32Array(16) as Mat4,
+    view: new Float32Array(16) as Mat4,
+    model: new Float32Array(16) as Mat4,
+    pv: new Float32Array(16) as Mat4,
+    mvp: new Float32Array(16) as Mat4,
+    initialized: false,
+  };
 
   /** 线段叠加层：独立着色程序与 VAO，键为图层 id。 */
   private lineProgram: WebGLProgram;
@@ -186,6 +192,10 @@ export class ViewportRenderer {
   };
   private readonly onContextRestored = (): void => {
     this.contextLost = false;
+    // 旧 program/缓冲句柄随上下文失效：线段程序同样重建，uniform 缓存一并清空。
+    this.lineProgram = this.buildLineProgram();
+    this.meshUniforms.clear();
+    this.lineUniforms.clear();
     if (this.lastMesh !== null) {
       this.uploadGlResources(this.lastMesh);
     } else {
@@ -360,23 +370,52 @@ export class ViewportRenderer {
     this.meshVisible = visible;
   }
 
+  /** 释放网格本体 GL 资源（重复上传与 dispose 共用；VAO 不持有 buffer 的引用计数）。 */
+  private destroyMeshResources(): void {
+    const gl = this.gl;
+    if (this.vao !== null) {
+      gl.deleteVertexArray(this.vao);
+      this.vao = null;
+    }
+    for (const buffer of [
+      this.positionBuffer,
+      this.normalBuffer,
+      this.valueBuffer,
+      this.indexBuffer,
+    ]) {
+      if (buffer !== null) {
+        gl.deleteBuffer(buffer);
+      }
+    }
+    this.positionBuffer = null;
+    this.normalBuffer = null;
+    this.valueBuffer = null;
+    this.indexBuffer = null;
+  }
+
   /** 重建全部 GL 资源（首次上传与上下文恢复共用路径）。 */
   private uploadGlResources(mesh: RenderMesh): void {
     const gl = this.gl;
+    this.destroyMeshResources();
     this.program = this.buildProgram();
+    this.meshUniforms.clear();
     // 恢复后旧句柄全部失效，VAO 与缓冲必须全新创建（不能用 ??= 复用）。
     this.vao = gl.createVertexArray();
     gl.bindVertexArray(this.vao);
 
-    const positionBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    this.positionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.positionBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, mesh.positions, gl.STATIC_DRAW);
     gl.enableVertexAttribArray(0);
     gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
 
-    const normalBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, computeNormals(mesh.positions, mesh.indices), gl.STATIC_DRAW);
+    this.normalBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.normalBuffer);
+    gl.bufferData(
+      gl.ARRAY_BUFFER,
+      computeVertexNormals(mesh.positions, mesh.indices),
+      gl.STATIC_DRAW,
+    );
     gl.enableVertexAttribArray(1);
     gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 0, 0);
 
@@ -386,8 +425,8 @@ export class ViewportRenderer {
     gl.enableVertexAttribArray(2);
     gl.vertexAttribPointer(2, 1, gl.FLOAT, false, 0, 0);
 
-    const indexBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+    this.indexBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.indexBuffer);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, mesh.indices, gl.STATIC_DRAW);
 
     this.indexCount = mesh.indices.length;
@@ -431,23 +470,7 @@ export class ViewportRenderer {
     if (this.lastMesh === null) {
       return null;
     }
-    const { positions } = this.lastMesh;
-    const min: Vec3 = [Infinity, Infinity, Infinity];
-    const max: Vec3 = [-Infinity, -Infinity, -Infinity];
-    for (let i = 0; i < positions.length; i += 3) {
-      for (let axis = 0; axis < 3; axis += 1) {
-        // i + 2 必然在界内（positions 按三顶点成面上传）。
-        const value = positions[i + axis] as number;
-        // 初始化值恒存在（Infinity 哨兵），索引访问按非空处理。
-        if (value < (min[axis] as number)) {
-          min[axis] = value;
-        }
-        if (value > (max[axis] as number)) {
-          max[axis] = value;
-        }
-      }
-    }
-    return { min, max };
+    return boundsOf(this.lastMesh.positions);
   }
 
   resetView(): void {
@@ -495,6 +518,18 @@ export class ViewportRenderer {
     window.removeEventListener(THEME_CHANGED_EVENT, this.onThemeChanged);
     this.canvas.removeEventListener("webglcontextlost", this.onContextLost);
     this.canvas.removeEventListener("webglcontextrestored", this.onContextRestored);
+    // 全量释放 GL 资源：四分格切换会反复创建/销毁渲染器，
+    // 不显式释放只能等上下文丢失回收。
+    this.destroyMeshResources();
+    this.gl.deleteProgram(this.program);
+    this.gl.deleteProgram(this.lineProgram);
+    for (const overlay of this.overlays.values()) {
+      this.gl.deleteVertexArray(overlay.vao);
+    }
+    this.overlays.clear();
+    this.lastOverlayData.clear();
+    this.meshUniforms.clear();
+    this.lineUniforms.clear();
   }
 
   /** 注册 WebGL 上下文丢失 / 恢复监听：丢失时暂停渲染，恢复后按缓存网格重建全部资源。 */
@@ -603,38 +638,65 @@ export class ViewportRenderer {
     this.drawOverlays(aspect);
   }
 
+  /** 相机矩阵（暂存缓冲复用）：drawMesh 与 drawOverlays 共用同一份投影/视图。 */
+  private updateViewTransforms(aspect: number): void {
+    const scratch = this.viewScratch;
+    const eye = scratch.eye;
+    eye[0] = this.target[0] + this.distance * Math.cos(this.pitch) * Math.sin(this.yaw);
+    eye[1] = this.target[1] + this.distance * Math.sin(this.pitch);
+    eye[2] = this.target[2] + this.distance * Math.cos(this.pitch) * Math.cos(this.yaw);
+    mat4Perspective(FOV_Y, aspect, 0.01, 100, scratch.projection);
+    mat4LookAt(eye, this.target, [0, 1, 0], scratch.view);
+    if (!scratch.initialized) {
+      mat4Identity(scratch.model);
+      scratch.initialized = true;
+    }
+  }
+
   private drawMesh(aspect: number): void {
     const gl = this.gl;
-    const projection = mat4Perspective(FOV_Y, aspect, 0.01, 100);
-    const eye: Vec3 = [
-      this.target[0] + this.distance * Math.cos(this.pitch) * Math.sin(this.yaw),
-      this.target[1] + this.distance * Math.sin(this.pitch),
-      this.target[2] + this.distance * Math.cos(this.pitch) * Math.cos(this.yaw),
-    ];
-    const view = mat4LookAt(eye, this.target, [0, 1, 0]);
-    const model = mat4Identity();
-    const mvp = mat4Multiply(mat4Multiply(projection, view), model);
+    const scratch = this.viewScratch;
+    this.updateViewTransforms(aspect);
+    const mvp = mat4Multiply(
+      mat4Multiply(scratch.projection, scratch.view, scratch.pv),
+      scratch.model,
+      scratch.mvp,
+    );
 
     gl.useProgram(this.program);
-    gl.uniformMatrix4fv(gl.getUniformLocation(this.program, "u_mvp"), false, mvp);
-    gl.uniform3f(gl.getUniformLocation(this.program, "u_lightDir"), 0.4, 0.8, 0.6);
-    gl.uniform3f(gl.getUniformLocation(this.program, "u_colorCold"), 0.15, 0.35, 0.85);
-    gl.uniform3f(gl.getUniformLocation(this.program, "u_colorHot"), 0.95, 0.4, 0.1);
-    gl.uniform1f(gl.getUniformLocation(this.program, "u_valueMin"), this.valueMin);
-    gl.uniform1f(gl.getUniformLocation(this.program, "u_valueMax"), this.valueMax);
-    gl.uniform1i(gl.getUniformLocation(this.program, "u_useField"), this.useField);
-    gl.uniform1i(gl.getUniformLocation(this.program, "u_clipEnabled"), this.clipEnabled);
+    gl.uniformMatrix4fv(this.locOf(this.meshUniforms, this.program, "u_mvp"), false, mvp);
+    gl.uniform3f(this.locOf(this.meshUniforms, this.program, "u_lightDir"), 0.4, 0.8, 0.6);
+    gl.uniform3f(this.locOf(this.meshUniforms, this.program, "u_colorCold"), 0.15, 0.35, 0.85);
+    gl.uniform3f(this.locOf(this.meshUniforms, this.program, "u_colorHot"), 0.95, 0.4, 0.1);
+    gl.uniform1f(this.locOf(this.meshUniforms, this.program, "u_valueMin"), this.valueMin);
+    gl.uniform1f(this.locOf(this.meshUniforms, this.program, "u_valueMax"), this.valueMax);
+    gl.uniform1i(this.locOf(this.meshUniforms, this.program, "u_useField"), this.useField);
+    gl.uniform1i(this.locOf(this.meshUniforms, this.program, "u_clipEnabled"), this.clipEnabled);
     gl.uniform3f(
-      gl.getUniformLocation(this.program, "u_clipNormal"),
+      this.locOf(this.meshUniforms, this.program, "u_clipNormal"),
       this.clipNormal[0],
       this.clipNormal[1],
       this.clipNormal[2],
     );
-    gl.uniform1f(gl.getUniformLocation(this.program, "u_clipOffset"), this.clipOffset);
+    gl.uniform1f(this.locOf(this.meshUniforms, this.program, "u_clipOffset"), this.clipOffset);
 
     gl.bindVertexArray(this.vao);
     gl.drawElements(gl.TRIANGLES, this.indexCount, this.indexType, 0);
     gl.bindVertexArray(null);
+  }
+
+  /** uniform 位置查询（按 program 分缓存，命中后不再走 GL 查询）。 */
+  private locOf(
+    cache: Map<string, WebGLUniformLocation | null>,
+    program: WebGLProgram,
+    name: string,
+  ): WebGLUniformLocation | null {
+    let location = cache.get(name);
+    if (location === undefined) {
+      location = this.gl.getUniformLocation(program, name);
+      cache.set(name, location);
+    }
+    return location;
   }
 
   /** 逐层绘制可见线段叠加层（剖切对线段不生效：浇注系统在制品外侧）。 */
@@ -643,23 +705,18 @@ export class ViewportRenderer {
       return;
     }
     const gl = this.gl;
-    const projection = mat4Perspective(FOV_Y, aspect, 0.01, 100);
-    const eye: Vec3 = [
-      this.target[0] + this.distance * Math.cos(this.pitch) * Math.sin(this.yaw),
-      this.target[1] + this.distance * Math.sin(this.pitch),
-      this.target[2] + this.distance * Math.cos(this.pitch) * Math.cos(this.yaw),
-    ];
-    const view = mat4LookAt(eye, this.target, [0, 1, 0]);
-    const mvp = mat4Multiply(projection, view);
+    const scratch = this.viewScratch;
+    this.updateViewTransforms(aspect);
+    const mvp = mat4Multiply(scratch.projection, scratch.view, scratch.pv);
 
     gl.useProgram(this.lineProgram);
-    gl.uniformMatrix4fv(gl.getUniformLocation(this.lineProgram, "u_mvp"), false, mvp);
+    gl.uniformMatrix4fv(this.locOf(this.lineUniforms, this.lineProgram, "u_mvp"), false, mvp);
     for (const [id, overlay] of this.overlays) {
       if (this.overlayVisible.get(id) !== true) {
         continue;
       }
       gl.uniform3f(
-        gl.getUniformLocation(this.lineProgram, "u_color"),
+        this.locOf(this.lineUniforms, this.lineProgram, "u_color"),
         overlay.color[0],
         overlay.color[1],
         overlay.color[2],
@@ -671,17 +728,14 @@ export class ViewportRenderer {
   }
 
   private fitToMesh(positions: Float32Array): void {
-    let min = Infinity;
-    let max = -Infinity;
-    for (let index = 0; index < positions.length; index += 1) {
-      min = Math.min(min, positions[index] ?? 0);
-      max = Math.max(max, positions[index] ?? 0);
-    }
-    const span = Math.max(max - min, 1e-6);
+    // 逐轴包围盒：x/y/z 各自求中心与跨度（此前三轴共用同一 min/max，
+    // 网格不居中时注视点会瞄错位置）。
+    const { min, max } = boundsOf(positions);
+    const center: Vec3 = [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2];
+    const span = Math.max(max[0] - min[0], max[1] - min[1], max[2] - min[2], 1e-6);
     this.distance = span * 2.5;
-    this.target = [min + span / 2, min + span / 2, min + span / 2];
+    this.target = center;
     // 视角重置后剖切面回到过包围盒中心（沿当前剖切法向）。
-    const center: Vec3 = [min + span / 2, min + span / 2, min + span / 2];
     this.clipOffset = dot(center, this.clipNormal);
   }
 }

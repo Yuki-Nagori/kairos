@@ -74,10 +74,20 @@ export function useViewportPanel() {
       legendValues.value = null;
       return;
     }
-    const sorted = [...field.values].sort((a, b) => a - b);
-    const max = sorted[sorted.length - 1] ?? 0;
-    const mid = sorted[Math.floor(sorted.length / 2)] ?? 0;
-    const min = sorted[0] ?? 0;
+    const values = field.values;
+    // min/max 一趟线性扫描；中值用 quickselect（O(n) 平均），大场动画
+    // 逐帧调用时不做 O(n log n) 全量排序。
+    let min = Infinity;
+    let max = -Infinity;
+    for (const value of values) {
+      if (value < min) {
+        min = value;
+      }
+      if (value > max) {
+        max = value;
+      }
+    }
+    const mid = quickselect([...values], Math.floor(values.length / 2));
     legendValues.value = [max, mid, min];
   }
 
@@ -100,6 +110,8 @@ export function useViewportPanel() {
   let sharedMesh: PickMesh | null = null;
   let playTimer: ReturnType<typeof setInterval> | null = null;
   let playIndex = 0;
+  /** 场加载进行中标记（动画节拍背压）。 */
+  let loadInFlight = false;
 
   // —— 空间拾取 ——
   // pointerdown/up 位移小于阈值视为点击（大于阈值是旋转拖拽），命中单元加入探针。
@@ -191,11 +203,21 @@ export function useViewportPanel() {
         stopPlay();
         return;
       }
+      // 背压保护：上一步还在加载时跳过本拍，避免大场加载慢于节拍导致请求叠加排队。
+      if (loadInFlight) {
+        return;
+      }
+      loadInFlight = true;
       const step = catalog.times[playIndex % catalog.times.length]!;
       playIndex += 1;
-      void results.loadField(caseDir, step.dirName, fieldName).then(() => {
-        applyField(results.loadedField);
-      });
+      void results
+        .loadField(caseDir, step.dirName, fieldName)
+        .then(() => {
+          applyField(results.loadedField);
+        })
+        .finally(() => {
+          loadInFlight = false;
+        });
     }, 400);
   }
 
@@ -428,4 +450,43 @@ export function useViewportPanel() {
     zoomBy,
     fitView,
   };
+}
+
+/** 就地 quickselect：返回数组第 k 小（副本上操作，均值 O(n)）。 */
+function quickselect(values: number[], k: number): number {
+  if (values.length === 0) {
+    return 0;
+  }
+  let left = 0;
+  let right = values.length - 1;
+  for (;;) {
+    if (left === right) {
+      return values[left] ?? 0;
+    }
+    const pivot = values[(left + right) >> 1] ?? 0;
+    let low = left;
+    let high = right;
+    while (low <= high) {
+      while ((values[low] ?? 0) < pivot) {
+        low += 1;
+      }
+      while ((values[high] ?? 0) > pivot) {
+        high -= 1;
+      }
+      if (low <= high) {
+        const tmp = values[low] as number;
+        values[low] = values[high] as number;
+        values[high] = tmp;
+        low += 1;
+        high -= 1;
+      }
+    }
+    if (k <= high) {
+      right = high;
+    } else if (k >= low) {
+      left = low;
+    } else {
+      return values[k] ?? 0;
+    }
+  }
 }
