@@ -15,7 +15,13 @@
 | 数据转换、格式化     | `utils` / store action  | `utils/`（chart/stats/report 等纯函数）、展示型格式化就近放 composable |
 | 跨组件共享状态       | `stores`                | 按领域一个 defineStore，禁止新建「公共 store」收容杂物                 |
 | 纯业务算法、校验     | 领域 `.ts`，无 Vue 依赖 | `utils/`（如 pipeline 前置校验）、`render/`（图形算法）                |
-| 类型定义             | `types/`                | `types/index.ts` 统一出口，前后端契约以 contract 测试锁定              |
+
+> **先于上表判断**：**计算密集 / 数值 / 几何 / 场处理逻辑一律优先 Rust
+> `kairos-core`**——TS 大部分场景性能不如 Rust，前端以 UI 编排为主。TS 侧
+> 的领域 `.ts` 只收「UI 状态聚合 + 展示型格式化」这类与渲染强耦合、数据量
+> 小的逻辑；完整判断口诀见
+> [ARCHITECTURE.md §1.1](ARCHITECTURE.md#11-逻辑归属判断rust-优先原则的落地)。
+> | 类型定义 | `types/` | `types/index.ts` 统一出口，前后端契约以 contract 测试锁定 |
 
 图标组件统一放 `components/ui/icons/`，设计语言、双轨分类（Mono 按钮
 图标 / Art 彩色图示）与强制参数见 [icon-design.md](icon-design.md)；
@@ -28,8 +34,12 @@
 - **必须依赖 `ref`、`onMounted` 这类 Vue API** 才能工作 → 放 composable（useXxx.ts）；
 - **只描述 DOM 结构和样式** → 留 `.vue`。
 
-三个问题依次问，命中即停。`.vue` 里写 `if (值 > 100)` 这类判断逻辑、composable 里写
-`querySelector` 这类 DOM 查询，都是边界失守的信号。
+**第 0 问先问 Rust**：这段逻辑是数值计算 / 几何 / 场处理，或数据量大、
+需要与求解一致性吗？命中 → 下沉 `kairos-core`（见
+[ARCHITECTURE.md §1.1](ARCHITECTURE.md#11-逻辑归属判断rust-优先原则的落地)），
+不要在 TS 里实现。然后三个问题依次问，命中即停。`.vue` 里写 `if (值 > 100)`
+这类判断逻辑、composable 里写 `querySelector` 这类 DOM 查询、utils 里
+重写 core 已有的数值计算，都是边界失守的信号。
 
 ## 依赖方向
 
@@ -70,6 +80,8 @@ flowchart LR
 | 什么都往同一个 store 塞                  | store 变成上帝对象；严格按领域拆（app/project/geometry/…），新领域建新文件    |
 | props 传函数回调                         | 破坏单向数据流；改为 emit 事件，或让子组件直接使用 store                      |
 | 组件里重复声明后端返回的数据形状         | 以 `types/` 为准，形状漂移由 contract 测试拦截                                |
+| 在 TS 里重写 core 已有的数值计算         | 性能与数值一致性双输；core 是唯一事实源，TS 只消费其 DTO                      |
+| 把重计算放前端跑（万级元素逐值运算等）   | TS 性能大部分场景不如 Rust；数值流水线在 Rust 一次算完，大数组走二进制通道    |
 
 ## 大型 / 多人协作演进方向
 
@@ -77,7 +89,8 @@ flowchart LR
 **service / domain 层**：核心逻辑做成纯函数或逻辑类（无 Vue 依赖、可独立单测），composable 退化为
 「响应式适配层」——只负责把领域状态接成 ref/computed、把用户动作转发给领域层。判断是否需要拆分的
 信号：同一个 useXxxPanel.ts 里出现与单一面板无关的通用逻辑（应上提 `composables/`），或领域计算
-开始依赖 Vue 响应式对象（应下沉纯函数）。
+开始依赖 Vue 响应式对象（应下沉纯函数）。**注意：TS service 层只收 UI 邻近逻辑——计算密集的
+领域逻辑不走这条演进路线，而是下沉 Rust `kairos-core`**（Rust 优先原则，见 ARCHITECTURE §1.1）。
 
 ## 与既有文档的关系
 
