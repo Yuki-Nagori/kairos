@@ -7,8 +7,11 @@ use crate::error::{KairosError, Result};
 use crate::models::results::{ResultCatalog, ScalarField, TimeStepMeta};
 
 /// 已知场名 → 是否为矢量场（模量读取）。
+///
+/// `D` = 位移（翘曲/变形）场，OpenFOAM 结构求解惯例；moldingFoam M4 的
+/// 翘曲输出定稿后若改名，此处与文档同步（见 tasks/T64）。
 fn is_vector_field(field: &str) -> bool {
-    matches!(field, "U" | "V" | "gradU")
+    matches!(field, "U" | "V" | "gradU" | "D")
 }
 
 /// 判断目录名是否为时间目录（可解析为非负有限浮点数）。
@@ -336,6 +339,43 @@ boundaryField
         fs::write(time_dir.join("T"), SCALAR_UNIFORM).unwrap();
         let error = read_field(&dir, "abc", "T").unwrap_err();
         assert!(error.to_string().contains("时间目录名无法解析"));
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    /// 位移场（D）：矢量场口径与 U 相同，模量可直接用于变形量展示。
+    const DISPLACEMENT_NONUNIFORM: &str = r#"FoamFile
+{
+    version 2.0;
+    format ascii;
+    class "volVectorField";
+    object D;
+}
+dimensions [0 1 0 0 0 0 0];
+internalField nonuniform List<vector>
+2
+(
+(0 0 0.3)
+(0.4 0 0)
+)
+;
+boundaryField
+{
+    walls { type fixedValue; value uniform (0 0 0); }
+}
+"#;
+
+    #[test]
+    fn displacement_field_reads_as_magnitude() {
+        let dir = std::env::temp_dir().join(format!("kairos-t64-{}", std::process::id()));
+        fs::create_dir_all(dir.join("2")).unwrap();
+        fs::write(dir.join("2").join("D"), DISPLACEMENT_NONUNIFORM).unwrap();
+
+        let d = read_field(&dir, "2", "D").unwrap();
+        assert!(d.is_magnitude, "位移场按矢量口径取模量");
+        assert!(d.complete);
+        assert_eq!(d.values.len(), 2);
+        assert!((d.values[0] - 0.3).abs() < 1e-12);
+        assert!((d.values[1] - 0.4).abs() < 1e-12);
         fs::remove_dir_all(&dir).ok();
     }
 

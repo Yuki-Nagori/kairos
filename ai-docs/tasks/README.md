@@ -64,6 +64,7 @@
 | T61 | [T61-gate-geometry-landing-done.md](T61-gate-geometry-landing-done.md)         | 浇口几何落地（模具网络 → case inlet） |
 | T62 | [T62-fill-load-validation-done.md](T62-fill-load-validation-done.md)           | 工艺参数合理性校验（填充工况量级）    |
 | T63 | [T63-thin-feature-hint-done.md](T63-thin-feature-hint-done.md)                 | 网格最小特征提示（体素尺寸 vs 壁厚）  |
+| T64 | [T64-warpage-field-consumption-done.md](T64-warpage-field-consumption-done.md) | 翘曲结果场消费（位移场口径）          |
 | T51 | [T51-result-binary-chain-done.md](T51-result-binary-chain-done.md)             | 大结果二进制通道 + 有界缓存           |
 | T52 | [T52-report-content-done.md](T52-report-content-done.md)                       | 分析报告内容增强（几何/探针表）       |
 | T53 | [T53-report-template-done.md](T53-report-template-done.md)                     | 模板化自定义报告                      |
@@ -87,6 +88,7 @@
 | T58 | [T58-viewport-gate-picking.md](T58-viewport-gate-picking.md)         | 视口拾取放浇口 + 节点吸附         | T45/T07  |
 | T59 | [T59-fill-preview.md](T59-fill-preview.md)                           | 填充预览（依赖 T55）              | T55      |
 | T60 | [T60-import-log-and-pptx.md](T60-import-log-and-pptx.md)             | 导入日志流 + PPT 报告（低优先）   | T52      |
+| T65 | [T65-warpage-deformation-view.md](T65-warpage-deformation-view.md)   | 翘曲变形可视化（视口位移显示）    | T64      |
 
 > T29 优先级最高：bundle v0.2.0 已修掉 v0.1.1 的 SIGILL，VM 内可跑通
 > 0 → endTime 全段（Kairos 侧 case/作业链路缺陷已修）；剩余阻塞是 bundle
