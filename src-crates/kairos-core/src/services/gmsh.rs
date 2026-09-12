@@ -339,7 +339,7 @@ $EndElements
     }
 
     /// 写一个可执行 shell 脚本冒充 gmsh：正文写入临时目录并赋予执行位。
-    /// 仅 Unix——覆盖率与测试环境为 macOS/Linux，Windows 桌面端另行手测。
+    /// 仅 Unix——Windows 侧用等价的 .cmd 批处理（见下方 cfg(windows) 测试）。
     #[cfg(unix)]
     fn write_fake_gmsh(name: &str, body: &str) -> std::path::PathBuf {
         use std::os::unix::fs::PermissionsExt;
@@ -393,6 +393,75 @@ $EndElements
     fn tetrahedralize_reports_missing_output_as_io() {
         // 假 gmsh 正常退出但不产出文件 → 读取 msh 失败。
         let fake = write_fake_gmsh("kairos-fake-gmsh-silent", "exit 0\n");
+        let out_msh = std::env::temp_dir().join("kairos-fake-gmsh-silent.msh");
+        let _ = std::fs::remove_file(&out_msh);
+
+        let error = tetrahedralize(&fake, Path::new("in.stl"), &out_msh, None).unwrap_err();
+        assert_eq!(error.kind(), crate::error::ErrorKind::Io);
+        assert!(error.to_string().contains("读取 msh 失败"), "{error}");
+        let _ = std::fs::remove_file(&fake);
+    }
+
+    /// Windows 等价物：.cmd 批处理冒充 gmsh（Rust 的 Command 可直接派生
+    /// .cmd，经 cmd.exe 执行）。msh 夹具路径经环境变量传入，避免批处理
+    /// 解析参数；批处理取最后一个参数（tetrahedralize_args 保证 -o 出现在
+    /// 最后）作为输出路径。
+    #[cfg(windows)]
+    fn write_fake_cmd(name: &str, body: &str) -> std::path::PathBuf {
+        let path = std::env::temp_dir().join(format!("{name}.cmd"));
+        // cmd.exe 对 LF-only 的批处理兼容性不稳，显式 CRLF
+        let body = body.replace('\n', "\r\n");
+        std::fs::write(&path, format!("@echo off\r\n{body}")).unwrap();
+        path
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn tetrahedralize_reads_parsed_msh_from_successful_run() {
+        // msh 夹具写临时文件，夹具路径直接嵌进批处理（避免进程级环境变量
+        // 在并行测试下的竞态）；批处理取最后一个参数（-o 的值）作输出路径。
+        let fixture = std::env::temp_dir().join("kairos-fake-gmsh-fixture.msh");
+        std::fs::write(&fixture, SAMPLE_MSH).unwrap();
+        let fake = write_fake_cmd(
+            "kairos-fake-gmsh-ok",
+            &format!(
+                "set \"last=\"\r\nfor %%a in (%*) do set \"last=%%~a\"\r\ncopy /y \"{}\" \"%last%\" >nul\r\n",
+                fixture.display()
+            ),
+        );
+        let out_msh = std::env::temp_dir().join("kairos-fake-gmsh-ok.msh");
+        let _ = std::fs::remove_file(&out_msh);
+
+        let volume = tetrahedralize(&fake, Path::new("in.stl"), &out_msh, Some(0.5)).unwrap();
+        assert_eq!(volume.nodes.len(), 5);
+        assert_eq!(volume.tets.len(), 2);
+        let _ = std::fs::remove_file(&fake);
+        let _ = std::fs::remove_file(&fixture);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn tetrahedralize_maps_nonzero_exit_to_io_error_with_stderr_tail() {
+        let fake = write_fake_cmd(
+            "kairos-fake-gmsh-fail",
+            "echo bad mesh 1>&2\r\nexit /b 3\r\n",
+        );
+        let out_msh = std::env::temp_dir().join("kairos-fake-gmsh-fail.msh");
+        let _ = std::fs::remove_file(&out_msh);
+
+        let error = tetrahedralize(&fake, Path::new("in.stl"), &out_msh, None).unwrap_err();
+        assert_eq!(error.kind(), crate::error::ErrorKind::Io);
+        assert!(
+            error.to_string().contains("gmsh 网格化失败：bad mesh"),
+            "{error}"
+        );
+        let _ = std::fs::remove_file(&fake);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn tetrahedralize_reports_missing_output_as_io() {
+        let fake = write_fake_cmd("kairos-fake-gmsh-silent", "exit /b 0\r\n");
         let out_msh = std::env::temp_dir().join("kairos-fake-gmsh-silent.msh");
         let _ = std::fs::remove_file(&out_msh);
 
