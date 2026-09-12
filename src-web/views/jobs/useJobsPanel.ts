@@ -1,5 +1,5 @@
 /** 求解作业面板：列表、提交与取消（并发预算由调度器控制）；顶部在求解
- *  环境「已下载新版本但 VM 未部署」时展示提醒横幅（T54）。 */
+ *  环境「已下载新版本但 VM 未部署」时展示提醒横幅。 */
 import { computed, ref } from "vue";
 import { useAppStore } from "../../stores/app";
 import { useJobsStore } from "../../stores/jobs";
@@ -30,7 +30,7 @@ export function useJobsPanel() {
   const deps = useDependenciesStore();
   const vm = useVmStore();
 
-  /** 求解环境「已下载新版本但 VM 内未部署」提醒（T54）。 */
+  /** 求解环境「已下载新版本但 VM 内未部署」提醒。 */
   const pendingDeployText = computed(() => {
     const downloaded = deps.downloadedFiles["moldingfoam"]?.releaseTag ?? null;
     if (downloaded === null || !isPendingDeploy(downloaded, vm.deployedReleaseTag)) {

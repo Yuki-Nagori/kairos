@@ -71,8 +71,10 @@
   存在两份（日志 18 条 `Duplicate entry … in runtime selection table`），
   退出析构时堆破坏；把 `libmoldingFoamSolver.so` 改为指向
   `libmoldingFoam.so` 的符号链接后，完整链路 exit 0、无重复警告与堆报告。
-  属 bundle 打包侧问题，已按约定移交 moldingFoam 仓库修复；Kairos 侧在此之前
-  保留收尾判定兜底（`SolverOutcome`），修复版 bundle 落地后复跑再撤。
+  属 bundle 打包侧问题，已按约定移交 moldingFoam 仓库修复；Kairos 侧的临时
+  宽容判定（非零退出码 + 见过 `End` 视为完成）在 v0.2.1 复跑确认后撤除——
+  该判定本身带风险（`decomposePar` 也打印 `End`，求解器中途崩溃会被误判成功），
+  现按退出码严格判定，只用输出标记区分失败原因。
 
 ## 非目标
 

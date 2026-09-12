@@ -1,5 +1,5 @@
 /**
- * 方案任务窗格（对齐 Moldflow 方案任务窗格）：左列常驻，任务按执行顺序
+ * 方案任务窗格：左列常驻，任务按执行顺序
  * 排列、六态图标、上游失败阻断后续；双击任务切换到对应工作台阶段编辑，
  * 右键任务弹出常用命令菜单（打开编辑 / 取消作业 / 重扫结果目录）。
  * 窗格底部为分析序列选择与提交按钮（替代原流水线面板的编排入口）。
@@ -16,7 +16,7 @@ import type { AnalysisStage } from "../../types";
 import { useStudyTasksSnapshot } from "../../composables/useStudyTasksSnapshot";
 import { prerequisitesReady, type StudyTask, type StudyTaskState } from "../../utils/study-tasks";
 
-/** Moldflow 六态图标的展示模型：字符、配色与语义提示。 */
+/** 六态图标的展示模型：字符、配色与语义提示。 */
 export const TASK_STATE_META: Record<StudyTaskState | "blocked", { icon: string; cls: string }> = {
   done: { icon: "✓", cls: "bg-emerald-800 text-emerald-300" },
   warning: { icon: "!", cls: "bg-amber-500/20 text-amber-400" },
@@ -48,7 +48,7 @@ export function useStudyTasks() {
   const submitDisabled = computed(() => !prerequisitesReady(tasks.value) || app.busy !== null);
 
   function openTask(task: StudyTask): void {
-    // 双击任务 → 切换到对应阶段（对齐 Moldflow 双击打开编辑器）
+    // 双击任务 → 切换到对应阶段
     app.stage = task.stage;
   }
 
@@ -56,7 +56,7 @@ export function useStudyTasks() {
     void pipeline.submitPipeline(Number(cores.value) || 2, stage.value as AnalysisStage);
   }
 
-  // —— 右键菜单（对齐 Moldflow 任务右键常用命令）——
+  // —— 右键菜单（任务右键常用命令）——
   const menu = ref<{ task: StudyTask; x: number; y: number } | null>(null);
 
   function openMenu(task: StudyTask, event: MouseEvent): void {

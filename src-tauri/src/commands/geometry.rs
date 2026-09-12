@@ -34,7 +34,7 @@ pub struct MeshSession {
     pub midplane: Option<MidplaneMesh>,
 }
 
-/// 几何会话缓存：渲染与网格生成（T06/T14）从这里取全量数据。
+/// 几何会话缓存：渲染与网格生成从这里取全量数据。
 /// 内部为 Arc 句柄：async 命令克隆句柄后在阻塞线程池访问，不阻塞主线程。
 #[derive(Clone, Default)]
 pub struct GeometryStore(pub Arc<Mutex<HashMap<String, MeshSession>>>);
@@ -221,10 +221,8 @@ pub async fn generate_volume_mesh(
         };
         let volume = meshing::generate(&mesh, &params)?;
         let mut report = meshing::report(&volume);
-        report.thin_feature_hints = kairos_core::services::thickness::thin_feature_hints(
-            params.target_size,
-            &kairos_core::services::thickness::probe_thickness(&mesh),
-        );
+        report.thin_feature_hints =
+            kairos_core::services::thickness::hints_for(&mesh, params.target_size);
         if let Some(session) = store.lock().get_mut(&geometry_id) {
             session.volume = Some(volume);
         }
@@ -282,10 +280,7 @@ pub async fn generate_gmsh_mesh(
         )?;
         let mut report = kairos_core::services::meshing::report(&volume);
         report.engine = "gmsh".into();
-        report.thin_feature_hints = kairos_core::services::thickness::thin_feature_hints(
-            target_size,
-            &kairos_core::services::thickness::probe_thickness(&mesh),
-        );
+        report.thin_feature_hints = kairos_core::services::thickness::hints_for(&mesh, target_size);
 
         if let Some(session) = store_clone.lock().get_mut(&geometry_id) {
             session.volume = Some(volume);

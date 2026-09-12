@@ -1,4 +1,4 @@
-//! GPU 命令：wgpu 适配器探测与厂商识别（NVIDIA / AMD / Intel / Apple，T19）。
+//! GPU 命令：wgpu 适配器探测与厂商识别（NVIDIA / AMD / Intel / Apple）。
 //! 统一走 wgpu（Vulkan / DX12 / Metal），禁止引入 CUDA 等单厂商 SDK。
 
 use kairos_core::error::Result;
@@ -65,7 +65,7 @@ mod tests {
             .enumerate_adapters(wgpu::Backends::all())
             .is_empty()
         {
-            println!("跳过：无可用 GPU 适配器（无 GPU 环境按策略跳过，真机验收归 T48）");
+            println!("跳过：无可用 GPU 适配器（无 GPU 环境按策略跳过）");
             return;
         }
         let adapters = pollster::block_on(probe_gpu()).expect("GPU 探测不应失败");

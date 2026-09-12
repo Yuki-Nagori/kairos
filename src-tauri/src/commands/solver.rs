@@ -1,5 +1,5 @@
 //! 求解器命令：环境探测与求解 case 生成（GPL 隔离：仅子进程 + 文件交换）。
-//! 作业的启动 / 取消 / 列表由 T10 的调度器（commands::jobs）负责。
+//! 作业的启动 / 取消 / 列表由调度器（commands::jobs）负责。
 //! 见 ai-docs/decisions/openfoam-gpl-compliance.md。
 
 use std::process::Command;

@@ -1,4 +1,4 @@
-/** 视口后端工厂：优先自研 WebGPU（T39 主路径），不可用回退 WebGL2。
+/** 视口后端工厂：优先自研 WebGPU（主路径），不可用回退 WebGL2。
  * 两个后端实现同一公共方法面（ViewportBackend），面板逻辑不感知差异。 */
 import { ViewportRenderer } from "./renderer";
 import { WebGPURenderer } from "./webgpu/renderer";

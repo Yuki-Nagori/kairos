@@ -1,5 +1,5 @@
 <script setup lang="ts">
-/** 方案任务窗格：Moldflow 式任务序列（六态图标 / 失败阻断 / 双击直达编辑阶段）
+/** 方案任务窗格：任务序列（六态图标 / 失败阻断 / 双击直达编辑阶段）
  *  + 底部分析序列与提交表单。逻辑见 useStudyTasks。 */
 import { useStudyTasks, TASK_STATE_META } from "./useStudyTasks";
 import Card from "../../components/ui/UiCard.vue";
@@ -32,7 +32,7 @@ const {
           @dblclick="openTask(task)"
           @contextmenu.prevent="openMenu(task, $event)"
         >
-          <!-- Moldflow 六态图标：✓ 成功 / ! 警告 / ✕ 失败 / ⧖ 排队 / ⟳ 执行中 / 空 未开始 -->
+          <!-- 六态图标：✓ 成功 / ! 警告 / ✕ 失败 / ⧖ 排队 / ⟳ 执行中 / 空 未开始 -->
           <span
             class="mt-0.5 flex size-3.5 shrink-0 items-center justify-center rounded text-[9px] font-semibold"
             :class="TASK_STATE_META[task.state].cls"

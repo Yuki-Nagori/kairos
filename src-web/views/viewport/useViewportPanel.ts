@@ -303,7 +303,7 @@ export function useViewportPanel() {
       return;
     }
     // 共享网格入槽：applyField / applyClip / 空间拾取都按槽读取
-    // （T49 重构曾丢失此赋值，三个功能随之静默失效——回归锁定）。
+    // （缺此赋值时云图 / 剖切 / 拾取会静默失效——回归锁定）。
     slot.renderMesh = sharedMesh;
     renderer.uploadMesh({
       positions: sharedMesh.positions,

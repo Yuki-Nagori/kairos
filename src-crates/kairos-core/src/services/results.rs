@@ -8,8 +8,8 @@ use crate::models::results::{ResultCatalog, ScalarField, TimeStepMeta};
 
 /// 已知场名 → 是否为矢量场（模量读取）。
 ///
-/// `D` = 位移（翘曲/变形）场，OpenFOAM 结构求解惯例；moldingFoam M4 的
-/// 翘曲输出定稿后若改名，此处与文档同步（见 tasks/T64）。
+/// `D` = 位移（翘曲/变形）场，OpenFOAM 结构求解惯例；求解侧的翘曲输出
+/// 定稿后若改名，此处与字段契约同步。
 fn is_vector_field(field: &str) -> bool {
     matches!(field, "U" | "V" | "gradU" | "D")
 }

@@ -136,6 +136,43 @@ fn gate_inlet_faces(
     inlet
 }
 
+/// 边界面分带：先由浇口圈定 inlet，其余按分带回退（给了浇口时底带不再是入口）。
+/// 返回 [inlet, vent, walls] 三组面序号。
+fn classify_boundary_faces(
+    neighbour: &[Option<usize>],
+    face_centres: &[[f64; 3]],
+    face_areas: &[f64],
+    face_normal_z: &[f64],
+    (z_min, z_max): (f64, f64),
+    gates: &[GatePortal],
+) -> [Vec<usize>; 3] {
+    let boundary: Vec<usize> = (0..neighbour.len())
+        .filter(|index| neighbour[*index].is_none())
+        .collect();
+    let mut is_gate_face = vec![false; neighbour.len()];
+    for index in gate_inlet_faces(&boundary, face_centres, face_areas, gates) {
+        is_gate_face[index] = true;
+    }
+    let mut band_faces: [Vec<usize>; 3] = [Vec::new(), Vec::new(), Vec::new()];
+    for &index in &boundary {
+        if is_gate_face[index] {
+            band_faces[0].push(index);
+            continue;
+        }
+        let band =
+            classify_boundary_face(face_centres[index][2], face_normal_z[index], z_min, z_max);
+        band_faces[match band {
+            // 给了浇口时底带不再是入口（避免「浇口 + 整条底带」双重入口）
+            BoundaryBand::Inlet if gates.is_empty() => 0,
+            BoundaryBand::Inlet => 2,
+            BoundaryBand::Vent => 1,
+            BoundaryBand::Walls => 2,
+        }]
+        .push(index);
+    }
+    band_faces
+}
+
 /// 从体积网格写出 constant/polyMesh（points/faces/owner/neighbour/boundary）。
 /// 四面体绕向已在生成时保证正体积；面法向按 owner 外法向定向。
 ///
@@ -259,48 +296,24 @@ pub fn write_poly_mesh(case_dir: &Path, mesh: &VolumeMesh, gates: &[GatePortal])
         (lo.min(p[2]), hi.max(p[2]))
     });
     let mut order: Vec<usize> = Vec::with_capacity(faces.len());
-    let mut band_faces: [Vec<usize>; 3] = [Vec::new(), Vec::new(), Vec::new()];
     for (index, slot) in neighbour.iter().enumerate() {
         if slot.is_some() {
             order.push(index);
         }
-    }
-    // 边界面：先由浇口圈定 inlet，其余按分带回退（给了浇口时底带不再是入口）。
-    let boundary: Vec<usize> = (0..faces.len())
-        .filter(|index| neighbour[*index].is_none())
-        .collect();
-    let gate_faces = gate_inlet_faces(&boundary, &face_centres, &face_areas, gates);
-    let mut is_gate_face = vec![false; faces.len()];
-    for &index in &gate_faces {
-        is_gate_face[index] = true;
     }
     // OpenFOAM 要求内部面按 (owner, neighbour) 升序（"upper triangular order"）：
     // 每个单元的面按其邻居升序排列，否则 checkMesh 报 faces not in upper
     // triangular order。
     order.sort_by_key(|&index| (owner[index], neighbour[index].unwrap_or(0)));
     let n_internal = order.len();
-    for (index, slot) in neighbour.iter().enumerate() {
-        if slot.is_some() {
-            continue;
-        }
-        // 浇口圈定的面直接进 inlet；其余按分带，且给了浇口时底带不再算入口。
-        if is_gate_face[index] {
-            band_faces[0].push(index);
-            continue;
-        }
-        let slot = match classify_boundary_face(
-            face_centres[index][2],
-            face_normal_z[index],
-            z_min,
-            z_max,
-        ) {
-            BoundaryBand::Inlet if gates.is_empty() => 0,
-            BoundaryBand::Inlet => 2,
-            BoundaryBand::Vent => 1,
-            BoundaryBand::Walls => 2,
-        };
-        band_faces[slot].push(index);
-    }
+    let band_faces = classify_boundary_faces(
+        &neighbour,
+        &face_centres,
+        &face_areas,
+        &face_normal_z,
+        (z_min, z_max),
+        gates,
+    );
     let mut boundary_patches: Vec<(&str, &str, usize, usize)> = Vec::new();
     let mut start_face = n_internal;
     for (slot, (name, patch_type)) in ["inlet", "vent", "walls"]
@@ -527,7 +540,7 @@ fn decompose_dict(cores: usize) -> String {
 
 /// 工艺字典：V/P 切换分数与切换压力、保压压力表、顶出判据。
 ///
-/// 保压曲线相对 V/P 切换时刻计时（moldingFoam README「保压（M2）」）：
+/// 保压曲线相对 V/P 切换时刻计时（契约的保压阶段）：
 /// 切换压力取曲线起点，使闸口压力在切换瞬间连续、无压力阶跃。不能再额外
 /// 写一个大气压首点——曲线起点在 t=0 时会出现重复横坐标，被求解器的
 /// `Function1s::Table::check` 判为 out-of-order 而拒绝启动。
@@ -616,7 +629,7 @@ const FV_SCHEMES: &str = "FoamFile\n{\n    version 2.0;\n    format ascii;\n    
 
 const FV_SOLUTION: &str = "FoamFile\n{\n    version 2.0;\n    format ascii;\n    class dictionary;\n    location \"system\";\n    object fvSolution;\n}\nsolvers\n{\n    \"alpha.melt.*\"\n    {\n        nCorrectors     2;\n        nSubCycles      6;\n        MULESCorr       no;\n        solver          smoothSolver;\n        smoother        symGaussSeidel;\n        tolerance       1e-8;\n        relTol          0;\n    }\n\n    \"pcorr.*\"\n    {\n        solver          PCG;\n        preconditioner  DIC;\n        tolerance       1e-5;\n        relTol          0;\n    }\n\n    p_rgh\n    {\n        solver          PCG;\n        preconditioner  DIC;\n        tolerance       1e-07;\n        relTol          0.05;\n    }\n\n    p_rghFinal\n    {\n        $p_rgh;\n        relTol          0;\n    }\n\n    \"(U|e|T).*\"\n    {\n        solver          smoothSolver;\n        smoother        symGaussSeidel;\n        tolerance       1e-06;\n        relTol          0;\n    }\n}\n\nPIMPLE\n{\n    momentumPredictor no;\n    nOuterCorrectors 1;\n    nCorrectors     3;\n    nNonOrthogonalCorrectors 0;\n}\n";
 
-/// 各分析阶段预期产出的结果场目录（供 T13 结果模型与后处理面板消费）。
+/// 各分析阶段预期产出的结果场目录（供结果模型与后处理面板消费）。
 /// 场名为 moldingFoam 的真实写出名；填充 ⊂ 保压 ⊂ 冷却单调增长。
 const FILL_FIELDS: &[&str] = &["alpha.melt", "p", "p_rgh", "T", "U"];
 // 保压与冷却阶段场集合一致（顶出判据由求解器内部判定，不新增场）。

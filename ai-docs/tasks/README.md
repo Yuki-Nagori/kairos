@@ -90,9 +90,10 @@
 | T60 | [T60-import-log-and-pptx.md](T60-import-log-and-pptx.md)             | 导入日志流 + PPT 报告（低优先）   | T52      |
 | T65 | [T65-warpage-deformation-view.md](T65-warpage-deformation-view.md)   | 翘曲变形可视化（视口位移显示）    | T64      |
 
-> T29 优先级最高：bundle v0.2.0 已修掉 v0.1.1 的 SIGILL，VM 内可跑通
-> 0 → endTime 全段（Kairos 侧 case/作业链路缺陷已修）；剩余阻塞是 bundle
-> 退出期堆破坏（求解器侧，正常跑完也非零退出，已移交 moldingFoam 修复）。
+> T29 优先级最高：样例方盒与真实 STL（46.7 万面）两条链路都已在 bundle v0.2.1
+> 上复跑——样例全程 exit 0 且结果可读；真实件导入/网格/case 通过，求解在固定
+> 填充分数处暴露压力 runaway 与入口分带问题（已建档移交求解器侧）。剩余为前端
+> 视口/图表验证（需桌面控制权限）。
 > 数值侧已闭环：大结果二进制通道（T51）、派生算子 GPU 生产化、渲染双后端
 > （T39）均已落地；剩余性能与三端验收归 T48。T55–T60 为 Moldflow 对照评审
 > 新增缺口，详见各自任务文件。

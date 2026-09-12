@@ -11,7 +11,7 @@ const { app, vm, deps, rows, downloadsDir, pendingDeployText, openDownloadsDir }
 
 <template>
   <Card title="运行时依赖" status-hint="尚未探测。点击「重新探测」检查求解环境。">
-    <!-- T54：求解环境「已下载新版本但 VM 未部署」提醒 -->
+    <!-- 求解环境「已下载新版本但 VM 未部署」提醒 -->
     <p
       v-if="pendingDeployText"
       class="mx-4 mt-2 rounded-lg border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-xs text-amber-300"

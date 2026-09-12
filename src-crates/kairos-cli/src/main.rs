@@ -101,7 +101,7 @@ enum ProjectAction {
 
 #[derive(Subcommand)]
 enum MeshAction {
-    /// 生成体积网格（voxel = 内置体素引擎；gmsh = T30 落地后可用）
+    /// 生成体积网格（voxel = 内置体素引擎；gmsh = 外部引擎，需在依赖面板下载）
     Generate {
         #[arg(long)]
         stl: String,

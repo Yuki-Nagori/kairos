@@ -114,6 +114,11 @@ pub fn probe_thickness(mesh: &TriangleMesh) -> ThicknessReport {
 /// 薄壁占比告警线：薄于 2×目标尺寸的表面占比超过该值即提示。
 const THIN_FRACTION_LIMIT: f64 = 0.05;
 
+/// 探测 + 出提示的一行入口：命令层多处（体素 / gmsh 网格）共用，避免各自拼装。
+pub fn hints_for(mesh: &TriangleMesh, target_size_mm: f64) -> Vec<String> {
+    thin_feature_hints(target_size_mm, &probe_thickness(mesh))
+}
+
 /// 网格尺寸提示：目标尺寸分辨不了的表面（壁厚薄于 2×目标尺寸）占比超线时告警
 /// （空 = 通过）。
 pub fn thin_feature_hints(target_size_mm: f64, report: &ThicknessReport) -> Vec<String> {
@@ -269,6 +274,12 @@ mod tests {
         let report = probe_thickness(&mesh);
         assert_eq!(report.count(), 1, "只有下片有合法命中");
         assert!((report.min_mm() - 5.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn hints_for_wraps_probe_and_hint() {
+        assert!(hints_for(&box_mesh([20.0, 20.0, 2.0]), 1.0).is_empty());
+        assert_eq!(hints_for(&box_mesh([20.0, 20.0, 2.0]), 1.5).len(), 1);
     }
 
     #[test]

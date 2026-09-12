@@ -126,7 +126,7 @@ export function useDependenciesPanel() {
   void deps.refreshDownloadsDir();
 
   void deps.refreshDependencies();
-  // VM 内已部署版本（T54「更新未部署」提醒的比对源）
+  // VM 内已部署版本（「更新未部署」提醒的比对源）
   void vm.refreshDeployedReleaseTag();
 
   /** 待部署提示文案（版本从 → 到；VM 侧未知显示「未部署」）。 */

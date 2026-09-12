@@ -47,7 +47,7 @@ const ALL_STAGES: Stage[] = STAGES.map(([stage]) => stage);
 
 const LEFT_PANELS: PanelConfig[] = [
   { component: ProjectTree, stages: ALL_STAGES },
-  // 方案任务窗格（Moldflow 范式）：任务序列常驻所有阶段，双击任务直达编辑阶段
+  // 方案任务窗格：任务序列常驻所有阶段，双击任务直达编辑阶段
   { component: StudyTasksPanel, stages: ALL_STAGES },
   { component: LayersPanel, stages: ALL_STAGES },
   { component: MaterialsPanel, stages: ["home", "process"] },
@@ -55,7 +55,7 @@ const LEFT_PANELS: PanelConfig[] = [
 ];
 
 const RIGHT_PANELS: PanelConfig[] = [
-  // 方案摘要（Moldflow 式配置速览）：材料 / 工艺 / 最新作业，常驻右列首位
+  // 方案摘要（配置速览）：材料 / 工艺 / 最新作业，常驻右列首位
   { component: StudySummaryPanel, stages: ALL_STAGES },
   { component: MoldPanel, stages: ["home", "process"] },
   { component: ProcessPanel, stages: ["home", "process"] },

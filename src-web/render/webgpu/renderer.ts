@@ -1,7 +1,7 @@
-/** WebGPU 渲染后端 POC（T39）：与 WebGL2 主后端同一 RenderMesh / 场值 /
+/** WebGPU 渲染后端 POC：与 WebGL2 主后端同一 RenderMesh / 场值 /
  * 剖切平面语义的自研实现，验证自研 WebGPU 主路径的可行性。
  *
- * POC 边界（决策材料，见 ai-docs/reviews/T39-review.md）：
+ * POC 边界：
  * - 冷热配色与背景色取规范常量，未接主题 CSS 变量；
  * - 相机平移（右键拖拽）未实现，旋转 / 缩放 / 视角重置可用。
  */

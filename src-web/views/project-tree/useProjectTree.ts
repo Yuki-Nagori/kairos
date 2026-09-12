@@ -17,7 +17,7 @@ export function useProjectTree() {
   const jobsStore = useJobsStore();
   const deps = useDependenciesStore();
 
-  /** 方案层（对齐 Moldflow 工程视图：工程 → 方案）。 */
+  /** 方案层（工程视图：工程 → 方案）。 */
   const studies = computed<StudyLeaf[]>(() =>
     (project.project?.studies ?? []).map((study) => ({
       id: study.id,
@@ -45,7 +45,7 @@ export function useProjectTree() {
   /** 头部徽标：当前项目名（未打开时给占位）。 */
   const projectName = computed(() => project.project?.name ?? "未打开项目");
 
-  /** 点击方案 → 切换活跃研究（对齐 Moldflow 工程视图的方案选择）。 */
+  /** 点击方案 → 切换活跃研究（工程视图的方案选择）。 */
   function selectStudy(id: string): void {
     project.selectStudy(id);
   }

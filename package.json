@@ -28,7 +28,8 @@
     "test:watch": "vitest",
     "typecheck": "vue-tsc --noEmit",
     "typecheck:rust": "cargo check --workspace",
-    "verify": "bun run typecheck && bun run typecheck:rust && bun run lint && bun run lint:rust && bun run format:check && bun run format:rust:check && bun run test:coverage && bun run test:rust && bun run coverage:rust && bun run knip"
+    "verify": "bun run typecheck && bun run typecheck:rust && bun run lint && bun run lint:comments && bun run lint:rust && bun run format:check && bun run format:rust:check && bun run test:coverage && bun run test:rust && bun run coverage:rust && bun run knip",
+    "lint:comments": "bun scripts/comment-style.mts"
   },
   "devDependencies": {
     "@eslint/js": "^9",

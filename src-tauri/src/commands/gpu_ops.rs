@@ -511,7 +511,7 @@ mod tests {
         if compute_device().is_ok() {
             return false;
         }
-        println!("跳过：无可用 GPU 适配器（无 GPU 环境按策略跳过，真机验收归 T48）");
+        println!("跳过：无可用 GPU 适配器（无 GPU 环境按策略跳过）");
         true
     }
 

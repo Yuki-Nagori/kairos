@@ -363,8 +363,8 @@ pub fn parse_deployed_tag(stdout: &str) -> Option<String> {
     }
 }
 
-/// 读取 VM 内已部署的求解环境版本标记（「更新未部署」提醒的比对源，
-/// T54）。非 multipass 平台无部署概念、VM 未启动 / multipass 缺失均返回
+/// 读取 VM 内已部署的求解环境版本标记（「更新未部署」提醒的比对源）。
+/// 非 multipass 平台无部署概念、VM 未启动 / multipass 缺失均返回
 /// null——提示只在真正可比对的环境中出现。
 #[tauri::command]
 pub async fn vm_deployed_release_tag(app: AppHandle) -> Result<Option<String>> {
@@ -444,8 +444,8 @@ pub async fn vm_deploy_bundle(app: AppHandle, progress: Channel<String>) -> Resu
         if !extract.success() {
             return Err(KairosError::io("解压失败，请确认 bundle 完整后重试。"));
         }
-        // 版本标记：把 releaseTag 写进 VM，供「更新未部署」提醒比对
-        //（T54）。非 release 流组件无标签，跳过标记（比对端视为未部署）。
+        // 版本标记：把 releaseTag 写进 VM，供「更新未部署」提醒比对。
+        // 非 release 流组件无标签，跳过标记（比对端视为未部署）。
         if let Some(tag) = &entry.release_tag {
             let marker = platform_command("multipass")
                 .args([

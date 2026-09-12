@@ -1,8 +1,8 @@
 /**
- * 方案任务序列评估（对齐 Moldflow「方案任务窗格」范式）：任务按必须执行的
+ * 方案任务序列评估（方案任务窗格）：任务按必须执行的
  * 顺序排列，每个任务的输出是下一个任务的输入；状态六态 + 阻断——
  * ✓ 成功 / ⚠ 完成但有警告（应检查）/ ✕ 失败 / ⧖ 排队 / ⟳ 执行中 /
- * 空 未开始；上游失败时后续任务进入 blocked（Moldflow 规则：上一任务
+ * 空 未开始；上游失败时后续任务进入 blocked（规则：上一任务
  * 失败则不运行后续任务）。纯函数，从应用状态快照评估，可独立单测消融。
  */
 import type { GeometrySummary, Job, Material, Project, ResultCatalog } from "../types";
@@ -23,7 +23,7 @@ export interface StudyTasksInput {
   resultCatalog: ResultCatalog | null;
 }
 
-/** 任务状态：六态对齐 Moldflow 图标语义 + blocked（上游失败阻断）。 */
+/** 任务状态：六态图标语义 + blocked（上游失败阻断）。 */
 export type StudyTaskState = "done" | "warning" | "failed" | "queued" | "running" | "todo";
 
 export interface StudyTask {
@@ -36,7 +36,7 @@ export interface StudyTask {
   hint: string | null;
   /** blocked 时的原因（上游任务失败）。 */
   blockReason: string | null;
-  /** 双击任务打开的工作台阶段（对齐 Moldflow 双击打开编辑器）。 */
+  /** 双击任务打开的工作台阶段（双击打开对应编辑器）。 */
   stage: Stage;
 }
 
@@ -118,7 +118,7 @@ export function evaluateStudyTasks(input: StudyTasksInput): StudyTask[] {
       blockReason: null,
       stage: "geometry",
     });
-    // 条件任务：几何不健康才出现（对齐 Moldflow 的「网格诊断 / 修复」任务）
+    // 条件任务：几何不健康才出现（对应「网格诊断 / 修复」任务）
     if (!healthy) {
       tasks.push({
         id: "repair",

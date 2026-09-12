@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /** 方案摘要面板：材料 / 成型工艺 / 最新作业三段只读属性行，常驻右列首位
- *  （对齐 Moldflow 方案窗格的配置速览）。逻辑见 useStudySummary。 */
+ *  （配置速览）。逻辑见 useStudySummary。 */
 import { useStudySummary } from "./useStudySummary";
 import Card from "../../components/ui/UiCard.vue";
 

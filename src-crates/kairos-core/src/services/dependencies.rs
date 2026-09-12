@@ -76,7 +76,7 @@ pub fn catalog() -> Vec<RuntimeDependency> {
             page_url: "https://gmsh.info/#Download".into(),
             required: false,
             check_command: "gmsh".into(),
-            hint: "T22 Delaunay 网格升级路线（条件触发，可选）。".into(),
+            hint: "Delaunay 网格升级路线（条件触发，可选）。".into(),
             download: Some(crate::models::dependencies::DownloadSpec {
                 // 注意：macOS 目录是 bin/macOS（ARM 版），且旧版本文件会被官方
                 // 移除——升级版本号时三条 URL 必须同步更新。
