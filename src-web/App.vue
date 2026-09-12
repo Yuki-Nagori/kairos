@@ -23,7 +23,7 @@ import XyChartPanel from "./views/xy-chart/XyChartPanel.vue";
 import ResultsPanel from "./views/results/ResultsPanel.vue";
 import ProjectTree from "./views/project-tree/ProjectTree.vue";
 import LayersPanel from "./views/layers/LayersPanel.vue";
-import PipelinePanel from "./views/pipeline/PipelinePanel.vue";
+import StudyTasksPanel from "./views/study-tasks/StudyTasksPanel.vue";
 import MaterialsPanel from "./views/materials/MaterialsPanel.vue";
 import GeometryPanel from "./views/geometry/GeometryPanel.vue";
 import MoldPanel from "./views/mold/MoldPanel.vue";
@@ -46,8 +46,9 @@ const ALL_STAGES: Stage[] = STAGES.map(([stage]) => stage);
 
 const LEFT_PANELS: PanelConfig[] = [
   { component: ProjectTree, stages: ALL_STAGES },
+  // 方案任务窗格（Moldflow 范式）：任务序列常驻所有阶段，双击任务直达编辑阶段
+  { component: StudyTasksPanel, stages: ALL_STAGES },
   { component: LayersPanel, stages: ALL_STAGES },
-  { component: PipelinePanel, stages: ["home"] },
   { component: MaterialsPanel, stages: ["home", "process"] },
   { component: GeometryPanel, stages: ["home", "geometry", "mesh"] },
 ];

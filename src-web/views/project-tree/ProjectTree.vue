@@ -1,8 +1,8 @@
 <script setup lang="ts">
-/** 项目树面板：逻辑见 useProjectTree。头部为「工程 + 当前项目徽标」。 */
+/** 项目树面板：工程 + 方案层（点击切换活跃研究）+ 次级分组。逻辑见 useProjectTree。 */
 import { useProjectTree } from "./useProjectTree";
 
-const { groups, projectName } = useProjectTree();
+const { studies, groups, projectName, selectStudy } = useProjectTree();
 </script>
 
 <template>
@@ -19,6 +19,34 @@ const { groups, projectName } = useProjectTree();
       >
     </div>
     <div class="px-2 py-2">
+      <!-- 方案层：Moldflow 工程视图的核心交互——点击方案切换活跃研究 -->
+      <template v-if="studies.length > 0">
+        <div
+          class="flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-semibold text-zinc-500"
+        >
+          <span class="w-2.5 text-center text-[9px] text-zinc-600">▾</span>
+          方案
+        </div>
+        <button
+          v-for="study in studies"
+          :key="study.id"
+          type="button"
+          class="ml-4 flex w-[calc(100%-1rem)] items-center gap-1.5 rounded-md py-1 pl-2 pr-2 text-left text-xs transition-colors"
+          :class="
+            study.active
+              ? 'bg-emerald-900/40 text-emerald-300'
+              : 'text-zinc-300 hover:bg-zinc-800/50'
+          "
+          :title="`切换到方案「${study.name}」`"
+          @click="selectStudy(study.id)"
+        >
+          <span
+            class="size-1.5 shrink-0 rounded-sm"
+            :class="study.active ? 'bg-emerald-400' : 'bg-lime-700'"
+          />
+          <span class="truncate">{{ study.name }}</span>
+        </button>
+      </template>
       <template v-for="group in groups" :key="group.title">
         <div
           class="flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-semibold text-zinc-500"

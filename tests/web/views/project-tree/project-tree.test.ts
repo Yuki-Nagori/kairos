@@ -116,4 +116,44 @@ describe("ProjectTree", () => {
     expect(text).toContain("Gmsh: 未就绪");
     expect(text).toContain("Python: 就绪");
   });
+
+  it("方案层渲染并可点击切换活跃研究（Moldflow 工程视图交互）", async () => {
+    const project = useProjectStore();
+    project.project = projectFixture({
+      studies: [
+        {
+          id: "study-1",
+          name: "方案 A",
+          createdMs: 1,
+          runnerElements: [],
+          coolingChannels: [],
+          process: null,
+          materialId: null,
+        },
+        {
+          id: "study-2",
+          name: "方案 B",
+          createdMs: 2,
+          runnerElements: [],
+          coolingChannels: [],
+          process: null,
+          materialId: null,
+        },
+      ],
+    });
+    project.activeStudyId = "study-1";
+
+    const wrapper = mount(ProjectTree, { global: { plugins: [pinia] } });
+    expect(wrapper.text()).toContain("方案");
+    const buttons = wrapper.findAll("button");
+    expect(buttons).toHaveLength(2);
+    // 活跃方案高亮
+    expect(buttons[0]!.classes()).toContain("bg-emerald-900/40");
+    expect(buttons[1]!.classes()).not.toContain("bg-emerald-900/40");
+
+    await buttons[1]!.trigger("click");
+    expect(project.activeStudyId).toBe("study-2");
+    await wrapper.vm.$nextTick();
+    expect(buttons[1]!.classes()).toContain("bg-emerald-900/40");
+  });
 });
