@@ -235,7 +235,8 @@ fn copy_results_from_vm(_case_dir: &str, _vm_case: Option<&str>) -> Result<()> {
 /// 求解脚本里的 case 目录（含 shell 单引号转义）。
 ///
 /// 平台经 `os` 传入（与 `std::env::consts::OS` 同口径）而不是编译期分支——三端
-/// 取值都能在同一平台单测覆盖：
+/// 取值都能在同一平台单测覆盖，且函数在原生平台（走宿主路径分支）同样被调用，
+/// 不会因为只有 VM 平台用得上而被判成死代码：
 /// - macOS：VM 内暂存路径（宿主绝对路径在虚拟机里并不存在）；
 /// - Windows：WSL 的 `/mnt` 形态路径（WSL 能直接读宿主文件系统）；
 /// - 原生：宿主路径。
@@ -282,12 +283,12 @@ fn spawn_run_script(
             .map_err(|e| KairosError::io(format!("VM 求解启动失败：{e}")));
     }
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-    let _ = (vm_case, vm_shell);
+    let _ = vm_shell;
     let path_export = managed_path
         .map(|prefix| format!("export PATH='{prefix}:$PATH'; "))
         .unwrap_or_default();
-    // 单引号内的 shell 转义：' → '\''（防路径注入）。
-    let safe_dir = case_dir.replace('\'', "'\\''");
+    // 原生平台走宿主路径分支（同一处做 shell 单引号转义，防路径注入）。
+    let safe_dir = script_case_dir(std::env::consts::OS, case_dir, vm_case);
     // 求解入口：foamRun 是 OpenFOAM 11+ 的模块化运行器，具体求解模块由
     // case 的 controlDict（solver 键，见 moldingfoam.rs::SOLVER_MODULE）提供；
     // 并行由 mpirun 发起（见 moldingfoam::solve_command）。
