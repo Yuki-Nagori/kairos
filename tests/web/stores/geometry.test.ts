@@ -28,6 +28,12 @@ import type {
   Study,
 } from "../../../src-web/types";
 
+vi.mock("../../../src-web/api/project", () => ({
+  archiveWorkspaceGeometry: vi.fn(),
+  loadWorkspaceGeometry: vi.fn(),
+  saveStudyMesh: vi.fn(),
+  restoreStudyMesh: vi.fn(),
+}));
 vi.mock("../../../src-web/api/geometry", () => ({
   estimateVolumeMesh: vi.fn(),
   importStl: vi.fn(),
@@ -352,6 +358,7 @@ describe("geometry store", () => {
         createdMs: 1,
         updatedMs: 1,
         studies: [studyWithRunners(runners)],
+        geometries: [],
       };
       project.activeStudyId = "study-1";
       vi.mocked(generateDualDomainMesh).mockResolvedValue(makeDualReport());
@@ -401,6 +408,7 @@ describe("geometry store", () => {
         createdMs: 1,
         updatedMs: 1,
         studies: [studyWithRunners(runners)],
+        geometries: [],
       };
       project.activeStudyId = "study-1";
       vi.mocked(generateMidplaneMesh).mockResolvedValue(makeMidplaneReport());
@@ -637,5 +645,142 @@ describe("geometry store", () => {
       await geometry.removeGeometryById("g-1");
       expect(geometry.meshEstimates["g-1"]).toBeUndefined();
     });
+  });
+});
+
+describe("工作区：几何归档与恢复", () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    vi.resetAllMocks();
+  });
+
+  function workspaceProject() {
+    const project = useProjectStore();
+    project.project = {
+      schemaVersion: 5,
+      id: "p-1",
+      name: "演示",
+      createdMs: 1,
+      updatedMs: 1,
+      studies: [studyWithRunners([])],
+      geometries: [],
+    };
+    project.activeStudyId = "study-1";
+    project.projectPath = "/home/u/Documents/kairos/p/p.kairos";
+    project.workspaceRoot = "/home/u/Documents/kairos/p";
+    return project;
+  }
+
+  it("无工作区（散装工程）时归档与落盘为静默 no-op", async () => {
+    const project = useProjectStore();
+    project.projectPath = "/tmp/loose.kairos";
+    project.workspaceRoot = null;
+    const geometry = useGeometryStore();
+
+    await geometry.archiveIntoWorkspace("g-1", "/models/a.stl");
+    await geometry.persistStudyMesh("g-1", 2.5);
+    const { archiveWorkspaceGeometry, saveStudyMesh } =
+      await import("../../../src-web/api/project");
+    expect(archiveWorkspaceGeometry).not.toHaveBeenCalled();
+    expect(saveStudyMesh).not.toHaveBeenCalled();
+  });
+
+  it("导入几何时归档进工作区并登记引用；失败只进错误不打断导入", async () => {
+    const project = workspaceProject();
+    const geometry = useGeometryStore();
+    const { archiveWorkspaceGeometry } = await import("../../../src-web/api/project");
+    vi.mocked(archiveWorkspaceGeometry).mockResolvedValue({
+      id: "geo-9",
+      fileName: "demo.stl",
+      relativePath: "geometry/demo.stl",
+    });
+    vi.mocked(pickOpenGeometryPath).mockResolvedValue("/models/demo.stl");
+    vi.mocked(importStl).mockResolvedValue(makeSummary());
+    await geometry.importGeometry();
+
+    // 归档用导入摘要里的几何 id（默认 fixture 为 g-1）
+    expect(archiveWorkspaceGeometry).toHaveBeenCalledWith(
+      "/home/u/Documents/kairos/p/p.kairos",
+      "g-1",
+      "/models/demo.stl",
+    );
+    expect(project.project?.geometries).toEqual([
+      { id: "geo-9", fileName: "demo.stl", relativePath: "geometry/demo.stl" },
+    ]);
+
+    // 归档失败：错误进全局管道，几何仍在列表里（导入本身成功）
+    vi.mocked(archiveWorkspaceGeometry).mockRejectedValue(new Error("磁盘只读"));
+    await geometry.importGeometry();
+    expect(useAppStore().error?.message).toBe("磁盘只读");
+    expect(geometry.geometries).toHaveLength(2);
+  });
+
+  it("生成网格后落盘到方案目录；无活跃方案时不落盘", async () => {
+    const project = workspaceProject();
+    const geometry = useGeometryStore();
+    const { saveStudyMesh } = await import("../../../src-web/api/project");
+    vi.mocked(generateVolumeMesh).mockResolvedValue(makeReport());
+    vi.mocked(saveStudyMesh).mockResolvedValue(undefined);
+
+    await geometry.generateMesh("g-1", 2.5, { mode: "boundaryLayers", layers: 2, ratio: 0.5 });
+    expect(saveStudyMesh).toHaveBeenCalledWith(
+      "/home/u/Documents/kairos/p/p.kairos",
+      "study-1",
+      "g-1",
+      2.5,
+      { mode: "boundaryLayers", layers: 2, ratio: 0.5 },
+    );
+
+    // 落盘失败：错误进全局管道，网格报告仍然写入（生成本身成功）
+    vi.mocked(saveStudyMesh).mockRejectedValue(new Error("磁盘只读"));
+    await geometry.generateMesh("g-1", 3);
+    expect(useAppStore().error?.message).toBe("磁盘只读");
+    expect(geometry.meshReports["g-1"]).toBeDefined();
+
+    // 无活跃方案：跳过落盘
+    vi.mocked(saveStudyMesh).mockClear();
+    project.activeStudyId = null;
+    await geometry.generateMesh("g-1", 3);
+    expect(saveStudyMesh).not.toHaveBeenCalled();
+  });
+
+  it("打开工程恢复：读回几何与网格；缺工作区时整体跳过", async () => {
+    const project = workspaceProject();
+    const geometry = useGeometryStore();
+    const { loadWorkspaceGeometry, restoreStudyMesh } =
+      await import("../../../src-web/api/project");
+    project.project!.geometries = [
+      { id: "geo-1", fileName: "a.stl", relativePath: "geometry/a.stl" },
+      { id: "geo-2", fileName: "b.stl", relativePath: "geometry/b.stl" },
+    ];
+    vi.mocked(loadWorkspaceGeometry).mockImplementation(async (_path, id) => makeSummary(id));
+    vi.mocked(restoreStudyMesh).mockResolvedValue(makeReport());
+
+    await geometry.restoreWorkspaceContent();
+    expect(loadWorkspaceGeometry).toHaveBeenCalledWith(
+      "/home/u/Documents/kairos/p/p.kairos",
+      "geo-1",
+      "geometry/a.stl",
+    );
+    expect(geometry.geometries.map((entry) => entry.geometryId)).toEqual(["geo-1", "geo-2"]);
+    expect(geometry.meshReports["geo-1"]).toBeDefined();
+
+    // 网格文件缺失（None）与无几何引用时不写报告，也不报错
+    vi.mocked(restoreStudyMesh).mockResolvedValue(null);
+    await geometry.restoreWorkspaceContent();
+    project.project!.geometries = [];
+    vi.mocked(loadWorkspaceGeometry).mockClear();
+    await geometry.restoreWorkspaceContent();
+    expect(loadWorkspaceGeometry).not.toHaveBeenCalled();
+
+    // 无工作区：不发起任何 IPC
+    project.project!.geometries = [
+      { id: "geo-1", fileName: "a.stl", relativePath: "geometry/a.stl" },
+    ];
+    vi.mocked(restoreStudyMesh).mockClear();
+    project.workspaceRoot = null;
+    await geometry.restoreWorkspaceContent();
+    expect(loadWorkspaceGeometry).not.toHaveBeenCalled();
+    expect(restoreStudyMesh).not.toHaveBeenCalled();
   });
 });

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import type { Pinia } from "pinia";
@@ -74,6 +74,7 @@ function projectFixture(overrides: Partial<Project> = {}): Project {
     createdMs: 1,
     updatedMs: 1,
     studies: [],
+    geometries: [],
     ...overrides,
   };
 }
@@ -198,5 +199,41 @@ describe("ProjectTree", () => {
     tree.createStudy();
 
     expect(useAppStore().error?.message).toBe("请先新建或打开项目。");
+  });
+});
+
+describe("工作区路径提示", () => {
+  let pinia: Pinia;
+
+  beforeEach(() => {
+    pinia = createPinia();
+    setActivePinia(pinia);
+    vi.resetAllMocks();
+  });
+
+  it("未保存 / 工作区 / 散装三种形态", async () => {
+    const project = useProjectStore();
+    const tree = useProjectTree();
+    expect(tree.workspaceHint.value).toBe("尚未保存");
+    expect(tree.workspacePath.value).toBe("");
+
+    project.project = projectFixture();
+    project.projectPath = "/home/u/Documents/kairos/p/p.kairos";
+    project.workspaceRoot = "/home/u/Documents/kairos/p";
+    expect(tree.workspaceHint.value).toBe("/home/u/Documents/kairos/p");
+    expect(tree.workspacePath.value).toBe("/home/u/Documents/kairos/p/p.kairos");
+
+    // 散装工程：无工作区根，提示里带完整路径
+    project.workspaceRoot = null;
+    expect(tree.workspaceHint.value).toBe("散装工程：/home/u/Documents/kairos/p/p.kairos");
+  });
+
+  it("工程树渲染工作区提示行", async () => {
+    const project = useProjectStore();
+    project.project = projectFixture();
+    project.projectPath = "/home/u/Documents/kairos/p/p.kairos";
+    project.workspaceRoot = "/home/u/Documents/kairos/p";
+    const wrapper = mount(ProjectTree, { global: { plugins: [pinia] } });
+    expect(wrapper.text()).toContain("/home/u/Documents/kairos/p");
   });
 });

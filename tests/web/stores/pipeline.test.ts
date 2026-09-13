@@ -147,6 +147,7 @@ function primeStores(options: { withGeometry?: boolean; withMesh?: boolean; stud
     createdMs: 1,
     updatedMs: 1,
     studies: [study],
+    geometries: [],
   };
   projectStore.activeStudyId = study.id;
 }
@@ -240,7 +241,8 @@ describe("pipeline store", () => {
 
     await pipeline.submitPipeline(4, "fill_pack");
 
-    expect(defaultCaseDir).toHaveBeenCalledWith("s-1");
+    // 散装工程：projectPath 为 null → case 目录回退应用数据目录
+    expect(defaultCaseDir).toHaveBeenCalledWith("s-1", null);
     expect(generateMoldingfoamCase).toHaveBeenCalledWith({
       geometryId: "g-1",
       caseDir: "/data/cases/s-1",

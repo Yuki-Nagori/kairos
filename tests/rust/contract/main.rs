@@ -12,7 +12,7 @@ use kairos_core::models::mesh::{
     DualDomainReport, MeshEstimate, MeshQuality, MeshRefinement, MeshingReport, MidplaneReport,
     RefineRegion,
 };
-use kairos_core::models::project::{Project, Study};
+use kairos_core::models::project::{GeometryRef, Project, Study};
 use kairos_core::models::results::{
     DeriveRequest, ResultCatalog, ScalarField, TimeStepMeta, VectorField,
 };
@@ -63,11 +63,32 @@ fn project_serializes_with_camel_case() {
         material_id: None,
     });
     let json = serde_json::to_value(&project).unwrap();
-    assert_eq!(json["schemaVersion"], 4);
+    assert_eq!(json["schemaVersion"], 5);
+    // v5：工作区几何引用（相对路径），空工程为空数组
+    assert_eq!(json["geometries"], json!([]));
     assert!(json["studies"][0]["process"].is_null());
     assert_eq!(json["name"], "演示项目");
     assert_eq!(json["studies"][0]["name"], "填充分析");
     assert_eq!(json["studies"][0]["createdMs"], 1001);
+}
+
+/// GeometryRef 的形状：camelCase 相对路径引用，前端工程树与之对应。
+#[test]
+fn geometry_ref_serializes_with_camel_case() {
+    let reference = GeometryRef {
+        id: "geom-1".into(),
+        file_name: "part.stl".into(),
+        relative_path: "geometry/part.stl".into(),
+    };
+    let json = serde_json::to_value(&reference).unwrap();
+    assert_eq!(
+        json,
+        json!({
+            "id": "geom-1",
+            "fileName": "part.stl",
+            "relativePath": "geometry/part.stl",
+        })
+    );
 }
 
 /// Material 的形状：camelCase 参数组，前端 `src-web/types.ts` 与之对应。

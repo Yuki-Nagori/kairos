@@ -50,7 +50,8 @@ export const usePipelineStore = defineStore("pipeline", {
       }
 
       await app.withBusy("正在准备求解…", async () => {
-        const caseDir = await defaultCaseDir(activeStudy.id);
+        // case 目录：工作区工程放 <工作区>/cases/<方案 id>，散装工程回退应用数据目录
+        const caseDir = await defaultCaseDir(activeStudy.id, projectStore.projectPath);
         const outcome = await generateMoldingfoamCase({
           geometryId: geometry.geometryId,
           caseDir,

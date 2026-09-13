@@ -10,6 +10,7 @@ pub mod gmsh;
 pub mod iges;
 pub mod jobs;
 pub mod material;
+pub mod mesh_store;
 pub mod meshing;
 pub mod midplane;
 pub mod moldingfoam;
@@ -25,6 +26,7 @@ pub mod system;
 pub mod thickness;
 pub mod vm;
 pub mod volume_field;
+pub mod workspace;
 
 #[cfg(test)]
 mod gap_tests;

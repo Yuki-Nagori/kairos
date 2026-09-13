@@ -72,6 +72,7 @@ function projectFixture(): Project {
         materialId: "m-1",
       },
     ],
+    geometries: [],
   };
 }
 

@@ -2,7 +2,16 @@
 /** 项目树面板：工程 + 方案层（点击切换活跃方案 / ＋ 新建）+ 次级分组。逻辑见 useProjectTree。 */
 import { useProjectTree } from "./useProjectTree";
 
-const { studies, groups, projectName, hasProject, selectStudy, createStudy } = useProjectTree();
+const {
+  studies,
+  groups,
+  projectName,
+  hasProject,
+  workspaceHint,
+  workspacePath,
+  selectStudy,
+  createStudy,
+} = useProjectTree();
 </script>
 
 <template>
@@ -18,6 +27,13 @@ const { studies, groups, projectName, hasProject, selectStudy, createStudy } = u
         >{{ projectName }}</span
       >
     </div>
+    <p
+      v-if="hasProject"
+      class="truncate border-b border-zinc-800 px-4 py-1 text-[10px] text-zinc-500"
+      :title="workspacePath"
+    >
+      {{ workspaceHint }}
+    </p>
     <div class="px-2 py-2">
       <!-- 方案层：工程视图的核心交互——点击方案切换活跃方案，＋ 新建方案 -->
       <template v-if="hasProject">

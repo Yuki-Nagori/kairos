@@ -15,6 +15,18 @@ export interface Project {
   createdMs: number;
   updatedMs: number;
   studies: Study[];
+  /** 工作区几何引用（相对路径）；散装工程为空数组。 */
+  geometries: GeometryRef[];
+}
+
+/** 对应 `kairos-core::models::project::GeometryRef`。 */
+export interface GeometryRef {
+  /** 会话内几何 id（跨会话稳定，与工程文件一致）。 */
+  id: string;
+  /** 归档后的文件名（展示用）。 */
+  fileName: string;
+  /** 相对工作区根的路径，如 `geometry/part.stl`。 */
+  relativePath: string;
 }
 
 /** 对应 `kairos-core::models::project::Study`。 */

@@ -65,6 +65,7 @@ function projectFixture(studies: Study[]): Project {
     createdMs: 1,
     updatedMs: 1,
     studies,
+    geometries: [],
   };
 }
 

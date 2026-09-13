@@ -65,8 +65,8 @@ enum PipelineAction {
         /// 指定 STL 路径（与 --sample-box 二选一）
         #[arg(long)]
         stl: Option<String>,
-        /// 输出 case 目录
-        #[arg(long, default_value = "kairos-case")]
+        /// 工作区目录（缺省 = 当前目录下的 workspace/；case 落在其 cases/ 子目录）
+        #[arg(long, default_value = "workspace")]
         out_dir: String,
         /// 并行核数
         #[arg(long, default_value_t = 4)]
@@ -392,7 +392,11 @@ fn run_pipeline(
     solve: bool,
     json: bool,
 ) -> kairos_core::error::Result<()> {
-    let out = Path::new(&out_dir);
+    // 工作区布局：case 写在 <工作区>/cases/<方案>/ 下，与桌面端同一套规则。
+    let workspace = Path::new(&out_dir);
+    let out = &services::workspace::cases_dir(workspace, "cli");
+    let out = out.as_path();
+    let case_dir_text = out.to_string_lossy().to_string();
     // 1. 几何
     let mesh_tri = match (sample_box, stl) {
         (true, _) => Ok(kairos_core::models::geometry::TriangleMesh::sample_box(
@@ -442,7 +446,8 @@ fn run_pipeline(
         services::process::fill_load_hints(volume_mm3, &process, Some(case_report.inlet_area_m2));
     if json {
         emit_json(&serde_json::json!({
-            "caseDir": out_dir,
+            "workspace": out_dir,
+            "caseDir": case_dir_text,
             "nodes": volume.nodes.len(),
             "tets": volume.tets.len(),
             "solved": solve,
@@ -459,7 +464,7 @@ fn run_pipeline(
     } else {
         println!(
             "case 已生成：{}（{} 节点 / {} 四面体）",
-            out_dir,
+            case_dir_text,
             volume.nodes.len(),
             volume.tets.len()
         );
@@ -493,7 +498,7 @@ fn run_pipeline(
     if solve {
         return run_solve(
             SolveAction::Submit {
-                case_dir: out_dir,
+                case_dir: case_dir_text.clone(),
                 cores,
             },
             json,

@@ -69,7 +69,7 @@ pub struct MidplaneMesh {
 }
 
 /// 单个四面体的质量指标。
-#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MeshQuality {
     /// 全场最小的「最长边 / 最短边」比（越接近 1 越好）。
@@ -81,7 +81,7 @@ pub struct MeshQuality {
 }
 
 /// 网格化报告：返回给前端的统计信息。
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MeshingReport {
     /// 生成引擎标识（voxel / gmsh）。

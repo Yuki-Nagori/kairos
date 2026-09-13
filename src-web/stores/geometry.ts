@@ -15,6 +15,12 @@ import {
   repairGeometry as apiRepairGeometry,
 } from "../api/geometry";
 import { pickOpenGeometryPath } from "../api/dialog";
+import {
+  archiveWorkspaceGeometry,
+  loadWorkspaceGeometry,
+  restoreStudyMesh,
+  saveStudyMesh,
+} from "../api/project";
 import type {
   DualDomainReport,
   GeometrySummary,
@@ -44,7 +50,7 @@ export const useGeometryStore = defineStore("geometry", {
     meshEstimates: {} as Record<string, MeshEstimate>,
   }),
   actions: {
-    /** 导入 STL：弹出文件对话框，解析检查后入列表。 */
+    /** 导入 STL：弹出文件对话框，解析检查后入列表；工作区工程顺带归档源文件。 */
     async importGeometry(): Promise<void> {
       const app = useAppStore();
       const path = await pickOpenGeometryPath();
@@ -60,7 +66,40 @@ export const useGeometryStore = defineStore("geometry", {
               ? await apiImportIges(path)
               : await importStl(path);
         this.geometries = [...this.geometries, summary];
+        await this.archiveIntoWorkspace(summary.geometryId, path);
       });
+    },
+    /** 几何归档进工作区（无工作区时为静默 no-op）：失败只记录，不影响导入本身。 */
+    async archiveIntoWorkspace(geometryId: string, sourcePath: string): Promise<void> {
+      const project = useProjectStore();
+      const projectPath = project.projectPath;
+      if (projectPath === null || project.workspaceRoot === null) {
+        return;
+      }
+      try {
+        const reference = await archiveWorkspaceGeometry(projectPath, geometryId, sourcePath);
+        project.upsertGeometryRef(reference);
+      } catch (error) {
+        useAppStore().setError(error);
+      }
+    },
+    /** 方案网格落盘（无工作区时为 no-op）：打开工程即可直接载入视口。 */
+    async persistStudyMesh(
+      geometryId: string,
+      targetSize: number,
+      refinement?: MeshRefinement,
+    ): Promise<void> {
+      const project = useProjectStore();
+      const projectPath = project.projectPath;
+      const studyId = project.activeStudyId;
+      if (projectPath === null || project.workspaceRoot === null || studyId === null) {
+        return;
+      }
+      try {
+        await saveStudyMesh(projectPath, studyId, geometryId, targetSize, refinement);
+      } catch (error) {
+        useAppStore().setError(error);
+      }
     },
     /** 从列表与会话缓存移除几何。 */
     async removeGeometryById(geometryId: string): Promise<void> {
@@ -85,6 +124,7 @@ export const useGeometryStore = defineStore("geometry", {
       await app.withBusy("正在生成 Gmsh 网格…", async () => {
         const report = await apiGenerateGmshMesh(geometryId, targetSize);
         this.meshReports = { ...this.meshReports, [geometryId]: report };
+        await this.persistStudyMesh(geometryId, targetSize);
       });
     },
     /** 为几何生成 3D 体积网格（体素 + 5-四面体保形分解），可选分级加密。 */
@@ -101,6 +141,7 @@ export const useGeometryStore = defineStore("geometry", {
       await app.withBusy("正在生成网格…", async () => {
         const report = await generateVolumeMesh(geometryId, targetSize, refinement);
         this.meshReports = { ...this.meshReports, [geometryId]: report };
+        await this.persistStudyMesh(geometryId, targetSize, refinement);
       });
     },
     /** 为几何生成双域网格：表面厚度配对 + 当前方案杆系（流道/浇口）耦合。 */
@@ -171,6 +212,32 @@ export const useGeometryStore = defineStore("geometry", {
       await app.withBusy("正在导入样例…", async () => {
         const summary = await importSampleBox(size);
         this.geometries = [...this.geometries, summary];
+      });
+    },
+    /** 工作区恢复：按工程里的相对路径读回几何，并把各方案的体积网格读回会话。
+     *  打开工作区工程后调用；散装工程（无工作区）直接返回。 */
+    async restoreWorkspaceContent(): Promise<void> {
+      const app = useAppStore();
+      const project = useProjectStore();
+      const path = project.projectPath;
+      if (path === null || project.project === null || project.workspaceRoot === null) {
+        return;
+      }
+      await app.withBusy("正在恢复工程数据…", async () => {
+        for (const reference of project.project!.geometries) {
+          const summary = await loadWorkspaceGeometry(path, reference.id, reference.relativePath);
+          this.geometries = [
+            ...this.geometries.filter((entry) => entry.geometryId !== summary.geometryId),
+            summary,
+          ];
+        }
+        for (const study of project.project!.studies) {
+          const report = await restoreStudyMesh(path, study.id);
+          const geometryId = project.project!.geometries[0]?.id;
+          if (report !== null && geometryId !== undefined) {
+            this.meshReports = { ...this.meshReports, [geometryId]: report };
+          }
+        }
       });
     },
     /** 导出视口渲染网格（体积边界面优先，否则 STL 表面）；失败进全局错误。 */

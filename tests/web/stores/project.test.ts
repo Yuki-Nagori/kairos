@@ -19,6 +19,16 @@ import type { CoolingChannel, Project, RunnerElement, Study } from "../../../src
 vi.mock("../../../src-web/api/system", () => ({ getSystemInfo: vi.fn() }));
 vi.mock("../../../src-web/api/project", () => ({
   createProject: vi.fn(),
+  defaultProjectPath: vi.fn(
+    async (name: string, file: string) => `/home/u/Documents/kairos/${name}/${file}.kairos`,
+  ),
+  workspaceRootOf: vi.fn(
+    async (path: string) => `/home/u/Documents/kairos/${path.split("/").at(-2)}`,
+  ),
+  archiveWorkspaceGeometry: vi.fn(),
+  loadWorkspaceGeometry: vi.fn(),
+  saveStudyMesh: vi.fn(),
+  restoreStudyMesh: vi.fn(),
   listRecentProjects: vi.fn(),
   loadProjectFile: vi.fn(),
   saveProjectFile: vi.fn(),
@@ -61,6 +71,7 @@ function makeProject(overrides: Partial<Project> = {}): Project {
     createdMs: 1,
     updatedMs: 1,
     studies: [],
+    geometries: [],
     ...overrides,
   };
 }
@@ -138,7 +149,7 @@ describe("project store", () => {
   });
 
   describe("project lifecycle", () => {
-    it("newProject replaces the open project and clears its path", async () => {
+    it("newProject 落在「文档/kairos/<工程名>/」并立即落盘", async () => {
       const app = useAppStore();
       const project = useProjectStore();
       project.projectPath = "/old.kairos";
@@ -147,12 +158,27 @@ describe("project store", () => {
         busyDuring.push(useAppStore().busy);
         return makeProject({ name });
       });
-      await project.newProject("新项目");
+      const { saveProjectFile } = await import("../../../src-web/api/project");
+
+      await project.newProject("新项目", "模具 A");
 
       expect(project.project?.name).toBe("新项目");
-      expect(project.projectPath).toBeNull();
+      // 用户可改文件名；默认名走 project
+      expect(project.projectPath).toBe("/home/u/Documents/kairos/新项目/模具 A.kairos");
+      expect(project.workspaceRoot).toBe("/home/u/Documents/kairos/新项目");
+      expect(saveProjectFile).toHaveBeenCalledWith(
+        "/home/u/Documents/kairos/新项目/模具 A.kairos",
+        project.project,
+      );
       expect(busyDuring).toEqual(["正在创建项目…"]);
       expect(app.busy).toBeNull();
+    });
+
+    it("newProject 未填文件名时用默认名 project", async () => {
+      const project = useProjectStore();
+      vi.mocked(createProject).mockResolvedValue(makeProject({ name: "新项目" }));
+      await project.newProject("新项目");
+      expect(project.projectPath).toBe("/home/u/Documents/kairos/新项目/project.kairos");
     });
 
     it("reports newProject failures and clears busy", async () => {
@@ -539,5 +565,51 @@ describe("project store", () => {
 
       expect(app.error?.message).toBe("校验崩溃");
     });
+  });
+});
+
+describe("工作区：打开工程恢复与根目录刷新", () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    vi.resetAllMocks();
+  });
+
+  it("打开工作区工程后刷新根目录；判定失败按散装处理", async () => {
+    const project = useProjectStore();
+    const { loadProjectFile, workspaceRootOf } = await import("../../../src-web/api/project");
+    vi.mocked(loadProjectFile).mockResolvedValue(makeProject({ name: "工作区工程" }));
+    vi.mocked(workspaceRootOf).mockResolvedValue("/home/u/Documents/kairos/p");
+
+    await project.openProjectAtPath("/home/u/Documents/kairos/p/p.kairos");
+    expect(project.workspaceRoot).toBe("/home/u/Documents/kairos/p");
+    expect(project.projectPath).toBe("/home/u/Documents/kairos/p/p.kairos");
+
+    // 工作区判定抛错：按散装处理，不打断打开流程
+    vi.mocked(workspaceRootOf).mockRejectedValue(new Error("无法定位文档目录"));
+    await project.openProjectAtPath("/home/u/Documents/kairos/p/p.kairos");
+    expect(project.workspaceRoot).toBeNull();
+    expect(useAppStore().error).toBeNull();
+  });
+
+  it("刷新根目录：无路径直接清空", async () => {
+    const project = useProjectStore();
+    project.projectPath = null;
+    await project.refreshWorkspaceRoot();
+    expect(project.workspaceRoot).toBeNull();
+  });
+
+  it("upsertGeometryRef：同 id 覆盖、不同 id 追加；无工程时忽略", () => {
+    const project = useProjectStore();
+    project.upsertGeometryRef({ id: "g-1", fileName: "a.stl", relativePath: "geometry/a.stl" });
+    expect(project.project).toBeNull();
+
+    project.project = makeProject({ geometries: [] });
+    project.upsertGeometryRef({ id: "g-1", fileName: "a.stl", relativePath: "geometry/a.stl" });
+    project.upsertGeometryRef({ id: "g-2", fileName: "b.stl", relativePath: "geometry/b.stl" });
+    expect(project.project?.geometries.map((entry) => entry.id)).toEqual(["g-1", "g-2"]);
+    // 覆盖时保留原有顺序（列表顺序即导入顺序，避免刷新后跳位）
+    project.upsertGeometryRef({ id: "g-1", fileName: "a2.stl", relativePath: "geometry/a2.stl" });
+    expect(project.project?.geometries.map((entry) => entry.fileName)).toEqual(["a2.stl", "b.stl"]);
+    expect(project.project?.geometries.map((entry) => entry.id)).toEqual(["g-1", "g-2"]);
   });
 });

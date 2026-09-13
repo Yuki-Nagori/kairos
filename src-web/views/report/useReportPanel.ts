@@ -8,6 +8,8 @@ import { useResultsStore } from "../../stores/results";
 import { buildReportHtml, type ReportOptions } from "../../utils/report";
 import { minMax } from "../../utils/stats";
 import { getSnapshotDataUrl } from "../../render/snapshot";
+import { saveReportToWorkspace } from "../../api/project";
+import { useAppStore } from "../../stores/app";
 
 export function useReportPanel() {
   const project = useProjectStore();
@@ -32,7 +34,18 @@ export function useReportPanel() {
     },
   });
 
-  function generateReport(): void {
+  /** 散装工程回退：浏览器下载（工作区不可用时的保底通路）。 */
+  function downloadReport(studyId: string, html: string): void {
+    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `kairos-report-${studyId}.html`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function generateReport(): Promise<void> {
     const currentProject = project.project;
     const materialsLib = materials.materials;
     const loadedField = results.loadedField;
@@ -139,13 +152,22 @@ export function useReportPanel() {
       },
       options,
     );
-    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `kairos-report-${study.id}.html`;
-    anchor.click();
-    URL.revokeObjectURL(url);
+    // 工作区工程：默认写进 <工作区>/reports/（自包含，随工程拷走）；
+    // 散装工程回退浏览器下载。
+    const app = useAppStore();
+    const projectPath = project.projectPath;
+    const fileName = `kairos-report-${study.name}.html`;
+    if (projectPath !== null && project.workspaceRoot !== null) {
+      try {
+        const path = await saveReportToWorkspace(projectPath, fileName, html);
+        status.value = `报告已保存：${path}`;
+        return;
+      } catch (error) {
+        // 写入失败（目录只读等）→ 回退下载，保证报告一定能拿到
+        app.setError(error);
+      }
+    }
+    downloadReport(study.id, html);
     status.value = "报告已生成并下载";
   }
 

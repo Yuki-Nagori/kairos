@@ -3,13 +3,15 @@ import { defineStore } from "pinia";
 import { getSystemInfo } from "../api/system";
 import {
   createProject,
+  defaultProjectPath,
   listRecentProjects,
   loadProjectFile,
   saveProjectFile,
+  workspaceRootOf,
 } from "../api/project";
 import { pickOpenProjectPath, pickSaveProjectPath } from "../api/dialog";
 import { checkMoldNetwork } from "../api/mold";
-import type { Project, RunnerKind, Study } from "../types";
+import type { Project, RunnerKind, Study, GeometryRef } from "../types";
 import { useAppStore } from "./app";
 import { useMaterialsStore } from "./materials";
 
@@ -29,6 +31,8 @@ export const useProjectStore = defineStore("project", {
     activeStudyId: null as string | null,
     /** 模具网络校验问题清单（校验按钮触发）。 */
     moldIssues: [] as string[],
+    /** 工作区根目录（工程位于「文档/kairos/<工程目录>/」内时非空）。 */
+    workspaceRoot: null as string | null,
   }),
   getters: {
     /** 当前活跃方案对象（未选择或不存在时为 null）。 */
@@ -53,12 +57,18 @@ export const useProjectStore = defineStore("project", {
       }
     },
     /** 新建空项目（仅内存，保存时才落盘）。 */
-    async newProject(name: string): Promise<void> {
+    async newProject(name: string, fileName = ""): Promise<void> {
       const app = useAppStore();
       await app.withBusy("正在创建项目…", async () => {
-        this.project = await createProject(name);
-        this.projectPath = null;
+        const project = await createProject(name);
+        // 工程目录：<文档目录>/kairos/<工程名>/<文件名>.kairos（文件名留空用默认名）。
+        const path = await defaultProjectPath(name, fileName.trim() === "" ? "project" : fileName);
+        this.project = project;
+        this.projectPath = path;
+        this.workspaceRoot = await workspaceRootOf(path);
         this.syncActiveStudy();
+        await saveProjectFile(path, project);
+        await this.refreshRecents();
       });
     },
     /** 弹出文件对话框选择并打开工程。 */
@@ -68,14 +78,44 @@ export const useProjectStore = defineStore("project", {
         await this.openProjectAtPath(path);
       }
     },
-    /** 打开指定路径的工程文件。 */
+    /** 打开指定路径的工程文件；工作区工程顺带恢复几何与网格（由调用方在
+     *  打开后调用 geometry store 的 restoreWorkspaceContent）。 */
     async openProjectAtPath(path: string): Promise<void> {
       const app = useAppStore();
       await app.withBusy("正在打开项目…", async () => {
         this.project = await loadProjectFile(path);
         this.projectPath = path;
         this.syncActiveStudy();
+        await this.refreshWorkspaceRoot();
       });
+    },
+    /** 刷新工作区根（打开 / 保存后调用）：散装工程为 null。 */
+    async refreshWorkspaceRoot(): Promise<void> {
+      const path = this.projectPath;
+      if (path === null) {
+        this.workspaceRoot = null;
+        return;
+      }
+      try {
+        this.workspaceRoot = await workspaceRootOf(path);
+      } catch {
+        // 工作区判定失败不影响工程本身（按散装处理）
+        this.workspaceRoot = null;
+      }
+    },
+    /** 登记几何引用（导入归档后调用）：同 id 就地覆盖（保持列表顺序），否则追加。 */
+    upsertGeometryRef(reference: GeometryRef): void {
+      if (this.project === null) {
+        return;
+      }
+      const index = this.project.geometries.findIndex((entry) => entry.id === reference.id);
+      const geometries = [...this.project.geometries];
+      if (index >= 0) {
+        geometries[index] = reference;
+      } else {
+        geometries.push(reference);
+      }
+      this.project = { ...this.project, geometries, updatedMs: Date.now() };
     },
     /** 装载工程后的活跃方案兜底：原选中项不在新工程里就落到首个方案。
      * 活跃方案是材料 / 工艺 / 浇注系统的编辑目标，缺了它整条工作流无处落笔。 */

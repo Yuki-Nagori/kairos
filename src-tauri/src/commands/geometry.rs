@@ -19,6 +19,7 @@ use kairos_core::services::fill_preview;
 use kairos_core::services::gate_location::{self, GateLocationParams};
 use kairos_core::services::geometry as geometry_service;
 use kairos_core::services::iges;
+use kairos_core::services::mesh_store::{self, MeshManifest};
 use kairos_core::services::meshing::{self, VolumeMeshParams};
 use kairos_core::services::midplane::{self, MidplaneParams};
 use kairos_core::services::moldingfoam;
@@ -26,6 +27,7 @@ use kairos_core::services::project::new_id;
 use kairos_core::services::render_mesh;
 use kairos_core::services::repair;
 use kairos_core::services::step;
+use kairos_core::services::workspace;
 use tauri::State;
 
 /// 单个导入几何的会话缓存。表面网格是唯一入口数据；体积 / 双域 / 中面
@@ -391,6 +393,124 @@ pub async fn preview_fill(
     })
     .await
     .map_err(|e| KairosError::internal(format!("填充预览任务失败：{e}")))?
+}
+
+/// 从工作区读回几何（打开工程时恢复导入态）：按归档文件名选解析器，
+/// 用工程文件里的**同一个 id** 登记会话，使方案 / 网格引用天然对齐。
+#[tauri::command]
+pub async fn load_workspace_geometry(
+    app: tauri::AppHandle,
+    store: State<'_, GeometryStore>,
+    project_path: String,
+    geometry_id: String,
+    relative_path: String,
+) -> Result<GeometrySummary> {
+    let documents = super::project::documents_dir(&app)?;
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let root = workspace::workspace_root(Path::new(&project_path), &documents)
+            .ok_or_else(|| KairosError::validation("当前工程不在工作区目录中。"))?;
+        let path = workspace::resolve(&root, &relative_path)?;
+        let extension = path
+            .extension()
+            .map(|value| value.to_string_lossy().to_lowercase())
+            .unwrap_or_default();
+        let mesh = match extension.as_str() {
+            "step" | "stp" => step::parse_step_file(&path)?,
+            "iges" | "igs" => iges::parse_iges_file(&path)?,
+            _ => geometry_service::parse_stl_file(&path)?,
+        };
+        let file_name = path
+            .file_name()
+            .map(|name| name.to_string_lossy().to_string())
+            .unwrap_or_else(|| relative_path.clone());
+        let summary = geometry_service::summarize(geometry_id.clone(), file_name.clone(), &mesh);
+        store.lock().insert(
+            geometry_id,
+            MeshSession {
+                mesh,
+                file_name,
+                volume: None,
+                dual: None,
+                midplane: None,
+            },
+        );
+        Ok(summary)
+    })
+    .await
+    .map_err(|e| KairosError::internal(format!("读取工作区几何失败：{e}")))?
+}
+
+/// 保存方案网格到工作区 `mesh/<方案 id>/`（打开工程时可免重算直接载入视口）。
+#[tauri::command]
+pub async fn save_study_mesh(
+    app: tauri::AppHandle,
+    store: State<'_, GeometryStore>,
+    project_path: String,
+    study_id: String,
+    geometry_id: String,
+    target_size: f64,
+    refinement: Option<MeshRefinement>,
+) -> Result<()> {
+    let documents = super::project::documents_dir(&app)?;
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let root = workspace::workspace_root(Path::new(&project_path), &documents)
+            .ok_or_else(|| KairosError::validation("当前工程不在工作区目录中。"))?;
+        let (volume, report) = {
+            let sessions = store.lock();
+            let session = sessions
+                .get(&geometry_id)
+                .ok_or_else(|| KairosError::not_found(format!("几何不存在：{geometry_id}")))?;
+            let volume = session
+                .volume
+                .clone()
+                .ok_or_else(|| KairosError::validation("该几何尚未生成体积网格。"))?;
+            let report = meshing::report(&volume);
+            (volume, report)
+        };
+        let dir = workspace::mesh_dir(&root, &study_id);
+        mesh_store::write(
+            &dir,
+            &MeshManifest {
+                version: 1,
+                geometry_id,
+                target_size,
+                refinement,
+                report,
+            },
+            &volume,
+        )
+    })
+    .await
+    .map_err(|e| KairosError::internal(format!("网格落盘任务失败：{e}")))?
+}
+
+/// 读回方案网格（打开工程时调用）：登记进会话并返回报告；文件缺失返回 None。
+#[tauri::command]
+pub async fn restore_study_mesh(
+    app: tauri::AppHandle,
+    store: State<'_, GeometryStore>,
+    project_path: String,
+    study_id: String,
+) -> Result<Option<MeshingReport>> {
+    let documents = super::project::documents_dir(&app)?;
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let root = workspace::workspace_root(Path::new(&project_path), &documents)
+            .ok_or_else(|| KairosError::validation("当前工程不在工作区目录中。"))?;
+        let stored = mesh_store::read(&workspace::mesh_dir(&root, &study_id))?;
+        let Some(stored) = stored else {
+            return Ok(None);
+        };
+        let geometry_id = stored.manifest.geometry_id.clone();
+        if let Some(session) = store.lock().get_mut(&geometry_id) {
+            session.volume = Some(stored.mesh);
+        }
+        Ok(Some(stored.manifest.report))
+    })
+    .await
+    .map_err(|e| KairosError::internal(format!("网格读回任务失败：{e}")))?
 }
 
 #[tauri::command]

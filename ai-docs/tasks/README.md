@@ -89,6 +89,7 @@
 | T55 | [T55-gate-location-analysis-done.md](T55-gate-location-analysis-done.md)                   | 浇口位置分析序列（免求解器启发式）               |
 | T59 | [T59-fill-preview-done.md](T59-fill-preview-done.md)                                       | 填充预览（免求解器覆盖估计）                     |
 | T84 | [T84-result-data-chain-remainder-done.md](T84-result-data-chain-remainder-done.md)         | 大结果数据链剩余（压缩/LRU/矢量场）              |
+| T75 | [T75-workspace-layout-done.md](T75-workspace-layout-done.md)                               | 工作区布局（工程自包含：几何/网格/case/结果）    |
 
 > T26/T27 落地后的增量打磨（系统窗口按钮、原生应用菜单、主题注入统一、
 > 品牌图标、emoji 清理、启动窗口位置）见 `ai-docs/timeline.md` 对应条目，
@@ -96,22 +97,21 @@
 
 ## 待开工 / 待验收任务
 
-| ID  | 文件                                                                                         | 任务                                          | 依赖        |
-| --- | -------------------------------------------------------------------------------------------- | --------------------------------------------- | ----------- |
-| T21 | [T21-milestone-review.md](T21-milestone-review.md)                                           | 里程碑评审循环（随里程碑触发）                | 随里程碑    |
-| T29 | [T29-real-solve-e2e.md](T29-real-solve-e2e.md)                                               | 真实求解端到端验证（OpenFOAM）                | T09–T11     |
-| T33 | [T33-updater-hardening.md](T33-updater-hardening.md)                                         | 发布加固：updater + CSP 收窄                  | T18         |
-| T48 | [T48-renderer-bench-realdevice.md](T48-renderer-bench-realdevice.md)                         | 渲染后端三端真机验收与 FPS 回填               | T39         |
-| T60 | [T60-import-log-and-pptx.md](T60-import-log-and-pptx.md)                                     | 导入日志流 + PPT 报告（低优先）               | T52         |
-| T65 | [T65-warpage-deformation-view.md](T65-warpage-deformation-view.md)                           | 翘曲变形可视化（视口位移显示）                | T64         |
-| T67 | [T67-coolant-channel-landing.md](T67-coolant-channel-landing.md)                             | 冷却水路落地（模壁 1D 通道 BC）               | T07/T66     |
-| T75 | [T75-workspace-layout.md](T75-workspace-layout.md)                                           | 工作区布局（工程自包含：几何/网格/case/结果） | T03/T06/T68 |
-| T82 | [T82-dualdomain-midplane-solve-consumption.md](T82-dualdomain-midplane-solve-consumption.md) | 双域 / 中面网格的求解消费                     | T41/T42     |
-| T83 | [T83-multi-cavity-runner-fill.md](T83-multi-cavity-runner-fill.md)                           | 多型腔与流道系统参与填充                      | T07/T61     |
-| T85 | [T85-linux-native-channel.md](T85-linux-native-channel.md)                                   | Linux 原生执行通道                            | T35/T36     |
-| T86 | [T86-special-process-modules.md](T86-special-process-modules.md)                             | 扩展工艺模块规划（GAIM/双色/微发泡）          | 上游能力    |
-| T87 | [T87-multiphysics-coupling.md](T87-multiphysics-coupling.md)                                 | 多物理场耦合规划（纤维取向/流固）             | T64/T81     |
-| T88 | [T88-e3-optimization-planning.md](T88-e3-optimization-planning.md)                           | 优化与自动化规划（DOE/寻优）                  | T29/T32     |
+| ID  | 文件                                                                                         | 任务                                 | 依赖     |
+| --- | -------------------------------------------------------------------------------------------- | ------------------------------------ | -------- |
+| T21 | [T21-milestone-review.md](T21-milestone-review.md)                                           | 里程碑评审循环（随里程碑触发）       | 随里程碑 |
+| T29 | [T29-real-solve-e2e.md](T29-real-solve-e2e.md)                                               | 真实求解端到端验证（OpenFOAM）       | T09–T11  |
+| T33 | [T33-updater-hardening.md](T33-updater-hardening.md)                                         | 发布加固：updater + CSP 收窄         | T18      |
+| T48 | [T48-renderer-bench-realdevice.md](T48-renderer-bench-realdevice.md)                         | 渲染后端三端真机验收与 FPS 回填      | T39      |
+| T60 | [T60-import-log-and-pptx.md](T60-import-log-and-pptx.md)                                     | 导入日志流 + PPT 报告（低优先）      | T52      |
+| T65 | [T65-warpage-deformation-view.md](T65-warpage-deformation-view.md)                           | 翘曲变形可视化（视口位移显示）       | T64      |
+| T67 | [T67-coolant-channel-landing.md](T67-coolant-channel-landing.md)                             | 冷却水路落地（模壁 1D 通道 BC）      | T07/T66  |
+| T82 | [T82-dualdomain-midplane-solve-consumption.md](T82-dualdomain-midplane-solve-consumption.md) | 双域 / 中面网格的求解消费            | T41/T42  |
+| T83 | [T83-multi-cavity-runner-fill.md](T83-multi-cavity-runner-fill.md)                           | 多型腔与流道系统参与填充             | T07/T61  |
+| T85 | [T85-linux-native-channel.md](T85-linux-native-channel.md)                                   | Linux 原生执行通道                   | T35/T36  |
+| T86 | [T86-special-process-modules.md](T86-special-process-modules.md)                             | 扩展工艺模块规划（GAIM/双色/微发泡） | 上游能力 |
+| T87 | [T87-multiphysics-coupling.md](T87-multiphysics-coupling.md)                                 | 多物理场耦合规划（纤维取向/流固）    | T64/T81  |
+| T88 | [T88-e3-optimization-planning.md](T88-e3-optimization-planning.md)                           | 优化与自动化规划（DOE/寻优）         | T29/T32  |
 
 > T29 优先级最高：样例方盒与真实 STL（46.7 万面）两条链路都已在 bundle v0.2.1
 > 上复跑——样例全程 exit 0 且结果可读；真实件导入/网格/case 通过，求解在固定

@@ -554,6 +554,7 @@ describe("runFillPreview（填充预览）", () => {
           materialId: null,
         },
       ],
+      geometries: [],
     };
     project.activeStudyId = "s-1";
 

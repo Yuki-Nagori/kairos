@@ -4,11 +4,19 @@ import { createPinia, setActivePinia } from "pinia";
 import type { Pinia } from "pinia";
 import ReportPanel from "../../../../src-web/views/report/ReportPanel.vue";
 import { registerSnapshot } from "../../../../src-web/render/snapshot";
+import { useAppStore } from "../../../../src-web/stores/app";
 import { useMaterialsStore } from "../../../../src-web/stores/materials";
 import { useProjectStore } from "../../../../src-web/stores/project";
 import { useGeometryStore } from "../../../../src-web/stores/geometry";
 import { useResultsStore } from "../../../../src-web/stores/results";
 import type { Material, Project, ScalarField, Study } from "../../../../src-web/types";
+
+const { saveReportToWorkspaceMock } = vi.hoisted(() => ({
+  saveReportToWorkspaceMock: vi.fn(),
+}));
+vi.mock("../../../../src-web/api/project", () => ({
+  saveReportToWorkspace: saveReportToWorkspaceMock,
+}));
 
 function materialFixture(): Material {
   return {
@@ -56,6 +64,7 @@ function projectFixture(studies: Study[]): Project {
     createdMs: 1,
     updatedMs: 1,
     studies,
+    geometries: [],
   };
 }
 
@@ -344,5 +353,59 @@ describe("ReportPanel", () => {
     expect(html).toContain("<h1>季度评审报告</h1>");
     expect(html).not.toContain("<h2>结果</h2>");
     expect(html).not.toContain("统计行");
+  });
+});
+
+describe("报告落盘位置", () => {
+  let pinia: Pinia;
+
+  beforeEach(() => {
+    pinia = createPinia();
+    setActivePinia(pinia);
+    vi.resetAllMocks();
+  });
+
+  it("工作区工程写进 <工作区>/reports 并显示路径；写入失败回退下载", async () => {
+    const project = useProjectStore();
+    project.project = projectFixture([]);
+    project.projectPath = "/home/u/Documents/kairos/p/p.kairos";
+    project.workspaceRoot = "/home/u/Documents/kairos/p";
+    saveReportToWorkspaceMock.mockResolvedValue("/home/u/Documents/kairos/p/reports/r.html");
+
+    const { useReportPanel } = await import("../../../../src-web/views/report/useReportPanel");
+    const panel = useReportPanel();
+    // 无项目/方案时先生成会被拦；这里直接给最小可生成状态
+    project.project = {
+      ...projectFixture([studyFixture()]),
+      geometries: [],
+    };
+    project.activeStudyId = "study-1";
+    await panel.generateReport();
+    expect(saveReportToWorkspaceMock).toHaveBeenCalledWith(
+      "/home/u/Documents/kairos/p/p.kairos",
+      "kairos-report-填充方案.html",
+      expect.stringContaining("<!doctype html>"),
+    );
+    expect(panel.status.value).toContain("报告已保存");
+    expect(useAppStore().error).toBeNull();
+
+    // 写入失败 → 回退下载路径（jsdom 里 anchor.click 是 no-op），错误仍被记录
+    saveReportToWorkspaceMock.mockRejectedValue(new Error("目录只读"));
+    await panel.generateReport();
+    expect(panel.status.value).toBe("报告已生成并下载");
+    expect(useAppStore().error?.message).toBe("目录只读");
+  });
+
+  it("散装工程直接下载", async () => {
+    const project = useProjectStore();
+    project.project = projectFixture([studyFixture()]);
+    project.activeStudyId = "study-1";
+    project.projectPath = "/tmp/loose.kairos";
+    project.workspaceRoot = null;
+    const { useReportPanel } = await import("../../../../src-web/views/report/useReportPanel");
+    const panel = useReportPanel();
+    await panel.generateReport();
+    expect(saveReportToWorkspaceMock).not.toHaveBeenCalled();
+    expect(panel.status.value).toBe("报告已生成并下载");
   });
 });

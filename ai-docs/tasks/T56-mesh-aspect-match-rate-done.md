@@ -3,6 +3,9 @@
 - 阶段：B1（网格质量度量）
 - 依赖：T06（体积网格）、T41（双域网格）
 - 优先级：P2（立即做；回流自 R1 全项目对照评审步骤 4）
+- 状态：**已实现**（2026-09-13）——`MeshingReport.aspectMax/aspectAvg`（最长棱 ÷
+  最短高）+ `DualDomainReport.matchRatio`；几何面板与报告展示，契约测试锁定。见
+  [T56 评审](../reviews/T56-review.md)
 
 ## 目标
 

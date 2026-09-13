@@ -67,6 +67,7 @@ function project(overrides: { materialId?: string | null; withProcess?: boolean 
         materialId: overrides.materialId ?? null,
       },
     ],
+    geometries: [],
   };
 }
 

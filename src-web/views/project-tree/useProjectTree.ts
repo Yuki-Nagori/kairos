@@ -48,6 +48,15 @@ export function useProjectTree() {
   /** 是否已打开工程：方案层与新建入口只在有工程时渲染。 */
   const hasProject = computed(() => project.project !== null);
 
+  /** 工作区提示：工程目录（自包含）或散装工程说明；鼠标悬停显示完整路径。 */
+  const workspaceHint = computed(() => {
+    if (project.projectPath === null) {
+      return "尚未保存";
+    }
+    return project.workspaceRoot ?? `散装工程：${project.projectPath}`;
+  });
+  const workspacePath = computed(() => project.projectPath ?? "");
+
   /** 点击方案 → 切换活跃方案（工程视图的方案选择）。 */
   function selectStudy(id: string): void {
     project.selectStudy(id);
@@ -58,5 +67,14 @@ export function useProjectTree() {
     project.addStudy(`方案 ${studies.value.length + 1}`);
   }
 
-  return { studies, groups, projectName, hasProject, selectStudy, createStudy };
+  return {
+    studies,
+    groups,
+    projectName,
+    hasProject,
+    workspaceHint,
+    workspacePath,
+    selectStudy,
+    createStudy,
+  };
 }

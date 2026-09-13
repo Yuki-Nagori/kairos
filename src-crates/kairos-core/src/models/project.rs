@@ -9,7 +9,8 @@ use crate::models::runners::{CoolingChannel, RunnerElement};
 /// v1→v2：Study 新增流道 / 浇口与冷却水路字段（serde default 迁移，旧文件补空集合）。
 /// v2→v3：Study 新增工艺设置（Option，serde default 迁移为 None）。
 /// v3→v4：Study 新增材料引用 material_id（Option，serde default 迁移为 None）。
-pub const SCHEMA_VERSION: u32 = 4;
+/// v4→v5：Project 新增几何引用 geometries（工作区相对路径，serde default 迁移为空集合）。
+pub const SCHEMA_VERSION: u32 = 5;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -20,6 +21,46 @@ pub struct Project {
     pub created_ms: u64,
     pub updated_ms: u64,
     pub studies: Vec<Study>,
+    /// 工程内的几何引用（工作区相对路径；散装工程为空，几何只活在会话内存里）。
+    #[serde(default)]
+    pub geometries: Vec<GeometryRef>,
+}
+
+/// 工程内的几何引用：文件在工作区 `geometry/` 下的相对路径。
+/// 绝对路径不写入工程文件——换机器 / 换盘即失效。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GeometryRef {
+    /// 会话内几何 id（导入时生成，跨会话稳定地标识同一份几何）。
+    pub id: String,
+    /// 展示用文件名（归档后的文件名）。
+    pub file_name: String,
+    /// 相对工作区根的路径，如 `geometry/part.stl`。
+    pub relative_path: String,
+}
+
+impl Project {
+    /// 登记几何引用：同 id 覆盖（重复导入同名文件时更新引用），否则追加。
+    pub fn upsert_geometry(&mut self, reference: GeometryRef, now_ms: u64) {
+        match self
+            .geometries
+            .iter_mut()
+            .find(|existing| existing.id == reference.id)
+        {
+            Some(existing) => *existing = reference,
+            None => self.geometries.push(reference),
+        }
+        self.updated_ms = now_ms;
+    }
+
+    /// 移除几何引用（几何被移除时同步清理）。
+    pub fn remove_geometry(&mut self, geometry_id: &str, now_ms: u64) {
+        let before = self.geometries.len();
+        self.geometries.retain(|entry| entry.id != geometry_id);
+        if self.geometries.len() != before {
+            self.updated_ms = now_ms;
+        }
+    }
 }
 
 /// 最近打开的工程记录（适配层持久化在应用数据目录，随命令返回前端）。
@@ -60,6 +101,7 @@ impl Project {
             created_ms: now_ms,
             updated_ms: now_ms,
             studies: Vec::new(),
+            geometries: Vec::new(),
         }
     }
 
@@ -132,5 +174,46 @@ mod tests {
     #[test]
     fn new_project_uses_current_schema() {
         assert_eq!(project().schema_version, SCHEMA_VERSION);
+    }
+
+    #[test]
+    fn upsert_geometry_replaces_same_id_and_removes() {
+        let mut p = project();
+        let first = GeometryRef {
+            id: "g-1".into(),
+            file_name: "part.stl".into(),
+            relative_path: "geometry/part.stl".into(),
+        };
+        p.upsert_geometry(first.clone(), 1001);
+        assert_eq!(p.geometries.len(), 1);
+        assert_eq!(p.updated_ms, 1001);
+
+        // 同 id 覆盖（重新导入同名文件）
+        let updated = GeometryRef {
+            file_name: "part-v2.stl".into(),
+            relative_path: "geometry/g-1-part-v2.stl".into(),
+            ..first
+        };
+        p.upsert_geometry(updated, 1002);
+        assert_eq!(p.geometries.len(), 1);
+        assert_eq!(p.geometries[0].file_name, "part-v2.stl");
+
+        // 不同 id 追加；移除按 id
+        p.upsert_geometry(
+            GeometryRef {
+                id: "g-2".into(),
+                file_name: "other.stl".into(),
+                relative_path: "geometry/other.stl".into(),
+            },
+            1003,
+        );
+        assert_eq!(p.geometries.len(), 2);
+        p.remove_geometry("g-1", 1004);
+        assert_eq!(p.geometries.len(), 1);
+        assert_eq!(p.geometries[0].id, "g-2");
+        assert_eq!(p.updated_ms, 1004);
+        // 不存在的 id：时间戳不变
+        p.remove_geometry("ghost", 1005);
+        assert_eq!(p.updated_ms, 1004);
     }
 }

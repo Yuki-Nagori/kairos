@@ -65,6 +65,7 @@ function makeProject(studies: Project["studies"]): Project {
     createdMs: 1,
     updatedMs: 1,
     studies,
+    geometries: [],
   };
 }
 

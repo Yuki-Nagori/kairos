@@ -183,6 +183,7 @@ function primeStudy(): void {
         materialId: null,
       },
     ],
+    geometries: [],
   };
   project.activeStudyId = "s-1";
 }
