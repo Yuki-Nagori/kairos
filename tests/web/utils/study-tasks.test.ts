@@ -95,6 +95,7 @@ function input(overrides: Partial<StudyTasksInput> = {}): StudyTasksInput {
     materials: { builtin: [], custom: [] },
     jobs: [],
     resultCatalog: null,
+    gateLocationRan: false,
     ...overrides,
   };
 }
@@ -106,6 +107,31 @@ function byId(tasks: ReturnType<typeof evaluateStudyTasks>, id: string) {
   }
   return task;
 }
+
+describe("浇口位置分析任务", () => {
+  it("有网格后出现；未跑为待办、跑过为完成，且不参与提交前置", () => {
+    const ready = input({
+      geometries: [geometry()],
+      meshReports: { "g-1": { elementCount: 5000 } },
+      project: project({ materialId: "m-1", withProcess: true }),
+      materials: { builtin: [material("m-1", "PP 参考")], custom: [] },
+    });
+    const todo = byId(evaluateStudyTasks(ready), "gate-location");
+    expect(todo.state).toBe("todo");
+    expect(todo.hint).toContain("不需要浇口与工艺");
+    // 未跑浇口位置分析也能提交求解（该任务不是前置）
+    expect(prerequisitesReady(evaluateStudyTasks(ready))).toBe(true);
+
+    const done = byId(evaluateStudyTasks({ ...ready, gateLocationRan: true }), "gate-location");
+    expect(done.state).toBe("done");
+    expect(done.detail).toBe("已给出适合度场与建议");
+    expect(done.hint).toBeNull();
+
+    // 无网格时不出现（没有可评分的单元）
+    const empty = evaluateStudyTasks(input({ geometries: [geometry()] }));
+    expect(empty.find((task) => task.id === "gate-location")).toBeUndefined();
+  });
+});
 
 describe("evaluateStudyTasks（方案任务序列）", () => {
   it("空状态：全部待办，任务按 Moldflow 执行顺序排列", () => {

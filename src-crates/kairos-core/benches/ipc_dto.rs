@@ -2,8 +2,10 @@
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use kairos_core::error::KairosError;
+use kairos_core::models::geometry::TriangleMesh;
 use kairos_core::models::system::SystemInfo;
-use kairos_core::services::system;
+use kairos_core::services::gate_location::{self, GateLocationParams};
+use kairos_core::services::{meshing, system};
 
 fn bench_system_info_serialize(c: &mut Criterion) {
     let info: SystemInfo = system::system_info("kairos", env!("CARGO_PKG_VERSION"));
@@ -19,5 +21,25 @@ fn bench_error_serialize(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, bench_system_info_serialize, bench_error_serialize);
+/// 浇口位置分析：62.5 万四面体网格上的候选遍历耗时（预算见 ai-docs/perf-budget.md）。
+fn bench_gate_location(c: &mut Criterion) {
+    let mesh = meshing::generate(
+        &TriangleMesh::sample_box(50.0),
+        &meshing::VolumeMeshParams {
+            refinement: None,
+            target_size: 1.0,
+        },
+    )
+    .expect("mesh");
+    c.bench_function("gate_location_625k_tets", |b| {
+        b.iter(|| gate_location::analyze(&mesh, &GateLocationParams::default()).expect("analyze"))
+    });
+}
+
+criterion_group!(
+    benches,
+    bench_system_info_serialize,
+    bench_error_serialize,
+    bench_gate_location
+);
 criterion_main!(benches);

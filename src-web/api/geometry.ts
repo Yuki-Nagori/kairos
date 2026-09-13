@@ -2,6 +2,7 @@
 import { invokeCommand } from "../utils/ipc";
 import type {
   DualDomainReport,
+  GateLocationReport,
   GeometrySummary,
   MeshEstimate,
   MeshingReport,
@@ -39,6 +40,11 @@ export function estimateVolumeMesh(
   engine: string,
 ): Promise<MeshEstimate> {
   return invokeCommand("estimate_volume_mesh", { geometryId, targetSize, refinement, engine });
+}
+
+/** 浇口位置分析：轻量流动启发式评分（适合度场 + Top-N 建议）。 */
+export function analyzeGateLocation(geometryId: string, topN: number): Promise<GateLocationReport> {
+  return invokeCommand("analyze_gate_location", { geometryId, topN });
 }
 
 /** 导入内置样例立方体（首次使用引导）。 */

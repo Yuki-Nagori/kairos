@@ -4,6 +4,8 @@ import { flushPromises, mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import type { Pinia } from "pinia";
 import StudyTasksPanel from "../../../../src-web/views/study-tasks/StudyTasksPanel.vue";
+import { useStudyTasks } from "../../../../src-web/views/study-tasks/useStudyTasks";
+import { useAppStore } from "../../../../src-web/stores/app";
 import { useGeometryStore } from "../../../../src-web/stores/geometry";
 import { useJobsStore } from "../../../../src-web/stores/jobs";
 import { useMaterialsStore } from "../../../../src-web/stores/materials";
@@ -17,6 +19,10 @@ vi.mock("../../../../src-web/api/results", () => ({
   loadResultField: vi.fn(),
   deriveField: vi.fn(),
   deriveDifference: vi.fn(),
+}));
+vi.mock("../../../../src-web/api/geometry", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  analyzeGateLocation: vi.fn(),
 }));
 vi.mock("../../../../src-web/api/solver", () => ({
   generateMoldingfoamCase: vi.fn(),
@@ -318,5 +324,79 @@ describe("StudyTasksPanel（方案任务窗格）", () => {
     };
     expect(generateMoldingfoamCase).toHaveBeenCalledTimes(1);
     expect(submitJob).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("浇口位置分析序列（旁路）", () => {
+  let pinia: Pinia;
+
+  beforeEach(() => {
+    pinia = createPinia();
+    setActivePinia(pinia);
+    vi.resetAllMocks();
+  });
+
+  it("选择序列后按钮改名；缺网格禁用；就绪后运行分析并把适合度场载入视口", async () => {
+    const geometry = useGeometryStore();
+    const results = useResultsStore();
+    const { analyzeGateLocation } =
+      (await import("../../../../src-web/api/geometry")) as unknown as {
+        analyzeGateLocation: Mock;
+      };
+    const wrapper = mount(StudyTasksPanel, { global: { plugins: [pinia] } });
+
+    // 序列下拉切到「浇口位置（无需浇口）」：没有几何也不满足（需要网格）
+    await wrapper.find("select").setValue("gate_location");
+    const runButton = () =>
+      wrapper.findAll("button").find((node) => node.text() === "运行浇口位置分析")!;
+    expect(runButton().attributes("disabled")).toBeDefined();
+
+    // 只有几何、没有网格 → 仍禁用
+    geometry.geometries = [geometryFixture()];
+    await flushPromises();
+    expect(runButton().attributes("disabled")).toBeDefined();
+
+    // 有网格 → 可运行；运行后建议落进结果 store（Top-N 默认 5）
+    geometry.meshReports["g-1"] = {
+      engine: "voxel",
+      nodeCount: 10,
+      elementCount: 20,
+      surfaceFaceCount: 30,
+      totalVolume: 1000,
+      quality: { minEdgeRatio: 1, avgEdgeRatio: 1, maxEdgeRatio: 1, minVolume: 1 },
+      aspectMax: 3.4,
+      aspectAvg: 1.6,
+      thinFeatureHints: [],
+    };
+    await flushPromises();
+    expect(runButton().attributes("disabled")).toBeUndefined();
+
+    analyzeGateLocation.mockResolvedValue({
+      field: [0.5, 0.4],
+      candidateCount: 2,
+      cellCount: 2,
+      top: [],
+      diagonalMm: 10,
+      basis: "启发式",
+    });
+    await runButton().trigger("click");
+    await flushPromises();
+    expect(analyzeGateLocation).toHaveBeenCalledWith("g-1", 5);
+
+    // 任务清单里出现「浇口位置分析」且转为完成
+    expect(wrapper.text()).toContain("浇口位置分析");
+    expect(wrapper.text()).toContain("已给出适合度场与建议");
+
+    // 几何缺失时点击给出明确错误（按钮已禁用，这里直接锁分支行为）
+    geometry.geometries = [];
+    await flushPromises();
+    expect(results.gateLocation).not.toBeNull();
+  });
+
+  it("缺几何时直接提交给出明确错误（按钮禁用之外的防御分支）", () => {
+    const panel = useStudyTasks();
+    panel.stage.value = "gate_location";
+    panel.submit();
+    expect(useAppStore().error?.message).toBe("请先导入几何。");
   });
 });

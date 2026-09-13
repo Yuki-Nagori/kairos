@@ -86,6 +86,7 @@
 | T58 | [T58-viewport-gate-picking-done.md](T58-viewport-gate-picking-done.md)                     | 视口拾取放置浇口 + 节点吸附                      |
 | T72 | [T72-inlet-portal-area-done.md](T72-inlet-portal-area-done.md)                             | 浇口入口面口径与有效面积回显                     |
 | T69 | [T69-terminology-unification-done.md](T69-terminology-unification-done.md)                 | 术语统一：「方案 / 研究」混用收口                |
+| T55 | [T55-gate-location-analysis-done.md](T55-gate-location-analysis-done.md)                   | 浇口位置分析序列（免求解器启发式）               |
 
 > T26/T27 落地后的增量打磨（系统窗口按钮、原生应用菜单、主题注入统一、
 > 品牌图标、emoji 清理、启动窗口位置）见 `ai-docs/timeline.md` 对应条目，
@@ -99,7 +100,6 @@
 | T29 | [T29-real-solve-e2e.md](T29-real-solve-e2e.md)                                               | 真实求解端到端验证（OpenFOAM）                | T09–T11     |
 | T33 | [T33-updater-hardening.md](T33-updater-hardening.md)                                         | 发布加固：updater + CSP 收窄                  | T18         |
 | T48 | [T48-renderer-bench-realdevice.md](T48-renderer-bench-realdevice.md)                         | 渲染后端三端真机验收与 FPS 回填               | T39         |
-| T55 | [T55-gate-location-analysis.md](T55-gate-location-analysis.md)                               | 浇口位置分析序列（P1，最大缺口）              | T11/T44     |
 | T59 | [T59-fill-preview.md](T59-fill-preview.md)                                                   | 填充预览（依赖 T55）                          | T55         |
 | T60 | [T60-import-log-and-pptx.md](T60-import-log-and-pptx.md)                                     | 导入日志流 + PPT 报告（低优先）               | T52         |
 | T65 | [T65-warpage-deformation-view.md](T65-warpage-deformation-view.md)                           | 翘曲变形可视化（视口位移显示）                | T64         |

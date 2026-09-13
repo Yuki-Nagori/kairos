@@ -9,13 +9,17 @@ import {
   listResultTimes,
   loadResultField,
 } from "../../../src-web/api/results";
-import type { ResultCatalog, ScalarField } from "../../../src-web/types";
+import { analyzeGateLocation } from "../../../src-web/api/geometry";
+import type { GateLocationReport, ResultCatalog, ScalarField } from "../../../src-web/types";
 
 vi.mock("../../../src-web/api/results", () => ({
   listResultTimes: vi.fn(),
   loadResultField: vi.fn(),
   deriveField: vi.fn(),
   deriveDifference: vi.fn(),
+}));
+vi.mock("../../../src-web/api/geometry", () => ({
+  analyzeGateLocation: vi.fn(),
 }));
 vi.mock("../../../src-web/utils/download", () => ({ downloadTextFile: vi.fn() }));
 
@@ -434,5 +438,70 @@ describe("results store", () => {
 
       expect(app.error?.message).toBe("差值失败");
     });
+  });
+});
+
+describe("runGateLocation（浇口位置分析）", () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    vi.resetAllMocks();
+  });
+
+  const report: GateLocationReport = {
+    field: [0.9, 0.5, 0.1],
+    candidateCount: 2,
+    cellCount: 3,
+    top: [
+      {
+        cell: 0,
+        node: 4,
+        center: [1, 2, 3],
+        score: 0.9,
+        maxFlowLengthMm: 12.5,
+        thicknessMm: 2,
+      },
+    ],
+    diagonalMm: 17.3,
+    basis: "流动长度均衡 × 壁厚可达性（候选限表面单元；启发式建议，非求解结果）",
+  };
+
+  it("运行后报告入状态，适合度场直接作为当前场", async () => {
+    vi.mocked(analyzeGateLocation).mockResolvedValue(report);
+    const app = useAppStore();
+    const results = useResultsStore();
+    const busyDuring: (string | null)[] = [];
+    vi.mocked(analyzeGateLocation).mockImplementation(async () => {
+      busyDuring.push(useAppStore().busy);
+      return report;
+    });
+
+    await results.runGateLocation("g-1", 3);
+
+    expect(analyzeGateLocation).toHaveBeenCalledWith("g-1", 3);
+    expect(busyDuring).toEqual(["正在分析浇口位置…"]);
+    expect(results.gateLocation).toEqual(report);
+    expect(results.loadedField).toEqual({
+      field: "浇口适合度",
+      timeDir: "—",
+      timeS: 0,
+      values: report.field,
+      isMagnitude: false,
+      complete: true,
+    });
+    expect(app.busy).toBeNull();
+    expect(app.error).toBeNull();
+  });
+
+  it("默认 Top-N 为 5；失败进全局错误且不覆盖已有报告", async () => {
+    vi.mocked(analyzeGateLocation).mockResolvedValue(report);
+    const results = useResultsStore();
+    await results.runGateLocation("g-1");
+    expect(analyzeGateLocation).toHaveBeenCalledWith("g-1", 5);
+
+    const app = useAppStore();
+    vi.mocked(analyzeGateLocation).mockRejectedValue(new Error("尚未生成体积网格"));
+    await results.runGateLocation("g-1");
+    expect(app.error?.message).toBe("尚未生成体积网格");
+    expect(results.gateLocation).toEqual(report);
   });
 });

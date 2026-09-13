@@ -205,6 +205,34 @@ export interface CaseOutcome {
   warnings: string[];
 }
 
+/** 对应 `kairos-core::models::analysis::GateCandidate`。 */
+export interface GateCandidate {
+  /** 候选单元（与适合度场同域）。 */
+  cell: number;
+  /** 建议落点节点。 */
+  node: number;
+  /** 建议落点坐标（mm）。 */
+  center: [number, number, number];
+  /** 归一化适合度（0~1）。 */
+  score: number;
+  /** 最长流动距离（mm）。 */
+  maxFlowLengthMm: number;
+  /** 局部厚度代理（mm）。 */
+  thicknessMm: number;
+}
+
+/** 对应 `kairos-core::models::analysis::GateLocationReport`。 */
+export interface GateLocationReport {
+  /** 逐单元适合度（0~1）。 */
+  field: number[];
+  candidateCount: number;
+  cellCount: number;
+  top: GateCandidate[];
+  diagonalMm: number;
+  /** 评分口径说明。 */
+  basis: string;
+}
+
 /** 对应 `kairos-core::models::mesh::MeshEstimate`。 */
 export interface MeshEstimate {
   /** 引擎标识（voxel / gmsh）。 */

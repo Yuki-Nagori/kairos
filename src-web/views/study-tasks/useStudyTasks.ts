@@ -11,6 +11,7 @@ import { useAppStore } from "../../stores/app";
 import { useJobsStore } from "../../stores/jobs";
 import { usePipelineStore } from "../../stores/pipeline";
 import { useProjectStore } from "../../stores/project";
+import { useGeometryStore } from "../../stores/geometry";
 import { useResultsStore } from "../../stores/results";
 import type { AnalysisStage } from "../../types";
 import { useStudyTasksSnapshot } from "../../composables/useStudyTasksSnapshot";
@@ -39,13 +40,29 @@ export function useStudyTasks() {
   const pipeline = usePipelineStore();
   const project = useProjectStore();
   const results = useResultsStore();
+  const geometryStore = useGeometryStore();
   const { tasks } = useStudyTasksSnapshot();
 
   // 提交表单：核数留空时按 2 核提交。
   const stage = ref("fill");
   const cores = ref("");
 
-  const submitDisabled = computed(() => !prerequisitesReady(tasks.value) || app.busy !== null);
+  /** 浇口位置分析：旁路序列，只需几何 + 网格（不需要浇口 / 材料 / 工艺）。 */
+  const gateLocationStage = "gate_location";
+  const selectedGateLocation = computed(() => stage.value === gateLocationStage);
+  const gateLocationReady = computed(() => {
+    const first = geometryStore.geometries[0];
+    return first !== undefined && geometryStore.meshReports[first.geometryId] !== undefined;
+  });
+  const submitDisabled = computed(() => {
+    if (selectedGateLocation.value) {
+      return !gateLocationReady.value || app.busy !== null;
+    }
+    return !prerequisitesReady(tasks.value) || app.busy !== null;
+  });
+  const submitLabel = computed(() =>
+    selectedGateLocation.value ? "运行浇口位置分析" : "提交求解作业",
+  );
 
   function openTask(task: StudyTask): void {
     // 双击任务 → 切换到对应阶段
@@ -53,6 +70,15 @@ export function useStudyTasks() {
   }
 
   function submit(): void {
+    const first = geometryStore.geometries[0];
+    if (selectedGateLocation.value) {
+      if (first === undefined) {
+        app.setError("请先导入几何。");
+        return;
+      }
+      void results.runGateLocation(first.geometryId);
+      return;
+    }
     void pipeline.submitPipeline(Number(cores.value) || 2, stage.value as AnalysisStage);
   }
 
@@ -112,6 +138,7 @@ export function useStudyTasks() {
     submit,
     stage,
     cores,
+    submitLabel,
     menu,
     openMenu,
     closeMenu,

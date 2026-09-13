@@ -17,6 +17,9 @@ const {
   runnerStart,
   runnerEnd,
   addRunner,
+  gateSuggestions,
+  gateLocationBasis,
+  applySuggestion,
   placementActive,
   placementContinuous,
   toggleContinuous,
@@ -126,6 +129,21 @@ const {
         </div>
         <p v-if="study.runnerElements.length === 0" class="text-xs text-zinc-500">尚无单元。</p>
       </template>
+    </div>
+
+    <div v-if="gateSuggestions.length > 0" class="space-y-1 rounded-lg border border-zinc-800 p-2">
+      <p class="text-[11px] font-semibold tracking-wide text-zinc-400">浇口位置建议（Top-N）</p>
+      <div
+        v-for="suggestion in gateSuggestions"
+        :key="suggestion.cell"
+        class="flex items-center justify-between gap-2 text-[11px]"
+      >
+        <span class="text-zinc-400">{{ suggestion.text }}</span>
+        <UiButton :disabled="formDisabled" @click="applySuggestion(suggestion)">设为浇口</UiButton>
+      </div>
+      <p v-if="gateLocationBasis !== null" class="text-[10px] text-zinc-600">
+        {{ gateLocationBasis }}
+      </p>
     </div>
 
     <p class="text-[11px] font-semibold tracking-wide text-zinc-400">

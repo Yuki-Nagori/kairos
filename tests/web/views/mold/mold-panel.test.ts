@@ -7,6 +7,7 @@ import MoldPanel from "../../../../src-web/views/mold/MoldPanel.vue";
 import { useMoldPanel } from "../../../../src-web/views/mold/useMoldPanel";
 import { useAppStore } from "../../../../src-web/stores/app";
 import { useProjectStore } from "../../../../src-web/stores/project";
+import { useResultsStore } from "../../../../src-web/stores/results";
 import { useViewportStore } from "../../../../src-web/stores/viewport";
 import { checkMoldNetwork } from "../../../../src-web/api/mold";
 import type { CoolingChannel, Project, RunnerElement, Study } from "../../../../src-web/types";
@@ -356,5 +357,73 @@ describe("MoldPanel：视口拾取放置", () => {
     expect(wrapper.text()).toContain("请先创建或选择一个方案。");
     // 直接调用也不进入（按钮已禁用，这里锁定状态机不被绕过）。
     expect(viewport.placement.active).toBe(false);
+  });
+});
+
+describe("MoldPanel：浇口位置建议", () => {
+  let pinia: Pinia;
+
+  beforeEach(() => {
+    pinia = createPinia();
+    setActivePinia(pinia);
+    vi.resetAllMocks();
+  });
+
+  it("无报告不显示建议区；有报告时列出 Top-N 并可一键落浇口", async () => {
+    const project = useProjectStore();
+    project.project = projectFixture([studyFixture()]);
+    project.activeStudyId = "study-1";
+    const results = useResultsStore();
+    const wrapper = mount(MoldPanel, { global: { plugins: [pinia] } });
+    expect(wrapper.text()).not.toContain("浇口位置建议");
+    // 无报告时口径文案为 null，建议列表为空（模板 v-if 之外的分支直接锁）
+    const panel = useMoldPanel();
+    expect(panel.gateLocationBasis.value).toBeNull();
+    expect(panel.gateSuggestions.value).toEqual([]);
+
+    results.gateLocation = {
+      field: [0.9, 0.4],
+      candidateCount: 2,
+      cellCount: 2,
+      top: [
+        {
+          cell: 7,
+          node: 12,
+          center: [5, 5, 5],
+          score: 0.92,
+          maxFlowLengthMm: 11.2,
+          thicknessMm: 2.5,
+        },
+      ],
+      diagonalMm: 17.3,
+      basis: "流动长度均衡 × 壁厚可达性（启发式建议，非求解结果）",
+    };
+    await nextTick();
+    expect(wrapper.text()).toContain("浇口位置建议（Top-N）");
+    expect(wrapper.text()).toContain("#7 · 适合度 92% · 流动长 11.2 mm · 厚 2.50 mm");
+    expect(wrapper.text()).toContain("启发式建议");
+
+    // 一键落浇口：直径 8 → 起点沿 x 回退半径 4 mm
+    await wrapper.findAll("input")[0]!.setValue("8");
+    await findButton(wrapper, "设为浇口").trigger("click");
+    const study = useProjectStore().activeStudy;
+    expect(study?.runnerElements).toHaveLength(1);
+    expect(study?.runnerElements[0]).toMatchObject({
+      kind: "gate",
+      diameterMm: 8,
+      start: [1, 5, 5],
+      end: [5, 5, 5],
+    });
+    expect(wrapper.text()).toContain("浇口 re-");
+
+    // 直径填 0（非法）：回退 6 mm 直径 / 半径 3 mm，起点回退 3 mm
+    await wrapper.findAll("input")[0]!.setValue("0");
+    await findButton(wrapper, "设为浇口").trigger("click");
+    expect(useProjectStore().activeStudy?.runnerElements[1]).toMatchObject({
+      kind: "gate",
+      diameterMm: 6,
+      start: [2, 5, 5],
+      end: [5, 5, 5],
+    });
   });
 });

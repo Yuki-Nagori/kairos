@@ -6,6 +6,7 @@
 import { computed, reactive, ref, watch } from "vue";
 import { useAppStore } from "../../stores/app";
 import { useProjectStore } from "../../stores/project";
+import { useResultsStore } from "../../stores/results";
 import { useViewportStore } from "../../stores/viewport";
 import type { CoolingChannel, RunnerElement, RunnerKind } from "../../types";
 
@@ -26,6 +27,7 @@ export function useMoldPanel() {
   const app = useAppStore();
   const project = useProjectStore();
   const viewport = useViewportStore();
+  const results = useResultsStore();
 
   const working = computed(() => app.busy !== null);
 
@@ -73,6 +75,8 @@ export function useMoldPanel() {
   }
 
   // —— 视口拾取放置 ——
+  /** 建议落浇口时的默认直径（表单为空 / 非法时使用）。 */
+  const DEFAULT_GATE_DIAMETER_MM = 6;
   // 拾取点写入浇口**终点**（型腔端，与 case 生成的 GatePortal 取端一致），
   // 起点保持表单值：用户可先填起点，或拾取后再微调。
   const placementActive = computed(() => viewport.placement.active);
@@ -126,6 +130,29 @@ export function useMoldPanel() {
     },
   );
 
+  // —— 浇口位置分析建议（Top-N）——
+  // 分析在方案任务窗格运行（无需浇口），这里负责把建议落成浇口单元。
+  const gateSuggestions = computed(() =>
+    (results.gateLocation?.top ?? []).map((candidate) => ({
+      cell: candidate.cell,
+      text: `#${candidate.cell} · 适合度 ${(candidate.score * 100).toFixed(0)}% · 流动长 ${candidate.maxFlowLengthMm.toFixed(1)} mm · 厚 ${candidate.thicknessMm.toFixed(2)} mm`,
+      center: candidate.center,
+    })),
+  );
+  const gateLocationBasis = computed(() => results.gateLocation?.basis ?? null);
+
+  /** 一键落浇口：建议点写入浇口终点，起点沿 x 回退一个半径（表单直径非法时按默认 6 mm）。 */
+  function applySuggestion(candidate: { center: [number, number, number] }): void {
+    const typed = Number(runnerDiameter.value);
+    const diameter = typed > 0 ? typed : DEFAULT_GATE_DIAMETER_MM;
+    const start: [number, number, number] = [
+      candidate.center[0] - diameter / 2,
+      candidate.center[1],
+      candidate.center[2],
+    ];
+    project.addRunnerElement("gate", diameter, start, [...candidate.center]);
+  }
+
   function runnerLabel(element: RunnerElement): string {
     return `${element.kind === "gate" ? "浇口" : "流道"} ${element.id} · Ø${element.diameterMm} mm`;
   }
@@ -139,6 +166,9 @@ export function useMoldPanel() {
     project,
     working,
     formDisabled,
+    gateSuggestions,
+    gateLocationBasis,
+    applySuggestion,
     placementActive,
     placementContinuous,
     toggleContinuous,

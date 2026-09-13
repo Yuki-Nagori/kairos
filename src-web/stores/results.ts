@@ -1,5 +1,6 @@
 /** 求解结果状态：结果目录清单、最近加载的场与探针列表。 */
 import { defineStore } from "pinia";
+import { analyzeGateLocation } from "../api/geometry";
 import {
   deriveDifference as deriveDifferenceApi,
   deriveField as deriveFieldApi,
@@ -9,6 +10,7 @@ import {
 import type {
   DeriveRequest,
   FieldSlot,
+  GateLocationReport,
   Probe,
   ProbeTimeSeries,
   ResultCatalog,
@@ -34,8 +36,27 @@ export const useResultsStore = defineStore("results", {
     probeSeriesField: null as string | null,
     /** 探针列表（节点序号）。 */
     probes: [] as Probe[],
+    /** 最近一次浇口位置分析报告（null = 未运行过）。 */
+    gateLocation: null as GateLocationReport | null,
   }),
   actions: {
+    /** 运行浇口位置分析（轻量启发式，不经求解器）：适合度场直接作为当前场
+     *  载入视口云图，Top-N 建议供模具网络面板一键落浇口。 */
+    async runGateLocation(geometryId: string, topN = 5): Promise<void> {
+      const app = useAppStore();
+      await app.withBusy("正在分析浇口位置…", async () => {
+        const report = await analyzeGateLocation(geometryId, topN);
+        this.gateLocation = report;
+        this.loadedField = {
+          field: "浇口适合度",
+          timeDir: "—",
+          timeS: 0,
+          values: report.field,
+          isMagnitude: false,
+          complete: true,
+        };
+      });
+    },
     /** 扫描 case 结果目录（时间步 + 场清单）。 */
     async loadResultsCatalog(caseDir: string): Promise<void> {
       const app = useAppStore();

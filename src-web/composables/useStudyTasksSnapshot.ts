@@ -27,6 +27,7 @@ export function useStudyTasksSnapshot() {
       materials: materials.materials,
       jobs: jobsStore.jobs,
       resultCatalog: results.resultCatalog,
+      gateLocationRan: results.gateLocation !== null,
     }),
   );
 

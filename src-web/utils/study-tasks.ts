@@ -21,6 +21,8 @@ export interface StudyTasksInput {
   materials: { builtin: Material[]; custom: Material[] };
   jobs: Job[];
   resultCatalog: ResultCatalog | null;
+  /** 是否已跑过浇口位置分析（该任务没有求解作业，状态由报告驱动）。 */
+  gateLocationRan: boolean;
 }
 
 /** 任务状态：六态图标语义 + blocked（上游失败阻断）。 */
@@ -132,6 +134,20 @@ export function evaluateStudyTasks(input: StudyTasksInput): StudyTask[] {
     }
   }
 
+  if (meshReport !== undefined) {
+    tasks.push({
+      id: "gate-location",
+      label: "浇口位置分析",
+      state: input.gateLocationRan ? "done" : "todo",
+      detail: input.gateLocationRan ? "已给出适合度场与建议" : null,
+      hint: input.gateLocationRan
+        ? null
+        : "（可选）在下方选择「浇口位置」序列运行：不需要浇口与工艺，先看建议落点。",
+      blockReason: null,
+      stage: "solve",
+    });
+  }
+
   tasks.push(
     {
       id: "material",
@@ -219,9 +235,10 @@ export function stageBadges(tasks: StudyTask[]): Partial<Record<Stage, StageBadg
   return badges;
 }
 
-/** 提交前置是否就绪：分析与其后的任务是提交的产物，不参与前置判断。 */
+/** 提交前置是否就绪：分析与其后的任务是提交的产物，不参与前置判断；
+ *  浇口位置分析是旁路任务（不依赖也不阻塞提交）。 */
 export function prerequisitesReady(tasks: StudyTask[]): boolean {
-  const POST_SUBMIT = new Set(["analysis", "results"]);
+  const POST_SUBMIT = new Set(["analysis", "results", "gate-location"]);
   return tasks
     .filter((task) => !POST_SUBMIT.has(task.id))
     .every((task) => task.state === "done" || task.state === "warning");

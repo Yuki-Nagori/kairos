@@ -5,6 +5,7 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use kairos_core::error::{KairosError, Result};
+use kairos_core::models::analysis::GateLocationReport;
 use kairos_core::models::geometry::{GeometrySummary, TriangleMesh};
 use kairos_core::models::mesh::{
     DualDomainMesh, DualDomainReport, MeshRefinement, MeshingReport, MidplaneMesh, MidplaneReport,
@@ -14,6 +15,7 @@ use kairos_core::models::render::RenderMeshData;
 use kairos_core::models::repair::RepairOutcome;
 use kairos_core::models::runners::RunnerElement;
 use kairos_core::services::dualdomain::{self, DualDomainParams};
+use kairos_core::services::gate_location::{self, GateLocationParams};
 use kairos_core::services::geometry as geometry_service;
 use kairos_core::services::iges;
 use kairos_core::services::meshing::{self, VolumeMeshParams};
@@ -325,6 +327,37 @@ pub async fn generate_gmsh_mesh(
     })
     .await
     .map_err(|e| KairosError::internal(format!("gmsh 网格任务失败：{e}")))?
+}
+
+/// 浇口位置分析：对已生成的体积网格做轻量流动启发式评分，返回适合度场
+/// （逐单元，与云图同域）与 Top-N 建议落点；不需要浇口 / 工艺前置。
+#[tauri::command]
+pub async fn analyze_gate_location(
+    store: State<'_, GeometryStore>,
+    geometry_id: String,
+    top_n: usize,
+) -> Result<GateLocationReport> {
+    let params = GateLocationParams { top_n };
+    params.validate()?;
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let volume = {
+            let sessions = store.lock();
+            let session = sessions
+                .get(&geometry_id)
+                .ok_or_else(|| KairosError::not_found(format!("几何不存在：{geometry_id}")))?;
+            session
+                .volume
+                .as_ref()
+                .ok_or_else(|| {
+                    KairosError::validation("该几何尚未生成体积网格，请先执行网格划分。")
+                })?
+                .clone()
+        };
+        gate_location::analyze(&volume, &params)
+    })
+    .await
+    .map_err(|e| KairosError::internal(format!("浇口位置分析任务失败：{e}")))?
 }
 
 #[tauri::command]

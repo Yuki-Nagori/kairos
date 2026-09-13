@@ -14,6 +14,7 @@ const {
   submit,
   stage,
   cores,
+  submitLabel,
   menu,
   openMenu,
   closeMenu,
@@ -101,6 +102,7 @@ const {
         <option value="fill">填充</option>
         <option value="fill_pack">填充 + 保压</option>
         <option value="fill_pack_cool">填充 + 保压 + 冷却</option>
+        <option value="gate_location">浇口位置（无需浇口）</option>
       </Dropdown>
       <p class="text-xs text-zinc-500">核数</p>
       <TextInput
@@ -112,7 +114,7 @@ const {
         title="并行核数"
       />
       <UiButton variant="primary" :disabled="submitDisabled" @click="submit">
-        提交求解作业
+        {{ submitLabel }}
       </UiButton>
     </div>
   </Card>
