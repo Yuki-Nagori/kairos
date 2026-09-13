@@ -77,6 +77,9 @@ enum PipelineAction {
         /// 浇口入口 `x,y,z[,半径]`（mm，可重复；不填则回退 z 分带启发式）
         #[arg(long = "gate")]
         gates: Vec<String>,
+        /// 注射时间（s）：真实件按件体积给合理值（工况校验会提示建议下限）
+        #[arg(long = "injection-time", default_value_t = 1.0)]
+        injection_time_s: f64,
         /// 实际调用求解器（缺环境时以结构化错误退出）
         #[arg(long)]
         solve: bool,
@@ -180,12 +183,13 @@ fn parse_gate(
     })
 }
 
-fn default_process() -> ProcessSettings {
+/// 默认工艺（注射时间可调：真实件按件体积给合理值）。
+fn default_process_with(injection_time_s: f64) -> ProcessSettings {
     ProcessSettings {
         melt_temp_c: 230.0,
         mold_temp_c: 40.0,
         ejection_temp_c: 90.0,
-        injection_time_s: 1.0,
+        injection_time_s,
         vp_switch_volume_percent: 96.0,
         packing_pressure_mpa_curve: vec![(0.0, 60.0), (8.0, 40.0)],
         packing_time_s: 8.0,
@@ -220,6 +224,7 @@ fn run(command: Commands, json: bool) -> kairos_core::error::Result<()> {
                 cores,
                 target_size,
                 gates,
+                injection_time_s,
                 solve,
             } => run_pipeline(
                 sample_box,
@@ -228,6 +233,7 @@ fn run(command: Commands, json: bool) -> kairos_core::error::Result<()> {
                 cores,
                 target_size,
                 gates,
+                injection_time_s,
                 solve,
                 json,
             ),
@@ -382,6 +388,7 @@ fn run_pipeline(
     cores: u32,
     target_size: f64,
     gate_specs: Vec<String>,
+    injection_time_s: f64,
     solve: bool,
     json: bool,
 ) -> kairos_core::error::Result<()> {
@@ -410,11 +417,12 @@ fn run_pipeline(
         .iter()
         .map(|spec| parse_gate(spec))
         .collect::<kairos_core::error::Result<Vec<_>>>()?;
+    let process = default_process_with(injection_time_s);
     let areas = moldingfoam::generate_case(
         out,
         &volume,
         &material,
-        &default_process(),
+        &process,
         &AnalysisStage::Fill,
         cores as usize,
         &gates,
@@ -424,8 +432,7 @@ fn run_pipeline(
     let thickness_hints = services::thickness::thin_feature_hints(target_size, &thickness);
     // 填充工况量级提示（与工艺面板同一套 core 校验）
     let volume_mm3 = services::moldingfoam::mesh_volume(&volume);
-    let load_hints =
-        services::process::fill_load_hints(volume_mm3, &default_process(), Some(areas.inlet_m2));
+    let load_hints = services::process::fill_load_hints(volume_mm3, &process, Some(areas.inlet_m2));
     if json {
         emit_json(&serde_json::json!({
             "caseDir": out_dir,
