@@ -15,7 +15,10 @@ use kairos_core::services::jobs as job_logic;
 use kairos_core::services::jobs::SchedulerLimits;
 use kairos_core::services::moldingfoam;
 use kairos_core::services::project::new_id;
+// 结果回传只在 macOS（multipass）通道用得上；VM 路径 macOS 与 Windows 都用
+#[cfg(target_os = "macos")]
 use kairos_core::services::results;
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 use kairos_core::services::vm as vm_logic;
 use tauri::State;
 use tauri::ipc::Channel;
@@ -87,7 +90,6 @@ pub fn detect_vm_shell() -> Option<String> {
 }
 
 /// Windows 盘符路径 → WSL 的 /mnt 形态（C:\a\b → /mnt/c/a/b）。
-#[cfg(target_os = "windows")]
 fn to_wsl_path(path: &str) -> String {
     let lower = path.replace('\\', "/");
     let bytes = lower.as_bytes();
@@ -230,6 +232,22 @@ fn copy_results_from_vm(_case_dir: &str, _vm_case: Option<&str>) -> Result<()> {
     Ok(())
 }
 
+/// 求解脚本里的 case 目录（含 shell 单引号转义）。
+///
+/// 平台经 `os` 传入（与 `std::env::consts::OS` 同口径）而不是编译期分支——三端
+/// 取值都能在同一平台单测覆盖：
+/// - macOS：VM 内暂存路径（宿主绝对路径在虚拟机里并不存在）；
+/// - Windows：WSL 的 `/mnt` 形态路径（WSL 能直接读宿主文件系统）；
+/// - 原生：宿主路径。
+fn script_case_dir(os: &str, case_dir: &str, vm_case: Option<&str>) -> String {
+    let dir = match os {
+        "macos" => vm_case.unwrap_or(case_dir),
+        "windows" => &to_wsl_path(case_dir),
+        _ => case_dir,
+    };
+    dir.replace('\'', "'\\''")
+}
+
 fn spawn_run_script(
     case_dir: &str,
     vm_case: Option<&str>,
@@ -238,18 +256,14 @@ fn spawn_run_script(
     vm_shell: Option<&str>,
 ) -> Result<Child> {
     let solve = moldingfoam::solve_command(cores);
+    // VM 执行通道只在 macOS（multipass）与 Windows（WSL）存在；原生平台直接本机执行。
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     if let Some(shell) = vm_shell {
-        // macOS：宿主路径在 VM 内不存在，必须用 tar 复制后的 VM 路径。
-        #[cfg(target_os = "macos")]
-        let safe_dir = vm_case.unwrap_or(case_dir).replace('\'', "'\\''");
-        // Windows：WSL 能直接读宿主文件系统，用 /mnt 形态路径。
-        #[cfg(target_os = "windows")]
-        let safe_dir = to_wsl_path(case_dir).replace('\'', "'\\''");
-        #[cfg(any(target_os = "macos", target_os = "windows"))]
-        let inner = {
-            let source = vm_logic::env_source_command();
-            format!("{source} && cd '{safe_dir}' && {solve}")
-        };
+        let inner = format!(
+            "{} && cd '{}' && {solve}",
+            vm_logic::env_source_command(),
+            script_case_dir(std::env::consts::OS, case_dir, vm_case)
+        );
         let mut command = Command::new(shell);
         #[cfg(target_os = "macos")]
         command.args(["exec", "kairos", "--", "bash", "-lc", &inner]);
@@ -267,6 +281,8 @@ fn spawn_run_script(
             .spawn()
             .map_err(|e| KairosError::io(format!("VM 求解启动失败：{e}")));
     }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    let _ = (vm_case, vm_shell);
     let path_export = managed_path
         .map(|prefix| format!("export PATH='{prefix}:$PATH'; "))
         .unwrap_or_default();
@@ -512,4 +528,44 @@ pub fn cancel_job(scheduler: State<'_, JobScheduler>, job_id: String) -> Result<
 #[tauri::command]
 pub fn list_jobs(scheduler: State<'_, JobScheduler>) -> Result<Vec<Job>> {
     Ok(scheduler.lock().jobs.clone())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn script_case_dir_picks_path_per_platform() {
+        // macOS：VM 内暂存路径（宿主路径在虚拟机里不存在）；没有暂存路径时退回宿主路径
+        assert_eq!(
+            script_case_dir("macos", "/host/study-1", Some("/home/ubuntu/study-1")),
+            "/home/ubuntu/study-1"
+        );
+        assert_eq!(
+            script_case_dir("macos", "/host/study-1", None),
+            "/host/study-1"
+        );
+        // Windows：WSL 的 /mnt 形态（WSL 能直接读宿主文件系统）
+        assert_eq!(
+            script_case_dir("windows", r"C:\cases\study-1", None),
+            "/mnt/c/cases/study-1"
+        );
+        // 原生 Linux：宿主路径
+        assert_eq!(
+            script_case_dir("linux", "/data/cases/study-1", None),
+            "/data/cases/study-1"
+        );
+        // 单引号转义：拼进 bash -lc 脚本前必须处理，防路径注入
+        assert_eq!(
+            script_case_dir("linux", "/data/it's", None),
+            r"/data/it'\''s"
+        );
+    }
+
+    #[test]
+    fn wsl_path_maps_drive_letters_only() {
+        assert_eq!(to_wsl_path(r"C:\a\b"), "/mnt/c/a/b");
+        assert_eq!(to_wsl_path(r"D:\cases"), "/mnt/d/cases");
+        assert_eq!(to_wsl_path("/already/unix"), "/already/unix");
+    }
 }
