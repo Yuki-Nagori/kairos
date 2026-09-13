@@ -338,6 +338,16 @@ $EndElements
         assert!(error.to_string().contains("gmsh 启动失败"));
     }
 
+    /// 假 gmsh 用例的「写脚本 → 起进程」临界区。
+    ///
+    /// Linux 上 exec 一个刚写完的文件，若同进程其它线程此刻 fork（fork 会复制 fd
+    /// 表），新进程会短暂持有该脚本的写引用，内核即以 ETXTBSY（Text file busy）
+    /// 拒绝 exec——并行跑这几个用例偶发失败（本文件是 core 里唯一的起进程处）。
+    /// 串行执行即可消除：同一时刻只有一个用例在写脚本 / 起进程，没有别的 fork
+    /// 能拿到它的写 fd。
+    #[cfg(unix)]
+    static FAKE_GMSH_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     /// 写一个可执行 shell 脚本冒充 gmsh：正文写入临时目录并赋予执行位。
     /// 仅 Unix——Windows 侧用等价的 .cmd 批处理（见下方 cfg(windows) 测试）。
     #[cfg(unix)]
@@ -349,9 +359,18 @@ $EndElements
         path
     }
 
+    /// 取临界区锁（用例存活期间持有）；中毒不影响断言本身。
+    #[cfg(unix)]
+    fn lock_fake_gmsh() -> std::sync::MutexGuard<'static, ()> {
+        FAKE_GMSH_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
     #[cfg(unix)]
     #[test]
     fn tetrahedralize_reads_parsed_msh_from_successful_run() {
+        let _serial = lock_fake_gmsh();
         // 假 gmsh：忽略输入，把最小合法 msh（2 四面体）写到 -o 指定的输出路径。
         let fixture = SAMPLE_MSH.replace('"', "'");
         let script = format!(
@@ -375,6 +394,7 @@ $EndElements
     #[cfg(unix)]
     #[test]
     fn tetrahedralize_maps_nonzero_exit_to_io_error_with_stderr_tail() {
+        let _serial = lock_fake_gmsh();
         let fake = write_fake_gmsh("kairos-fake-gmsh-fail", "echo bad mesh >&2\nexit 3\n");
         let out_msh = std::env::temp_dir().join("kairos-fake-gmsh-fail.msh");
         let _ = std::fs::remove_file(&out_msh);
@@ -391,6 +411,7 @@ $EndElements
     #[cfg(unix)]
     #[test]
     fn tetrahedralize_reports_missing_output_as_io() {
+        let _serial = lock_fake_gmsh();
         // 假 gmsh 正常退出但不产出文件 → 读取 msh 失败。
         let fake = write_fake_gmsh("kairos-fake-gmsh-silent", "exit 0\n");
         let out_msh = std::env::temp_dir().join("kairos-fake-gmsh-silent.msh");
