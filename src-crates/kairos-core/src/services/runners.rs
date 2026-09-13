@@ -59,6 +59,18 @@ pub fn check_mold_network(runners: &[RunnerElement], channels: &[CoolingChannel]
                 channel.id, channel.inlet_temp_c
             ));
         }
+        if !(channel.mass_flow_rate_kg_s.is_finite() && channel.mass_flow_rate_kg_s > 0.0) {
+            issues.push(format!(
+                "水路「{}」质量流量必须为正数（kg/s）——模壁 1D 通道 BC 需要它算取热。",
+                channel.id
+            ));
+        }
+        if !(channel.specific_heat_j_kg_k.is_finite() && channel.specific_heat_j_kg_k > 0.0) {
+            issues.push(format!(
+                "水路「{}」介质比热必须为正数（J/kg/K，水默认 4180）。",
+                channel.id
+            ));
+        }
     }
 
     // 2. 流道网络连通性：端点焊接成图，孤立单元（两端都只连自己）报错
@@ -153,8 +165,42 @@ mod tests {
             start: [0.0, 0.0, 0.0],
             end: [100.0, 0.0, 0.0],
             inlet_temp_c: 500.0,
+            ..CoolingChannel::default()
         }];
         let issues = check_mold_network(&[], &channels);
         assert!(issues.iter().any(|issue| issue.contains("超出合理范围")));
+    }
+
+    /// 冷却水路的口径校验：质量流量与比热缺项（旧文件迁移后为 0）必须提示。
+    #[test]
+    fn channel_missing_coolant_parameters_are_reported() {
+        let channels = vec![CoolingChannel {
+            id: "c1".into(),
+            diameter_mm: 8.0,
+            start: [0.0, 0.0, 0.0],
+            end: [100.0, 0.0, 0.0],
+            inlet_temp_c: 25.0,
+            mass_flow_rate_kg_s: 0.0,
+            specific_heat_j_kg_k: 0.0,
+        }];
+        let issues = check_mold_network(&[], &channels);
+        assert!(
+            issues
+                .iter()
+                .any(|issue| issue.contains("质量流量必须为正数")),
+            "{issues:?}"
+        );
+        assert!(
+            issues
+                .iter()
+                .any(|issue| issue.contains("介质比热必须为正数")),
+            "{issues:?}"
+        );
+
+        // 补齐口径后不再报这两项（默认构造即水口径）
+        let fixed = vec![CoolingChannel::default()];
+        let issues = check_mold_network(&[], &fixed);
+        assert!(!issues.iter().any(|issue| issue.contains("质量流量")));
+        assert!(!issues.iter().any(|issue| issue.contains("介质比热")));
     }
 }

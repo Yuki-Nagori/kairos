@@ -40,6 +40,8 @@ function channelFixture(overrides: Partial<CoolingChannel> = {}): CoolingChannel
     start: [0, 0, 0],
     end: [9, 9, 9],
     inletTempC: 25,
+    massFlowRateKgS: 0.05,
+    specificHeatJKgK: 4180,
     ...overrides,
   };
 }
@@ -165,6 +167,8 @@ describe("MoldPanel", () => {
       start: [1, 2, 3],
       end: [4, 5, 6],
       inletTempC: 30,
+      massFlowRateKgS: 0.05,
+      specificHeatJKgK: 4180,
     });
     expect(wrapper.text()).toContain(`水路 ${channels[0]?.id} · Ø8 mm · 30°C`);
 

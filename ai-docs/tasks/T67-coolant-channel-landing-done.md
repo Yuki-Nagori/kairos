@@ -3,7 +3,10 @@
 - 阶段：B2/C5（求解器 · 冷却分析的 Kairos 侧）
 - 依赖：T07（水路网络模型与面板）、T66（case 单位制与 vent 对齐）
 - 优先级：**P2**
-- 状态：**待开工**（契约已定，见下）
+- 状态：**已实现**（2026-09-13）——模壁 T 边界落 `moldingMoldTemperature` + `coolant`
+  （流量求和 / cp / 最冷入口温度 / 轴向单位化 / htc / D 写米），无水路保持恒定模温；DTO 补
+  `massFlowRateKgS` + `specificHeatJKgK` 双端镜像，模具面板可编辑、校验面板提示缺项。
+  真机冷却阶段复跑归 T29。见 [T67 评审](../reviews/T67-review.md)
 
 ## 目标
 

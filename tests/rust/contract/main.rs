@@ -16,6 +16,7 @@ use kairos_core::models::project::{GeometryRef, Project, Study};
 use kairos_core::models::results::{
     DeriveRequest, ResultCatalog, ScalarField, TimeStepMeta, VectorField,
 };
+use kairos_core::models::runners::CoolingChannel;
 use kairos_core::services::moldingfoam::{CaseReport, GateInlet, PatchAreas};
 use kairos_core::services::{geometry, material};
 
@@ -58,7 +59,15 @@ fn project_serializes_with_camel_case() {
         name: "填充分析".into(),
         created_ms: 1001,
         runner_elements: Vec::new(),
-        cooling_channels: Vec::new(),
+        cooling_channels: vec![CoolingChannel {
+            id: "cc-1".into(),
+            diameter_mm: 8.0,
+            start: [0.0, 0.0, 0.0],
+            end: [10.0, 0.0, 0.0],
+            inlet_temp_c: 25.0,
+            mass_flow_rate_kg_s: 0.05,
+            specific_heat_j_kg_k: 4180.0,
+        }],
         process: None,
         material_id: None,
     });
@@ -70,6 +79,15 @@ fn project_serializes_with_camel_case() {
     assert_eq!(json["name"], "演示项目");
     assert_eq!(json["studies"][0]["name"], "填充分析");
     assert_eq!(json["studies"][0]["createdMs"], 1001);
+    // 冷却水路：模壁 1D 通道 BC 的口径（质量流量 / 比热）随工程文件持久化
+    assert_eq!(
+        json["studies"][0]["coolingChannels"][0]["massFlowRateKgS"],
+        0.05
+    );
+    assert_eq!(
+        json["studies"][0]["coolingChannels"][0]["specificHeatJKgK"],
+        4180.0
+    );
 }
 
 /// GeometryRef 的形状：camelCase 相对路径引用，前端工程树与之对应。

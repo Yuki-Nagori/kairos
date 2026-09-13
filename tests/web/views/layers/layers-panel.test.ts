@@ -18,7 +18,15 @@ function studyFixture(overrides: Partial<Study> = {}): Study {
       { id: "r1", kind: "runner", diameterMm: 6, start: [1, 0, 0], end: [5, 0, 0] },
     ],
     coolingChannels: [
-      { id: "c1", diameterMm: 8, start: [0, 5, 0], end: [5, 5, 0], inletTempC: 25 },
+      {
+        id: "c1",
+        diameterMm: 8,
+        start: [0, 5, 0],
+        end: [5, 5, 0],
+        inletTempC: 25,
+        massFlowRateKgS: 0.05,
+        specificHeatJKgK: 4180,
+      },
     ],
     process: null,
     materialId: null,

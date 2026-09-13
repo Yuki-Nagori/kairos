@@ -343,6 +343,10 @@ export interface CoolingChannel {
   start: [number, number, number];
   end: [number, number, number];
   inletTempC: number;
+  /** 介质质量流量（kg/s）——模壁 1D 通道 BC 的口径。 */
+  massFlowRateKgS: number;
+  /** 介质比热（J/kg/K，水 4180）。 */
+  specificHeatJKgK: number;
 }
 /** 对应 `kairos-core::models::jobs::JobStatus`。 */
 export type JobStatus = "queued" | "running" | "done" | "failed" | "cancelled";

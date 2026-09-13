@@ -8,7 +8,7 @@ use kairos_core::error::{KairosError, Result};
 use kairos_core::models::material::Material;
 use kairos_core::models::mesh::VolumeMesh;
 use kairos_core::models::process::ProcessSettings;
-use kairos_core::models::runners::RunnerElement;
+use kairos_core::models::runners::{CoolingChannel, RunnerElement};
 use kairos_core::models::solver::AnalysisStage;
 use kairos_core::services::moldingfoam;
 use serde::Serialize;
@@ -85,6 +85,7 @@ pub async fn generate_moldingfoam_case(
     stage: AnalysisStage,
     cores: u32,
     runner_elements: Vec<RunnerElement>,
+    cooling_channels: Vec<CoolingChannel>,
 ) -> Result<CaseOutcome> {
     let cores = cores.clamp(1, 64) as usize;
     let gates = moldingfoam::gate_portals(&runner_elements);
@@ -103,12 +104,15 @@ pub async fn generate_moldingfoam_case(
     tauri::async_runtime::spawn_blocking(move || {
         let report = moldingfoam::generate_case(
             std::path::Path::new(&case_dir),
-            &volume_mesh,
-            &material,
-            &process,
-            &stage,
-            cores,
-            &gates,
+            &moldingfoam::CaseInputs {
+                mesh: &volume_mesh,
+                material: &material,
+                process: &process,
+                stage: &stage,
+                cores,
+                gates: &gates,
+                channels: &cooling_channels,
+            },
         )?;
         Ok(CaseOutcome {
             case_dir,

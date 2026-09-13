@@ -15,7 +15,7 @@ use crate::error::{KairosError, Result};
 use crate::models::material::Material;
 use crate::models::mesh::VolumeMesh;
 use crate::models::process::ProcessSettings;
-use crate::models::runners::{RunnerElement, RunnerKind};
+use crate::models::runners::{CoolingChannel, DEFAULT_COOLANT_HTC, RunnerElement, RunnerKind};
 use crate::models::solver::AnalysisStage;
 
 /// 求解入口单点：foamRun 框架的求解模块名。bundle 自带
@@ -587,13 +587,18 @@ pub fn mesh_volume(mesh: &VolumeMesh) -> f64 {
 /// 写出 0/ 场与 system/、constant/ 字典（case-contract v1.1 布局）。
 pub fn write_case_files(
     case_dir: &Path,
-    mesh: &VolumeMesh,
-    material: &Material,
-    process: &ProcessSettings,
-    stage: &AnalysisStage,
-    cores: usize,
+    inputs: &CaseInputs<'_>,
     areas: &PatchAreas,
 ) -> Result<()> {
+    let CaseInputs {
+        mesh,
+        material,
+        process,
+        stage,
+        cores,
+        channels,
+        ..
+    } = *inputs;
     let zero = case_dir.join("0");
     let system = case_dir.join("system");
     let constant = case_dir.join("constant");
@@ -637,28 +642,33 @@ pub fn write_case_files(
     write(&zero.join("U"), &u_dict(flow_rate))?;
     write(&zero.join("p"), P_DICT)?;
     write(&zero.join("p_rgh"), &p_rgh_dict(areas.vent_m2))?;
-    write(&zero.join("T"), &t_dict(melt_k, mold_k))?;
+    let coolant = coolant_boundary(channels);
+    write(&zero.join("T"), &t_dict(melt_k, mold_k, coolant.as_ref()))?;
     Ok(())
 }
 
 /// 生成完整 case：polyMesh + 场 + 字典。
-pub fn generate_case(
-    case_dir: &Path,
-    mesh: &VolumeMesh,
-    material: &Material,
-    process: &ProcessSettings,
-    stage: &AnalysisStage,
-    cores: usize,
-    gates: &[GatePortal],
-) -> Result<CaseReport> {
-    let report = write_poly_mesh(case_dir, mesh, gates)?;
+pub fn generate_case(case_dir: &Path, inputs: &CaseInputs<'_>) -> Result<CaseReport> {
+    let report = write_poly_mesh(case_dir, inputs.mesh, inputs.gates)?;
     let areas = PatchAreas {
         inlet_m2: report.inlet_area_m2,
         vent_m2: report.vent_area_m2,
         walls_m2: report.walls_area_m2,
     };
-    write_case_files(case_dir, mesh, material, process, stage, cores, &areas)?;
+    write_case_files(case_dir, inputs, &areas)?;
     Ok(report)
+}
+
+/// case 生成输入：几何 / 材料 / 工艺 / 阶段 / 核数 / 浇口 / 冷却水路。
+/// 参数多于 clippy 阈值，用结构体承载既避免长参数表，也让调用点自解释。
+pub struct CaseInputs<'a> {
+    pub mesh: &'a VolumeMesh,
+    pub material: &'a Material,
+    pub process: &'a ProcessSettings,
+    pub stage: &'a AnalysisStage,
+    pub cores: usize,
+    pub gates: &'a [GatePortal],
+    pub channels: &'a [CoolingChannel],
 }
 
 /// 解析求解器 stdout 中的时间步行（如 "Time = 0.05"），返回物理进度秒数。
@@ -814,11 +824,79 @@ fn u_dict(flow_rate: f64) -> String {
 }
 
 /// 模温作用于 walls 的 fixedValue；浇口 fixedValue 熔温；vent 进出流切换。
-fn t_dict(melt_k: f64, mold_k: f64) -> String {
+/// 模壁 T 边界：无冷却通道 → 恒定模温；有通道 → 模壁 1D 通道 BC
+/// （`moldingMoldTemperature` + `coolant` 子字典，通道参数按水路聚合）。
+fn t_dict(melt_k: f64, mold_k: f64, coolant: Option<&CoolantBoundary>) -> String {
+    let walls = match coolant {
+        None => format!(
+            "    walls\n    {{\n        type            fixedValue;\n        value           uniform {mold_k:.2};\n    }}\n"
+        ),
+        Some(boundary) => format!(
+            "    walls\n    {{\n        type            moldingMoldTemperature;\n        value           uniform {mold_k:.2};\n\n        coolant\n        {{\n            massFlowRate     {mass_flow:.6};\n            cp               {cp:.1};\n            inletTemperature {inlet_k:.2};\n            direction        ({dx:.4} {dy:.4} {dz:.4});\n            htc              {htc:.1};\n            D                {diameter_m:.6};\n        }}\n    }}\n",
+            mass_flow = boundary.mass_flow_rate_kg_s,
+            cp = boundary.specific_heat_j_kg_k,
+            inlet_k = kelvin(boundary.inlet_temp_c),
+            dx = boundary.direction[0],
+            dy = boundary.direction[1],
+            dz = boundary.direction[2],
+            htc = boundary.htc,
+            diameter_m = boundary.diameter_mm * MM_TO_M,
+        ),
+    };
     foam_header("volScalarField", "T")
         + &format!(
-            "dimensions      [0 0 0 1 0 0 0];\n\ninternalField   uniform 300;\n\nboundaryField\n{{\n    #includeEtc \"caseDicts/setConstraintTypes\"\n\n    inlet\n    {{\n        type            fixedValue;\n        value           uniform {melt_k:.2};\n    }}\n\n    vent\n    {{\n        type            inletOutlet;\n        inletValue      uniform 300;\n        value           uniform 300;\n    }}\n\n    walls\n    {{\n        type            fixedValue;\n        value           uniform {mold_k:.2};\n    }}\n}}\n"
+            "dimensions      [0 0 0 1 0 0 0];\n\ninternalField   uniform 300;\n\nboundaryField\n{{\n    #includeEtc \"caseDicts/setConstraintTypes\"\n\n    inlet\n    {{\n        type            fixedValue;\n        value           uniform {melt_k:.2};\n    }}\n\n    vent\n    {{\n        type            inletOutlet;\n        inletValue      uniform 300;\n        value           uniform 300;\n    }}\n\n{walls}}}\n"
         )
+}
+
+/// 模壁冷却边界（case 侧口径）：由冷却水路聚合而来（同一壁面共用一组通道参数——
+/// 制品域网格没有模具域，无法逐通道切 patch，先按整壁聚合，待模具域网格立项再细化）。
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CoolantBoundary {
+    /// 总质量流量（kg/s，各水路求和）。
+    pub mass_flow_rate_kg_s: f64,
+    /// 介质比热（J/kg/K）。
+    pub specific_heat_j_kg_k: f64,
+    /// 介质入口温度（°C，取各水路中最低者——最冷一路决定取热上限）。
+    pub inlet_temp_c: f64,
+    /// 通道轴向（取第一段水路的起止方向，单位化）。
+    pub direction: [f64; 3],
+    /// 对流换热系数（W/m²/K）。
+    pub htc: f64,
+    /// 通道直径（mm，取第一段）。
+    pub diameter_mm: f64,
+}
+
+/// 冷却水路 → 模壁边界参数；无水路返回 None（保持恒定模温）。
+pub fn coolant_boundary(channels: &[CoolingChannel]) -> Option<CoolantBoundary> {
+    let first = channels.first()?;
+    let mass_flow_rate_kg_s = channels
+        .iter()
+        .map(|channel| channel.mass_flow_rate_kg_s.max(0.0))
+        .sum();
+    let inlet_temp_c = channels
+        .iter()
+        .map(|channel| channel.inlet_temp_c)
+        .fold(f64::MAX, f64::min);
+    let axial = [
+        first.end[0] - first.start[0],
+        first.end[1] - first.start[1],
+        first.end[2] - first.start[2],
+    ];
+    let length = (axial[0].powi(2) + axial[1].powi(2) + axial[2].powi(2)).sqrt();
+    let direction = if length > 0.0 {
+        [axial[0] / length, axial[1] / length, axial[2] / length]
+    } else {
+        [1.0, 0.0, 0.0]
+    };
+    Some(CoolantBoundary {
+        mass_flow_rate_kg_s,
+        specific_heat_j_kg_k: first.specific_heat_j_kg_k,
+        inlet_temp_c,
+        direction,
+        htc: DEFAULT_COOLANT_HTC,
+        diameter_mm: first.diameter_mm,
+    })
 }
 
 const ALPHA_MELT: &str = "FoamFile\n{\n    version 2.0;\n    format ascii;\n    class \"volScalarField\";\n    object alpha.melt;\n}\ndimensions      [];\ninternalField   uniform 0;\nboundaryField\n{\n    #includeEtc \"caseDicts/setConstraintTypes\"\n\n    inlet\n    {\n        type            fixedValue;\n        value           uniform 1;\n    }\n\n    vent\n    {\n        type            inletOutlet;\n        inletValue      uniform 0;\n        value           uniform 0;\n    }\n\n    walls\n    {\n        type            zeroGradient;\n    }\n}\n";
@@ -864,7 +942,27 @@ pub fn expected_fields(stage: &AnalysisStage) -> &'static [&'static str] {
 mod tests {
     use super::*;
     use crate::models::process::ProcessSettings;
-    use crate::models::runners::{RunnerElement, RunnerKind};
+    use crate::models::runners::{CoolingChannel, RunnerElement, RunnerKind};
+
+    /// 测试用 case 输入：默认无浇口 / 无冷却水路（`gates` / `channels` 单独覆盖）。
+    fn inputs<'a>(
+        mesh: &'a VolumeMesh,
+        material: &'a Material,
+        process: &'a ProcessSettings,
+        stage: &'a AnalysisStage,
+        gates: &'a [GatePortal],
+        channels: &'a [CoolingChannel],
+    ) -> CaseInputs<'a> {
+        CaseInputs {
+            mesh,
+            material,
+            process,
+            stage,
+            cores: 4,
+            gates,
+            channels,
+        }
+    }
 
     #[test]
     fn boundary_bands_classify_bottom_inlet_top_vent() {
@@ -893,12 +991,14 @@ mod tests {
         fs::write(&as_file, "占位").unwrap();
         let error = generate_case(
             &as_file,
-            &two_tet_mesh(),
-            material,
-            &process(),
-            &AnalysisStage::Fill,
-            4,
-            &[],
+            &inputs(
+                &two_tet_mesh(),
+                material,
+                &process(),
+                &AnalysisStage::Fill,
+                &[],
+                &[],
+            ),
         )
         .unwrap_err();
         assert!(error.to_string().contains("创建 polyMesh 目录失败"));
@@ -911,12 +1011,14 @@ mod tests {
         fs::write(case.join("0"), "占位").unwrap();
         let error = generate_case(
             &case,
-            &two_tet_mesh(),
-            material,
-            &process(),
-            &AnalysisStage::Fill,
-            4,
-            &[],
+            &inputs(
+                &two_tet_mesh(),
+                material,
+                &process(),
+                &AnalysisStage::Fill,
+                &[],
+                &[],
+            ),
         )
         .unwrap_err();
         assert!(error.to_string().contains("创建"), "{error}");
@@ -1026,12 +1128,14 @@ mod tests {
         let case = dir.join("case");
         generate_case(
             &case,
-            &two_tet_mesh(),
-            &crate::services::material::builtin_materials()[0],
-            &process(),
-            &AnalysisStage::Fill,
-            4,
-            &[],
+            &inputs(
+                &two_tet_mesh(),
+                &crate::services::material::builtin_materials()[0],
+                &process(),
+                &AnalysisStage::Fill,
+                &[],
+                &[],
+            ),
         )
         .unwrap();
 
@@ -1649,6 +1753,106 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
+    /// 冷却水路 → 模壁 1D 通道 BC：有通道时 walls 写 moldingMoldTemperature +
+    /// coolant 子字典（SI 单位），无通道保持恒定模温。
+    #[test]
+    fn coolant_channels_land_on_mold_wall_boundary() {
+        let dir = std::env::temp_dir().join(format!("kairos-coolant-{}", std::process::id()));
+        let case = dir.join("case");
+        let mesh = crate::services::meshing::generate(
+            &crate::models::geometry::TriangleMesh::sample_box(4.0),
+            &crate::services::meshing::VolumeMeshParams {
+                refinement: None,
+                target_size: 1.0,
+            },
+        )
+        .unwrap();
+        let channels = vec![
+            CoolingChannel {
+                id: "cc-1".into(),
+                diameter_mm: 8.0,
+                start: [0.0, 0.0, 2.0],
+                end: [10.0, 0.0, 2.0],
+                inlet_temp_c: 25.0,
+                mass_flow_rate_kg_s: 0.05,
+                specific_heat_j_kg_k: 4180.0,
+            },
+            CoolingChannel {
+                id: "cc-2".into(),
+                diameter_mm: 8.0,
+                start: [0.0, 0.0, 8.0],
+                end: [10.0, 0.0, 8.0],
+                inlet_temp_c: 18.0,
+                mass_flow_rate_kg_s: 0.03,
+                specific_heat_j_kg_k: 4180.0,
+            },
+        ];
+        generate_case(
+            &case,
+            &inputs(
+                &mesh,
+                &crate::services::material::builtin_materials()[0],
+                &process(),
+                &AnalysisStage::FillPackCool,
+                &[],
+                &channels,
+            ),
+        )
+        .unwrap();
+
+        let t = fs::read_to_string(case.join("0/T")).unwrap();
+        assert!(t.contains("moldingMoldTemperature"), "{t}");
+        assert!(t.contains("coolant"));
+        // 流量求和、入口温度取最冷一路、比热与换热系数按默认量级写入
+        assert!(t.contains("massFlowRate     0.080000"), "{t}");
+        assert!(t.contains("inletTemperature 291.15"), "{t}");
+        assert!(t.contains("cp               4180.0"));
+        assert!(t.contains("htc              5000.0"));
+        // 直径写米（8 mm → 0.008）
+        assert!(t.contains("D                0.008000"), "{t}");
+        // 轴向单位化（(10,0,0) → (1,0,0)）
+        assert!(t.contains("direction        (1.0000 0.0000 0.0000)"));
+
+        // 无通道：恒定模温（旧行为不变）
+        let plain = dir.join("plain");
+        generate_case(
+            &plain,
+            &inputs(
+                &mesh,
+                &crate::services::material::builtin_materials()[0],
+                &process(),
+                &AnalysisStage::Fill,
+                &[],
+                &[],
+            ),
+        )
+        .unwrap();
+        let plain_t = fs::read_to_string(plain.join("0/T")).unwrap();
+        assert!(!plain_t.contains("moldingMoldTemperature"));
+        assert!(plain_t.contains("fixedValue"));
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// 水路聚合：零长水路的轴向回退为 +x（不产生 NaN 方向）。
+    #[test]
+    fn coolant_boundary_handles_degenerate_direction() {
+        let channels = vec![CoolingChannel {
+            id: "c".into(),
+            diameter_mm: 6.0,
+            start: [1.0, 2.0, 3.0],
+            end: [1.0, 2.0, 3.0],
+            inlet_temp_c: 20.0,
+            mass_flow_rate_kg_s: -1.0,
+            specific_heat_j_kg_k: 4180.0,
+        }];
+        let boundary = coolant_boundary(&channels).unwrap();
+        assert_eq!(boundary.direction, [1.0, 0.0, 0.0]);
+        // 负流量按 0 计（避免负取热）
+        assert_eq!(boundary.mass_flow_rate_kg_s, 0.0);
+        assert!(coolant_boundary(&[]).is_none());
+    }
+
     #[test]
     fn written_mesh_is_si_with_patch_areas() {
         // 4 mm 立方体、1 mm 体素：写出的点应在米制（≤ 4e-3），
@@ -1720,12 +1924,14 @@ mod tests {
         let case = dir.join("case");
         generate_case(
             &case,
-            &two_tet_mesh(),
-            &crate::services::material::builtin_materials()[0],
-            &process(),
-            &crate::models::solver::AnalysisStage::FillPackCool,
-            4,
-            &[],
+            &inputs(
+                &two_tet_mesh(),
+                &crate::services::material::builtin_materials()[0],
+                &process(),
+                &crate::models::solver::AnalysisStage::FillPackCool,
+                &[],
+                &[],
+            ),
         )
         .unwrap();
 

@@ -544,6 +544,8 @@ describe("project store", () => {
         start: [0, 20, 0],
         end: [100, 20, 0],
         inletTempC: 25,
+        massFlowRateKgS: 0.05,
+        specificHeatJKgK: 4180,
       };
       vi.mocked(checkMoldNetwork).mockResolvedValue(["水路与流道不相交"]);
       const { project, study } = primeActiveStudy();

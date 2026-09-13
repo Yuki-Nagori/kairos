@@ -5,7 +5,11 @@
  */
 import { computed, reactive, ref, watch } from "vue";
 import { useAppStore } from "../../stores/app";
-import { useProjectStore } from "../../stores/project";
+import {
+  DEFAULT_COOLANT_MASS_FLOW_KG_S,
+  useProjectStore,
+  WATER_SPECIFIC_HEAT,
+} from "../../stores/project";
 import { useGeometryStore } from "../../stores/geometry";
 import { useResultsStore } from "../../stores/results";
 import { useViewportStore } from "../../stores/viewport";
@@ -47,6 +51,9 @@ export function useMoldPanel() {
   const channelStart = reactive(zeroCoords());
   const channelEnd = reactive(zeroCoords());
   const inletTemp = ref("25");
+  // 模壁 1D 通道 BC 的口径：质量流量（kg/s）与介质比热（J/kg/K，水 4180）
+  const channelMassFlow = ref(String(DEFAULT_COOLANT_MASS_FLOW_KG_S));
+  const channelCp = ref(String(WATER_SPECIFIC_HEAT));
 
   // 空输入按 0 处理（Number("") === 0），坐标允许留空。
   function xyz(values: Record<AxisKey, string>): [number, number, number] {
@@ -68,6 +75,8 @@ export function useMoldPanel() {
       xyz(channelStart),
       xyz(channelEnd),
       Number(inletTemp.value),
+      Number(channelMassFlow.value),
+      Number(channelCp.value),
     );
   }
 
@@ -199,7 +208,7 @@ export function useMoldPanel() {
   }
 
   function channelLabel(channel: CoolingChannel): string {
-    return `水路 ${channel.id} · Ø${channel.diameterMm} mm · ${channel.inletTempC}°C`;
+    return `水路 ${channel.id} · Ø${channel.diameterMm} mm · ${channel.inletTempC}°C · ${channel.massFlowRateKgS} kg/s`;
   }
 
   return {
@@ -232,6 +241,8 @@ export function useMoldPanel() {
     channelStart,
     channelEnd,
     inletTemp,
+    channelMassFlow,
+    channelCp,
     addChannel,
     channelLabel,
     check,

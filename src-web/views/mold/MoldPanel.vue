@@ -36,6 +36,8 @@ const {
   channelStart,
   channelEnd,
   inletTemp,
+  channelMassFlow,
+  channelCp,
   addChannel,
   channelLabel,
   check,
@@ -219,6 +221,22 @@ const {
         class="w-20"
         step="any"
         title="入口温度 °C"
+        :disabled="formDisabled"
+      />
+      <TextInput
+        v-model="channelMassFlow"
+        type="number"
+        class="w-20"
+        step="any"
+        title="质量流量 kg/s"
+        :disabled="formDisabled"
+      />
+      <TextInput
+        v-model="channelCp"
+        type="number"
+        class="w-24"
+        step="any"
+        title="介质比热 J/kg/K"
         :disabled="formDisabled"
       />
       <UiButton :disabled="formDisabled" @click="addChannel">添加水路</UiButton>

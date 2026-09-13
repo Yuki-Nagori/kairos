@@ -424,12 +424,15 @@ fn run_pipeline(
     let process = default_process_with(injection_time_s);
     let case_report = moldingfoam::generate_case(
         out,
-        &volume,
-        &material,
-        &process,
-        &AnalysisStage::Fill,
-        cores as usize,
-        &gates,
+        &moldingfoam::CaseInputs {
+            mesh: &volume,
+            material: &material,
+            process: &process,
+            stage: &AnalysisStage::Fill,
+            cores: cores as usize,
+            gates: &gates,
+            channels: &[],
+        },
     )?;
     // 网格尺寸 vs 最小特征提示（与几何面板同一套 core 探测）
     let thickness = services::thickness::probe_thickness(&mesh_tri);

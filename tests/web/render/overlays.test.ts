@@ -22,6 +22,8 @@ const channel: CoolingChannel = {
   start: [0, 5, 0],
   end: [5, 5, 0],
   inletTempC: 25,
+  massFlowRateKgS: 0.05,
+  specificHeatJKgK: 4180,
 };
 
 describe("buildOverlayLayers", () => {

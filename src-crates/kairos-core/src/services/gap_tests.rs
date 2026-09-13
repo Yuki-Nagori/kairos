@@ -538,12 +538,15 @@ fn generate_case_reports_write_failure_when_target_is_directory() {
     let volume_mesh = meshing::generate(&sample_mesh(), &params).unwrap();
     let error = moldingfoam::generate_case(
         &dir,
-        &volume_mesh,
-        &valid_material(),
-        &valid_process(),
-        &AnalysisStage::Fill,
-        2,
-        &[],
+        &moldingfoam::CaseInputs {
+            mesh: &volume_mesh,
+            material: &valid_material(),
+            process: &valid_process(),
+            stage: &AnalysisStage::Fill,
+            cores: 2,
+            gates: &[],
+            channels: &[],
+        },
     )
     .unwrap_err();
     assert!(error.message().contains("写入") || error.message().contains("创建目录"));
@@ -572,12 +575,15 @@ fn generate_case_reports_write_failure_at_constant_dictionaries() {
         std::fs::create_dir_all(dir.join(target)).unwrap();
         let error = moldingfoam::generate_case(
             &dir,
-            &volume_mesh,
-            &valid_material(),
-            &valid_process(),
-            &AnalysisStage::Fill,
-            2,
-            &[],
+            &moldingfoam::CaseInputs {
+                mesh: &volume_mesh,
+                material: &valid_material(),
+                process: &valid_process(),
+                stage: &AnalysisStage::Fill,
+                cores: 2,
+                gates: &[],
+                channels: &[],
+            },
         )
         .unwrap_err();
         assert!(error.message().contains("写入"), "{target}");

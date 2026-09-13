@@ -19,6 +19,10 @@ let studySeq = 0;
 let elementSeq = 0;
 
 /** 结构编辑只改内存，落盘统一经保存/另存为动作（writeProject）。 */
+/** 冷却介质默认口径：水 0.05 kg/s、cp 4180 J/kg/K（面板初值与 core 默认一致）。 */
+export const DEFAULT_COOLANT_MASS_FLOW_KG_S = 0.05;
+export const WATER_SPECIFIC_HEAT = 4180;
+
 export const useProjectStore = defineStore("project", {
   state: () => ({
     /** 当前打开的工程文档；null 表示尚未打开（新建/打开后才有）。 */
@@ -244,6 +248,8 @@ export const useProjectStore = defineStore("project", {
       start: [number, number, number],
       end: [number, number, number],
       inletTempC: number,
+      massFlowRateKgS = DEFAULT_COOLANT_MASS_FLOW_KG_S,
+      specificHeatJKgK = WATER_SPECIFIC_HEAT,
     ): void {
       this.touchActiveStudy((study) => {
         study.coolingChannels.push({
@@ -252,6 +258,8 @@ export const useProjectStore = defineStore("project", {
           start,
           end,
           inletTempC,
+          massFlowRateKgS,
+          specificHeatJKgK,
         });
       });
     },
