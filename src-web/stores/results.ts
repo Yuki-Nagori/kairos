@@ -7,6 +7,7 @@ import {
   deformRenderMesh,
   listResultTimes,
   loadResultField,
+  loadTensorField,
   loadVectorField,
 } from "../api/results";
 import type {
@@ -16,6 +17,7 @@ import type {
   GateLocationReport,
   Probe,
   RenderMeshData,
+  TensorField,
   VectorField,
   ProbeTimeSeries,
   ResultCatalog,
@@ -48,6 +50,8 @@ export const useResultsStore = defineStore("results", {
     fillPreview: null as FillPreviewReport | null,
     /** 最近一次加载的矢量场三分量（null = 未加载）。 */
     vectorField: null as VectorField | null,
+    /** 最近一次加载的对称张量场（null = 未加载）。 */
+    tensorField: null as TensorField | null,
   }),
   actions: {
     /** 运行浇口位置分析（轻量启发式，不经求解器）：适合度场直接作为当前场
@@ -66,6 +70,24 @@ export const useResultsStore = defineStore("results", {
           complete: true,
         };
       });
+    },
+    /** 加载对称张量场（残余应力 / 取向张量）：模量作为当前场进云图，主轴供面板读数。 */
+    async loadTensorComponents(caseDir: string, timeDir: string, field: string): Promise<void> {
+      const app = useAppStore();
+      try {
+        const tensor = await loadTensorField(caseDir, timeDir, field);
+        this.tensorField = tensor;
+        this.loadedField = {
+          field: tensor.field,
+          timeDir: tensor.timeDir,
+          timeS: tensor.timeS,
+          values: tensor.magnitudes,
+          isMagnitude: true,
+          complete: tensor.complete,
+        };
+      } catch (error) {
+        app.setError(error);
+      }
     },
     /** 变形显示：按已加载的矢量场（位移）偏移渲染网格；失败进全局错误并返回 null。 */
     async deformMesh(geometryId: string, scale: number): Promise<RenderMeshData | null> {

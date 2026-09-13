@@ -6,6 +6,7 @@ import { downloadTextFile } from "../../../src-web/utils/download";
 import { useResultsStore } from "../../../src-web/stores/results";
 import {
   deformRenderMesh,
+  loadTensorField,
   deriveDifference as deriveDifferenceApi,
   deriveField as deriveFieldApi,
   listResultTimes,
@@ -24,6 +25,7 @@ vi.mock("../../../src-web/api/results", () => ({
   listResultTimes: vi.fn(),
   loadResultField: vi.fn(),
   loadVectorField: vi.fn(),
+  loadTensorField: vi.fn(),
   deformRenderMesh: vi.fn(),
   deriveField: vi.fn(),
   deriveDifference: vi.fn(),
@@ -650,5 +652,53 @@ describe("deformMesh（变形显示）", () => {
     vi.mocked(deformRenderMesh).mockRejectedValue(new Error("尚未加载矢量场"));
     await expect(results.deformMesh("g-1", 5)).resolves.toBeNull();
     expect(app.error?.message).toBe("尚未加载矢量场");
+  });
+});
+
+describe("loadTensorComponents（对称张量场）", () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    vi.resetAllMocks();
+  });
+
+  const tensor = {
+    field: "sigma",
+    timeDir: "2",
+    timeS: 2,
+    components: [[100, 0, 0, 0, 0, 0]] as [number, number, number, number, number, number][],
+    magnitudes: [100, 50],
+    principalAxes: [[1, 0, 0] as [number, number, number]],
+    complete: true,
+  };
+
+  it("张量入状态，模量作为当前场（isMagnitude 标记）", async () => {
+    vi.mocked(loadTensorField).mockResolvedValue(tensor);
+    const app = useAppStore();
+    const results = useResultsStore();
+    await results.loadTensorComponents("/case/run", "2", "sigma");
+
+    expect(loadTensorField).toHaveBeenCalledWith("/case/run", "2", "sigma");
+    expect(results.tensorField).toEqual(tensor);
+    expect(results.loadedField).toEqual({
+      field: "sigma",
+      timeDir: "2",
+      timeS: 2,
+      values: tensor.magnitudes,
+      isMagnitude: true,
+      complete: true,
+    });
+    expect(app.error).toBeNull();
+  });
+
+  it("加载失败进全局错误且保留旧值", async () => {
+    vi.mocked(loadTensorField).mockResolvedValue(tensor);
+    const results = useResultsStore();
+    await results.loadTensorComponents("/case/run", "2", "sigma");
+
+    const app = useAppStore();
+    vi.mocked(loadTensorField).mockRejectedValue(new Error("不是对称张量场"));
+    await results.loadTensorComponents("/case/run", "3", "T");
+    expect(app.error?.message).toBe("不是对称张量场");
+    expect(results.tensorField).toEqual(tensor);
   });
 });

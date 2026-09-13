@@ -50,6 +50,23 @@ pub struct VectorField {
     pub complete: bool,
 }
 
+/// 已加载的对称张量场（6 分量 + 模量 + 主轴）：翘曲残余应力 / 取向张量等。
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TensorField {
+    pub field: String,
+    pub time_dir: String,
+    pub time_s: f64,
+    /// OpenFOAM symmTensor 分量顺序 (xx, xy, xz, yy, yz, zz)。
+    pub components: Vec<[f64; 6]>,
+    /// 张量模量 sqrt(xx²+yy²+zz²+2(xy²+xz²+yz²))，逐单元。
+    pub magnitudes: Vec<f64>,
+    /// 主方向（按特征值绝对值最大者），单位向量；退化时为零向量。
+    pub principal_axes: Vec<[f64; 3]>,
+    /// false = 声明数量与实际不符（求解中途取消的不完整结果）。
+    pub complete: bool,
+}
+
 /// 派生算子请求：作用于会话缓存的最近加载场；差值另需会话中的对比场。
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]

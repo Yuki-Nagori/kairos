@@ -153,6 +153,21 @@ pub async fn load_vector_field_binary(
     Ok(Response::new(field_binary::encode_vector(&vectors)))
 }
 
+/// 对称张量场读取（残余应力 sigma / 取向张量等）：返回分量 + 模量 + 主方向。
+/// 走 JSON（当前用途是面板展示与主方向读数，网格规模见发布说明）。
+#[tauri::command]
+pub async fn load_tensor_field(
+    case_dir: String,
+    time_dir: String,
+    field: String,
+) -> Result<kairos_core::models::results::TensorField> {
+    tauri::async_runtime::spawn_blocking(move || {
+        results::read_tensor_field(std::path::Path::new(&case_dir), &time_dir, &field)
+    })
+    .await
+    .map_err(|e| KairosError::internal(format!("张量场加载任务失败：{e}")))?
+}
+
 /// 变形显示：用会话里最近加载的矢量场（位移）偏移渲染网格顶点。
 /// 位移单位按 m → mm 换算（case 场是 SI）；scale 为显示倍数（0 = 原位）。
 #[tauri::command]

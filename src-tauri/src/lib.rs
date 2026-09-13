@@ -232,6 +232,7 @@ pub fn run() {
             commands::results::load_result_field_binary,
             commands::results::load_vector_field_binary,
             commands::results::deform_render_mesh,
+            commands::results::load_tensor_field,
             commands::results::derive_field,
             commands::vm::vm_status,
             commands::vm::vm_install,

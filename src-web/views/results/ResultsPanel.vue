@@ -23,6 +23,9 @@ const {
   vectorStats,
   vectorDisabled,
   loadVector,
+  tensorFieldName,
+  tensorStats,
+  loadTensor,
 } = useResultsPanel();
 </script>
 
@@ -146,6 +149,30 @@ const {
       <p v-if="vectorField?.complete === false" class="text-[10px] text-amber-400">
         矢量数据不完整：求解中途取消的结果。
       </p>
+    </div>
+    <div class="flex flex-wrap items-center gap-2">
+      <p class="text-[11px] font-semibold tracking-wide text-zinc-400">对称张量场（残余应力）</p>
+      <UiTextInput
+        v-model="tensorFieldName"
+        class="w-20"
+        placeholder="sigma"
+        title="张量场名（如 sigma 残余应力）"
+      />
+      <UiButton
+        variant="ghost"
+        :disabled="vectorDisabled"
+        title="读取 6 分量 + 模量 + 主方向（模量直接上云图）"
+        @click="loadTensor"
+      >
+        加载张量场
+      </UiButton>
+      <p v-if="tensorStats === null" class="text-xs text-zinc-500">
+        未加载张量场（残余应力 sigma / 取向张量等）。
+      </p>
+      <p v-else-if="!tensorStats.complete" class="text-xs text-amber-400">
+        {{ tensorStats.line }}（不完整）
+      </p>
+      <p v-else class="text-xs text-zinc-300">{{ tensorStats.line }}</p>
     </div>
   </Card>
 </template>

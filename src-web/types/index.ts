@@ -499,6 +499,20 @@ export interface DependencyStatus {
 /** 分析阶段选项卡（工作流导航；home = 总览显示全部面板）。 */
 export type Stage = "home" | "geometry" | "mesh" | "process" | "solve" | "results" | "report";
 
+/** 对应 `kairos-core::models::results::TensorField`（对称张量 6 分量 + 模量 + 主轴）。 */
+export interface TensorField {
+  field: string;
+  timeDir: string;
+  timeS: number;
+  /** OpenFOAM symmTensor 顺序 (xx, xy, xz, yy, yz, zz)。 */
+  components: [number, number, number, number, number, number][];
+  /** 张量模量 sqrt(xx²+yy²+zz²+2(xy²+xz²+yz²))。 */
+  magnitudes: number[];
+  /** 主方向（|λ| 最大者），单位向量；符号已规范化。 */
+  principalAxes: [number, number, number][];
+  complete: boolean;
+}
+
 /** 对应 `kairos-core::models::results::VectorField`（三分量）。 */
 export interface VectorField {
   field: string;

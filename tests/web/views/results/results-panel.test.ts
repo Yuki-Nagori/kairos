@@ -19,6 +19,7 @@ vi.mock("../../../../src-web/api/results", () => ({
   listResultTimes: vi.fn(),
   loadResultField: vi.fn(),
   loadVectorField: vi.fn(),
+  loadTensorField: vi.fn(),
   deriveField: vi.fn(),
   deriveDifference: vi.fn(),
 }));
@@ -429,5 +430,108 @@ describe("ResultsPanel：矢量场三分量", () => {
     expect(wrapper.text()).toContain("矢量 U @ 2：1 个单元");
     const incomplete = wrapper.findAll("p").find((node) => node.text().includes("（不完整）"));
     expect(incomplete?.classes()).toContain("text-amber-400");
+  });
+});
+
+describe("ResultsPanel：对称张量场", () => {
+  let pinia: Pinia;
+
+  beforeEach(() => {
+    pinia = createPinia();
+    setActivePinia(pinia);
+    vi.resetAllMocks();
+  });
+
+  it("无目录时禁用；加载后展示单元数、模量范围与首单元主轴", async () => {
+    const wrapper = mount(ResultsPanel, { global: { plugins: [pinia] } });
+    expect(wrapper.text()).toContain("未加载张量场");
+
+    const { loadTensorField } = (await import("../../../../src-web/api/results")) as unknown as {
+      loadTensorField: Mock;
+    };
+    const results = useResultsStore();
+    results.resultCatalog = {
+      caseDir: "/case/run",
+      times: [{ dirName: "2", timeS: 2, fields: [] }],
+    };
+    loadTensorField.mockResolvedValue({
+      field: "sigma",
+      timeDir: "2",
+      timeS: 2,
+      components: [[100, 0, 0, 0, 0, 0]],
+      magnitudes: [100, 50],
+      principalAxes: [[0.577, 0.577, 0.577]],
+      complete: true,
+    });
+    await nextTick();
+
+    await findButton(wrapper, "加载张量场").trigger("click");
+    await flushPromises();
+    expect(loadTensorField).toHaveBeenCalledWith("/case/run", "2", "sigma");
+    expect(wrapper.text()).toContain("张量 sigma @ 2：2 个单元");
+    expect(wrapper.text()).toContain("首单元主轴 (0.577, 0.577, 0.577)");
+  });
+
+  it("无目录 / 空时间步时不请求张量场；名字清空回退 sigma（防御分支）", async () => {
+    const { loadTensorField } = (await import("../../../../src-web/api/results")) as unknown as {
+      loadTensorField: Mock;
+    };
+    const results = useResultsStore();
+    const { useResultsPanel } = await import("../../../../src-web/views/results/useResultsPanel");
+    const panel = useResultsPanel();
+
+    panel.loadTensor();
+    expect(loadTensorField).not.toHaveBeenCalled();
+
+    results.resultCatalog = { caseDir: "/case/run", times: [] };
+    panel.loadTensor();
+    expect(loadTensorField).not.toHaveBeenCalled();
+
+    results.resultCatalog = {
+      caseDir: "/case/run",
+      times: [{ dirName: "1", timeS: 1, fields: [] }],
+    };
+    panel.tensorFieldName.value = "  ";
+    loadTensorField.mockResolvedValue({
+      field: "sigma",
+      timeDir: "1",
+      timeS: 1,
+      components: [],
+      magnitudes: [],
+      principalAxes: [],
+      complete: true,
+    });
+    panel.loadTensor();
+    await flushPromises();
+    expect(loadTensorField).toHaveBeenCalledWith("/case/run", "1", "sigma");
+    expect(panel.tensorStats.value).toBeNull();
+  });
+
+  it("不完整张量给出告警行", async () => {
+    const { loadTensorField } = (await import("../../../../src-web/api/results")) as unknown as {
+      loadTensorField: Mock;
+    };
+    const results = useResultsStore();
+    results.resultCatalog = {
+      caseDir: "/case/run",
+      times: [{ dirName: "1", timeS: 1, fields: [] }],
+    };
+    loadTensorField.mockResolvedValue({
+      field: "sigmaEq",
+      timeDir: "1",
+      timeS: 1,
+      components: [],
+      magnitudes: [1],
+      principalAxes: [[0, 0, 1]],
+      complete: false,
+    });
+    const wrapper = mount(ResultsPanel, { global: { plugins: [pinia] } });
+    await nextTick();
+    await wrapper.find('input[placeholder="sigma"]').setValue("sigmaEq");
+    await findButton(wrapper, "加载张量场").trigger("click");
+    await flushPromises();
+
+    const line = wrapper.findAll("p").find((node) => node.text().includes("（不完整）"));
+    expect(line?.classes()).toContain("text-amber-400");
   });
 });

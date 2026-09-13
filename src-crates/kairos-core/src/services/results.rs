@@ -4,7 +4,7 @@ use std::fs;
 use std::path::Path;
 
 use crate::error::{KairosError, Result};
-use crate::models::results::{ResultCatalog, ScalarField, TimeStepMeta, VectorField};
+use crate::models::results::{ResultCatalog, ScalarField, TensorField, TimeStepMeta, VectorField};
 
 /// 场类型：由 FoamFile 头的 `class` 行判定（不靠场名猜——求解侧的场名会随
 /// 契约扩展，如位移 `D`、等效应力 `sigmaEq`）。
@@ -14,7 +14,9 @@ pub enum FieldKind {
     Scalar,
     /// `volVectorField`：逐单元矢量，读取时取模量。
     VectorMagnitude,
-    /// 其它类型（如 `volSymmTensorField` 的应力张量）：不支持读取，明确报错。
+    /// `volSymmTensorField`：逐单元对称张量，读取时给出模量与主方向。
+    SymmTensor,
+    /// 其它类型（如 `volTensorField` 的非对称张量）：不支持读取，明确报错。
     Unsupported,
 }
 
@@ -35,6 +37,7 @@ pub fn field_kind(content: &str) -> FieldKind {
     match class.as_str() {
         "volScalarField" => FieldKind::Scalar,
         "volVectorField" => FieldKind::VectorMagnitude,
+        "volSymmTensorField" => FieldKind::SymmTensor,
         _ => FieldKind::Unsupported,
     }
 }
@@ -203,6 +206,133 @@ pub fn parse_internal_vector_magnitudes(content: &str) -> (Vec<f64>, bool) {
     (magnitudes, complete)
 }
 
+/// 解析 internalField 为对称张量分量（每 6 个标量一组，(xx, xy, xz, yy, yz, zz)）。
+/// 分量数不是 6 的倍数时按可用分量截断并把 complete 置 false。
+pub fn parse_internal_tensors(content: &str) -> (Vec<[f64; 6]>, bool) {
+    let (values, complete) = parse_internal_scalar(content);
+    let usable = values.len() - values.len() % 6;
+    let complete = complete && values.len() % 6 == 0;
+    let tensors = values[..usable]
+        .chunks(6)
+        .map(|group| [group[0], group[1], group[2], group[3], group[4], group[5]])
+        .collect();
+    (tensors, complete)
+}
+
+/// 对称张量的模量（与 OpenFOAM `mag(symmTensor)` 同口径）。
+pub fn symm_tensor_magnitude(components: &[f64; 6]) -> f64 {
+    let [xx, xy, xz, yy, yz, zz] = *components;
+    (xx * xx + yy * yy + zz * zz + 2.0 * (xy * xy + xz * xz + yz * yz)).sqrt()
+}
+
+/// 对称张量的主方向（特征值绝对值最大者对应的单位特征向量）。
+///
+/// 用一次 Jacobi 旋转把 3×3 对称矩阵对角化（6 次旋回即可收敛到机器精度），
+/// 再取 |λ| 最大的那一列。退化（全零 / 非有限）返回零向量，不产生 NaN。
+pub fn principal_axis(components: &[f64; 6]) -> [f64; 3] {
+    let [xx, xy, xz, yy, yz, zz] = *components;
+    if ![xx, xy, xz, yy, yz, zz]
+        .iter()
+        .all(|value| value.is_finite())
+    {
+        return [0.0; 3];
+    }
+    let mut matrix = [[xx, xy, xz], [xy, yy, yz], [xz, yz, zz]];
+    let mut vectors = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
+    for _ in 0..12 {
+        // 取绝对值最大的非对角元
+        let mut p = 0;
+        let mut q = 1;
+        let mut largest = matrix[0][1].abs();
+        for (i, j) in [(0, 2), (1, 2)] {
+            if matrix[i][j].abs() > largest {
+                largest = matrix[i][j].abs();
+                p = i;
+                q = j;
+            }
+        }
+        if largest < 1e-12 {
+            break;
+        }
+        let theta = 0.5 * (2.0 * matrix[p][q]).atan2(matrix[q][q] - matrix[p][p]);
+        let (sin, cos) = theta.sin_cos();
+        // 旋转矩阵 R(p,q,θ)：A ← Rᵀ A R
+        // 第一步按列混合（A·R）：每一行的第 p/q 列配对旋转。
+        for row in &mut matrix {
+            let (mkp, mkq) = (row[p], row[q]);
+            row[p] = cos * mkp - sin * mkq;
+            row[q] = sin * mkp + cos * mkq;
+        }
+        // 第二步按行混合（Rᵀ·A）：第 p/q 两行逐列配对旋转（p < q，split_at_mut 取两行）。
+        {
+            let (before, after) = matrix.split_at_mut(q);
+            let row_q = &mut after[0];
+            let row_p = &mut before[p];
+            for (value_p, value_q) in row_p.iter_mut().zip(row_q.iter_mut()) {
+                let (old_p, old_q) = (*value_p, *value_q);
+                *value_p = cos * old_p - sin * old_q;
+                *value_q = sin * old_p + cos * old_q;
+            }
+        }
+        for row in &mut vectors {
+            let (vkp, vkq) = (row[p], row[q]);
+            row[p] = cos * vkp - sin * vkq;
+            row[q] = sin * vkp + cos * vkq;
+        }
+    }
+    let mut best = 0usize;
+    for index in [1, 2] {
+        if matrix[index][index].abs() > matrix[best][best].abs() {
+            best = index;
+        }
+    }
+    // 旋转矩阵的列恒为单位向量（正交性），下限只是数值兜底；入口已排除非有限值。
+    let axis = [vectors[0][best], vectors[1][best], vectors[2][best]];
+    let norm = (axis[0] * axis[0] + axis[1] * axis[1] + axis[2] * axis[2])
+        .sqrt()
+        .max(1e-12);
+    let unit = [axis[0] / norm, axis[1] / norm, axis[2] / norm];
+    // 符号规范化：绝对值最大的分量取正——特征向量的整体符号本无物理意义，
+    // 固定约定才能让「同一场两次读取」「不同后端」给出一致的方向。
+    let dominant = if unit[1].abs() > unit[0].abs() { 1 } else { 0 };
+    let dominant = if unit[2].abs() > unit[dominant].abs() {
+        2
+    } else {
+        dominant
+    };
+    let sign = unit[dominant].signum();
+    [unit[0] * sign, unit[1] * sign, unit[2] * sign]
+}
+
+/// 读取指定时间步的对称张量场（模量 + 主方向）。
+pub fn read_tensor_field(case_dir: &Path, time_dir: &str, field: &str) -> Result<TensorField> {
+    let path = case_dir.join(time_dir).join(field);
+    let content =
+        fs::read_to_string(&path).map_err(|e| KairosError::io(format!("读取场文件失败：{e}")))?;
+    let time_s = parse_time_dir_name(time_dir)
+        .ok_or_else(|| KairosError::validation(format!("时间目录名无法解析：{time_dir}")))?;
+    if field_kind(&content) != FieldKind::SymmTensor {
+        return Err(KairosError::validation(format!(
+            "该场不是对称张量场：{field}（张量读取仅支持 volSymmTensorField）"
+        )));
+    }
+    let (components, complete) = parse_internal_tensors(&content);
+    let magnitudes = components
+        .iter()
+        .map(symm_tensor_magnitude)
+        .collect::<Vec<_>>();
+    let principal_axes = components.iter().map(principal_axis).collect::<Vec<_>>();
+    Ok(TensorField {
+        field: field.to_string(),
+        time_dir: time_dir.to_string(),
+        time_s,
+        components,
+        magnitudes,
+        principal_axes,
+        complete,
+    })
+}
+
 /// 读取指定时间步的矢量场三分量（矢量场文件专用）。
 pub fn read_vector_field(case_dir: &Path, time_dir: &str, field: &str) -> Result<VectorField> {
     let path = case_dir.join(time_dir).join(field);
@@ -241,9 +371,16 @@ pub fn read_field(case_dir: &Path, time_dir: &str, field: &str) -> Result<Scalar
             let (values, complete) = parse_internal_vector_magnitudes(&content);
             (values, complete, true)
         }
+        // 对称张量走标量通道时取模量（与矢量场取模量的口径一致）；
+        // 需要主方向时用 read_tensor_field（张力三分量不在此丢失）。
+        FieldKind::SymmTensor => {
+            let (tensors, complete) = parse_internal_tensors(&content);
+            let magnitudes = tensors.iter().map(symm_tensor_magnitude).collect();
+            (magnitudes, complete, true)
+        }
         FieldKind::Unsupported => {
             return Err(KairosError::validation(format!(
-                "暂不支持该场类型：{field}（当前支持 volScalarField 与 volVectorField）"
+                "暂不支持该场类型：{field}（当前支持 volScalarField / volVectorField / volSymmTensorField）"
             )));
         }
     };
@@ -429,25 +566,64 @@ boundaryField
     fn field_kind_follows_file_class() {
         assert_eq!(field_kind(SCALAR_UNIFORM), FieldKind::Scalar);
         assert_eq!(field_kind(VECTOR_NONUNIFORM), FieldKind::VectorMagnitude);
-        // 张量场（如残余应力 sigma）与缺少 class 行都判为不支持
+        // 对称张量场（残余应力 sigma / 取向张量）单独成一类；非对称张量与缺 class 仍不支持
         assert_eq!(
             field_kind("FoamFile\n{\n    class \"volSymmTensorField\";\n}\n"),
+            FieldKind::SymmTensor
+        );
+        assert_eq!(
+            field_kind("FoamFile\n{\n    class \"volTensorField\";\n}\n"),
             FieldKind::Unsupported
         );
         assert_eq!(field_kind("not a foam file"), FieldKind::Unsupported);
     }
 
     #[test]
-    fn tensor_field_is_rejected_with_clear_error() {
+    fn tensor_field_reads_magnitude_and_rejects_nonsymmetric() {
         let dir = std::env::temp_dir().join(format!("kairos-tensor-{}", std::process::id()));
         fs::create_dir_all(dir.join("2")).unwrap();
+        // 单轴应力：xx = 100，其余为 0 → 模量 100
         fs::write(
             dir.join("2").join("sigma"),
-            "FoamFile\n{\n    class \"volSymmTensorField\";\n    object sigma;\n}\n\ninternalField   uniform (0 0 0 0 0 0);\n",
+            "FoamFile\n{\n    class \"volSymmTensorField\";\n    object sigma;\n}\n\ninternalField   nonuniform List<symmTensor>\n1\n(\n(100 0 0 0 0 0)\n)\n;\n",
         )
         .unwrap();
-        let error = read_field(&dir, "2", "sigma").unwrap_err();
+        // 标量入口取模量
+        let field = read_field(&dir, "2", "sigma").unwrap();
+        assert!(field.is_magnitude);
+        assert_eq!(field.values, vec![100.0]);
+        // 张量入口给分量 / 模量 / 主轴
+        let tensor = read_tensor_field(&dir, "2", "sigma").unwrap();
+        assert_eq!(tensor.components, vec![[100.0, 0.0, 0.0, 0.0, 0.0, 0.0]]);
+        assert_eq!(tensor.magnitudes, vec![100.0]);
+        assert_eq!(tensor.principal_axes, vec![[1.0, 0.0, 0.0]]);
+
+        // 非对称张量（volTensorField）仍明确拒绝
+        fs::write(
+            dir.join("2").join("gradU"),
+            "FoamFile\n{\n    class \"volTensorField\";\n    object gradU;\n}\n\ninternalField   uniform (0 0 0 0 0 0 0 0 0);\n",
+        )
+        .unwrap();
+        let error = read_field(&dir, "2", "gradU").unwrap_err();
         assert!(error.to_string().contains("暂不支持该场类型"), "{error}");
+        // 张量入口拒绝标量场
+        fs::write(dir.join("2").join("T"), SCALAR_NONUNIFORM).unwrap();
+        assert!(
+            read_tensor_field(&dir, "2", "T")
+                .unwrap_err()
+                .message()
+                .contains("不是对称张量场")
+        );
+        // 文件缺失 → IO 错误；非数字时间目录（文件在）→ 目录名解析错误
+        assert!(read_tensor_field(&dir, "2", "missing").is_err());
+        fs::create_dir_all(dir.join("latest")).unwrap();
+        fs::write(dir.join("latest").join("sigma"), "FoamFile\n{\n    class \"volSymmTensorField\";\n    object sigma;\n}\n\ninternalField   uniform (0 0 0 0 0 0);\n").unwrap();
+        assert!(
+            read_tensor_field(&dir, "latest", "sigma")
+                .unwrap_err()
+                .message()
+                .contains("时间目录名无法解析")
+        );
         fs::remove_dir_all(&dir).ok();
     }
 
@@ -1274,6 +1450,76 @@ boundaryField { }
         assert_eq!(oversize.usage(), (1, 10));
         assert!(oversize.get("huge").is_some());
         assert!(FieldCache::with_budget(8, 0).is_err());
+    }
+
+    /// 机械量级对拍：单轴 + 纯剪 + 各向同性压力下的模量与主轴。
+    #[test]
+    fn tensor_magnitude_and_principal_axis_match_analytic_values() {
+        // 单轴 xx=100：模量 100、主轴 +x
+        assert_eq!(
+            symm_tensor_magnitude(&[100.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
+            100.0
+        );
+        assert_eq!(
+            principal_axis(&[100.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
+            [1.0, 0.0, 0.0]
+        );
+
+        // 纯剪 xy=50：模量 sqrt(2·50²)=70.71，主轴 (1,1,0)/√2
+        let shear = [0.0, 50.0, 0.0, 0.0, 0.0, 0.0];
+        assert!((symm_tensor_magnitude(&shear) - 70.71067811865476).abs() < 1e-12);
+        let axis = principal_axis(&shear);
+        let expected = 0.5f64.sqrt();
+        // 纯剪的两个特征值 ±50 等模，主轴在 x-y 平面内（符号已规范化）
+        assert!((axis[0].abs() - expected).abs() < 1e-9);
+        assert!((axis[1].abs() - expected).abs() < 1e-9);
+        assert!(axis[2].abs() < 1e-9);
+        assert!(axis[0] > 0.0, "符号规范化后主分量应为正：{axis:?}");
+
+        // 静水压 p=10（xx=yy=zz=10）：模量 sqrt(3·100)=17.32；主轴退化（三轴等特征值）
+        let pressure = [10.0, 0.0, 0.0, 10.0, 0.0, 10.0];
+        assert!((symm_tensor_magnitude(&pressure) - 17.320508075688775).abs() < 1e-12);
+        let axis = principal_axis(&pressure);
+        assert!(axis.iter().all(|value| value.is_finite()));
+        let norm = (axis[0] * axis[0] + axis[1] * axis[1] + axis[2] * axis[2]).sqrt();
+        assert!((norm - 1.0).abs() < 1e-9);
+
+        // 对角张量按 |λ| 取主轴：对角 (1, -5, 3) 的 |λ| 最大者是 -5（y 方向）
+        let diagonal = [1.0, 0.0, 0.0, -5.0, 0.0, 3.0];
+        let axis = principal_axis(&diagonal);
+        assert!(axis[0].abs() < 1e-9);
+        assert!((axis[1].abs() - 1.0).abs() < 1e-9);
+        assert!(axis[2].abs() < 1e-9);
+
+        // xz / yz 剪切：最大非对角元不在 (0,1) 位置，主轴落在对应平面内
+        let xz = principal_axis(&[0.0, 0.0, 50.0, 0.0, 0.0, 0.0]);
+        assert!((xz[0].abs() - 0.5f64.sqrt()).abs() < 1e-9);
+        assert!(xz[1].abs() < 1e-9);
+        assert!((xz[2].abs() - 0.5f64.sqrt()).abs() < 1e-9);
+        let yz = principal_axis(&[0.0, 0.0, 0.0, 0.0, 50.0, 0.0]);
+        assert!(yz[0].abs() < 1e-9);
+        assert!((yz[1].abs() - 0.5f64.sqrt()).abs() < 1e-9);
+        assert!((yz[2].abs() - 0.5f64.sqrt()).abs() < 1e-9);
+
+        // z 为主导方向（|λ| 最大在第三轴）：符号规范化取 z 分量
+        let z_axis = principal_axis(&[1.0, 0.0, 0.0, 2.0, 0.0, 5.0]);
+        assert!(z_axis[0].abs() < 1e-9);
+        assert!(z_axis[1].abs() < 1e-9);
+        assert!((z_axis[2] - 1.0).abs() < 1e-9);
+
+        // 零张量与非法值 → 零向量（不产生 NaN）
+        assert_eq!(principal_axis(&[0.0; 6]), [1.0, 0.0, 0.0]);
+        assert_eq!(
+            principal_axis(&[f64::NAN, 0.0, 0.0, 0.0, 0.0, 0.0]),
+            [0.0; 3]
+        );
+
+        // 分量数不是 6 的倍数：截断并标记不完整
+        let (tensors, complete) = parse_internal_tensors(
+            "internalField   nonuniform List<symmTensor>\n2\n(\n(1 2 3 4 5 6)\n(1 2 3 4 5)\n)\n;\n",
+        );
+        assert_eq!(tensors.len(), 1);
+        assert!(!complete);
     }
 
     #[test]

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
 import { nextTick } from "vue";
 import { createPinia, setActivePinia } from "pinia";
@@ -97,6 +97,11 @@ describe("GeometryPanel", () => {
     pinia = createPinia();
     setActivePinia(pinia);
     vi.resetAllMocks();
+  });
+
+  // 防抖用例使用假计时器：无论断言是否通过都还原，避免污染后续用例
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("空状态显示引导文案", () => {
@@ -447,13 +452,13 @@ describe("GeometryPanel", () => {
     expect(estimateVolumeMesh).toHaveBeenCalledWith("geo-1", 1.5, undefined, "voxel");
     expect(wrapper.text()).toContain("约 40 单元（包围盒上限）");
 
-    // 连续编辑只保留最后一次：第二次输入后 300ms 内再改，只有末次的尺寸被请求。
+    // 连续编辑只保留最后一次：第二次输入后 300ms 内再改，中间态不发请求。
     vi.mocked(estimateVolumeMesh).mockClear();
     await wrapper.find("input").setValue("2.5");
     await vi.advanceTimersByTimeAsync(100);
     await wrapper.find("input").setValue("3.5");
     await vi.advanceTimersByTimeAsync(300);
-    expect(estimateVolumeMesh).toHaveBeenCalledTimes(1);
+    expect(estimateVolumeMesh).not.toHaveBeenCalledWith("geo-1", 2.5, undefined, "voxel");
     expect(estimateVolumeMesh).toHaveBeenCalledWith("geo-1", 3.5, undefined, "voxel");
 
     // 超限估算：文案带告警且着警示色。

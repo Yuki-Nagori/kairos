@@ -7,6 +7,7 @@ import type {
   RenderMeshData,
   ResultCatalog,
   ScalarField,
+  TensorField,
   VectorField,
 } from "../types";
 
@@ -44,6 +45,15 @@ export async function loadVectorField(
     field,
   });
   return decodeVectorFieldBinary(buffer);
+}
+
+/** 加载对称张量场（残余应力 / 取向张量）：分量 + 模量 + 主方向。 */
+export function loadTensorField(
+  caseDir: string,
+  timeDir: string,
+  field: string,
+): Promise<TensorField> {
+  return invokeCommand("load_tensor_field", { caseDir, timeDir, field });
 }
 
 /** 变形显示：按会话里已加载的矢量场（位移）偏移渲染网格，返回变形后的网格。 */

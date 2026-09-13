@@ -89,6 +89,38 @@ export function useResultsPanel() {
   });
   const vectorDisabled = computed(() => results.resultCatalog === null);
 
+  // —— 对称张量场（残余应力 / 取向张量）——
+  const tensorFieldName = ref("sigma");
+  const tensorStats = computed(() => {
+    const field = results.tensorField;
+    if (field === null || field.magnitudes.length === 0) {
+      return null;
+    }
+    const { min, max } = minMax(field.magnitudes);
+    const axis = field.principalAxes[0] as [number, number, number];
+    return {
+      line: `张量 ${field.field} @ ${field.timeDir}：${field.magnitudes.length} 个单元 · |σ| ${min.toExponential(2)} ~ ${max.toExponential(2)} · 首单元主轴 (${axis.map((value) => value.toFixed(3)).join(", ")})`,
+      complete: field.complete,
+    };
+  });
+
+  /** 加载张量场：时间步与矢量场同一取法（当前已加载场 → 最后一个时间步）。 */
+  function loadTensor(): void {
+    const catalog = results.resultCatalog;
+    if (catalog === null || catalog.times.length === 0) {
+      return;
+    }
+    const loadedTime = results.loadedField?.timeDir;
+    const timeDir =
+      catalog.times.find((step) => step.dirName === loadedTime)?.dirName ??
+      catalog.times.at(-1)!.dirName;
+    void results.loadTensorComponents(
+      catalog.caseDir,
+      timeDir,
+      tensorFieldName.value.trim() || "sigma",
+    );
+  }
+
   /** 加载矢量场：时间步取当前已加载场（没有就用最后一个时间步）。 */
   function loadVector(): void {
     const catalog = results.resultCatalog;
@@ -124,5 +156,8 @@ export function useResultsPanel() {
     vectorStats,
     vectorDisabled,
     loadVector,
+    tensorFieldName,
+    tensorStats,
+    loadTensor,
   };
 }
