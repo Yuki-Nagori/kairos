@@ -232,6 +232,40 @@ pub async fn generate_volume_mesh(
     .map_err(|e| KairosError::internal(format!("网格任务失败：{e}")))?
 }
 
+/// 网格规模估算（生成前预览）：体素按包围盒上限精确推算（与生成同一套
+/// 逐轴数学），Gmsh 按体积粗估；超上限时不进入生成即可给出告警。
+#[tauri::command]
+pub async fn estimate_volume_mesh(
+    store: State<'_, GeometryStore>,
+    geometry_id: String,
+    target_size: f64,
+    refinement: Option<MeshRefinement>,
+    engine: String,
+) -> Result<kairos_core::models::mesh::MeshEstimate> {
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let mesh = {
+            let sessions = store.lock();
+            let session = sessions
+                .get(&geometry_id)
+                .ok_or_else(|| KairosError::not_found(format!("几何不存在：{geometry_id}")))?;
+            session.mesh.clone()
+        };
+        match engine.as_str() {
+            "gmsh" => meshing::estimate_gmsh(&mesh, target_size),
+            _ => meshing::estimate_voxel(
+                &mesh,
+                &VolumeMeshParams {
+                    target_size,
+                    refinement,
+                },
+            ),
+        }
+    })
+    .await
+    .map_err(|e| KairosError::internal(format!("网格估算任务失败：{e}")))?
+}
+
 /// 生成 Gmsh 引擎网格：定位应用内下载的 gmsh 可执行文件，写临时 STL 后
 /// 子进程调用（GPL 隔离红线），解析 msh2 回 VolumeMesh。target_size 作为
 /// 目标单元尺寸上限（-clmax）传入 Gmsh。

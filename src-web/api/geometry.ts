@@ -3,6 +3,7 @@ import { invokeCommand } from "../utils/ipc";
 import type {
   DualDomainReport,
   GeometrySummary,
+  MeshEstimate,
   MeshingReport,
   MeshRefinement,
   MidplaneReport,
@@ -28,6 +29,16 @@ export function generateVolumeMesh(
   refinement?: MeshRefinement,
 ): Promise<MeshingReport> {
   return invokeCommand("generate_volume_mesh", { geometryId, targetSize, refinement });
+}
+
+/** 网格规模估算（生成前预览）：体素为包围盒上限，Gmsh 为体积粗估。 */
+export function estimateVolumeMesh(
+  geometryId: string,
+  targetSize: number,
+  refinement: MeshRefinement | undefined,
+  engine: string,
+): Promise<MeshEstimate> {
+  return invokeCommand("estimate_volume_mesh", { geometryId, targetSize, refinement, engine });
 }
 
 /** 导入内置样例立方体（首次使用引导）。 */

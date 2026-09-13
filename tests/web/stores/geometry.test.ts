@@ -4,6 +4,7 @@ import { useAppStore } from "../../../src-web/stores/app";
 import { useGeometryStore } from "../../../src-web/stores/geometry";
 import { useProjectStore } from "../../../src-web/stores/project";
 import {
+  estimateVolumeMesh,
   generateDualDomainMesh,
   generateGmshMesh,
   generateMidplaneMesh,
@@ -20,6 +21,7 @@ import { pickOpenGeometryPath } from "../../../src-web/api/dialog";
 import type {
   DualDomainReport,
   GeometrySummary,
+  MeshEstimate,
   MeshingReport,
   MidplaneReport,
   RunnerElement,
@@ -27,6 +29,7 @@ import type {
 } from "../../../src-web/types";
 
 vi.mock("../../../src-web/api/geometry", () => ({
+  estimateVolumeMesh: vi.fn(),
   importStl: vi.fn(),
   importStep: vi.fn(),
   importIges: vi.fn(),
@@ -575,6 +578,64 @@ describe("geometry store", () => {
 
       expect(app.error?.message).toBe("Gmsh 未就绪");
       expect(app.busy).toBeNull();
+    });
+  });
+
+  describe("estimateMesh", () => {
+    const estimate: MeshEstimate = {
+      engine: "voxel",
+      cellCount: 8,
+      elementCount: 40,
+      overLimit: false,
+      basis: "包围盒上限",
+      cellLimit: 2_000_000,
+    };
+
+    it("stores the estimate on success", async () => {
+      vi.mocked(estimateVolumeMesh).mockResolvedValue(estimate);
+
+      const app = useAppStore();
+      const geometry = useGeometryStore();
+      await geometry.estimateMesh("g-1", 5, undefined, "voxel");
+
+      expect(estimateVolumeMesh).toHaveBeenCalledWith("g-1", 5, undefined, "voxel");
+      expect(geometry.meshEstimates["g-1"]).toEqual(estimate);
+      expect(app.error).toBeNull();
+    });
+
+    it("clears the estimate for invalid sizes without calling IPC", async () => {
+      const geometry = useGeometryStore();
+      geometry.meshEstimates = { "g-1": estimate };
+
+      await geometry.estimateMesh("g-1", 0, undefined, "voxel");
+      expect(estimateVolumeMesh).not.toHaveBeenCalled();
+      expect(geometry.meshEstimates["g-1"]).toBeUndefined();
+
+      await geometry.estimateMesh("g-1", Number.NaN, undefined, "voxel");
+      expect(estimateVolumeMesh).not.toHaveBeenCalled();
+    });
+
+    it("drops a stale estimate when the IPC fails", async () => {
+      vi.mocked(estimateVolumeMesh).mockRejectedValue(new Error("几何不存在"));
+
+      const app = useAppStore();
+      const geometry = useGeometryStore();
+      geometry.meshEstimates = { "g-1": estimate };
+      await geometry.estimateMesh("g-1", 5, undefined, "voxel");
+
+      expect(geometry.meshEstimates["g-1"]).toBeUndefined();
+      // 估算失败是常态（边输入边估算），不进全局错误条。
+      expect(app.error).toBeNull();
+    });
+
+    it("removing geometry drops its estimate", async () => {
+      vi.mocked(removeGeometry).mockResolvedValue(undefined);
+      const geometry = useGeometryStore();
+      geometry.geometries = [makeSummary("g-1")];
+      geometry.meshEstimates = { "g-1": estimate };
+
+      await geometry.removeGeometryById("g-1");
+      expect(geometry.meshEstimates["g-1"]).toBeUndefined();
     });
   });
 });

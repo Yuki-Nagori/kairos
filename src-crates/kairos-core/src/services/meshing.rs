@@ -15,11 +15,14 @@ use std::collections::HashMap;
 
 use crate::error::{KairosError, Result};
 use crate::models::geometry::TriangleMesh;
-use crate::models::mesh::{MeshQuality, MeshRefinement, MeshingReport, VolumeMesh};
+use crate::models::mesh::{MeshEstimate, MeshQuality, MeshRefinement, MeshingReport, VolumeMesh};
 
 /// 单轴最大体素数与总体素上限：防御性上限，避免误填尺寸导致内存爆炸。
 const MAX_CELLS_PER_AXIS: usize = 200;
 const MAX_TOTAL_CELLS: usize = 2_000_000;
+
+/// 每个体素切成 5 个四面体（保形分解），估算按同系数折算单元数。
+const TETS_PER_CELL: usize = 5;
 
 /// 网格化参数：目标体素尺寸（与几何同单位）+ 可选分级加密。
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -66,25 +69,16 @@ impl VolumeMeshParams {
     }
 }
 
-/// 由三角网格生成体积网格。
-pub fn generate(mesh: &TriangleMesh, params: &VolumeMeshParams) -> Result<VolumeMesh> {
-    params.validate()?;
-    let (min, max) = mesh.bounding_box();
-    let size = [max[0] - min[0], max[1] - min[1], max[2] - min[2]];
-    if mesh.triangles.is_empty() || size.iter().any(|s| !s.is_finite() || *s <= 0.0) {
-        return Err(KairosError::validation(
-            "几何为空或包围盒退化，无法划分网格。",
-        ));
-    }
+/// 各轴坐标线（生成与估算共用同一套数学，保证两者的网格规模一致）：
+/// 默认均匀；按加密选项做边界层 / 区域细分。
+fn build_axes(min: [f64; 3], size: [f64; 3], params: &VolumeMeshParams) -> Result<Vec<Vec<f64>>> {
     let h = params.target_size;
     let base_counts: Vec<usize> = size
         .iter()
         .map(|s| (*s / h).ceil() as usize)
         .map(|n| n.clamp(1, MAX_CELLS_PER_AXIS))
         .collect();
-
-    // 各轴坐标线：默认均匀；按加密选项做边界层 / 区域细分。
-    let axes: Vec<Vec<f64>> = (0..3)
+    Ok((0..3)
         .map(|axis| match params.refinement {
             None => uniform_axis(min[axis], size[axis], base_counts[axis]),
             Some(MeshRefinement::BoundaryLayers { layers, ratio }) => {
@@ -99,7 +93,26 @@ pub fn generate(mesh: &TriangleMesh, params: &VolumeMeshParams) -> Result<Volume
                 levels,
             ),
         })
-        .collect();
+        .collect())
+}
+
+/// 三角网格的包围盒三轴尺寸；空网格或退化包围盒返回校验错误。
+fn box_size(mesh: &TriangleMesh) -> Result<([f64; 3], [f64; 3])> {
+    let (min, max) = mesh.bounding_box();
+    let size = [max[0] - min[0], max[1] - min[1], max[2] - min[2]];
+    if mesh.triangles.is_empty() || size.iter().any(|s| !s.is_finite() || *s <= 0.0) {
+        return Err(KairosError::validation(
+            "几何为空或包围盒退化，无法划分网格。",
+        ));
+    }
+    Ok((min, size))
+}
+
+/// 由三角网格生成体积网格。
+pub fn generate(mesh: &TriangleMesh, params: &VolumeMeshParams) -> Result<VolumeMesh> {
+    params.validate()?;
+    let (min, size) = box_size(mesh)?;
+    let axes = build_axes(min, size, params)?;
     let counts: Vec<usize> = axes.iter().map(|coords| coords.len() - 1).collect();
     if counts[0] * counts[1] * counts[2] > MAX_TOTAL_CELLS {
         return Err(KairosError::validation(format!(
@@ -394,6 +407,54 @@ fn fill_row(crossings: &[f64], axis: &[f64]) -> Vec<bool> {
     row
 }
 
+/// 体素引擎的单元规模估算（生成前预览）：返回包围盒口径的**上限**——
+/// 逐轴单元数与 generate 同源（build_axes），每个体素 5 个四面体；
+/// 实际生成只保留几何内部体素，故真实单元数 ≤ 估算值，包围盒被填满时取等号。
+pub fn estimate_voxel(mesh: &TriangleMesh, params: &VolumeMeshParams) -> Result<MeshEstimate> {
+    params.validate()?;
+    let (min, size) = box_size(mesh)?;
+    let axes = build_axes(min, size, params)?;
+    let counts: Vec<usize> = axes.iter().map(|coords| coords.len() - 1).collect();
+    let cells = counts[0]
+        .saturating_mul(counts[1])
+        .saturating_mul(counts[2]);
+    Ok(MeshEstimate {
+        engine: "voxel".into(),
+        cell_count: cells,
+        element_count: cells.saturating_mul(TETS_PER_CELL),
+        over_limit: cells > MAX_TOTAL_CELLS,
+        basis: "包围盒上限".into(),
+        cell_limit: MAX_TOTAL_CELLS,
+    })
+}
+
+/// Gmsh 引擎的单元规模粗估：体积 ÷ (目标尺寸³) × 每立方体四面体数。
+/// 不做 Delaunay 试算，只给量级参考（面板标注「粗估」）。
+pub fn estimate_gmsh(mesh: &TriangleMesh, target_size: f64) -> Result<MeshEstimate> {
+    VolumeMeshParams {
+        target_size,
+        refinement: None,
+    }
+    .validate()?;
+    box_size(mesh)?;
+    let volume = mesh.signed_volume().abs();
+    let cells = volume / target_size.powi(3) * TETS_PER_CELL as f64;
+    let cells = if cells.is_finite() && cells > 0.0 {
+        cells
+    } else {
+        0.0
+    };
+    // 粗估没有逐轴体素概念，超限判据用「单元数超体素上限的 5 倍」对齐量级。
+    Ok(MeshEstimate {
+        engine: "gmsh".into(),
+        cell_count: 0,
+        element_count: cells.round() as usize,
+        over_limit: cells > (MAX_TOTAL_CELLS * TETS_PER_CELL) as f64,
+        basis: "体积粗估".into(),
+        cell_limit: MAX_TOTAL_CELLS,
+    })
+}
+
 /// 网格统计报告。
 pub fn report(volume_mesh: &VolumeMesh) -> MeshingReport {
     let mut min_ratio = f64::INFINITY;
@@ -472,6 +533,7 @@ pub fn report(volume_mesh: &VolumeMesh) -> MeshingReport {
 mod tests {
     use super::*;
     use crate::models::geometry::Triangle;
+    use crate::models::mesh::RefineRegion;
 
     fn unit_cube_mesh() -> TriangleMesh {
         let mut triangles = Vec::new();
@@ -802,6 +864,132 @@ mod tests {
         )
         .unwrap();
         assert!(report(&volume).quality.min_edge_ratio <= report(&uniform).quality.min_edge_ratio);
+    }
+
+    /// 估算的逐轴数学与生成同源：包围盒被填满时估算值 == 实际单元数。
+    #[test]
+    fn voxel_estimate_matches_generated_element_count_for_filled_box() {
+        let mesh = TriangleMesh::sample_box(10.0);
+        for target in [5.0, 2.5, 2.0] {
+            let params = VolumeMeshParams {
+                target_size: target,
+                refinement: None,
+            };
+            let estimate = estimate_voxel(&mesh, &params).unwrap();
+            let volume = generate(&mesh, &params).unwrap();
+            assert_eq!(estimate.engine, "voxel");
+            assert_eq!(estimate.basis, "包围盒上限");
+            assert_eq!(estimate.element_count, volume.tets.len(), "target={target}");
+            assert_eq!(estimate.cell_count * 5, estimate.element_count);
+            assert!(!estimate.over_limit);
+        }
+    }
+
+    /// 分级加密同样反映到估算（区域细分让体素数翻倍，估算与实际同步放大）。
+    #[test]
+    fn voxel_estimate_tracks_refinement_and_limit() {
+        let mesh = TriangleMesh::sample_box(10.0);
+        let base = estimate_voxel(
+            &mesh,
+            &VolumeMeshParams {
+                target_size: 5.0,
+                refinement: None,
+            },
+        )
+        .unwrap();
+        let refined = estimate_voxel(
+            &mesh,
+            &VolumeMeshParams {
+                target_size: 5.0,
+                refinement: Some(MeshRefinement::Region {
+                    region: RefineRegion {
+                        min: [0.0; 3],
+                        max: [5.0; 3],
+                    },
+                    levels: 1,
+                }),
+            },
+        )
+        .unwrap();
+        assert!(refined.cell_count > base.cell_count);
+        assert_eq!(
+            refined.element_count,
+            generate(
+                &mesh,
+                &VolumeMeshParams {
+                    target_size: 5.0,
+                    refinement: Some(MeshRefinement::Region {
+                        region: RefineRegion {
+                            min: [0.0; 3],
+                            max: [5.0; 3],
+                        },
+                        levels: 1,
+                    }),
+                },
+            )
+            .unwrap()
+            .tets
+            .len()
+        );
+
+        // 目标尺寸极小 → 估算直接给出超限标记（不必等生成报错）。
+        let over = estimate_voxel(
+            &mesh,
+            &VolumeMeshParams {
+                target_size: 0.01,
+                refinement: None,
+            },
+        )
+        .unwrap();
+        assert!(over.over_limit);
+        assert!(over.cell_count > over.cell_limit);
+        assert!(
+            generate(
+                &mesh,
+                &VolumeMeshParams {
+                    target_size: 0.01,
+                    refinement: None,
+                },
+            )
+            .is_err()
+        );
+    }
+
+    /// Gmsh 粗估：体积 / 目标尺寸³ × 5，标注来源，参数非法时同样报错。
+    #[test]
+    fn gmsh_estimate_scales_with_volume_and_size() {
+        let mesh = TriangleMesh::sample_box(10.0);
+        let estimate = estimate_gmsh(&mesh, 1.0).unwrap();
+        assert_eq!(estimate.engine, "gmsh");
+        assert_eq!(estimate.basis, "体积粗估");
+        assert_eq!(estimate.cell_count, 0);
+        assert_eq!(estimate.element_count, 5000);
+        assert!(!estimate.over_limit);
+        // 尺寸减半 → 单元数 ×8。
+        assert_eq!(estimate_gmsh(&mesh, 0.5).unwrap().element_count, 40000);
+        assert!(estimate_gmsh(&mesh, 0.0).is_err());
+        assert!(estimate_gmsh(&TriangleMesh::default(), 1.0).is_err());
+        // 两块以原点为公共顶点的面片：每项点积恒为 0（体积 0），包围盒三轴非退化。
+        let flat = TriangleMesh {
+            triangles: vec![
+                Triangle {
+                    a: [0.0, 0.0, 0.0],
+                    b: [1.0, 0.0, 0.0],
+                    c: [0.0, 1.0, 0.0],
+                    normal: [0.0; 3],
+                },
+                Triangle {
+                    a: [0.0, 0.0, 0.0],
+                    b: [0.0, 0.0, 1.0],
+                    c: [1.0, 0.0, 0.0],
+                    normal: [0.0; 3],
+                },
+            ],
+        };
+        assert_eq!(flat.signed_volume(), 0.0);
+        let flat_estimate = estimate_gmsh(&flat, 1.0).unwrap();
+        assert_eq!(flat_estimate.element_count, 0);
+        assert!(!flat_estimate.over_limit);
     }
 
     /// 单四面体的纵横比（最长棱 ÷ 最短高）：角点四面体 = √6，正四面体 = √6/2。

@@ -3,17 +3,22 @@
  * 体积网格生成。每个几何行自带目标尺寸 + 引擎（体素 / Gmsh）表单，
  * 初始尺寸取几何最大边的二十分之一；生成动作按引擎分派到对应服务。
  */
-import { computed, reactive, watch } from "vue";
+import { computed, onScopeDispose, reactive, watch } from "vue";
 import { useAppStore } from "../../stores/app";
 import { useGeometryStore } from "../../stores/geometry";
 import type {
   DualDomainReport,
   GeometrySummary,
+  MeshEstimate,
   MeshIssues,
+  MeshRefinement,
   MeshingReport,
   MidplaneReport,
   RepairReport,
 } from "../../types";
+
+/** 目标尺寸输入的估算防抖：连续编辑只在停顿后请求一次估算。 */
+const ESTIMATE_DEBOUNCE_MS = 300;
 
 export function useGeometryPanel() {
   const app = useAppStore();
@@ -65,6 +70,67 @@ export function useGeometryPanel() {
     geometry.geometries.map((geometry) => ({ geometry, form: meshForm(geometry) })),
   );
 
+  // 表单（尺寸 / 引擎 / 边界层）变化后防抖估算单元规模；几何列表变化一并触发
+  // （新导入的几何立即给出量级，用户不必先点生成）。
+  const estimateTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  function scheduleEstimate(item: GeometrySummary): void {
+    const form = meshForm(item);
+    const pending = estimateTimers.get(item.geometryId);
+    if (pending !== undefined) {
+      clearTimeout(pending);
+    }
+    estimateTimers.set(
+      item.geometryId,
+      setTimeout(() => {
+        estimateTimers.delete(item.geometryId);
+        void geometry.estimateMesh(
+          item.geometryId,
+          Number(form.size),
+          refinementFor(form),
+          form.engine,
+        );
+      }, ESTIMATE_DEBOUNCE_MS),
+    );
+  }
+  watch(
+    () => rows.value.map((row) => `${row.form.size}|${row.form.engine}|${row.form.boundaryLayers}`),
+    () => {
+      for (const row of rows.value) {
+        scheduleEstimate(row.geometry);
+      }
+    },
+    { immediate: true },
+  );
+  onScopeDispose(() => {
+    for (const timer of estimateTimers.values()) {
+      clearTimeout(timer);
+    }
+    estimateTimers.clear();
+  });
+
+  /** 体素引擎的边界层层数（≥1 时生效）；Gmsh 引擎不适用。 */
+  function refinementFor(form: MeshFormState): MeshRefinement | undefined {
+    const layers = Number(form.boundaryLayers);
+    return form.engine === "voxel" && layers >= 1
+      ? ({ mode: "boundaryLayers", layers, ratio: 0.5 } as const)
+      : undefined;
+  }
+
+  /** 估算行文案：超限时给出明确告警（不必等生成报错）。 */
+  function estimateText(estimate: MeshEstimate | undefined): string {
+    if (estimate === undefined) {
+      return "";
+    }
+    const scale = `约 ${estimate.elementCount.toLocaleString("zh-CN")} 单元（${estimate.basis}）`;
+    return estimate.overLimit
+      ? `${scale} —— 超过上限 ${estimate.cellLimit.toLocaleString("zh-CN")} 体素，请调大目标尺寸。`
+      : scale;
+  }
+
+  function estimateOverLimit(estimate: MeshEstimate | undefined): boolean {
+    return estimate?.overLimit ?? false;
+  }
+
   function issueText(issues: MeshIssues): string {
     const parts: string[] = [];
     if (issues.openEdges > 0) {
@@ -105,12 +171,7 @@ export function useGeometryPanel() {
       void geometry.generateGmshMesh(item.geometryId, size);
       return;
     }
-    const layers = Number(form.boundaryLayers);
-    const refinement =
-      form.engine === "voxel" && layers >= 1
-        ? ({ mode: "boundaryLayers", layers, ratio: 0.5 } as const)
-        : undefined;
-    void geometry.generateMesh(item.geometryId, size, refinement);
+    void geometry.generateMesh(item.geometryId, size, refinementFor(form));
   }
 
   /** 网格尺寸与最小特征的匹配提示（网格报告里的警告行）。 */
@@ -194,6 +255,8 @@ export function useGeometryPanel() {
     issueText,
     isClean,
     statsText,
+    estimateText,
+    estimateOverLimit,
     generate,
     reportText,
     thinFeatureHints,

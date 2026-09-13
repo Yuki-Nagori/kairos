@@ -8,6 +8,7 @@ import { useGeometryPanel } from "../../../../src-web/views/geometry/useGeometry
 import { useAppStore } from "../../../../src-web/stores/app";
 import { useGeometryStore } from "../../../../src-web/stores/geometry";
 import {
+  estimateVolumeMesh,
   generateDualDomainMesh,
   generateGmshMesh,
   generateMidplaneMesh,
@@ -18,9 +19,22 @@ import {
   repairGeometry,
 } from "../../../../src-web/api/geometry";
 import { pickOpenGeometryPath } from "../../../../src-web/api/dialog";
-import type { GeometrySummary, MeshingReport } from "../../../../src-web/types";
+import type { GeometrySummary, MeshEstimate, MeshingReport } from "../../../../src-web/types";
+
+function estimateFixture(overrides: Partial<MeshEstimate> = {}): MeshEstimate {
+  return {
+    engine: "voxel",
+    cellCount: 8,
+    elementCount: 40,
+    overLimit: false,
+    basis: "包围盒上限",
+    cellLimit: 2_000_000,
+    ...overrides,
+  };
+}
 
 vi.mock("../../../../src-web/api/geometry", () => ({
+  estimateVolumeMesh: vi.fn(),
   importStl: vi.fn(),
   importStep: vi.fn(),
   removeGeometry: vi.fn(),
@@ -417,6 +431,98 @@ describe("GeometryPanel", () => {
     expect(findButton(wrapper, "导入几何").attributes("disabled")).toBeDefined();
     expect(findButton(wrapper, "移除").attributes("disabled")).toBeDefined();
     expect(findButton(wrapper, "生成体积网格").attributes("disabled")).toBeDefined();
+  });
+
+  it("目标尺寸变化后防抖估算单元规模，超限标红", async () => {
+    vi.useFakeTimers();
+    const geometry = useGeometryStore();
+    geometry.geometries = [geometryFixture()];
+    vi.mocked(estimateVolumeMesh).mockResolvedValue(estimateFixture());
+    const wrapper = mount(GeometryPanel, { global: { plugins: [pinia] } });
+
+    // 挂载即排入一次估算（导入后可立刻看到量级）→ 防抖窗口内不请求 IPC。
+    expect(estimateVolumeMesh).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(300);
+    expect(estimateVolumeMesh).toHaveBeenCalledWith("geo-1", 1.5, undefined, "voxel");
+    expect(wrapper.text()).toContain("约 40 单元（包围盒上限）");
+
+    // 连续编辑只保留最后一次：第二次输入后 300ms 内再改，只有末次的尺寸被请求。
+    vi.mocked(estimateVolumeMesh).mockClear();
+    await wrapper.find("input").setValue("2.5");
+    await vi.advanceTimersByTimeAsync(100);
+    await wrapper.find("input").setValue("3.5");
+    await vi.advanceTimersByTimeAsync(300);
+    expect(estimateVolumeMesh).toHaveBeenCalledTimes(1);
+    expect(estimateVolumeMesh).toHaveBeenCalledWith("geo-1", 3.5, undefined, "voxel");
+
+    // 超限估算：文案带告警且着警示色。
+    vi.mocked(estimateVolumeMesh).mockResolvedValue(
+      estimateFixture({ overLimit: true, elementCount: 1_000_000, cellLimit: 2_000_000 }),
+    );
+    await wrapper.find("input").setValue("0.01");
+    await vi.advanceTimersByTimeAsync(300);
+    await nextTick();
+    expect(wrapper.text()).toContain("超过上限 2,000,000 体素，请调大目标尺寸。");
+    const estimateLine = wrapper.findAll("p").find((node) => node.text().includes("超过上限"));
+    expect(estimateLine?.classes()).toContain("text-rose-400");
+
+    wrapper.unmount();
+    vi.useRealTimers();
+  });
+
+  it("切换引擎与边界层数按对应口径估算", async () => {
+    vi.useFakeTimers();
+    const geometry = useGeometryStore();
+    geometry.geometries = [geometryFixture()];
+    vi.mocked(estimateVolumeMesh).mockResolvedValue(
+      estimateFixture({ engine: "gmsh", cellCount: 0, basis: "体积粗估" }),
+    );
+    const wrapper = mount(GeometryPanel, { global: { plugins: [pinia] } });
+    await nextTick();
+    await vi.advanceTimersByTimeAsync(300);
+
+    vi.mocked(estimateVolumeMesh).mockClear();
+    await wrapper.find("select").setValue("gmsh");
+    await vi.advanceTimersByTimeAsync(300);
+    expect(estimateVolumeMesh).toHaveBeenCalledWith("geo-1", 1.5, undefined, "gmsh");
+    await nextTick();
+    expect(wrapper.text()).toContain("约 40 单元（体积粗估）");
+
+    // 体素 + 边界层数：加密选项透传。
+    vi.mocked(estimateVolumeMesh).mockClear();
+    await wrapper.find("select").setValue("voxel");
+    await vi.advanceTimersByTimeAsync(300);
+    await wrapper.find('input[placeholder="边界层数"]').setValue("2");
+    await vi.advanceTimersByTimeAsync(300);
+    expect(estimateVolumeMesh).toHaveBeenLastCalledWith(
+      "geo-1",
+      1.5,
+      {
+        mode: "boundaryLayers",
+        layers: 2,
+        ratio: 0.5,
+      },
+      "voxel",
+    );
+
+    // 未经防抖的旧计时器在卸载时清理：卸载后再推进时间不再触发请求。
+    vi.mocked(estimateVolumeMesh).mockClear();
+    await wrapper.find("input").setValue("4");
+    wrapper.unmount();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(estimateVolumeMesh).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  it("估算文案：无估算留空，未超限只给量级与依据", () => {
+    const panel = useGeometryPanel();
+    expect(panel.estimateText(undefined)).toBe("");
+    expect(panel.estimateOverLimit(undefined)).toBe(false);
+    expect(panel.estimateOverLimit(estimateFixture())).toBe(false);
+    expect(panel.estimateText(estimateFixture({ elementCount: 40000 }))).toBe(
+      "约 40,000 单元（包围盒上限）",
+    );
   });
 
   it("行表单惰性建表：渲染前建表、重渲染复用、watch 跳过已有项", async () => {

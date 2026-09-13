@@ -9,7 +9,8 @@ use serde_json::json;
 
 use kairos_core::models::material::Material;
 use kairos_core::models::mesh::{
-    DualDomainReport, MeshQuality, MeshRefinement, MeshingReport, MidplaneReport, RefineRegion,
+    DualDomainReport, MeshEstimate, MeshQuality, MeshRefinement, MeshingReport, MidplaneReport,
+    RefineRegion,
 };
 use kairos_core::models::project::{Project, Study};
 use kairos_core::models::results::{DeriveRequest, ResultCatalog, ScalarField, TimeStepMeta};
@@ -166,6 +167,31 @@ fn meshing_report_serializes_with_camel_case() {
     assert_eq!(
         json["thinFeatureHints"][0],
         "目标尺寸 5.00 mm 超过最薄特征的 1/2（5% 分位壁厚 3.00 mm）。"
+    );
+}
+
+/// MeshEstimate 的形状：估算字段 camelCase，前端几何面板的生成前预览与之对应。
+#[test]
+fn mesh_estimate_serializes_with_camel_case() {
+    let estimate = MeshEstimate {
+        engine: "voxel".into(),
+        cell_count: 8,
+        element_count: 40,
+        over_limit: false,
+        basis: "包围盒上限".into(),
+        cell_limit: 2_000_000,
+    };
+    let json = serde_json::to_value(&estimate).unwrap();
+    assert_eq!(
+        json,
+        json!({
+            "engine": "voxel",
+            "cellCount": 8,
+            "elementCount": 40,
+            "overLimit": false,
+            "basis": "包围盒上限",
+            "cellLimit": 2_000_000,
+        })
     );
 }
 

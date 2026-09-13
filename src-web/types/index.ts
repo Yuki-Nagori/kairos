@@ -179,6 +179,22 @@ export interface MeshingReport {
   thinFeatureHints: string[];
 }
 
+/** 对应 `kairos-core::models::mesh::MeshEstimate`。 */
+export interface MeshEstimate {
+  /** 引擎标识（voxel / gmsh）。 */
+  engine: string;
+  /** 包围盒体素数（体素引擎；Gmsh 无此概念为 0）。 */
+  cellCount: number;
+  /** 预估四面体数。 */
+  elementCount: number;
+  /** 是否超过生成上限。 */
+  overLimit: boolean;
+  /** 估算依据（「包围盒上限」/「体积粗估」）。 */
+  basis: string;
+  /** 体素上限。 */
+  cellLimit: number;
+}
+
 /** 对应 `kairos-core::models::mesh::DualDomainReport`。 */
 export interface DualDomainReport {
   nodeCount: number;

@@ -1,6 +1,7 @@
 /** 几何域状态：已导入的 STL 摘要列表与每个几何的体积网格报告。 */
 import { defineStore } from "pinia";
 import {
+  estimateVolumeMesh as apiEstimateVolumeMesh,
   generateDualDomainMesh as apiGenerateDualDomain,
   generateGmshMesh as apiGenerateGmshMesh,
   generateMidplaneMesh as apiGenerateMidplane,
@@ -17,6 +18,7 @@ import { pickOpenGeometryPath } from "../api/dialog";
 import type {
   DualDomainReport,
   GeometrySummary,
+  MeshEstimate,
   MeshingReport,
   MeshRefinement,
   MidplaneReport,
@@ -38,6 +40,8 @@ export const useGeometryStore = defineStore("geometry", {
     midplaneReports: {} as Record<string, MidplaneReport>,
     /** 每个几何最近一次修复的报告（key = geometryId）。 */
     repairReports: {} as Record<string, RepairReport>,
+    /** 每个几何当前的网格规模估算（key = geometryId；生成前预览）。 */
+    meshEstimates: {} as Record<string, MeshEstimate>,
   }),
   actions: {
     /** 导入 STL：弹出文件对话框，解析检查后入列表。 */
@@ -64,6 +68,9 @@ export const useGeometryStore = defineStore("geometry", {
       try {
         await removeGeometry(geometryId);
         this.geometries = this.geometries.filter((g) => g.geometryId !== geometryId);
+        const estimates = { ...this.meshEstimates };
+        delete estimates[geometryId];
+        this.meshEstimates = estimates;
       } catch (error) {
         app.setError(error);
       }
@@ -113,6 +120,29 @@ export const useGeometryStore = defineStore("geometry", {
         const report = await apiGenerateMidplane(geometryId, runners);
         this.midplaneReports = { ...this.midplaneReports, [geometryId]: report };
       });
+    },
+    /** 网格规模估算（生成前预览）：尺寸非法或几何已移除时清掉旧值，不打断输入。 */
+    async estimateMesh(
+      geometryId: string,
+      targetSize: number,
+      refinement: MeshRefinement | undefined,
+      engine: string,
+    ): Promise<void> {
+      const clear = (): void => {
+        const estimates = { ...this.meshEstimates };
+        delete estimates[geometryId];
+        this.meshEstimates = estimates;
+      };
+      if (!(targetSize > 0)) {
+        clear();
+        return;
+      }
+      try {
+        const estimate = await apiEstimateVolumeMesh(geometryId, targetSize, refinement, engine);
+        this.meshEstimates = { ...this.meshEstimates, [geometryId]: estimate };
+      } catch {
+        clear();
+      }
     },
     /** 修复几何：焊接 / 去退化 / 填孔 / 一致化，刷新摘要并作废体积网格。 */
     async repairGeometryById(geometryId: string): Promise<void> {

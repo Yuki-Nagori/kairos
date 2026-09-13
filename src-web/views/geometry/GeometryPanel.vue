@@ -15,6 +15,8 @@ const {
   generate,
   repair,
   repairDisabled,
+  estimateText,
+  estimateOverLimit,
   reportText,
   thinFeatureHints,
   dualReportText,
@@ -79,6 +81,17 @@ const {
             min="1"
             max="4"
           />
+          <p
+            v-if="estimateText(geometry.meshEstimates[row.geometry.geometryId]) !== ''"
+            class="text-xs"
+            :class="
+              estimateOverLimit(geometry.meshEstimates[row.geometry.geometryId])
+                ? 'text-rose-400'
+                : 'text-zinc-500'
+            "
+          >
+            {{ estimateText(geometry.meshEstimates[row.geometry.geometryId]) }}
+          </p>
           <UiButton :disabled="working" @click="generate(row.geometry)">生成体积网格</UiButton>
           <UiButton
             :disabled="working"

@@ -101,6 +101,24 @@ pub struct MeshingReport {
     pub thin_feature_hints: Vec<String>,
 }
 
+/// 网格规模估算：生成前预览的单元数（体素为包围盒上限，Gmsh 为体积粗估）。
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MeshEstimate {
+    /// 引擎标识（voxel / gmsh）。
+    pub engine: String,
+    /// 包围盒体素数（体素引擎；Gmsh 无此概念为 0）。
+    pub cell_count: usize,
+    /// 预估四面体数。
+    pub element_count: usize,
+    /// 是否超过生成上限（体素按体素上限判；Gmsh 按单元数量级判）。
+    pub over_limit: bool,
+    /// 估算依据（面板直接展示，如「包围盒上限」「体积粗估」）。
+    pub basis: String,
+    /// 体素上限，供面板展示超限幅度。
+    pub cell_limit: usize,
+}
+
 /// 加密区域包围盒（模型单位）；min/max 分量对应，min ≤ max。
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
