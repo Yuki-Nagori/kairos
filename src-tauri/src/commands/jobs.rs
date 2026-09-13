@@ -14,11 +14,13 @@ use kairos_core::models::jobs::Job;
 use kairos_core::services::jobs as job_logic;
 use kairos_core::services::jobs::SchedulerLimits;
 use kairos_core::services::moldingfoam;
+use kairos_core::services::paths;
 use kairos_core::services::project::new_id;
 // 结果回传只在 macOS（multipass）通道用得上；VM 路径 macOS 与 Windows 都用
 #[cfg(target_os = "macos")]
 use kairos_core::services::results;
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+// VM 通道（macOS/Windows 的 env source）与原生环境（Linux 的 source 行）都用它，
+// 因此导入**不带 cfg**——只在 cfg 块里引用会让 Linux 构建找不到符号。
 use kairos_core::services::vm as vm_logic;
 use tauri::State;
 use tauri::ipc::Channel;
@@ -123,19 +125,10 @@ pub fn detect_vm_shell() -> Option<String> {
     }
 }
 
-/// Windows 盘符路径 → WSL 的 /mnt 形态（C:\a\b → /mnt/c/a/b）。
+/// Windows 盘符路径 → WSL 的 /mnt 形态：映射逻辑在 core（纯路径策略，
+/// 在 macOS 上也能测——Unix 解析不出 `Component::Prefix`，实现里两种形态都认）。
 fn to_wsl_path(path: &str) -> String {
-    let lower = path.replace('\\', "/");
-    let bytes = lower.as_bytes();
-    if bytes.len() >= 2 && bytes[1] == b':' {
-        format!(
-            "/mnt/{}{}",
-            (bytes[0] as char).to_ascii_lowercase(),
-            &lower[2..]
-        )
-    } else {
-        path.to_string()
-    }
+    paths::wsl_path(path).unwrap_or_else(|| path.to_string())
 }
 
 fn now_ms() -> u64 {

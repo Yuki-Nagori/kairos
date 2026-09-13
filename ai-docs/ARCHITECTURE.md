@@ -59,6 +59,26 @@ composable / utils。配套规则：
 - **TS 侧留什么**：与渲染状态强耦合、数据量小的聚合与格式化（如方案任务
   序列评估、图例 mid/max），它们脱离渲染就没有意义。
 
+### 1.2 路径处理（唯一入口 `services::paths`）
+
+路径一律走 `std::path`，**禁止手写分隔符、`split('/')`、字符串拼路径**——Windows 与
+Unix 的分隔符、盘符、保留字符差异只在 `src-crates/kairos-core/src/services/paths.rs`
+处理：
+
+| 场景                | 用什么                                                                                  |
+| ------------------- | --------------------------------------------------------------------------------------- |
+| 拼装                | `paths::join(&[…])`（内部 `Path::join`）                                                |
+| 取文件名 / 主干     | `paths::sanitize_file_name` / `paths::file_stem`（内部 `Path::file_name`、`file_stem`） |
+| 补扩展名            | `Path::with_extension`（例：工程文件 `.kairos`、报告 `.html`）                          |
+| 跨机器落盘          | `paths::to_storage`（分隔符归一为 `/`）/ `paths::from_storage`（读回并校验）            |
+| 相对路径安全校验    | `paths::validate_relative`（拒绝绝对 / 根 / 盘符 / `..`）                               |
+| 盘符语义（Windows） | `paths::wsl_path`（`C:` → `/mnt/c/a`）                                                  |
+
+两条硬性理由：① `Path` 只认本平台分隔符（Unix 上 `C:` 是普通文件名，Windows 上
+`a/b` 反而可解析），手写判定必然在某平台错；② 工程文件要跨机器搬，落盘形态必须固定
+（`/`）且读取侧不需区分平台。前端同样不解析路径——按扩展名分派之类交给 Rust
+（例：`import_geometry` 用 `Path::extension` 判定 STL/STEP/IGES）。
+
 ## 2. Rust 工作区
 
 ```

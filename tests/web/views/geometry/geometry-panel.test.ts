@@ -14,7 +14,7 @@ import {
   generateMidplaneMesh,
   generateVolumeMesh,
   importSampleBox,
-  importStl,
+  importGeometryFile,
   removeGeometry,
   repairGeometry,
 } from "../../../../src-web/api/geometry";
@@ -35,8 +35,7 @@ function estimateFixture(overrides: Partial<MeshEstimate> = {}): MeshEstimate {
 
 vi.mock("../../../../src-web/api/geometry", () => ({
   estimateVolumeMesh: vi.fn(),
-  importStl: vi.fn(),
-  importStep: vi.fn(),
+  importGeometryFile: vi.fn(),
   removeGeometry: vi.fn(),
   repairGeometry: vi.fn(),
   generateVolumeMesh: vi.fn(),
@@ -145,8 +144,8 @@ describe("GeometryPanel", () => {
     expect(app.busy).toBeNull();
   });
 
-  it("导入 STL：取消不触发 IPC；成功入列；失败进全局错误", async () => {
-    vi.mocked(importStl).mockResolvedValue({
+  it("导入几何：取消不触发 IPC；成功入列；失败进全局错误", async () => {
+    vi.mocked(importGeometryFile).mockResolvedValue({
       summary: geometryFixture({ geometryId: "geo-2" }),
       log: [],
     });
@@ -156,15 +155,15 @@ describe("GeometryPanel", () => {
     vi.mocked(pickOpenGeometryPath).mockResolvedValue(null);
     await findButton(wrapper, "导入几何").trigger("click");
     await flushPromises();
-    expect(importStl).not.toHaveBeenCalled();
+    expect(importGeometryFile).not.toHaveBeenCalled();
 
     vi.mocked(pickOpenGeometryPath).mockResolvedValue("/模型/demo.stl");
     await findButton(wrapper, "导入几何").trigger("click");
     await flushPromises();
-    expect(importStl).toHaveBeenCalledWith("/模型/demo.stl");
+    expect(importGeometryFile).toHaveBeenCalledWith("/模型/demo.stl");
     expect(geometry.geometries).toHaveLength(1);
 
-    vi.mocked(importStl).mockRejectedValue(new Error("非二进制 STL"));
+    vi.mocked(importGeometryFile).mockRejectedValue(new Error("非二进制 STL"));
     await findButton(wrapper, "导入几何").trigger("click");
     await flushPromises();
     await vi.waitFor(() => expect(useAppStore().error?.message).toBe("非二进制 STL"));

@@ -14,9 +14,10 @@ import type {
   RunnerElement,
 } from "../types";
 
-/** 导入 STL（全量网格留在 Rust 侧），返回摘要与健康检查结果。 */
-export function importStl(path: string): Promise<ImportOutcome> {
-  return invokeCommand("import_stl", { path });
+/** 导入几何（STL / STEP / IGES）：格式由扩展名在 Rust 侧判定，前端不做路径解析。
+ *  全量网格留在 Rust 侧，返回摘要、健康检查结果与导入日志。 */
+export function importGeometryFile(path: string): Promise<ImportOutcome> {
+  return invokeCommand("import_geometry", { path });
 }
 
 /** 移除几何并释放其会话缓存。 */
@@ -59,16 +60,6 @@ export function previewFill(
 /** 导入内置样例立方体（首次使用引导）。 */
 export function importSampleBox(size: number): Promise<ImportOutcome> {
   return invokeCommand("import_sample_box", { size });
-}
-
-/** 导入 STEP 镶嵌网格（AP242 子集）。 */
-export function importStep(path: string): Promise<ImportOutcome> {
-  return invokeCommand("import_step", { path });
-}
-
-/** 导入 IGES 镶嵌网格（实体 106 / 63 子集）。 */
-export function importIges(path: string): Promise<ImportOutcome> {
-  return invokeCommand("import_iges", { path });
 }
 
 /** 修复几何（顶点焊接 / 孔洞填充 / 法向一致化），返回更新后的摘要与修复报告。 */

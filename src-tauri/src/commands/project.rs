@@ -7,6 +7,7 @@ use std::path::PathBuf;
 
 use kairos_core::error::{KairosError, Result};
 use kairos_core::models::project::{GeometryRef, Project, RecentProject};
+use kairos_core::services::paths;
 use kairos_core::services::project as project_service;
 use kairos_core::services::workspace;
 use tauri::{AppHandle, Manager};
@@ -196,22 +197,10 @@ pub fn save_report_to_workspace(
             })?;
     let dir = workspace::reports_dir(&root);
     fs::create_dir_all(&dir).map_err(|e| KairosError::io(format!("创建报告目录失败：{e}")))?;
-    let stem = file_name.trim().trim_end_matches(".html");
-    let cleaned: String = stem
-        .chars()
-        .map(|character| match character {
-            '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' => '_',
-            other => other,
-        })
-        .collect();
-    let cleaned = cleaned.trim().trim_matches('.').trim();
-    // 去扩展名后为空（用户只填了空白或点）→ 用默认名
-    let safe = if cleaned.is_empty() {
-        "report"
-    } else {
-        cleaned
-    };
-    let path = dir.join(format!("{safe}.html"));
+    // 文件名清洗与扩展名都走库：主干取 `Path::file_stem`，扩展名用 `with_extension`
+    let stem = paths::file_stem(&file_name, "report");
+    let safe = paths::sanitize_file_name(&stem, "report");
+    let path = dir.join(safe).with_extension("html");
     fs::write(&path, content).map_err(|e| KairosError::io(format!("写入报告失败：{e}")))?;
     Ok(path.to_string_lossy().to_string())
 }

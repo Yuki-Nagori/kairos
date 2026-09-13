@@ -208,6 +208,48 @@ pub fn infer_unit(max_dimension: f64) -> &'static str {
 }
 
 /// 解析 STL 并生成导入摘要（网格本体由调用方存入会话缓存）。
+/// 导入格式：由文件扩展名判定（`Path::extension`，大小写不敏感，未知按 STL）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GeometryFormat {
+    Stl,
+    Step,
+    Iges,
+}
+
+impl GeometryFormat {
+    /// 日志 / 界面用的格式标签。
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Stl => "STL",
+            Self::Step => "STEP",
+            Self::Iges => "IGES",
+        }
+    }
+}
+
+/// 由路径扩展名判定导入格式：`.step` / `.stp` → STEP，`.igs` / `.iges` → IGES，
+/// 其余（含无扩展名）按 STL。解析走 `std::path`，不手写字符串切分。
+pub fn format_from_path(path: &Path) -> GeometryFormat {
+    let extension = path
+        .extension()
+        .map(|value| value.to_string_lossy().to_ascii_lowercase())
+        .unwrap_or_default();
+    match extension.as_str() {
+        "step" | "stp" => GeometryFormat::Step,
+        "igs" | "iges" => GeometryFormat::Iges,
+        _ => GeometryFormat::Stl,
+    }
+}
+
+/// 按格式解析文件（分派到各镶嵌解析器）。
+pub fn parse_file(path: &Path, format: GeometryFormat) -> Result<TriangleMesh> {
+    match format {
+        GeometryFormat::Stl => parse_stl_file(path),
+        GeometryFormat::Step => crate::services::step::parse_step_file(path),
+        GeometryFormat::Iges => crate::services::iges::parse_iges_file(path),
+    }
+}
+
 /// 导入日志行：导入过程的可复读记录（面板日志区展示，不参与任何判定）。
 /// `source_kind` 是导入格式标签（STL / STEP / IGES），`elapsed_ms` 为解析 + 检查耗时。
 pub fn import_log(
@@ -371,6 +413,40 @@ mod tests {
         let mut writer = FailingWriter { allow_calls: 99 };
         write_stl_binary_to(&mut writer, &single_triangle()).unwrap();
         writer.flush().unwrap();
+    }
+
+    /// 格式判定走 `Path::extension`（大小写不敏感）；分派到三条解析路径。
+    #[test]
+    fn format_dispatch_follows_extension() {
+        let cases = [
+            ("/models/件.stl", GeometryFormat::Stl),
+            ("/models/件.STL", GeometryFormat::Stl),
+            ("/models/件.step", GeometryFormat::Step),
+            ("/models/件.STP", GeometryFormat::Step),
+            ("/models/件.igs", GeometryFormat::Iges),
+            ("/models/件.IGES", GeometryFormat::Iges),
+            ("/models/无扩展名", GeometryFormat::Stl),
+            ("/models/件.txt", GeometryFormat::Stl),
+        ];
+        for (path, expected) in cases {
+            assert_eq!(format_from_path(Path::new(path)), expected, "{path}");
+        }
+        assert_eq!(GeometryFormat::Stl.label(), "STL");
+        assert_eq!(GeometryFormat::Step.label(), "STEP");
+        assert_eq!(GeometryFormat::Iges.label(), "IGES");
+
+        // 分派：STL 走本模块解析器（写出去的二进制 STL 能读回），
+        // 另外两条解析器由缺文件路径触达（各自返回 IO 错误）
+        let dir = std::env::temp_dir().join(format!("kairos-format-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let stl = dir.join("件.stl");
+        let mesh = TriangleMesh::sample_box(1.0);
+        write_stl_binary(&mesh, &stl).unwrap();
+        let parsed = parse_file(&stl, GeometryFormat::Stl).unwrap();
+        assert_eq!(parsed.triangle_count(), mesh.triangle_count());
+        assert!(parse_file(&dir.join("missing.step"), GeometryFormat::Step).is_err());
+        assert!(parse_file(&dir.join("missing.iges"), GeometryFormat::Iges).is_err());
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     /// 导入日志：健康件给通过行，问题件给计数与修复建议；格式标签与耗时入首行。

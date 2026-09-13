@@ -10,10 +10,8 @@ import {
   generateMidplaneMesh,
   generateVolumeMesh,
   getRenderMesh,
-  importIges,
   importSampleBox,
-  importStl,
-  importStep,
+  importGeometryFile,
   repairGeometry,
   removeGeometry,
 } from "../../../src-web/api/geometry";
@@ -36,9 +34,7 @@ vi.mock("../../../src-web/api/project", () => ({
 }));
 vi.mock("../../../src-web/api/geometry", () => ({
   estimateVolumeMesh: vi.fn(),
-  importStl: vi.fn(),
-  importStep: vi.fn(),
-  importIges: vi.fn(),
+  importGeometryFile: vi.fn(),
   repairGeometry: vi.fn(),
   removeGeometry: vi.fn(),
   generateVolumeMesh: vi.fn(),
@@ -144,7 +140,7 @@ describe("geometry store", () => {
       const geometry = useGeometryStore();
       await geometry.importGeometry();
 
-      expect(importStl).not.toHaveBeenCalled();
+      expect(importGeometryFile).not.toHaveBeenCalled();
       expect(app.busy).toBeNull();
       expect(geometry.geometries).toEqual([]);
     });
@@ -152,18 +148,18 @@ describe("geometry store", () => {
     it("appends the imported summary and clears busy", async () => {
       vi.mocked(pickOpenGeometryPath).mockResolvedValue("/models/box.stl");
       const summary = makeSummary();
-      vi.mocked(importStl).mockResolvedValue({ summary, log: [] });
+      vi.mocked(importGeometryFile).mockResolvedValue({ summary, log: [] });
 
       const app = useAppStore();
       const geometry = useGeometryStore();
       const busyDuring: (string | null)[] = [];
-      vi.mocked(importStl).mockImplementation(async () => {
+      vi.mocked(importGeometryFile).mockImplementation(async () => {
         busyDuring.push(useAppStore().busy);
         return { summary, log: ["导入 STL：box.stl"] };
       });
       await geometry.importGeometry();
 
-      expect(importStl).toHaveBeenCalledWith("/models/box.stl");
+      expect(importGeometryFile).toHaveBeenCalledWith("/models/box.stl");
       expect(geometry.geometries).toEqual([summary]);
       expect(geometry.importLogs[0]).toBe("导入 STL：box.stl");
       expect(busyDuring).toEqual(["正在导入几何…"]);
@@ -171,36 +167,25 @@ describe("geometry store", () => {
       expect(app.error).toBeNull();
     });
 
-    it("STEP 文件分派到镶嵌导入", async () => {
-      vi.mocked(pickOpenGeometryPath).mockResolvedValue("/models/壳体.step");
-      const summary = makeSummary();
-      vi.mocked(importStep).mockResolvedValue({ summary, log: [] });
-
+    it("导入走统一入口：所有格式都调用 import_geometry（分派在 Rust 侧）", async () => {
       const geometry = useGeometryStore();
-      await geometry.importGeometry();
+      for (const path of ["/models/壳体.step", "/models/壳体.iges", "/models/件.stl"]) {
+        const summary = makeSummary();
+        vi.mocked(importGeometryFile).mockClear();
+        vi.mocked(importGeometryFile).mockResolvedValue({ summary, log: [] });
+        vi.mocked(pickOpenGeometryPath).mockResolvedValue(path);
 
-      expect(importStep).toHaveBeenCalledWith("/models/壳体.step");
-      expect(importStl).not.toHaveBeenCalled();
-      expect(geometry.geometries).toEqual([summary]);
-    });
+        await geometry.importGeometry();
 
-    it.each(["igs", "iges"])("%S 文件分派到 IGES 镶嵌导入", async (extension) => {
-      vi.mocked(pickOpenGeometryPath).mockResolvedValue(`/models/壳体.${extension}`);
-      const summary = makeSummary();
-      vi.mocked(importIges).mockResolvedValue({ summary, log: [] });
-
-      const geometry = useGeometryStore();
-      await geometry.importGeometry();
-
-      expect(importIges).toHaveBeenCalledWith(`/models/壳体.${extension}`);
-      expect(importStl).not.toHaveBeenCalled();
-      expect(importStep).not.toHaveBeenCalled();
-      expect(geometry.geometries).toEqual([summary]);
+        // 前端不再按扩展名分派（也没有路径切分）：一律交给 import_geometry
+        expect(importGeometryFile).toHaveBeenCalledWith(path);
+      }
+      expect(geometry.geometries).toHaveLength(3);
     });
 
     it("reports import failures and clears busy", async () => {
       vi.mocked(pickOpenGeometryPath).mockResolvedValue("/models/broken.stl");
-      vi.mocked(importStl).mockRejectedValue(new Error("STL 解析失败"));
+      vi.mocked(importGeometryFile).mockRejectedValue(new Error("STL 解析失败"));
 
       const app = useAppStore();
       const geometry = useGeometryStore();
@@ -700,7 +685,7 @@ describe("工作区：几何归档与恢复", () => {
       relativePath: "geometry/demo.stl",
     });
     vi.mocked(pickOpenGeometryPath).mockResolvedValue("/models/demo.stl");
-    vi.mocked(importStl).mockResolvedValue({ summary: makeSummary(), log: [] });
+    vi.mocked(importGeometryFile).mockResolvedValue({ summary: makeSummary(), log: [] });
     await geometry.importGeometry();
 
     // 归档用导入摘要里的几何 id（默认 fixture 为 g-1）

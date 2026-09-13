@@ -22,6 +22,13 @@
    脚本，Linux 会因同进程其它测试 fork 时复制了该脚本的写 fd 而报 ETXTBSY
    （Text file busy）偶发失败，macOS/Windows 不这么判
    （同日第三轮：gmsh 假脚本用例；修法是把「写脚本 → 起进程」串行化）；
+   **（2026-09-13 第四轮，三条一起看）**：① 新增的对 core 的使用不能只放在 `cfg` 块里
+   ——`vm_logic` 只在 `#[cfg(any(macos, windows))]` 下导入，Linux 用到原生环境时编译
+   不过；② 测试断言不得依赖平台细节——硬编码 `/` 会在 Windows 上红，
+   `Path::is_absolute()` 对 `C:/x`、`/etc/passwd` 在 Windows 的判定与 Unix 不同；
+   ③ 无该平台语义的分支在本地覆盖不到——`Component::Prefix`（Windows 才有）与
+   `C:\` 后跟的 `RootDir` 组件在 Unix 上永不产生，写成分叉必然在一边漏测，
+   改用 `Component::as_os_str()` / `Path::file_name()` 走同一条代码路径；
 2. **性能预算对照**：用 T01 基准套件跑当前数字，与本里程碑设定的预算逐条对比，超标项必须给出处理结论（当场优化 / 立优化任务 / 修订预算并说明理由）；
 3. **代码与注释质量**：命名一致性、注释与实现相符且解释"为什么"、无 TODO/FIXME 残留、无死代码与投机性 API；
 4. **文档同步**：README / ARCHITECTURE / AGENTS 与实际实现一致，路径与数字无漂移；

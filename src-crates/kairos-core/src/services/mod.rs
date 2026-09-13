@@ -16,6 +16,7 @@ pub mod meshing;
 pub mod midplane;
 pub mod moldingfoam;
 pub mod operators;
+pub mod paths;
 pub mod process;
 pub mod project;
 pub mod render_mesh;

@@ -7,10 +7,8 @@ import {
   generateMidplaneMesh as apiGenerateMidplane,
   generateVolumeMesh,
   getRenderMesh,
-  importIges as apiImportIges,
+  importGeometryFile,
   importSampleBox,
-  importStl,
-  importStep as apiImportStep,
   removeGeometry,
   repairGeometry as apiRepairGeometry,
 } from "../api/geometry";
@@ -64,13 +62,8 @@ export const useGeometryStore = defineStore("geometry", {
         return;
       }
       await app.withBusy("正在导入几何…", async () => {
-        const extension = path.split(".").pop()?.toLowerCase();
-        const outcome =
-          extension === "step" || extension === "stp"
-            ? await apiImportStep(path)
-            : extension === "igs" || extension === "iges"
-              ? await apiImportIges(path)
-              : await importStl(path);
+        // 格式分派在 Rust 侧（Path::extension），前端不解析路径
+        const outcome = await importGeometryFile(path);
         this.recordImport(outcome);
         await this.archiveIntoWorkspace(outcome.summary.geometryId, path);
       });

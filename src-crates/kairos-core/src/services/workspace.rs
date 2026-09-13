@@ -17,14 +17,19 @@
 //! 如 `~/Documents`、`~/文档`、`~/Dokumente`），core 只接收解析结果做纯路径运算。
 //! 工程文件只存相对路径——绝对路径换机器 / 换盘即失效。
 
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 
-use crate::error::{KairosError, Result};
+use crate::error::Result;
+use crate::services::paths;
 
 /// 默认工作区根：用户文档目录下的 `kairos/`（每个工程一个子目录）。
 pub const DEFAULT_ROOT_DIR_NAME: &str = "kairos";
 /// 工程文件默认名（用户在新建工程时可改）。
 pub const DEFAULT_PROJECT_FILE_NAME: &str = "project.kairos";
+/// 工程文件扩展名（`Path::with_extension` 使用，不带点）。
+pub const PROJECT_EXTENSION: &str = "kairos";
+/// 几何归档文件名清洗失败时的回退名。
+const DEFAULT_ARCHIVE_NAME: &str = "geometry.stl";
 /// 几何归档子目录。
 pub const GEOMETRY_DIR: &str = "geometry";
 /// 网格子目录（其下按方案 id 分目录）。
@@ -55,34 +60,25 @@ pub fn workspace_root(project_file: &Path, documents_dir: &Path) -> Option<PathB
     Some(parent.to_path_buf())
 }
 
-/// 工程目录：`<文档目录>/kairos/<工程名>`（名称做文件系统安全清洗）。
+/// 工程目录：`<文档目录>/kairos/<工程名>`。
+/// 名称清洗走 [`paths::sanitize_file_name`]：保留字符替换为下划线，名称里的目录成分
+/// 一律丢弃（只取最后一段），空名回退 `kairos`。
 pub fn project_dir(documents_dir: &Path, project_name: &str) -> PathBuf {
     default_root(documents_dir).join(sanitize_component(project_name))
 }
 
 /// 工程文件路径：`<文档目录>/kairos/<工程名>/<文件名>.kairos`。
+/// 用户可能连扩展名一起填——主干由 `Path::file_stem` 取，再补回 `.kairos`。
 pub fn project_file_path(documents_dir: &Path, project_name: &str, file_name: &str) -> PathBuf {
-    let stem = sanitize_component(file_stem(file_name));
-    project_dir(documents_dir, project_name).join(format!("{stem}.kairos"))
+    let stem = sanitize_component(&paths::file_stem(file_name, DEFAULT_ROOT_DIR_NAME));
+    project_dir(documents_dir, project_name)
+        .join(stem)
+        .with_extension(PROJECT_EXTENSION)
 }
 
-/// 去掉扩展名（用户可能连 `.kairos` 一起填）。
-fn file_stem(file_name: &str) -> &str {
-    let trimmed = file_name.trim();
-    trimmed
-        .strip_suffix(".kairos")
-        .filter(|stem| !stem.is_empty())
-        .unwrap_or(trimmed)
-}
-
-/// 目录 / 文件名清洗：非法字符替换为下划线，空名回退 `kairos`。
+/// 目录 / 文件名清洗：保留字符替换为下划线，空名回退默认目录名。
 fn sanitize_component(name: &str) -> String {
-    let sanitized = sanitize_file_name(name);
-    if sanitized == "geometry.stl" {
-        DEFAULT_ROOT_DIR_NAME.to_string()
-    } else {
-        sanitized
-    }
+    paths::sanitize_file_name(name, DEFAULT_ROOT_DIR_NAME)
 }
 
 /// `<root>/geometry`。
@@ -105,46 +101,20 @@ pub fn reports_dir(root: &Path) -> PathBuf {
     root.join(REPORTS_DIR)
 }
 
-/// 相对路径安全校验：拒绝绝对路径、盘符、`..` 与空路径（工程文件可能被手工编辑）。
+/// 相对路径安全校验（工程文件可能被手工编辑）：委托 [`paths::validate_relative`]。
 pub fn validate_relative(relative: &str) -> Result<()> {
-    if relative.trim().is_empty() {
-        return Err(KairosError::validation("工程内相对路径不能为空。"));
-    }
-    let path = Path::new(relative);
-    if path.is_absolute() {
-        return Err(KairosError::validation(format!(
-            "工程内相对路径必须是相对路径：{relative}"
-        )));
-    }
-    // 绝对路径已在上方拦下，这里只需拦住向上逃逸（`..`）。
-    if path
-        .components()
-        .any(|component| component == Component::ParentDir)
-    {
-        return Err(KairosError::validation(format!(
-            "工程内相对路径不得越出工作区：{relative}"
-        )));
-    }
-    // 冒号在任何平台都拒绝：Windows 盘符 / 备用数据流在 Unix 上解析不出 Prefix 组件，
-    // 显式判定才能让「换机器打开工程」的行为一致（工程文件可能被手工编辑）。
-    if relative.contains(':') {
-        return Err(KairosError::validation(format!(
-            "工程内相对路径不得含盘符或冒号：{relative}"
-        )));
-    }
-    Ok(())
+    paths::validate_relative(relative)
 }
 
 /// 拼接工作区内的绝对路径（先做相对路径校验）。
 pub fn resolve(root: &Path, relative: &str) -> Result<PathBuf> {
-    validate_relative(relative)?;
-    Ok(root.join(relative))
+    Ok(root.join(paths::from_storage(relative)?))
 }
 
 /// 归档文件名：优先保留来源文件名；同名已被占用时加 `<id>-` 前缀避免覆盖。
 /// `taken` 为工作区内已存在的文件名集合（小写归一比较，兼容大小写不敏感文件系统）。
 pub fn archive_file_name(source_name: &str, id: &str, taken: &[String]) -> String {
-    let sanitized = sanitize_file_name(source_name);
+    let sanitized = paths::sanitize_file_name(source_name, DEFAULT_ARCHIVE_NAME);
     let lower = sanitized.to_lowercase();
     if !taken.iter().any(|name| name.to_lowercase() == lower) {
         return sanitized;
@@ -152,31 +122,14 @@ pub fn archive_file_name(source_name: &str, id: &str, taken: &[String]) -> Strin
     format!("{id}-{sanitized}")
 }
 
-/// 文件名清洗：去掉路径分隔与首尾空白，空名回退 `geometry.stl`。
-fn sanitize_file_name(name: &str) -> String {
-    let cleaned: String = name
-        .chars()
-        .map(|character| match character {
-            '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' => '_',
-            other => other,
-        })
-        .collect();
-    let trimmed = cleaned.trim().trim_matches('.').trim();
-    if trimmed.is_empty() {
-        "geometry.stl".to_string()
-    } else {
-        trimmed.to_string()
-    }
-}
-
-/// 几何归档的相对路径：`geometry/<文件名>`。
+/// 几何归档的相对路径：`geometry/<文件名>`（存储形态固定 `/`）。
 pub fn geometry_relative(file_name: &str) -> String {
-    format!("{GEOMETRY_DIR}/{file_name}")
+    paths::to_storage(&paths::join(&[GEOMETRY_DIR, file_name]))
 }
 
-/// 方案网格文件的相对路径：`mesh/<studyId>/mesh.json`。
+/// 方案网格文件的相对路径：`mesh/<studyId>/mesh.json`（存储形态固定 `/`）。
 pub fn mesh_relative(study_id: &str) -> String {
-    format!("{MESH_DIR}/{study_id}/{MESH_FILE_NAME}")
+    paths::to_storage(&paths::join(&[MESH_DIR, study_id, MESH_FILE_NAME]))
 }
 
 #[cfg(test)]
@@ -237,7 +190,7 @@ mod tests {
         );
         assert_eq!(
             project_file_path(documents, "a/b", "x:y"),
-            PathBuf::from("/home/u/Documents/kairos/a_b/x_y.kairos")
+            PathBuf::from("/home/u/Documents/kairos/b/x_y.kairos")
         );
         assert_eq!(
             project_file_path(documents, "  ", "  "),
@@ -292,7 +245,7 @@ mod tests {
             "geom-2-Part.STL"
         );
         // 路径分隔与非法字符清洗
-        assert_eq!(archive_file_name("a/b:c?.stl", "geom-3", &[]), "a_b_c_.stl");
+        assert_eq!(archive_file_name("a/b:c?.stl", "geom-3", &[]), "b_c_.stl");
         assert_eq!(archive_file_name("   ", "geom-4", &[]), "geometry.stl");
         assert_eq!(archive_file_name(".", "geom-5", &[]), "geometry.stl");
     }

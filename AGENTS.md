@@ -24,6 +24,12 @@ Kairos：注塑成型 CAE 仿真软件，对标行业领先的同类产品（自
 - **线程模型**：同步 Tauri 命令跑在主线程，重计算必须异步 / 另起线程；进度回传用 `tauri::ipc::Channel`；大体积数据用 `tauri::ipc::Response`。
 - **覆盖率门槛**：`kairos-core` 行覆盖 100%（`bun run coverage:rust`，cargo-llvm-cov）、前端逻辑层全量 100%（`utils/` + `stores/` + `composables/` + 各 `use*.ts`，`bun run test:coverage`，行/函数/语句/分支全 100）；api / render 薄适配层不计入门槛。两端均已并入 verify 门禁。
 - **GPU 计算**：统一经 wgpu 抽象层覆盖 NVIDIA / AMD / Intel / Apple（Vulkan/DX12/Metal），禁止引入 CUDA 等单厂商 SDK；后处理以硬件加速 GPU 为运行前提，不提供 CPU 运行时回退。CPU 实现仅可作为正确性基准与测试参考；缺少可用 GPU 时必须明确提示该能力不受支持。
+- **路径一律走库**：任何路径拼装 / 解析 / 判定用 `std::path`（`join` / `file_name` / `file_stem` /
+  `extension` / `components` / `with_extension`），**禁止手写分隔符或 `split('/')`**——Windows 与
+  Unix 的分隔符、盘符、保留字符差异只在这一个工具模块里处理：
+  `src-crates/kairos-core/src/services/paths.rs`（拼装 / 清洗 / 存储形态归一 / 盘符映射）。
+  跨机器落盘的相对路径统一用 `/`（经 `paths::to_storage`），读取侧用 `paths::from_storage`。
+  前端不解析路径：格式判定之类交给 Rust（如导入按扩展名分派在 `import_geometry`）。
 - **锁文件**：根 `Cargo.lock` 与 `bun.lock` 必须提交、保持同步（整个工作区只有根目录这一份 Cargo.lock）。
 - **提交前门禁**：仓库根 `bun run verify`（typecheck + clippy -D warnings + format + test + 覆盖率门槛 + knip，前端与 Rust 全量），通过才算完成。
 - **时间线**：每完成一个任务，在 [ai-docs/timeline.md](ai-docs/timeline.md) 末尾追加一行（时间 + 阶段 + 内容），**一行对应一个 commit**，随该任务的提交一并入库。

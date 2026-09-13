@@ -453,24 +453,31 @@ mod tests {
     }
 
     /// 路径含空格 / 单引号时仍能安全拼进 bash：全部走单引号字面量转义。
+    /// 断言用「按平台拼出来的 bashrc 路径」而不是硬编码 `/`——Windows 上 `Path::join`
+    /// 产出 `\`，写死 `/` 的期望值会红。
     #[test]
     fn native_env_commands_quote_paths() {
         let plain = Path::new("/opt/kairos env");
+        let bashrc = native_env_bashrc(plain).to_string_lossy().to_string();
         assert_eq!(
             native_env_source_command(plain),
-            "source '/opt/kairos env/openfoam14/etc/bashrc'"
+            format!("source '{bashrc}'")
         );
         assert_eq!(
             native_env_probe_command(plain),
-            "test -f '/opt/kairos env/openfoam14/etc/bashrc'"
+            format!("test -f '{bashrc}'")
         );
+        // 命令整体仍是单引号字面量（未有裸露的空格分隔符）
+        assert!(native_env_source_command(plain).starts_with("source '"));
+        assert!(native_env_source_command(plain).ends_with('\''));
 
-        // 单引号路径：' → '\''（shell 单引号串里唯一的转义形式）
+        // 单引号路径：整条命令里唯一的转义形态是 '\''，且 bashrc 中的引号被转义
         let quoted = Path::new("/opt/it's here");
-        assert_eq!(
-            native_env_source_command(quoted),
-            "source '/opt/it'\\''s here/openfoam14/etc/bashrc'"
-        );
+        let command = native_env_source_command(quoted);
+        assert_eq!(command.matches("'\\''").count(), 1);
+        assert!(!command.contains("it's"));
+
+        // 转义函数本身（平台无关）
         assert_eq!(bash_single_quote("a'b"), "a'\\''b");
         assert_eq!(bash_single_quote("plain"), "plain");
     }

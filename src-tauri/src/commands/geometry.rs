@@ -18,7 +18,6 @@ use kairos_core::services::dualdomain::{self, DualDomainParams};
 use kairos_core::services::fill_preview;
 use kairos_core::services::gate_location::{self, GateLocationParams};
 use kairos_core::services::geometry as geometry_service;
-use kairos_core::services::iges;
 use kairos_core::services::mesh_store::{self, MeshManifest};
 use kairos_core::services::meshing::{self, VolumeMeshParams};
 use kairos_core::services::midplane::{self, MidplaneParams};
@@ -26,7 +25,6 @@ use kairos_core::services::moldingfoam;
 use kairos_core::services::project::new_id;
 use kairos_core::services::render_mesh;
 use kairos_core::services::repair;
-use kairos_core::services::step;
 use kairos_core::services::workspace;
 use tauri::State;
 
@@ -55,24 +53,6 @@ impl GeometryStore {
     }
 }
 
-#[tauri::command]
-pub async fn import_stl(store: State<'_, GeometryStore>, path: String) -> Result<ImportOutcome> {
-    let store = store.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        let started = std::time::Instant::now();
-        let mesh = geometry_service::parse_stl_file(Path::new(&path))?;
-        Ok(store_import(
-            &store,
-            &path,
-            mesh,
-            "STL",
-            started.elapsed().as_millis(),
-        ))
-    })
-    .await
-    .map_err(|e| KairosError::internal(format!("导入任务失败：{e}")))?
-}
-
 /// 解析后的网格登记入会话缓存并生成摘要 + 导入日志。
 fn store_import(
     store: &GeometryStore,
@@ -99,6 +79,31 @@ fn store_import(
         },
     );
     ImportOutcome { summary, log }
+}
+
+/// 导入几何：解析格式由**扩展名**判定（`Path::extension`，core 侧统一分派），
+/// 前端不再自己做扩展名解析——路径语义只在 Rust 侧处理。
+#[tauri::command]
+pub async fn import_geometry(
+    store: State<'_, GeometryStore>,
+    path: String,
+) -> Result<ImportOutcome> {
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let started = std::time::Instant::now();
+        let source = Path::new(&path);
+        let format = geometry_service::format_from_path(source);
+        let mesh = geometry_service::parse_file(source, format)?;
+        Ok(store_import(
+            &store,
+            &path,
+            mesh,
+            format.label(),
+            started.elapsed().as_millis(),
+        ))
+    })
+    .await
+    .map_err(|e| KairosError::internal(format!("导入任务失败：{e}")))?
 }
 
 /// 修复已导入几何：顶点焊接 / 退化面移除 / 孔洞填充 / 法向一致化 / 自交检测。
@@ -137,43 +142,7 @@ pub async fn repair_geometry(
 }
 
 /// 导入 STEP 镶嵌网格（AP242 TRIANGULATED_FACE_SET / POLY_LOOP 子集）。
-#[tauri::command]
-pub async fn import_step(store: State<'_, GeometryStore>, path: String) -> Result<ImportOutcome> {
-    let store = store.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        let started = std::time::Instant::now();
-        let mesh = step::parse_step_file(Path::new(&path))?;
-        Ok(store_import(
-            &store,
-            &path,
-            mesh,
-            "STEP",
-            started.elapsed().as_millis(),
-        ))
-    })
-    .await
-    .map_err(|e| KairosError::internal(format!("导入任务失败：{e}")))?
-}
-
 /// 导入 IGES 镶嵌网格（实体 106 / 63 子集）。
-#[tauri::command]
-pub async fn import_iges(store: State<'_, GeometryStore>, path: String) -> Result<ImportOutcome> {
-    let store = store.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        let started = std::time::Instant::now();
-        let mesh = iges::parse_iges_file(Path::new(&path))?;
-        Ok(store_import(
-            &store,
-            &path,
-            mesh,
-            "IGES",
-            started.elapsed().as_millis(),
-        ))
-    })
-    .await
-    .map_err(|e| KairosError::internal(format!("导入任务失败：{e}")))?
-}
-
 /// 生成双域网格：表面三角形厚度配对 + 流道/浇口梁单元耦合
 /// （网格保留在会话缓存中，前端获得统计报告）。
 #[tauri::command]
@@ -439,15 +408,8 @@ pub async fn load_workspace_geometry(
         let root = workspace::workspace_root(Path::new(&project_path), &documents)
             .ok_or_else(|| KairosError::validation("当前工程不在工作区目录中。"))?;
         let path = workspace::resolve(&root, &relative_path)?;
-        let extension = path
-            .extension()
-            .map(|value| value.to_string_lossy().to_lowercase())
-            .unwrap_or_default();
-        let mesh = match extension.as_str() {
-            "step" | "stp" => step::parse_step_file(&path)?,
-            "iges" | "igs" => iges::parse_iges_file(&path)?,
-            _ => geometry_service::parse_stl_file(&path)?,
-        };
+        // 与导入同一条分派：格式由扩展名判定（core 统一实现）
+        let mesh = geometry_service::parse_file(&path, geometry_service::format_from_path(&path))?;
         let file_name = path
             .file_name()
             .map(|name| name.to_string_lossy().to_string())
