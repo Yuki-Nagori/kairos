@@ -86,7 +86,7 @@ const {
           </p>
 
           <p class="text-[11px] font-semibold tracking-wide text-zinc-400">Cross-WLF 黏度</p>
-          <LatexBlock :tex="CROSS_WLF_TEX" />
+          <LatexBlock :tex="CROSS_WLF_TEX" label="Cross-WLF 黏度模型公式" />
           <table class="text-xs">
             <tbody>
               <tr v-for="[key, value] in wlfRows" :key="key">
@@ -97,7 +97,7 @@ const {
           </table>
 
           <p class="text-[11px] font-semibold tracking-wide text-zinc-400">Tait PVT</p>
-          <LatexBlock :tex="TAIT_TEX" />
+          <LatexBlock :tex="TAIT_TEX" label="Tait PVT 状态方程公式" />
           <table class="text-xs">
             <tbody>
               <tr v-for="[key, value] in pvtRows" :key="key">

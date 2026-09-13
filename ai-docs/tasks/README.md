@@ -71,6 +71,7 @@
 | T53 | [T53-report-template-done.md](T53-report-template-done.md)                       | 模板化自定义报告                               |
 | T54 | [T54-vm-deploy-version-hint-done.md](T54-vm-deploy-version-hint-done.md)         | 求解环境"更新未部署"提醒                       |
 | T68 | [T68-study-creation-entry-done.md](T68-study-creation-entry-done.md)             | 方案创建入口（新建工程自带方案 + ＋ 新建方案） |
+| T70 | [T70-latex-a11y-flatten-done.md](T70-latex-a11y-flatten-done.md)                 | 材料公式刷屏可访问性树（LaTeX 单图像暴露）     |
 
 > T26/T27 落地后的增量打磨（系统窗口按钮、原生应用菜单、主题注入统一、
 > 品牌图标、emoji 清理、启动窗口位置）见 `ai-docs/timeline.md` 对应条目，

@@ -6,15 +6,22 @@ import { useLatex } from "../../../src-web/components/latex-block/useLatex";
 
 describe("LatexBlock", () => {
   it("行间模式渲染 katex 公式并带展示态样式", () => {
-    const wrapper = mount(LatexBlock, { props: { tex: "E = mc^2" } });
+    const wrapper = mount(LatexBlock, { props: { tex: "E = mc^2", label: "质能方程" } });
     expect(wrapper.find(".katex-display").exists()).toBe(true);
     expect(wrapper.find(".katex").exists()).toBe(true);
     expect(wrapper.find("div").classes()).toContain("text-center");
   });
 
+  it("公式按单张图像暴露给可访问性树（避免 MathML 逐符号展开）", () => {
+    const wrapper = mount(LatexBlock, { props: { tex: "E = mc^2", label: "质能方程" } });
+    const container = wrapper.find("div");
+    expect(container.attributes("role")).toBe("img");
+    expect(container.attributes("aria-label")).toBe("质能方程");
+  });
+
   it("行内模式不换行展示", () => {
     const wrapper = mount(LatexBlock, {
-      props: { tex: "\\eta_0", displayMode: false },
+      props: { tex: "\\eta_0", label: "黏度", displayMode: false },
     });
     expect(wrapper.find(".katex-display").exists()).toBe(false);
     expect(wrapper.find(".katex").exists()).toBe(true);
@@ -22,7 +29,7 @@ describe("LatexBlock", () => {
   });
 
   it("非法公式不抛异常（throwOnError 关闭，原样回显输入）", () => {
-    const wrapper = mount(LatexBlock, { props: { tex: "\\notacommand{x}" } });
+    const wrapper = mount(LatexBlock, { props: { tex: "\\notacommand{x}", label: "非法公式" } });
     expect(wrapper.find(".katex").exists()).toBe(true);
     expect(wrapper.text()).toContain("\\notacommand");
   });
