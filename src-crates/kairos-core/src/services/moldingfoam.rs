@@ -45,8 +45,11 @@ const FREEZE_OFF_FRACTION: f64 = 0.01;
 
 /// 保压压力斜坡：V/P 切换后闸口压力从实测值线性升到保压曲线，避免单步阶跃
 /// （大件实测切换瞬间 p_gate 仅 5.4 MPa、曲线起点 60 MPa，阶跃会把熔体推到
-/// 不可解）。斜坡时长按注射时间的固定比例给，再夹到工程区间。
-const PACKING_RAMP_OF_INJECTION: f64 = 0.05;
+/// 不可解）。口径与求解器的自适应默认一致：取**切换时刻的 5%**，夹到工程区间；
+/// 切换时刻在生成期不可知，按「注射时间 × V/P 切换体积分数」预估
+/// （873 cm³ / 4 s / 0.96 的件：预估 3.84 s → 0.192 s，求解器实测切换 3.92 s
+/// 给出 0.196 s，两者一致）。
+const PACKING_RAMP_OF_SWITCH: f64 = 0.05;
 const PACKING_RAMP_MIN_S: f64 = 0.05;
 const PACKING_RAMP_MAX_S: f64 = 0.5;
 
@@ -612,9 +615,11 @@ fn decompose_dict(cores: usize) -> String {
 /// 切换压力取曲线起点，使闸口压力在切换瞬间连续、无压力阶跃。不能再额外
 /// 写一个大气压首点——曲线起点在 t=0 时会出现重复横坐标，被求解器的
 /// `Function1s::Table::check` 判为 out-of-order 而拒绝启动。
-/// 保压压力斜坡时长 [s]：注射时间的 5%，夹在 [0.05, 0.5]。
-fn packing_ramp_s(injection_time_s: f64) -> f64 {
-    (injection_time_s * PACKING_RAMP_OF_INJECTION).clamp(PACKING_RAMP_MIN_S, PACKING_RAMP_MAX_S)
+/// 保压压力斜坡时长 [s]：预估切换时刻（注射时间 × 切换体积分数）的 5%，
+/// 夹在 [0.05, 0.5]。
+fn packing_ramp_s(injection_time_s: f64, switch_fraction: f64) -> f64 {
+    (injection_time_s * switch_fraction * PACKING_RAMP_OF_SWITCH)
+        .clamp(PACKING_RAMP_MIN_S, PACKING_RAMP_MAX_S)
 }
 
 fn molding_dict(material: &Material, process: &ProcessSettings) -> String {
@@ -646,7 +651,10 @@ fn molding_dict(material: &Material, process: &ProcessSettings) -> String {
             process.vp_switch_volume_percent / 100.0,
             material.pvt.b5,
             kelvin(process.ejection_temp_c),
-            ramp = packing_ramp_s(process.injection_time_s)
+            ramp = packing_ramp_s(
+                process.injection_time_s,
+                process.vp_switch_volume_percent / 100.0
+            )
         )
 }
 
@@ -855,11 +863,14 @@ mod tests {
     }
 
     #[test]
-    fn packing_ramp_scales_with_injection_time_and_clamps() {
-        // 注射 1 s → 5% = 0.05 命中下限；4 s → 0.2；20 s → 夹到上限 0.5
-        assert_eq!(packing_ramp_s(1.0), PACKING_RAMP_MIN_S);
-        assert!((packing_ramp_s(4.0) - 0.2).abs() < 1e-12);
-        assert_eq!(packing_ramp_s(20.0), PACKING_RAMP_MAX_S);
+    fn packing_ramp_scales_with_estimated_switch_time_and_clamps() {
+        // 预估切换时刻 = 注射时间 × 切换分数；取其 5%，夹 [0.05, 0.5]
+        // 注射 1 s / 0.96 → 0.048 命中下限 0.05（样例盒）
+        assert_eq!(packing_ramp_s(1.0, 0.96), PACKING_RAMP_MIN_S);
+        // 4 s / 0.96 → 0.192（真实件；求解器自适应实测 0.196，同一窗口）
+        assert!((packing_ramp_s(4.0, 0.96) - 0.192).abs() < 1e-12);
+        // 20 s / 1.0 → 1.0 夹到上限
+        assert_eq!(packing_ramp_s(20.0, 1.0), PACKING_RAMP_MAX_S);
     }
 
     fn two_tet_mesh() -> VolumeMesh {
@@ -970,7 +981,7 @@ mod tests {
         // 冻死短射守卫：无流温度取 Tait 转变温度 b5（内置 PP 为 418 K）
         assert!(dict.contains("freezeOffTemperature  418.0000"), "{dict}");
         assert!(dict.contains("freezeOffFraction  0.0100"));
-        // 保压斜坡：注射 1 s → 5% = 0.05（下限），避免切换瞬间单步阶跃
+        // 保压斜坡：注射 1 s × 0.96 → 0.048 夹到下限 0.05，避免切换瞬间单步阶跃
         assert!(dict.contains("pressureRamp  0.0500"), "{dict}");
         let momentum = momentum_transport_dict(&material);
         assert!(momentum.contains("viscosityModel  CrossWlf;"));
