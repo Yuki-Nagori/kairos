@@ -105,16 +105,17 @@ export function useProcessPanel() {
   const issueLines = ref<string[]>([]);
   const notice = ref<string | null>(null);
 
-  /** 填充工况上下文：活跃几何的网格体积 + 研究上第一个浇口的半径。 */
-  function fillLoadContext(): { volumeMm3?: number; gateRadiusMm?: number } {
+  /** 填充工况上下文：活跃几何的网格体积 + 研究上第一个浇口的等效流通面积。 */
+  function fillLoadContext(): { volumeMm3?: number; inletAreaM2?: number } {
     const geometry = geometryStore.geometries[0];
     const report = geometry ? geometryStore.meshReports[geometry.geometryId] : undefined;
     const gate = project.activeStudy?.runnerElements.find(
       (element) => element.kind === "gate" && element.diameterMm > 0,
     );
+    const radiusM = gate === undefined ? undefined : gate.diameterMm / 2000;
     return {
       volumeMm3: report?.totalVolume,
-      gateRadiusMm: gate === undefined ? undefined : gate.diameterMm / 2,
+      inletAreaM2: radiusM === undefined ? undefined : Math.PI * radiusM * radiusM,
     };
   }
 

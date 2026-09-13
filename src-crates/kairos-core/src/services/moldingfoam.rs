@@ -523,9 +523,10 @@ pub fn generate_case(
     stage: &AnalysisStage,
     cores: usize,
     gates: &[GatePortal],
-) -> Result<()> {
+) -> Result<PatchAreas> {
     let areas = write_poly_mesh(case_dir, mesh, gates)?;
-    write_case_files(case_dir, mesh, material, process, stage, cores, &areas)
+    write_case_files(case_dir, mesh, material, process, stage, cores, &areas)?;
+    Ok(areas)
 }
 
 /// 解析求解器 stdout 中的时间步行（如 "Time = 0.05"），返回物理进度秒数。

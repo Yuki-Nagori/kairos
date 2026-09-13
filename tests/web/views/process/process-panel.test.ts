@@ -142,9 +142,10 @@ describe("ProcessPanel 填充工况上下文", () => {
     await flushPromises();
 
     // 工艺字段的取值由面板重算（保压曲线末点 80% 等），此处只锁新增上下文。
+    // 浇口 1.5 mm 直径 → 半径 0.75 mm → 等效面积 πr² ≈ 1.767e-6 m²
     expect(checkProcess).toHaveBeenCalledWith(expect.anything(), {
       volumeMm3: 880000,
-      gateRadiusMm: 0.75,
+      inletAreaM2: Math.PI * (0.75 / 1000) ** 2,
     });
   });
 });

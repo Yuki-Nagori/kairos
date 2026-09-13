@@ -6,12 +6,37 @@ use std::path::Path;
 use crate::error::{KairosError, Result};
 use crate::models::results::{ResultCatalog, ScalarField, TimeStepMeta};
 
-/// 已知场名 → 是否为矢量场（模量读取）。
-///
-/// `D` = 位移（翘曲/变形）场，OpenFOAM 结构求解惯例；求解侧的翘曲输出
-/// 定稿后若改名，此处与字段契约同步。
-fn is_vector_field(field: &str) -> bool {
-    matches!(field, "U" | "V" | "gradU" | "D")
+/// 场类型：由 FoamFile 头的 `class` 行判定（不靠场名猜——求解侧的场名会随
+/// 契约扩展，如位移 `D`、等效应力 `sigmaEq`）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FieldKind {
+    /// `volScalarField`：逐单元标量。
+    Scalar,
+    /// `volVectorField`：逐单元矢量，读取时取模量。
+    VectorMagnitude,
+    /// 其它类型（如 `volSymmTensorField` 的应力张量）：不支持读取，明确报错。
+    Unsupported,
+}
+
+/// 从场文件内容解析类型（`class "volVectorField";` 与不带引号的写法都接受）。
+pub fn field_kind(content: &str) -> FieldKind {
+    let class = content
+        .lines()
+        .find_map(|line| {
+            let value = line
+                .trim()
+                .strip_prefix("class")?
+                .trim()
+                .trim_end_matches(';')
+                .trim();
+            Some(value.trim_matches('"').to_string())
+        })
+        .unwrap_or_default();
+    match class.as_str() {
+        "volScalarField" => FieldKind::Scalar,
+        "volVectorField" => FieldKind::VectorMagnitude,
+        _ => FieldKind::Unsupported,
+    }
 }
 
 /// 判断目录名是否为时间目录（可解析为非负有限浮点数）。
@@ -181,17 +206,27 @@ pub fn read_field(case_dir: &Path, time_dir: &str, field: &str) -> Result<Scalar
         fs::read_to_string(&path).map_err(|e| KairosError::io(format!("读取场文件失败：{e}")))?;
     let time_s = parse_time_dir_name(time_dir)
         .ok_or_else(|| KairosError::validation(format!("时间目录名无法解析：{time_dir}")))?;
-    let (values, complete) = if is_vector_field(field) {
-        parse_internal_vector_magnitudes(&content)
-    } else {
-        parse_internal_scalar(&content)
+    let (values, complete, is_magnitude) = match field_kind(&content) {
+        FieldKind::Scalar => {
+            let (values, complete) = parse_internal_scalar(&content);
+            (values, complete, false)
+        }
+        FieldKind::VectorMagnitude => {
+            let (values, complete) = parse_internal_vector_magnitudes(&content);
+            (values, complete, true)
+        }
+        FieldKind::Unsupported => {
+            return Err(KairosError::validation(format!(
+                "暂不支持该场类型：{field}（当前支持 volScalarField 与 volVectorField）"
+            )));
+        }
     };
     Ok(ScalarField {
         field: field.to_string(),
         time_dir: time_dir.to_string(),
         time_s,
         values,
-        is_magnitude: is_vector_field(field),
+        is_magnitude,
         complete,
     })
 }
@@ -363,6 +398,32 @@ boundaryField
     walls { type fixedValue; value uniform (0 0 0); }
 }
 "#;
+
+    #[test]
+    fn field_kind_follows_file_class() {
+        assert_eq!(field_kind(SCALAR_UNIFORM), FieldKind::Scalar);
+        assert_eq!(field_kind(VECTOR_NONUNIFORM), FieldKind::VectorMagnitude);
+        // 张量场（如残余应力 sigma）与缺少 class 行都判为不支持
+        assert_eq!(
+            field_kind("FoamFile\n{\n    class \"volSymmTensorField\";\n}\n"),
+            FieldKind::Unsupported
+        );
+        assert_eq!(field_kind("not a foam file"), FieldKind::Unsupported);
+    }
+
+    #[test]
+    fn tensor_field_is_rejected_with_clear_error() {
+        let dir = std::env::temp_dir().join(format!("kairos-tensor-{}", std::process::id()));
+        fs::create_dir_all(dir.join("2")).unwrap();
+        fs::write(
+            dir.join("2").join("sigma"),
+            "FoamFile\n{\n    class \"volSymmTensorField\";\n    object sigma;\n}\n\ninternalField   uniform (0 0 0 0 0 0);\n",
+        )
+        .unwrap();
+        let error = read_field(&dir, "2", "sigma").unwrap_err();
+        assert!(error.to_string().contains("暂不支持该场类型"), "{error}");
+        fs::remove_dir_all(&dir).ok();
+    }
 
     #[test]
     fn displacement_field_reads_as_magnitude() {

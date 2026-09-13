@@ -410,7 +410,7 @@ fn run_pipeline(
         .iter()
         .map(|spec| parse_gate(spec))
         .collect::<kairos_core::error::Result<Vec<_>>>()?;
-    moldingfoam::generate_case(
+    let areas = moldingfoam::generate_case(
         out,
         &volume,
         &material,
@@ -424,11 +424,8 @@ fn run_pipeline(
     let thickness_hints = services::thickness::thin_feature_hints(target_size, &thickness);
     // 填充工况量级提示（与工艺面板同一套 core 校验）
     let volume_mm3 = services::moldingfoam::mesh_volume(&volume);
-    let load_hints = services::process::fill_load_hints(
-        volume_mm3,
-        &default_process(),
-        gates.first().map(|gate| gate.radius_mm),
-    );
+    let load_hints =
+        services::process::fill_load_hints(volume_mm3, &default_process(), Some(areas.inlet_m2));
     if json {
         emit_json(&serde_json::json!({
             "caseDir": out_dir,

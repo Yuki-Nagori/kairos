@@ -36,45 +36,59 @@ const MACHINE_FLOW_LIMIT_CM3_S: f64 = 500.0;
 /// 浇口表观剪切速率上限（1/s）：常见聚合物建议不超过 5×10⁴。
 const GATE_SHEAR_LIMIT_S: f64 = 5.0e4;
 
-/// 填充工况量级（由件体积、注射时间与浇口半径估算）。
+/// 浇口名义速度窗口（m/s，SI）：Q/A_in。1~10 m/s 是常见工艺区间，
+/// 超过 5 m/s 需谨慎（粗网格 / 大流量易失稳），超过 20 m/s 视为不可行
+/// （所需注塑压力多半超机台，且可压缩两相求解器在局部 Mach 接近 1 时失稳）。
+const GATE_VELOCITY_CAUTION_M_S: f64 = 5.0;
+/// 浇口速度不可行线（m/s）。
+const GATE_VELOCITY_LIMIT_M_S: f64 = 20.0;
+
+/// 填充工况量级（由件体积、注射时间与浇口流通面积估算）。
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct FillLoad {
     /// 体积流量（cm³/s）。
     pub flow_rate_cm3_s: f64,
-    /// 浇口表观剪切速率（1/s）；未给浇口半径时为 None。
+    /// 浇口名义速度 Q/A_in（m/s）；未给浇口面积时为 None。
+    pub inlet_velocity_m_s: Option<f64>,
+    /// 浇口表观剪切速率 4Q/(πR³)（1/s，R 由面积反推的等效圆半径）。
     pub gate_shear_rate_s: Option<f64>,
 }
 
-/// 估算填充工况：体积流量 Q = V/t，浇口表观剪切速率 γ̇ = 4Q/(πR³)（圆管）。
-/// 体积单位 mm³、时间 s、半径 mm，故 Q 需换算成 cm³/s 输出。
+/// 估算填充工况：体积流量 Q = V/t；给了浇口流通面积 A 时再算名义速度
+/// U = Q/A 与表观剪切速率 γ̇ = 4Q/(πR³)（R = √(A/π)）。全部用 SI 计算，
+/// 流量另以 cm³/s 输出便于阅读。
 pub fn estimate_fill_load(
     volume_mm3: f64,
     injection_time_s: f64,
-    gate_radius_mm: Option<f64>,
+    inlet_area_m2: Option<f64>,
 ) -> FillLoad {
-    let flow_rate_mm3_s = volume_mm3 / injection_time_s.max(1e-9);
+    let flow_rate_m3_s = volume_mm3 * 1e-9 / injection_time_s.max(1e-9);
+    let area = inlet_area_m2.filter(|area| *area > 0.0);
     FillLoad {
-        flow_rate_cm3_s: flow_rate_mm3_s / 1000.0,
-        gate_shear_rate_s: gate_radius_mm
-            .filter(|radius| *radius > 0.0)
-            .map(|radius| 4.0 * flow_rate_mm3_s / (std::f64::consts::PI * radius.powi(3))),
+        flow_rate_cm3_s: flow_rate_m3_s * 1e6,
+        inlet_velocity_m_s: area.map(|area| flow_rate_m3_s / area),
+        gate_shear_rate_s: area.map(|area| {
+            let radius = (area / std::f64::consts::PI).sqrt();
+            4.0 * flow_rate_m3_s / (std::f64::consts::PI * radius.powi(3))
+        }),
     }
 }
 
 /// 填充工况提示：量级明显不匹配时给出建议值（空 = 通过）。
 ///
-/// `volume_mm3` 为件体积（来自网格报告）；`gate_radius_mm` 为浇口半径
-/// （来自模具网络的 Gate 单元），没有浇口时跳过剪切速率检查。
+/// `volume_mm3` 为件体积（来自网格报告）；`inlet_area_m2` 为浇口流通面积
+/// （模具网络的 Gate 单元等效面积，或 case 里 inlet patch 的实测面积），
+/// 没给面积时只做流量包络检查。
 pub fn fill_load_hints(
     volume_mm3: f64,
     settings: &ProcessSettings,
-    gate_radius_mm: Option<f64>,
+    inlet_area_m2: Option<f64>,
 ) -> Vec<String> {
     let mut hints = Vec::new();
     if volume_mm3 <= 0.0 {
         return hints;
     }
-    let load = estimate_fill_load(volume_mm3, settings.injection_time_s, gate_radius_mm);
+    let load = estimate_fill_load(volume_mm3, settings.injection_time_s, inlet_area_m2);
     if load.flow_rate_cm3_s > MACHINE_FLOW_LIMIT_CM3_S {
         let minimum_time_s = volume_mm3 / 1000.0 / MACHINE_FLOW_LIMIT_CM3_S;
         hints.push(format!(
@@ -84,6 +98,18 @@ pub fn fill_load_hints(
             MACHINE_FLOW_LIMIT_CM3_S,
             volume_mm3 / 1000.0,
             minimum_time_s
+        ));
+    }
+    if let Some(velocity) = load.inlet_velocity_m_s
+        && velocity > GATE_VELOCITY_CAUTION_M_S
+    {
+        let judgement = if velocity > GATE_VELOCITY_LIMIT_M_S {
+            "超过 20 m/s 视为工况不可行（所需注塑压力多半超机台，且求解器在浇口局部 Mach 接近 1 时失稳）"
+        } else {
+            "处于需谨慎区间（5~20 m/s），粗网格或大流量下易失稳"
+        };
+        hints.push(format!(
+            "浇口名义速度 Q/A_in = {velocity:.1} m/s，{judgement}；请核对浇口面积与注射时间。",
         ));
     }
     if let Some(shear_rate) = load.gate_shear_rate_s
@@ -173,23 +199,28 @@ mod tests {
     }
 
     #[test]
-    fn estimate_fill_load_scales_with_volume_time_and_gate() {
-        // 样例方盒：1 cm³、1 s → 1 cm³/s；未给浇口 → 无剪切速率
+    fn estimate_fill_load_uses_si_flow_velocity_and_shear() {
+        // 样例量级：1 cm³、1 s、未给浇口面积 → 只有流量
         let sample = estimate_fill_load(1000.0, 1.0, None);
         assert!((sample.flow_rate_cm3_s - 1.0).abs() < 1e-12);
+        assert_eq!(sample.inlet_velocity_m_s, None);
         assert_eq!(sample.gate_shear_rate_s, None);
-        // 880 cm³、1 s → 880 cm³/s；浇口半径 8 mm → 4Q/(πR³) ≈ 547 1/s
-        let big = estimate_fill_load(880_000.0, 1.0, Some(8.0));
+        // 880 cm³、1 s、浇口 8 mm 半径（面积 πR² = 2.01e-4 m²）：
+        // U = Q/A ≈ 4.4 m/s；γ̇ = 4Q/(πR³) ≈ 4370 1/s
+        let area = std::f64::consts::PI * 0.008_f64.powi(2);
+        let big = estimate_fill_load(880_000.0, 1.0, Some(area));
         assert!((big.flow_rate_cm3_s - 880.0).abs() < 1e-9);
+        let velocity = big.inlet_velocity_m_s.unwrap();
+        assert!((velocity - 8.8e-4 / area).abs() < 1e-9, "U={velocity}");
         let shear = big.gate_shear_rate_s.unwrap();
-        assert!((shear - 4.0 * 880_000.0 / (std::f64::consts::PI * 512.0)).abs() < 1e-6);
-        // 半径为 0 / 负值 / 时间为 0 都不产生除零
+        assert!((shear - 4.0 * 8.8e-4 / (std::f64::consts::PI * 0.008_f64.powi(3))).abs() < 1e-6);
+        // 面积为 0 / 负值 / 时间为 0 都不产生除零
         assert_eq!(
-            estimate_fill_load(1000.0, 1.0, Some(0.0)).gate_shear_rate_s,
+            estimate_fill_load(1000.0, 1.0, Some(0.0)).inlet_velocity_m_s,
             None
         );
         assert_eq!(
-            estimate_fill_load(1000.0, 1.0, Some(-1.0)).gate_shear_rate_s,
+            estimate_fill_load(1000.0, 1.0, Some(-1.0)).inlet_velocity_m_s,
             None
         );
         assert!(
@@ -200,28 +231,37 @@ mod tests {
     }
 
     #[test]
-    fn fill_load_hints_flag_order_of_magnitude_mismatch() {
+    fn fill_load_hints_cover_flow_velocity_and_shear() {
         let mut settings = valid();
         settings.injection_time_s = 1.0;
-        // 样例量级：1 cm³、1 s → 无提示
-        assert!(fill_load_hints(1000.0, &settings, Some(1.0)).is_empty());
-        // 体积为 0 或负 → 跳过（没有网格信息时不提示）
+        // 样例量级且无浇口面积 → 静默
+        assert!(fill_load_hints(1000.0, &settings, None).is_empty());
+        assert!(fill_load_hints(1000.0, &settings, Some(1e-4)).is_empty());
+        // 体积为 0 或负 → 跳过
         assert!(fill_load_hints(0.0, &settings, None).is_empty());
         assert!(fill_load_hints(-5.0, &settings, None).is_empty());
-        // 880 cm³、1 s → 流量超包络，建议值 ≈ 1.8 s
-        let hints = fill_load_hints(880_000.0, &settings, Some(8.0));
-        assert_eq!(hints.len(), 1, "{hints:?}");
-        assert!(hints[0].contains("880 cm³/s"), "{}", hints[0]);
-        assert!(hints[0].contains("≥ 1.8 s"), "{}", hints[0]);
-        // 细浇口 + 高流量 → 剪切速率提示（880 cm³/s、半径 1 mm → 1.1e6 1/s）
-        let sheared = fill_load_hints(880_000.0, &settings, Some(1.0));
-        assert_eq!(sheared.len(), 2, "{sheared:?}");
-        assert!(sheared[1].contains("浇口表观剪切速率"), "{}", sheared[1]);
-        // 注射时间拉长到 2 s → 流量回到包络内，只剩剪切提示（半径 1 mm）
-        settings.injection_time_s = 2.0;
-        let relaxed = fill_load_hints(880_000.0, &settings, Some(1.0));
-        assert_eq!(relaxed.len(), 1, "{relaxed:?}");
-        assert!(relaxed[0].contains("浇口表观剪切速率"), "{}", relaxed[0]);
+        // 880 cm³、1 s：大浇口（1e-3 m² → U=0.88 m/s）只报流量包络
+        let big_gate = fill_load_hints(880_000.0, &settings, Some(1e-3));
+        assert_eq!(big_gate.len(), 1, "{big_gate:?}");
+        assert!(big_gate[0].contains("880 cm³/s"), "{}", big_gate[0]);
+        assert!(big_gate[0].contains("≥ 1.8 s"), "{}", big_gate[0]);
+        // 小浇口（1e-4 m² → U≈8.8 m/s，谨慎区间）→ 流量 + 速度两条
+        let small_gate = fill_load_hints(880_000.0, &settings, Some(1e-4));
+        assert_eq!(small_gate.len(), 2, "{small_gate:?}");
+        assert!(small_gate[1].contains("浇口名义速度"), "{}", small_gate[1]);
+        assert!(small_gate[1].contains("5~20 m/s"), "{}", small_gate[1]);
+        // 极细浇口（1e-6 m² → U≈880 m/s）→ 速度判为不可行
+        let tiny_gate = fill_load_hints(880_000.0, &settings, Some(1e-6));
+        assert!(
+            tiny_gate.iter().any(|hint| hint.contains("不可行")),
+            "{tiny_gate:?}"
+        );
+        // 极细且流量中等（1e-5 m² → γ̇≈2e5 1/s）→ 出现剪切速率提示
+        let sheared = fill_load_hints(880_000.0, &settings, Some(1e-5));
+        assert!(
+            sheared.iter().any(|hint| hint.contains("剪切速率")),
+            "{sheared:?}"
+        );
     }
 
     #[test]

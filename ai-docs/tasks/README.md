@@ -90,6 +90,7 @@
 | T59 | [T59-fill-preview.md](T59-fill-preview.md)                           | 填充预览（依赖 T55）              | T55      |
 | T60 | [T60-import-log-and-pptx.md](T60-import-log-and-pptx.md)             | 导入日志流 + PPT 报告（低优先）   | T52      |
 | T65 | [T65-warpage-deformation-view.md](T65-warpage-deformation-view.md)   | 翘曲变形可视化（视口位移显示）    | T64      |
+| T67 | [T67-coolant-channel-landing.md](T67-coolant-channel-landing.md)     | 冷却水路落地（模壁 1D 通道 BC）   | T07/T66  |
 
 > T29 优先级最高：样例方盒与真实 STL（46.7 万面）两条链路都已在 bundle v0.2.1
 > 上复跑——样例全程 exit 0 且结果可读；真实件导入/网格/case 通过，求解在固定

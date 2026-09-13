@@ -24,6 +24,19 @@
    联动；变形后法向重算（用既有 `computeVertexNormals`）。
 4. 测试：core 单测 + 前端 store/组件测试；真机截图待 GUI 权限（见阻塞）。
 
+## 契约（2026-09-13 上游确认）
+
+| 场                                               | 类型                         | 量纲    | 说明                                                  |
+| ------------------------------------------------ | ---------------------------- | ------- | ----------------------------------------------------- |
+| `D`                                              | volVectorField               | m（SI） | 位移；**显示按 mm ×1000**                             |
+| `sigma`                                          | volSymmTensorField           | Pa      | 残余应力张量（Kairos 当前不支持读取，展示用 sigmaEq） |
+| `sigmaEq`                                        | volScalarField               | Pa      | 等效应力                                              |
+| `T`                                              | volScalarField               | K       | 温度                                                  |
+| `shrinkage` / `shrinkageTensor` / `voidFraction` | scalar / symmTensor / scalar | -       | 流动侧关联场（可选）                                  |
+
+写出位置：`<time>/D`（writeInterval 控制）；样例见其仓库
+`validation/warpagePlate` 与 `validation/shrinkBar`。
+
 ## 阻塞与开工条件
 
 - **无真实场可验**：moldingFoam M4 的翘曲输出目前只有解析模型（曲率/挠度/
