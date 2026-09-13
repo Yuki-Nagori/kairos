@@ -169,10 +169,43 @@ mod recents_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::process::ProcessSettings;
 
     fn sample() -> Project {
         let mut project = create("演示项目", 1000).unwrap();
         project.add_study("s-1".into(), "填充分析", 1001).unwrap();
+        // 方案配置（材料 / 工艺 / 杆系 / 水路）与几何引用都在工程文件里：
+        // 样本带上它们，序列化往返才锁得住这些字段（少一个就会静默丢配置）。
+        let study = &mut project.studies[0];
+        study.material_id = Some("builtin-pp-001".into());
+        study.process = Some(ProcessSettings {
+            melt_temp_c: 230.0,
+            mold_temp_c: 40.0,
+            ejection_temp_c: 90.0,
+            injection_time_s: 1.5,
+            vp_switch_volume_percent: 96.0,
+            packing_pressure_mpa_curve: vec![(0.0, 60.0), (8.0, 48.0)],
+            packing_time_s: 8.0,
+            cooling_time_s: 15.0,
+            coolant_temp_c: 25.0,
+        });
+        study
+            .runner_elements
+            .push(crate::models::runners::RunnerElement {
+                id: "re-1".into(),
+                kind: crate::models::runners::RunnerKind::Gate,
+                diameter_mm: 6.0,
+                start: [0.0, 0.0, 0.0],
+                end: [0.0, 0.0, 1.0],
+            });
+        project.upsert_geometry(
+            crate::models::project::GeometryRef {
+                id: "geo-1".into(),
+                file_name: "part.stl".into(),
+                relative_path: "geometry/part.stl".into(),
+            },
+            1002,
+        );
         project
     }
 

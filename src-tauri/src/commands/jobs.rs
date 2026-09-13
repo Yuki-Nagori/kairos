@@ -172,8 +172,9 @@ fn copy_case_into_vm(case_dir: &str, vm_shell: Option<&str>) -> Result<Option<St
         .take()
         .ok_or_else(|| KairosError::io("tar stdout 管道不可用。"))?;
     // 环境树由 vm_deploy_bundle 预先解压在 ~/moldingfoam-env。
-    // 先删掉 VM 内同名目录：否则重跑时残留的上一次时间目录会被回传逻辑当作
-    // 本次结果，与本次结果混在同一个 case 目录里。
+    // 解压命令由 core 构造：归档条目自带叶子名前缀，解压目标必须是 case 根
+    // （解到 case 目录本身会多套一层同名目录）；重跑前先删同名目录，
+    // 否则残留的上一次时间目录会被回传逻辑当作本次结果。
     let mut mp = Command::new("multipass");
     mp.args([
         "exec",
@@ -181,7 +182,7 @@ fn copy_case_into_vm(case_dir: &str, vm_shell: Option<&str>) -> Result<Option<St
         "--",
         "bash",
         "-lc",
-        &format!("rm -rf '{vm_case}' && mkdir -p '{vm_case}' && tar -xzf - -C '{vm_case}'"),
+        &vm_logic::vm_case_extract_command(&vm_case),
     ])
     .stdin(tar_stdout);
     let status = mp
@@ -493,18 +494,10 @@ fn run_job_body(
     // 结果写在 VM 原生文件系统里，回传宿主后 results 服务才读得到；求解失败时
     // 也走一遍回传——已写出的部分时间目录对排查有用——但只有成功路径把回传
     // 失败当作作业失败，避免用回传问题覆盖求解本身的失败原因。
+    // 判定收敛在 core（求解器错误标记优先于退出码，见 job_logic::job_failure）。
     let copy_back = copy_results_from_vm(&case_dir, vm_case.as_deref());
     let copy_back_error = copy_back.err().map(|error| error.message().to_string());
-    // 求解失败按输出里的异常标记区分原因：求解器主动报错（FOAM FATAL 等）与
-    // 进程被终止 / 崩溃（无任何求解器错误标记）；成功路径下回传失败仍算失败，
-    // 避免静默丢结果。
-    let failure = if exit_ok {
-        copy_back_error
-    } else if solver_aborted {
-        Some("求解器报错退出（输出含 FOAM FATAL，详见作业日志）".to_string())
-    } else {
-        Some("进程异常退出（输出无求解器错误标记）".to_string())
-    };
+    let failure = job_logic::job_failure(solver_aborted, exit_ok, copy_back_error);
     let now = now_ms();
     {
         let mut guard = inner
@@ -549,9 +542,9 @@ pub fn submit_job(
         let mut inner = scheduler.lock();
         job_logic::submit(&mut inner.jobs, id.clone(), study_id, case_dir, cores, now)?;
         inner.channels.insert(id.clone(), progress);
-        let limits = inner.limits;
-        // submit 里已尝试提升，启动在 promote_and_spawn 的作业线程中进行。
-        job_logic::promote_ready(&mut inner.jobs, &limits, now);
+        // 提升只发生在 promote_and_spawn 里（提升与起线程必须同一处）：
+        // 在这里先提升会把作业置成 Running 却不带线程，随后 promote_and_spawn
+        // 看不到待提升作业，作业就永远停在「运行中」。
         inner
             .jobs
             .iter()
@@ -664,5 +657,43 @@ mod tests {
         assert_eq!(to_wsl_path(r"C:\a\b"), "/mnt/c/a/b");
         assert_eq!(to_wsl_path(r"D:\cases"), "/mnt/d/cases");
         assert_eq!(to_wsl_path("/already/unix"), "/already/unix");
+    }
+
+    /// 作业必须由 promote_and_spawn 提升并起线程：先提升（Running）再让
+    /// promote_and_spawn 找不到排队作业，作业会永远停在「运行中」。
+    #[test]
+    fn promote_and_spawn_always_runs_the_promoted_job() {
+        let scheduler = JobScheduler::default();
+        let case_dir = std::env::temp_dir().join(format!("kairos-job-{}", std::process::id()));
+        std::fs::create_dir_all(&case_dir).unwrap();
+        let now = now_ms();
+        {
+            let mut inner = scheduler.lock();
+            job_logic::submit(
+                &mut inner.jobs,
+                "spawn-check".into(),
+                None,
+                case_dir.to_string_lossy().to_string(),
+                1,
+                now,
+            )
+            .unwrap();
+        }
+        scheduler.promote_and_spawn(now);
+        // 线程起进程后很快收尾：case 目录里没有 OpenFOAM 环境，脚本必然失败退出。
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        let status = loop {
+            let status = scheduler.lock().jobs[0].status;
+            if status != kairos_core::models::jobs::JobStatus::Running {
+                break status;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "作业停在运行中：提升与起线程不在同一处"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        };
+        assert_eq!(status, kairos_core::models::jobs::JobStatus::Failed);
+        std::fs::remove_dir_all(&case_dir).ok();
     }
 }

@@ -469,8 +469,10 @@ fn scan_times_skips_files_and_non_numeric_dirs() {
         let bad = std::ffi::OsStr::from_bytes(b"\xff\xfe-bad");
         std::fs::create_dir_all(dir.join(bad)).unwrap();
     }
-    std::fs::write(time_a.join("p"), "internalField uniform 0;").unwrap();
-    std::fs::write(time_b.join("U"), "internalField uniform 0;").unwrap();
+    // 场文件带 FoamFile 头：scan_times 按 class 过滤非场对象。
+    let field = "FoamFile\n{\n    class volScalarField;\n}\ninternalField uniform 0;\n";
+    std::fs::write(time_a.join("p"), field).unwrap();
+    std::fs::write(time_b.join("U"), field).unwrap();
 
     let catalog = results_service::scan_times(&dir).unwrap();
     assert_eq!(catalog.times.len(), 2);

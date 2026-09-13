@@ -1,6 +1,7 @@
 //! 结果服务：扫描 OpenFOAM 时间目录、解析 internalField、不完整结果容错。
 
 use std::fs;
+use std::io::Read;
 use std::path::Path;
 
 use crate::error::{KairosError, Result};
@@ -66,7 +67,26 @@ pub fn time_dir_names(listing: &str) -> Vec<String> {
     names.into_iter().map(|(_, name)| name).collect()
 }
 
-/// 扫描 case 目录下的时间步与场文件；解析失败的时间步跳过（不完整结果容错）。
+/// 场文件头部的读取上限（字节）：`class` 行总在 FoamFile 头里，读前缀即可
+/// 判定类型，不必为一次筛选把整套结果读进内存。
+const FIELD_HEADER_BYTES: usize = 512;
+
+/// 时间目录下的文件是否是可读场（按 FoamFile 头的 `class` 判定）。
+///
+/// 求解器会在时间目录里写非场对象（如阶段记录 `moldingStage`）：列进场清单
+/// 后用户在结果面板一点就是「暂不支持该场类型」，不如不列。打不开 / 读不出
+/// 头部的文件同样按不可读处理。
+fn is_readable_field(path: &Path) -> bool {
+    let mut header = [0u8; FIELD_HEADER_BYTES];
+    let Ok(mut file) = fs::File::open(path) else {
+        return false;
+    };
+    let read = file.read(&mut header).unwrap_or(0);
+    field_kind(&String::from_utf8_lossy(&header[..read])) != FieldKind::Unsupported
+}
+
+/// 扫描 case 目录下的时间步与场文件；解析失败的时间步跳过（不完整结果容错），
+/// 非场对象（class 不受支持）不进 `fields` 清单。
 pub fn scan_times(case_dir: &Path) -> Result<ResultCatalog> {
     if !case_dir.exists() {
         return Err(KairosError::not_found(format!(
@@ -96,8 +116,9 @@ pub fn scan_times(case_dir: &Path) -> Result<ResultCatalog> {
             .flatten()
             .flatten()
             .filter_map(|entry| {
+                let path = entry.path();
                 let name = entry.file_name().to_str()?.to_string();
-                entry.path().is_file().then_some(name)
+                (path.is_file() && is_readable_field(&path)).then_some(name)
             })
             .collect();
         fields.sort();
@@ -668,6 +689,37 @@ boundaryField
         fs::write(dir.join("README.md"), "不是时间步目录").unwrap();
         let catalog = scan_times(&dir).unwrap();
         assert_eq!(catalog.times.len(), 1);
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn scan_times_lists_only_readable_fields() {
+        let dir = std::env::temp_dir().join(format!("kairos-t13kind-{}", std::process::id()));
+        let time_dir = dir.join("1");
+        fs::create_dir_all(&time_dir).unwrap();
+        fs::write(time_dir.join("T"), SCALAR_UNIFORM).unwrap();
+        fs::write(time_dir.join("U"), VECTOR_NONUNIFORM).unwrap();
+        // 求解器写的阶段记录：不是场对象，不该进场清单
+        fs::write(
+            time_dir.join("moldingStage"),
+            "FoamFile\n{\n    class       moldingStage;\n    object      moldingStage;\n}\n\n1 1.08 0 1 -1\n",
+        )
+        .unwrap();
+        let catalog = scan_times(&dir).unwrap();
+        assert_eq!(
+            catalog.times[0].fields,
+            vec!["T".to_string(), "U".to_string()]
+        );
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn unreadable_field_files_are_not_listed() {
+        // 打不开的路径（不存在的文件）与读不出头部的路径（目录）都不算可读场。
+        let dir = std::env::temp_dir().join(format!("kairos-t13hdr-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        assert!(!is_readable_field(&dir.join("missing")));
+        assert!(!is_readable_field(&dir));
         fs::remove_dir_all(&dir).ok();
     }
 }

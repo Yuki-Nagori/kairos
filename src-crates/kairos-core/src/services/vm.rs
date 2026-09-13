@@ -184,6 +184,9 @@ pub fn shell_args(provider: VmProviderKind) -> Vec<String> {
     }
 }
 
+/// case 在 VM 内的落脚根目录：每个 case 解压成 `~/<叶子名>`。
+pub const VM_CASE_ROOT: &str = "/home/ubuntu";
+
 /// case 目录在 VM 内的暂存路径。multipass 的 sshfs 挂载权限映射不可用，
 /// 作业执行前用 tar 管道把 case 复制进 VM 原生文件系统，两侧同名。
 pub fn vm_case_dir(case_dir: &str) -> String {
@@ -191,7 +194,19 @@ pub fn vm_case_dir(case_dir: &str) -> String {
         .file_name()
         .map(|name| name.to_string_lossy().to_string())
         .unwrap_or_else(|| "case".to_string());
-    format!("/home/ubuntu/{name}")
+    format!("{VM_CASE_ROOT}/{name}")
+}
+
+/// VM 内 case 归档的解压命令（stdin 收 tar 流）：清掉同名目录后解到 case 根。
+///
+/// 归档由宿主按「父目录 + 叶子名」打包（`tar -C <父> -czf - <叶子>`），条目自带
+/// 叶子名前缀；解到 case 目录本身会多套一层同名目录，求解脚本 `cd ~/<叶子>`
+/// 就找不到 `system/controlDict`。先删同名目录是为了重跑时不带上次的时间目录。
+pub fn vm_case_extract_command(vm_case: &str) -> String {
+    format!(
+        "rm -rf '{}' && tar -xzf - -C {VM_CASE_ROOT}",
+        bash_single_quote(vm_case)
+    )
 }
 
 /// VM 内求解环境的部署根目录（vm_deploy_bundle 解压 bundle 的目标）。
@@ -763,6 +778,21 @@ mod tests {
         // 尾斜杠与空路径都归一到同一形态（回退名 "case"）
         assert_eq!(vm_case_dir("/tmp/case/"), "/home/ubuntu/case");
         assert_eq!(vm_case_dir(""), "/home/ubuntu/case");
+    }
+
+    #[test]
+    fn vm_case_extract_targets_the_case_root_not_the_case() {
+        // 归档条目自带叶子名前缀（宿主 tar -C <父> -czf - <叶子>）：
+        // 解压目标必须是 case 根，解到 case 目录会多套一层同名目录。
+        assert_eq!(
+            vm_case_extract_command("/home/ubuntu/study-1"),
+            "rm -rf '/home/ubuntu/study-1' && tar -xzf - -C /home/ubuntu"
+        );
+        // 单引号路径按 shell 字面量转义
+        assert_eq!(
+            vm_case_extract_command("/home/ubuntu/it's"),
+            "rm -rf '/home/ubuntu/it'\\''s' && tar -xzf - -C /home/ubuntu"
+        );
     }
 
     #[test]

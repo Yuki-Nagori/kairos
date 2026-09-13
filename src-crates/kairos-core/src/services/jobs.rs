@@ -134,6 +134,26 @@ pub fn cancel(jobs: &mut [Job], id: &str, now_ms: u64) -> Result<()> {
     )
 }
 
+/// 作业收尾判定：返回失败原因（`None` = 成功）。
+///
+/// 求解器错误标记优先于脚本退出码——求解命令用 `;` 串接 `reconstructPar`
+/// （求解器中途报错时也尽力重建已写出的部分结果），退出码因此可能仍为 0；
+/// 只看退出码会把「写出过部分时间目录的失败作业」判成成功。
+pub fn job_failure(
+    solver_aborted: bool,
+    exit_ok: bool,
+    copy_back_error: Option<String>,
+) -> Option<String> {
+    if solver_aborted {
+        Some("求解器报错退出（输出含 FOAM FATAL，详见作业日志）".to_string())
+    } else if !exit_ok {
+        Some("进程异常退出（输出无求解器错误标记）".to_string())
+    } else {
+        // 走到这里 = 求解正常结束；结果回传失败仍算失败，避免静默丢结果。
+        copy_back_error
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -201,5 +221,21 @@ mod tests {
         mark_failed(&mut jobs, "a", "求解发散", 2).unwrap();
         assert_eq!(jobs[0].status, JobStatus::Failed);
         assert_eq!(jobs[0].message.as_deref(), Some("求解发散"));
+    }
+
+    #[test]
+    fn job_failure_prefers_solver_abort_over_exit_code() {
+        // 求解器报错：即便 `;` 串接的 reconstructPar 让退出码为 0（且已回传出
+        // 部分结果），也必须是失败。
+        let aborted = job_failure(true, true, None).unwrap();
+        assert!(aborted.contains("求解器报错退出"), "{aborted}");
+        assert!(job_failure(true, false, None).is_some());
+        // 无错误标记的非零退出 = 进程被终止 / 崩溃
+        let crashed = job_failure(false, false, None).unwrap();
+        assert!(crashed.contains("进程异常退出"), "{crashed}");
+        // 正常结束：回传失败算失败，回传成功即成功
+        let copy_error = job_failure(false, true, Some("回传失败".into())).unwrap();
+        assert_eq!(copy_error, "回传失败");
+        assert!(job_failure(false, true, None).is_none());
     }
 }
