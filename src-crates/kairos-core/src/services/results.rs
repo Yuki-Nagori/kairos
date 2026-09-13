@@ -4,7 +4,7 @@ use std::fs;
 use std::path::Path;
 
 use crate::error::{KairosError, Result};
-use crate::models::results::{ResultCatalog, ScalarField, TimeStepMeta};
+use crate::models::results::{ResultCatalog, ScalarField, TimeStepMeta, VectorField};
 
 /// 场类型：由 FoamFile 头的 `class` 行判定（不靠场名猜——求解侧的场名会随
 /// 契约扩展，如位移 `D`、等效应力 `sigmaEq`）。
@@ -180,23 +180,49 @@ fn declared_count(internal: &str) -> Option<usize> {
         .find_map(|token| token.parse::<usize>().ok())
 }
 
+/// 解析 internalField 为矢量分量列表（每 3 个标量一组）。
+/// 分量数不是 3 的倍数时按可用分量截断并把 complete 置 false。
+pub fn parse_internal_vectors(content: &str) -> (Vec<[f64; 3]>, bool) {
+    let (values, complete) = parse_internal_scalar(content);
+    let usable = values.len() - values.len() % 3;
+    let complete = complete && values.len() % 3 == 0;
+    let vectors = values[..usable]
+        .chunks(3)
+        .map(|group| [group[0], group[1], group[2]])
+        .collect();
+    (vectors, complete)
+}
+
 /// 解析 internalField 为矢量模量列表（每 3 个分量一组）。
 pub fn parse_internal_vector_magnitudes(content: &str) -> (Vec<f64>, bool) {
-    let (values, complete) = parse_internal_scalar(content);
-    if values.len() % 3 != 0 {
-        // 分量数不是 3 的倍数：不完整的矢量数据，按可用分量截断后取模量
-        let usable = values.len() - values.len() % 3;
-        let magnitudes: Vec<f64> = values[..usable]
-            .chunks(3)
-            .map(|group| group.iter().map(|v| v * v).sum::<f64>().sqrt())
-            .collect();
-        return (magnitudes, false);
-    }
-    let magnitudes: Vec<f64> = values
-        .chunks(3)
-        .map(|group| group.iter().map(|v| v * v).sum::<f64>().sqrt())
+    let (vectors, complete) = parse_internal_vectors(content);
+    let magnitudes = vectors
+        .iter()
+        .map(|group| (group[0] * group[0] + group[1] * group[1] + group[2] * group[2]).sqrt())
         .collect();
     (magnitudes, complete)
+}
+
+/// 读取指定时间步的矢量场三分量（矢量场文件专用）。
+pub fn read_vector_field(case_dir: &Path, time_dir: &str, field: &str) -> Result<VectorField> {
+    let path = case_dir.join(time_dir).join(field);
+    let content =
+        fs::read_to_string(&path).map_err(|e| KairosError::io(format!("读取场文件失败：{e}")))?;
+    let time_s = parse_time_dir_name(time_dir)
+        .ok_or_else(|| KairosError::validation(format!("时间目录名无法解析：{time_dir}")))?;
+    if field_kind(&content) != FieldKind::VectorMagnitude {
+        return Err(KairosError::validation(format!(
+            "该场不是矢量场：{field}（分量读取仅支持 volVectorField）"
+        )));
+    }
+    let (components, complete) = parse_internal_vectors(&content);
+    Ok(VectorField {
+        field: field.to_string(),
+        time_dir: time_dir.to_string(),
+        time_s,
+        components,
+        complete,
+    })
 }
 
 /// 读取指定时间步的场文件：标量场直读，矢量场返回模量。
@@ -475,9 +501,14 @@ boundaryField
 /// 大结果走原始字节而非 JSON 数组，体积与解析开销都显著降低。
 pub mod field_binary {
     use crate::error::{KairosError, Result};
-    use crate::models::results::ScalarField;
+    use crate::models::results::{ScalarField, VectorField};
 
     const MAGIC: [u8; 4] = *b"KF1\x00";
+    /// 压缩口径标识：值区按 f32 截断（相对误差 ≤ 2^-24 ≈ 6e-8）。
+    /// 实测 1e7 值：载荷 80 MB → 40 MB；编解码耗时基本持平（31 / 12 ms），
+    /// 省的是传输与内存，不是 CPU；解析 ascii 场（426 ms）才是加载链路大头。
+    const FORMAT_F32: &str = "f32";
+    const FORMAT_F64: &str = "f64";
 
     #[derive(serde::Serialize, serde::Deserialize)]
     struct Meta {
@@ -487,9 +518,74 @@ pub mod field_binary {
         is_magnitude: bool,
         complete: bool,
         count: usize,
+        /// 值区格式：f32（默认）/ f64；缺省视为 f64（兼容旧载荷）。
+        #[serde(default = "default_format")]
+        format: String,
+        /// true = 值区是三分量矢量（每单元 3 个值）。
+        #[serde(default)]
+        vector: bool,
     }
 
+    fn default_format() -> String {
+        FORMAT_F64.to_string()
+    }
+
+    /// 值区格式：编码端按 f32；解码端兼容 f64 旧载荷（测试与历史缓存）。
+    #[derive(Debug, Clone, Copy, PartialEq)]
+    pub enum ValueFormat {
+        F32,
+        F64,
+    }
+
+    impl ValueFormat {
+        fn tag(self) -> &'static str {
+            match self {
+                Self::F32 => FORMAT_F32,
+                Self::F64 => FORMAT_F64,
+            }
+        }
+
+        fn parse(tag: &str) -> Result<Self> {
+            match tag {
+                FORMAT_F32 => Ok(Self::F32),
+                FORMAT_F64 => Ok(Self::F64),
+                other => Err(KairosError::validation(format!(
+                    "二进制场数据无效：未知的值格式 {other}。"
+                ))),
+            }
+        }
+
+        fn width(self) -> usize {
+            match self {
+                Self::F32 => 4,
+                Self::F64 => 8,
+            }
+        }
+
+        fn push(self, bytes: &mut Vec<u8>, value: f64) {
+            match self {
+                Self::F32 => bytes.extend_from_slice(&(value as f32).to_le_bytes()),
+                Self::F64 => bytes.extend_from_slice(&value.to_le_bytes()),
+            }
+        }
+
+        fn read(self, raw: &[u8]) -> f64 {
+            match self {
+                Self::F32 => f64::from(f32::from_le_bytes([raw[0], raw[1], raw[2], raw[3]])),
+                Self::F64 => f64::from_le_bytes([
+                    raw[0], raw[1], raw[2], raw[3], raw[4], raw[5], raw[6], raw[7],
+                ]),
+            }
+        }
+    }
+
+    /// 编码标量场（值区 f32）。
     pub fn encode(field: &ScalarField) -> Vec<u8> {
+        encode_scalar(field, ValueFormat::F32)
+    }
+
+    /// 编码标量场并指定值区格式（f64 用于无损对拍与回归）。
+    pub fn encode_scalar(field: &ScalarField, format: ValueFormat) -> Vec<u8> {
         let meta = serde_json::to_vec(&Meta {
             field: field.field.clone(),
             time_dir: field.time_dir.clone(),
@@ -497,19 +593,53 @@ pub mod field_binary {
             is_magnitude: field.is_magnitude,
             complete: field.complete,
             count: field.values.len(),
+            format: format.tag().to_string(),
+            vector: false,
         })
         .expect("元数据为纯标量结构，序列化不会失败");
-        let mut bytes = Vec::with_capacity(8 + meta.len() + field.values.len() * 8);
+        let mut bytes = Vec::with_capacity(8 + meta.len() + field.values.len() * format.width());
         bytes.extend_from_slice(&MAGIC);
         bytes.extend_from_slice(&(meta.len() as u32).to_le_bytes());
         bytes.extend_from_slice(&meta);
         for value in &field.values {
-            bytes.extend_from_slice(&value.to_le_bytes());
+            format.push(&mut bytes, *value);
         }
         bytes
     }
 
-    pub fn decode(bytes: &[u8]) -> Result<ScalarField> {
+    /// 编码矢量场（三分量；值区 f32，按 x/y/z 顺序平铺）。
+    pub fn encode_vector(field: &VectorField) -> Vec<u8> {
+        let format = ValueFormat::F32;
+        let meta = serde_json::to_vec(&Meta {
+            field: field.field.clone(),
+            time_dir: field.time_dir.clone(),
+            time_s: field.time_s,
+            is_magnitude: false,
+            complete: field.complete,
+            count: field.components.len(),
+            format: format.tag().to_string(),
+            vector: true,
+        })
+        .expect("元数据为纯标量结构，序列化不会失败");
+        let mut bytes = Vec::with_capacity(8 + meta.len() + field.components.len() * 3 * 4);
+        bytes.extend_from_slice(&MAGIC);
+        bytes.extend_from_slice(&(meta.len() as u32).to_le_bytes());
+        bytes.extend_from_slice(&meta);
+        for group in &field.components {
+            for value in group {
+                format.push(&mut bytes, *value);
+            }
+        }
+        bytes
+    }
+
+    struct Envelope {
+        meta: Meta,
+        format: ValueFormat,
+        values_end: usize,
+    }
+
+    fn envelope(bytes: &[u8]) -> Result<Envelope> {
         let invalid =
             |reason: &str| KairosError::validation(format!("二进制场数据无效：{reason}。"));
         if bytes.len() < 8 || bytes[..4] != MAGIC {
@@ -523,69 +653,163 @@ pub mod field_binary {
         let meta_end = 8 + meta_len;
         let meta: Meta = serde_json::from_slice(&bytes[8..meta_end])
             .map_err(|e| invalid(&format!("元数据解析失败（{e}）")))?;
-        let values_bytes = bytes.len() - meta_end;
-        if values_bytes < meta.count * 8 {
+        let format = ValueFormat::parse(&meta.format)?;
+        let width = format.width() * if meta.vector { 3 } else { 1 };
+        if bytes.len() - meta_end < meta.count * width {
             return Err(invalid("值区被截断"));
         }
-        let mut values = Vec::with_capacity(meta.count);
-        for index in 0..meta.count {
-            let start = meta_end + index * 8;
-            // 值区数量已在上方与字节长度核对，切片必然完整。
-            let mut raw = [0u8; 8];
-            raw.copy_from_slice(&bytes[start..start + 8]);
-            values.push(f64::from_le_bytes(raw));
+        Ok(Envelope {
+            meta,
+            format,
+            values_end: meta_end,
+        })
+    }
+
+    /// 解码标量场（矢量载荷报错，避免误读成标量）。
+    pub fn decode(bytes: &[u8]) -> Result<ScalarField> {
+        let envelope = envelope(bytes)?;
+        if envelope.meta.vector {
+            return Err(KairosError::validation(
+                "二进制场数据无效：该载荷是矢量场（请用矢量解码）。",
+            ));
+        }
+        let mut offset = envelope.values_end;
+        let width = envelope.format.width();
+        let mut values = Vec::with_capacity(envelope.meta.count);
+        for _ in 0..envelope.meta.count {
+            values.push(envelope.format.read(&bytes[offset..offset + width]));
+            offset += width;
         }
         Ok(ScalarField {
-            field: meta.field,
-            time_dir: meta.time_dir,
-            time_s: meta.time_s,
+            field: envelope.meta.field,
+            time_dir: envelope.meta.time_dir,
+            time_s: envelope.meta.time_s,
             values,
-            is_magnitude: meta.is_magnitude,
-            complete: meta.complete,
+            is_magnitude: envelope.meta.is_magnitude,
+            complete: envelope.meta.complete,
+        })
+    }
+
+    /// 解码矢量场三分量。
+    pub fn decode_vector(bytes: &[u8]) -> Result<VectorField> {
+        let envelope = envelope(bytes)?;
+        if !envelope.meta.vector {
+            return Err(KairosError::validation(
+                "二进制场数据无效：该载荷是标量场（请用标量解码）。",
+            ));
+        }
+        let width = envelope.format.width();
+        let mut offset = envelope.values_end;
+        let mut components = Vec::with_capacity(envelope.meta.count);
+        for _ in 0..envelope.meta.count {
+            let mut group = [0.0f64; 3];
+            for value in &mut group {
+                *value = envelope.format.read(&bytes[offset..offset + width]);
+                offset += width;
+            }
+            components.push(group);
+        }
+        Ok(VectorField {
+            field: envelope.meta.field,
+            time_dir: envelope.meta.time_dir,
+            time_s: envelope.meta.time_s,
+            components,
+            complete: envelope.meta.complete,
         })
     }
 }
 
-/// 有界场缓存（FIFO 淘汰）：命中时跳过磁盘读取，容量上限防御内存膨胀。
+/// 有界场缓存（LRU + 值数加权）：命中时跳过磁盘读取；容量按「缓存值总数」计，
+/// 大场与小场一视同仁地占额，避免几个大场把内存顶爆。淘汰最久未使用项。
 pub struct FieldCache {
     capacity: usize,
+    /// 值数上限（缓存内所有场的 values 长度之和）。
+    value_budget: usize,
     entries: std::collections::HashMap<String, ScalarField>,
+    /// 最近使用顺序：末尾最新。
     order: Vec<String>,
+    hits: usize,
+    misses: usize,
 }
 
 impl FieldCache {
-    /// 容量 1..=64。
+    /// 容量 1..=64；值数预算默认 2e7（f64 计约 160 MB）。
     pub fn new(capacity: usize) -> Result<Self> {
+        Self::with_budget(capacity, DEFAULT_VALUE_BUDGET)
+    }
+
+    /// 指定值数预算（测试与小内存场景用）。
+    pub fn with_budget(capacity: usize, value_budget: usize) -> Result<Self> {
         if capacity == 0 || capacity > 64 {
             return Err(KairosError::validation("场缓存容量必须在 1..=64 之间。"));
         }
+        if value_budget == 0 {
+            return Err(KairosError::validation("场缓存值数预算必须为正数。"));
+        }
         Ok(Self {
             capacity,
+            value_budget,
             entries: std::collections::HashMap::new(),
             order: Vec::new(),
+            hits: 0,
+            misses: 0,
         })
     }
 
+    /// 命中即刷新为最近使用（LRU 语义）。
     pub fn get(&mut self, key: &str) -> Option<&ScalarField> {
-        self.entries.get(key)
+        if self.entries.contains_key(key) {
+            self.hits += 1;
+            self.touch(key);
+            return self.entries.get(key);
+        }
+        self.misses += 1;
+        None
     }
 
-    /// 命中计数 0 的最旧条目淘汰：插入时若超容量则移除队首。
+    /// 插入并淘汰：先按条数、再按值数预算，从最久未使用端开始移除。
     pub fn put(&mut self, key: String, field: ScalarField) {
-        if !self.entries.contains_key(&key) {
-            self.order.push(key.clone());
-        }
+        self.touch(&key);
         self.entries.insert(key, field);
-        while self.order.len() > self.capacity {
+        while self.order.len() > self.capacity || self.total_values() > self.value_budget {
+            if self.order.len() <= 1 {
+                // 单个场就超预算：保留它（否则缓存永远空转），由调用方决定是否加载
+                break;
+            }
+            // 循环条件保证此处至少两项：下标 0 一定不是最近使用项。
             let oldest = self.order.remove(0);
             self.entries.remove(&oldest);
         }
     }
 
+    fn touch(&mut self, key: &str) {
+        if let Some(position) = self.order.iter().position(|entry| entry == key) {
+            self.order.remove(position);
+        }
+        self.order.push(key.to_string());
+    }
+
+    fn total_values(&self) -> usize {
+        self.entries.values().map(|field| field.values.len()).sum()
+    }
+
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
+
+    /// 命中 / 未命中计数（性能与策略验证用）。
+    pub fn stats(&self) -> (usize, usize) {
+        (self.hits, self.misses)
+    }
+
+    /// 当前缓存的场数量与值总数（内存占用上界判据）。
+    pub fn usage(&self) -> (usize, usize) {
+        (self.entries.len(), self.total_values())
+    }
 }
+
+/// 缓存值数预算：2e7 值（f64 计 ≈ 160 MB），覆盖数十个时间步的中等场。
+const DEFAULT_VALUE_BUDGET: usize = 20_000_000;
 
 /// 派生场：按请求对主场做归一化 / 阈值掩码 / 线性映射；差值走 derive_difference。
 pub fn derive_scalar_field(
@@ -817,8 +1041,9 @@ mod field_chain_tests {
             is_magnitude: false,
             complete: true,
         });
-        truncated.truncate(truncated.len() - 9);
-        assert!(field_binary::decode(&truncated).is_err());
+        truncated.truncate(truncated.len() - 3);
+        let error = field_binary::decode(&truncated).unwrap_err();
+        assert!(error.message().contains("值区被截断"));
         // 元数据 JSON 损坏（值区一起被改写，但解码在元数据阶段即失败）。
         let mut broken_meta = field_binary::encode(&ScalarField {
             field: "T".into(),
@@ -870,6 +1095,209 @@ mod field_chain_tests {
         assert!(cache.get("c").is_some());
         assert!(FieldCache::new(0).is_err());
         assert!(FieldCache::new(65).is_err());
+    }
+
+    const VECTOR_FIXTURE: &str = r#"FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volVectorField;
+    object      D;
+}
+dimensions      [0 1 0 0 0 0 0];
+internalField   nonuniform List<vector>
+3
+(
+(1e-05 0 0)
+(2e-05 1e-06 0)
+(-3e-05 0 1e-06)
+)
+;
+boundaryField { }
+"#;
+
+    const SCALAR_FIXTURE: &str = r#"FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    object      T;
+}
+dimensions      [0 0 0 1 0 0 0];
+internalField   nonuniform List<scalar>
+3
+(
+300.5
+301.25
+302.75
+)
+;
+boundaryField { }
+"#;
+
+    #[test]
+    fn binary_f32_compression_halves_payload_within_tolerance() {
+        // 物理量量级混合：温度 ~300、压力 1e5、速度 1e-1、时间 1e-3
+        let values: Vec<f64> = (0..1000)
+            .map(|index| {
+                let t = index as f64;
+                300.0 + t * 0.25 + (t * 0.7).sin() * 5.0 + 1.0e5 * (t * 0.001).cos() * 1e-5
+            })
+            .collect();
+        let field = ScalarField {
+            field: "T".into(),
+            time_dir: "0.1".into(),
+            time_s: 0.1,
+            values: values.clone(),
+            is_magnitude: false,
+            complete: true,
+        };
+        let compressed = field_binary::encode_scalar(&field, field_binary::ValueFormat::F32);
+        let lossless = field_binary::encode_scalar(&field, field_binary::ValueFormat::F64);
+        // 值区字节数正好减半（元数据部分不变）
+        let meta_overhead = lossless.len() - values.len() * 8;
+        assert_eq!(compressed.len(), meta_overhead + values.len() * 4);
+        assert!(compressed.len() * 2 <= lossless.len() + values.len() * 8 - values.len() * 4 + 1);
+
+        let decoded = field_binary::decode(&compressed).unwrap();
+        assert_eq!(decoded.values.len(), values.len());
+        // 容差：f32 尾数 24 位 → 相对误差 ≤ 2^-24
+        for (actual, expected) in decoded.values.iter().zip(&values) {
+            let tolerance = 2f64.powi(-24) * expected.abs().max(1.0);
+            assert!(
+                (actual - expected).abs() <= tolerance,
+                "{actual} vs {expected}"
+            );
+        }
+        // f64 通道逐位一致（回归对拍用）
+        assert_eq!(field_binary::decode(&lossless).unwrap().values, values);
+    }
+
+    #[test]
+    fn binary_vector_round_trip_and_cross_format_errors() {
+        let vectors = VectorField {
+            field: "D".into(),
+            time_dir: "2".into(),
+            time_s: 2.0,
+            components: vec![[0.001, -0.002, 0.0], [1.5e-4, 2.5e-5, -3.5e-5]],
+            complete: true,
+        };
+        let bytes = field_binary::encode_vector(&vectors);
+        let decoded = field_binary::decode_vector(&bytes).unwrap();
+        assert_eq!(decoded.field, "D");
+        assert_eq!(decoded.time_dir, "2");
+        assert_eq!(decoded.components.len(), 2);
+        for (actual, expected) in decoded.components.iter().zip(&vectors.components) {
+            for axis in 0..3 {
+                let tolerance = 2f64.powi(-24) * expected[axis].abs().max(1.0);
+                assert!((actual[axis] - expected[axis]).abs() <= tolerance);
+            }
+        }
+
+        // 交叉解码：矢量载荷不能被当成标量读，反之亦然
+        assert!(
+            field_binary::decode(&bytes)
+                .unwrap_err()
+                .message()
+                .contains("该载荷是矢量场")
+        );
+        let scalar = ScalarField {
+            field: "T".into(),
+            time_dir: "0".into(),
+            time_s: 0.0,
+            values: vec![1.0],
+            is_magnitude: false,
+            complete: true,
+        };
+        assert!(
+            field_binary::decode_vector(&field_binary::encode(&scalar))
+                .unwrap_err()
+                .message()
+                .contains("该载荷是标量场")
+        );
+
+        // 未知值格式：手工构造载荷（编码端不会产出）→ 明确报错
+        let meta = r#"{"field":"T","time_dir":"0","time_s":0.0,"is_magnitude":false,"complete":true,"count":1,"format":"f16","vector":false}"#;
+        let mut crafted = Vec::new();
+        crafted.extend_from_slice(b"KF1\x00");
+        crafted.extend_from_slice(&(meta.len() as u32).to_le_bytes());
+        crafted.extend_from_slice(meta.as_bytes());
+        crafted.extend_from_slice(&1.0f32.to_le_bytes());
+        assert!(
+            field_binary::decode(&crafted)
+                .unwrap_err()
+                .message()
+                .contains("未知的值格式")
+        );
+        // 缺 format 字段的历史载荷按 f64 读（向后兼容）
+        let legacy_meta = r#"{"field":"T","time_dir":"0","time_s":0.0,"is_magnitude":false,"complete":true,"count":1}"#;
+        let mut legacy = Vec::new();
+        legacy.extend_from_slice(b"KF1\x00");
+        legacy.extend_from_slice(&(legacy_meta.len() as u32).to_le_bytes());
+        legacy.extend_from_slice(legacy_meta.as_bytes());
+        legacy.extend_from_slice(&2.5f64.to_le_bytes());
+        assert_eq!(field_binary::decode(&legacy).unwrap().values, vec![2.5]);
+    }
+
+    #[test]
+    fn cache_is_lru_and_weighted_by_values() {
+        let field = |name: &str, count: usize| ScalarField {
+            field: name.into(),
+            time_dir: "0".into(),
+            time_s: 0.0,
+            values: vec![0.0; count],
+            is_magnitude: false,
+            complete: true,
+        };
+        // 条数上限 2：get 命中会刷新最近使用，淘汰最久未用
+        let mut cache = FieldCache::new(2).unwrap();
+        cache.put("a".into(), field("a", 1));
+        cache.put("b".into(), field("b", 1));
+        assert!(cache.get("a").is_some());
+        cache.put("c".into(), field("c", 1));
+        assert!(cache.get("b").is_none(), "最久未用的 b 应被淘汰");
+        assert!(cache.get("a").is_some());
+        let (hits, misses) = cache.stats();
+        assert!(hits >= 2 && misses >= 1);
+
+        // 值数加权：预算 5，两个 3 值场 → 插入第二个时淘汰第一个
+        let mut weighted = FieldCache::with_budget(8, 5).unwrap();
+        weighted.put("small".into(), field("small", 3));
+        assert_eq!(weighted.usage(), (1, 3));
+        weighted.put("big".into(), field("big", 3));
+        assert!(weighted.get("small").is_none());
+        assert_eq!(weighted.usage(), (1, 3));
+
+        // 单个场就超预算：保留（否则缓存永远空转）
+        let mut oversize = FieldCache::with_budget(8, 2).unwrap();
+        oversize.put("huge".into(), field("huge", 10));
+        assert_eq!(oversize.usage(), (1, 10));
+        assert!(oversize.get("huge").is_some());
+        assert!(FieldCache::with_budget(8, 0).is_err());
+    }
+
+    #[test]
+    fn vector_field_reads_components_and_rejects_scalars() {
+        let dir = std::env::temp_dir().join(format!("kairos-vec-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("2")).unwrap();
+        std::fs::write(dir.join("2/D"), VECTOR_FIXTURE).unwrap();
+        std::fs::write(dir.join("2/T"), SCALAR_FIXTURE).unwrap();
+        // 非数字时间目录（文件存在，仅目录名无法解析）
+        std::fs::create_dir_all(dir.join("latest")).unwrap();
+        std::fs::write(dir.join("latest/D"), VECTOR_FIXTURE).unwrap();
+
+        let field = read_vector_field(&dir, "2", "D").unwrap();
+        assert_eq!(field.field, "D");
+        assert_eq!(field.time_s, 2.0);
+        assert!(field.complete);
+        assert!(field.components.iter().all(|group| group[0].is_finite()));
+
+        let error = read_vector_field(&dir, "2", "T").unwrap_err();
+        assert!(error.message().contains("不是矢量场"));
+        assert!(read_vector_field(&dir, "2", "missing").is_err());
+        let error = read_vector_field(&dir, "latest", "D").unwrap_err();
+        assert!(error.message().contains("时间目录名无法解析"));
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]

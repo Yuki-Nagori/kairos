@@ -9,6 +9,7 @@ import {
   deriveField as deriveFieldApi,
   listResultTimes,
   loadResultField,
+  loadVectorField,
 } from "../../../src-web/api/results";
 import { analyzeGateLocation, previewFill } from "../../../src-web/api/geometry";
 import type {
@@ -21,6 +22,7 @@ import type {
 vi.mock("../../../src-web/api/results", () => ({
   listResultTimes: vi.fn(),
   loadResultField: vi.fn(),
+  loadVectorField: vi.fn(),
   deriveField: vi.fn(),
   deriveDifference: vi.fn(),
 }));
@@ -591,5 +593,38 @@ describe("runFillPreview（填充预览）", () => {
     expect(previewFill).toHaveBeenCalledWith("g-1", []);
     expect(app.error?.message).toBe("需要至少一个浇口");
     expect(results.fillPreview).toBeNull();
+  });
+});
+
+describe("loadVectorComponents（矢量场三分量）", () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    vi.resetAllMocks();
+  });
+
+  const vectors = {
+    field: "D",
+    timeDir: "2",
+    timeS: 2,
+    components: [
+      [0.001, -0.002, 0],
+      [1.5e-4, 2.5e-5, -3.5e-5],
+    ] as [number, number, number][],
+    complete: true,
+  };
+
+  it("成功入状态；失败进全局错误且保留旧值", async () => {
+    vi.mocked(loadVectorField).mockResolvedValue(vectors);
+    const app = useAppStore();
+    const results = useResultsStore();
+    await results.loadVectorComponents("/case/run", "2", "D");
+    expect(loadVectorField).toHaveBeenCalledWith("/case/run", "2", "D");
+    expect(results.vectorField).toEqual(vectors);
+    expect(app.error).toBeNull();
+
+    vi.mocked(loadVectorField).mockRejectedValue(new Error("场文件不存在"));
+    await results.loadVectorComponents("/case/run", "3", "D");
+    expect(app.error?.message).toBe("场文件不存在");
+    expect(results.vectorField).toEqual(vectors);
   });
 });

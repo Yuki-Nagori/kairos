@@ -468,6 +468,16 @@ export interface DependencyStatus {
 /** 分析阶段选项卡（工作流导航；home = 总览显示全部面板）。 */
 export type Stage = "home" | "geometry" | "mesh" | "process" | "solve" | "results" | "report";
 
+/** 对应 `kairos-core::models::results::VectorField`（三分量）。 */
+export interface VectorField {
+  field: string;
+  timeDir: string;
+  timeS: number;
+  /** 与网格单元一一对应的三分量。 */
+  components: [number, number, number][];
+  complete: boolean;
+}
+
 /** 派生算子请求（对应 `kairos-core::models::results::DeriveRequest`）。 */
 export type DeriveRequest =
   | { kind: "normalize" }

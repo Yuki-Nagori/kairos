@@ -13,7 +13,9 @@ use kairos_core::models::mesh::{
     RefineRegion,
 };
 use kairos_core::models::project::{Project, Study};
-use kairos_core::models::results::{DeriveRequest, ResultCatalog, ScalarField, TimeStepMeta};
+use kairos_core::models::results::{
+    DeriveRequest, ResultCatalog, ScalarField, TimeStepMeta, VectorField,
+};
 use kairos_core::services::moldingfoam::{CaseReport, GateInlet, PatchAreas};
 use kairos_core::services::{geometry, material};
 
@@ -232,6 +234,24 @@ fn gate_inlet_report_serializes_with_camel_case() {
     assert_eq!(json["ventAreaM2"], 2.5e-5);
     assert_eq!(json["gates"][0]["index"], 1);
     assert_eq!(json["warnings"].as_array().map(Vec::len), Some(1));
+}
+
+/// VectorField 的形状：三分量与 camelCase，前端结果面板的矢量行与之对应。
+#[test]
+fn vector_field_serializes_with_camel_case() {
+    let field = VectorField {
+        field: "D".into(),
+        time_dir: "2".into(),
+        time_s: 2.0,
+        components: vec![[0.001, -0.002, 0.0]],
+        complete: true,
+    };
+    let json = serde_json::to_value(&field).unwrap();
+    assert_eq!(json["field"], "D");
+    assert_eq!(json["timeDir"], "2");
+    assert_eq!(json["timeS"], 2.0);
+    assert_eq!(json["components"][0], json!([0.001, -0.002, 0.0]));
+    assert_eq!(json["complete"], true);
 }
 
 /// DualDomainReport 的形状：统计字段 camelCase，前端几何面板与之对应。

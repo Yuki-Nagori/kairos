@@ -37,6 +37,19 @@ pub struct ScalarField {
     pub complete: bool,
 }
 
+/// 已加载的矢量场（三分量）：与标量场同域，供变形显示与矢量派生使用。
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VectorField {
+    pub field: String,
+    pub time_dir: String,
+    pub time_s: f64,
+    /// 与体积网格单元一一对应的三分量。
+    pub components: Vec<[f64; 3]>,
+    /// false = 声明数量与实际不符（求解中途取消的不完整结果）。
+    pub complete: bool,
+}
+
 /// 派生算子请求：作用于会话缓存的最近加载场；差值另需会话中的对比场。
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]

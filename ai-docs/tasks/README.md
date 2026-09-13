@@ -88,6 +88,7 @@
 | T69 | [T69-terminology-unification-done.md](T69-terminology-unification-done.md)                 | 术语统一：「方案 / 研究」混用收口                |
 | T55 | [T55-gate-location-analysis-done.md](T55-gate-location-analysis-done.md)                   | 浇口位置分析序列（免求解器启发式）               |
 | T59 | [T59-fill-preview-done.md](T59-fill-preview-done.md)                                       | 填充预览（免求解器覆盖估计）                     |
+| T84 | [T84-result-data-chain-remainder-done.md](T84-result-data-chain-remainder-done.md)         | 大结果数据链剩余（压缩/LRU/矢量场）              |
 
 > T26/T27 落地后的增量打磨（系统窗口按钮、原生应用菜单、主题注入统一、
 > 品牌图标、emoji 清理、启动窗口位置）见 `ai-docs/timeline.md` 对应条目，
@@ -107,7 +108,6 @@
 | T75 | [T75-workspace-layout.md](T75-workspace-layout.md)                                           | 工作区布局（工程自包含：几何/网格/case/结果） | T03/T06/T68 |
 | T82 | [T82-dualdomain-midplane-solve-consumption.md](T82-dualdomain-midplane-solve-consumption.md) | 双域 / 中面网格的求解消费                     | T41/T42     |
 | T83 | [T83-multi-cavity-runner-fill.md](T83-multi-cavity-runner-fill.md)                           | 多型腔与流道系统参与填充                      | T07/T61     |
-| T84 | [T84-result-data-chain-remainder.md](T84-result-data-chain-remainder.md)                     | 大结果数据链剩余（分块/压缩/矢量场）          | T51         |
 | T85 | [T85-linux-native-channel.md](T85-linux-native-channel.md)                                   | Linux 原生执行通道                            | T35/T36     |
 | T86 | [T86-special-process-modules.md](T86-special-process-modules.md)                             | 扩展工艺模块规划（GAIM/双色/微发泡）          | 上游能力    |
 | T87 | [T87-multiphysics-coupling.md](T87-multiphysics-coupling.md)                                 | 多物理场耦合规划（纤维取向/流固）             | T64/T81     |

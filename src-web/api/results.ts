@@ -1,7 +1,7 @@
 /** 求解结果 IPC：结果目录扫描、场数据加载与派生算子。 */
 import { invokeCommand } from "../utils/ipc";
-import { decodeFieldBinary } from "../utils/field-binary";
-import type { DeriveRequest, FieldSlot, ResultCatalog, ScalarField } from "../types";
+import { decodeFieldBinary, decodeVectorFieldBinary } from "../utils/field-binary";
+import type { DeriveRequest, FieldSlot, ResultCatalog, ScalarField, VectorField } from "../types";
 
 /** 扫描 case 目录的时间步与场文件清单。 */
 export function listResultTimes(caseDir: string): Promise<ResultCatalog> {
@@ -23,6 +23,20 @@ export async function loadResultField(
     slot,
   });
   return decodeFieldBinary(buffer);
+}
+
+/** 加载指定时间步的矢量场三分量（变形显示 / 矢量派生用）。 */
+export async function loadVectorField(
+  caseDir: string,
+  timeDir: string,
+  field: string,
+): Promise<VectorField> {
+  const buffer = await invokeCommand<ArrayBuffer>("load_vector_field_binary", {
+    caseDir,
+    timeDir,
+    field,
+  });
+  return decodeVectorFieldBinary(buffer);
 }
 
 /** 对会话主场执行单场派生（归一化 / 阈值掩码 / 线性映射），返回派生后的场。 */

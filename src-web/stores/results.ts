@@ -6,6 +6,7 @@ import {
   deriveField as deriveFieldApi,
   listResultTimes,
   loadResultField,
+  loadVectorField,
 } from "../api/results";
 import type {
   DeriveRequest,
@@ -13,6 +14,7 @@ import type {
   FillPreviewReport,
   GateLocationReport,
   Probe,
+  VectorField,
   ProbeTimeSeries,
   ResultCatalog,
   ScalarField,
@@ -42,6 +44,8 @@ export const useResultsStore = defineStore("results", {
     gateLocation: null as GateLocationReport | null,
     /** 最近一次填充预览报告（null = 未运行过）。 */
     fillPreview: null as FillPreviewReport | null,
+    /** 最近一次加载的矢量场三分量（null = 未加载）。 */
+    vectorField: null as VectorField | null,
   }),
   actions: {
     /** 运行浇口位置分析（轻量启发式，不经求解器）：适合度场直接作为当前场
@@ -60,6 +64,15 @@ export const useResultsStore = defineStore("results", {
           complete: true,
         };
       });
+    },
+    /** 加载矢量场三分量（如位移 D）：供矢量展示与派生消费；失败进全局错误。 */
+    async loadVectorComponents(caseDir: string, timeDir: string, field: string): Promise<void> {
+      const app = useAppStore();
+      try {
+        this.vectorField = await loadVectorField(caseDir, timeDir, field);
+      } catch (error) {
+        app.setError(error);
+      }
     },
     /** 填充预览：以当前方案的浇口为源做覆盖估计，覆盖场作为当前场载入视口；
      *  未覆盖 / 落点异常等提示进预览报告（面板展示）。 */

@@ -18,6 +18,11 @@ const {
   linearOffset,
   deriveField,
   deriveDifference,
+  vectorField,
+  vectorFieldName,
+  vectorStats,
+  vectorDisabled,
+  loadVector,
 } = useResultsPanel();
 </script>
 
@@ -112,6 +117,34 @@ const {
             ? "尚未加载对比场。"
             : `对比场：${results.compareField.field} @ ${results.compareField.timeDir}`
         }}
+      </p>
+    </div>
+    <hr class="border-zinc-800" />
+    <div class="flex flex-wrap items-center gap-2">
+      <p class="text-[11px] font-semibold tracking-wide text-zinc-400">矢量场三分量</p>
+      <UiTextInput
+        v-model="vectorFieldName"
+        class="w-20"
+        placeholder="D"
+        title="矢量场名（如 D 位移 / U 速度）"
+      />
+      <UiButton
+        variant="ghost"
+        :disabled="vectorDisabled"
+        title="加载三分量（变形显示与矢量派生使用）"
+        @click="loadVector"
+      >
+        加载矢量场
+      </UiButton>
+      <p v-if="vectorStats === null" class="text-xs text-zinc-500">
+        未加载矢量场（位移 D / 速度 U 等三分量场）。
+      </p>
+      <p v-else-if="!vectorStats.complete" class="text-xs text-amber-400">
+        {{ vectorStats.line }}（不完整）
+      </p>
+      <p v-else class="text-xs text-zinc-300">{{ vectorStats.line }}</p>
+      <p v-if="vectorField?.complete === false" class="text-[10px] text-amber-400">
+        矢量数据不完整：求解中途取消的结果。
       </p>
     </div>
   </Card>

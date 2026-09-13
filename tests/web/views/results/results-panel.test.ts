@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
+import { nextTick } from "vue";
+import type { Mock } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 import type { Pinia } from "pinia";
 import ResultsPanel from "../../../../src-web/views/results/ResultsPanel.vue";
@@ -16,6 +18,7 @@ import type { ResultCatalog, ScalarField } from "../../../../src-web/types";
 vi.mock("../../../../src-web/api/results", () => ({
   listResultTimes: vi.fn(),
   loadResultField: vi.fn(),
+  loadVectorField: vi.fn(),
   deriveField: vi.fn(),
   deriveDifference: vi.fn(),
 }));
@@ -288,5 +291,143 @@ describe("ResultsPanel 派生场", () => {
     await findButton(wrapper, "生成派生场").trigger("click");
     expect(wrapper.text()).toContain("已加载 T @ 0.001");
     expect(results.loadedField?.field).toBe("T");
+  });
+});
+
+describe("ResultsPanel：矢量场三分量", () => {
+  let pinia: Pinia;
+
+  beforeEach(() => {
+    pinia = createPinia();
+    setActivePinia(pinia);
+    vi.resetAllMocks();
+  });
+
+  it("无目录时禁用；加载后展示单元数、首单元分量与模量范围", async () => {
+    const wrapper = mount(ResultsPanel, { global: { plugins: [pinia] } });
+    const button = wrapper.findAll("button").find((node) => node.text() === "加载矢量场")!;
+    expect(button.attributes("disabled")).toBeDefined();
+    expect(wrapper.text()).toContain("未加载矢量场");
+
+    // 扫描出目录后可用：时间步跟随当前已加载场（无则取最后一个）
+    const { listResultTimes, loadVectorField } =
+      (await import("../../../../src-web/api/results")) as unknown as {
+        listResultTimes: Mock;
+        loadVectorField: Mock;
+      };
+    listResultTimes.mockResolvedValue({
+      caseDir: "/case/run",
+      times: [
+        { dirName: "1", timeS: 1, fields: ["D"] },
+        { dirName: "2", timeS: 2, fields: ["D"] },
+      ],
+    });
+    const results = useResultsStore();
+    results.resultCatalog = {
+      caseDir: "/case/run",
+      times: [{ dirName: "1", timeS: 1, fields: [] }],
+    };
+    results.loadedField = {
+      field: "T",
+      timeDir: "1",
+      timeS: 1,
+      values: [1],
+      isMagnitude: false,
+      complete: true,
+    };
+    loadVectorField.mockResolvedValue({
+      field: "D",
+      timeDir: "1",
+      timeS: 1,
+      components: [
+        [0.001, -0.002, 0],
+        [0.0002, 0.0001, -0.0003],
+      ],
+      complete: true,
+    });
+    await nextTick();
+
+    const enabled = wrapper.findAll("button").find((node) => node.text() === "加载矢量场")!;
+    expect(enabled.attributes("disabled")).toBeUndefined();
+    await enabled.trigger("click");
+    await flushPromises();
+
+    // 时间步取当前已加载场的 1（而不是最后一个 2）
+    expect(loadVectorField).toHaveBeenCalledWith("/case/run", "1", "D");
+    expect(wrapper.text()).toContain("矢量 D @ 1：2 个单元");
+    expect(wrapper.text()).toContain("首单元 (1.00e-3, -2.00e-3, 0.00e+0)");
+    expect(wrapper.text()).toContain("|v|");
+  });
+
+  it("无目录 / 空时间步时不请求；场名为空回退 D（防御分支）", async () => {
+    const { loadVectorField } = (await import("../../../../src-web/api/results")) as unknown as {
+      loadVectorField: Mock;
+    };
+    const results = useResultsStore();
+    const { useResultsPanel } = await import("../../../../src-web/views/results/useResultsPanel");
+    const panel = useResultsPanel();
+
+    // 目录未扫描
+    panel.loadVector();
+    expect(loadVectorField).not.toHaveBeenCalled();
+
+    // 扫描了但没有时间步
+    results.resultCatalog = { caseDir: "/case/run", times: [] };
+    panel.loadVector();
+    expect(loadVectorField).not.toHaveBeenCalled();
+
+    // 场名清空 → 用默认 D
+    results.resultCatalog = {
+      caseDir: "/case/run",
+      times: [{ dirName: "1", timeS: 1, fields: [] }],
+    };
+    panel.vectorFieldName.value = "   ";
+    loadVectorField.mockResolvedValue({
+      field: "D",
+      timeDir: "1",
+      timeS: 1,
+      components: [],
+      complete: true,
+    });
+    panel.loadVector();
+    await flushPromises();
+    expect(loadVectorField).toHaveBeenCalledWith("/case/run", "1", "D");
+    // 空分量：统计行为 null（不渲染空行）
+    expect(panel.vectorStats.value).toBeNull();
+  });
+
+  it("未加载场时取最后一个时间步；不完整矢量给出告警行", async () => {
+    const { loadVectorField } = (await import("../../../../src-web/api/results")) as unknown as {
+      loadVectorField: Mock;
+    };
+    const results = useResultsStore();
+    results.resultCatalog = {
+      caseDir: "/case/run",
+      times: [
+        { dirName: "1", timeS: 1, fields: ["D"] },
+        { dirName: "2", timeS: 2, fields: ["D"] },
+      ],
+    };
+    loadVectorField.mockResolvedValue({
+      field: "U",
+      timeDir: "2",
+      timeS: 2,
+      components: [[1, 0, 0]],
+      complete: false,
+    });
+    const wrapper = mount(ResultsPanel, { global: { plugins: [pinia] } });
+    await nextTick();
+
+    await wrapper.find('input[placeholder="D"]').setValue("U");
+    await wrapper
+      .findAll("button")
+      .find((node) => node.text() === "加载矢量场")!
+      .trigger("click");
+    await flushPromises();
+
+    expect(loadVectorField).toHaveBeenCalledWith("/case/run", "2", "U");
+    expect(wrapper.text()).toContain("矢量 U @ 2：1 个单元");
+    const incomplete = wrapper.findAll("p").find((node) => node.text().includes("（不完整）"));
+    expect(incomplete?.classes()).toContain("text-amber-400");
   });
 });

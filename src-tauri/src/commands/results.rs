@@ -97,8 +97,8 @@ pub async fn load_result_field(
     Ok(loaded)
 }
 
-/// 二进制通道加载场：返回 [magic][meta JSON][f64 LE 值区] 的原始字节，
-/// 大结果避免 JSON 数组的体积与解析开销；同样写入会话槽位与缓存。
+/// 二进制通道加载标量场：返回 [magic][meta JSON][f32 值区] 的原始字节
+/// （值区按 f32 截断，相对误差 ≤ 2^-24）；同时写入会话槽位与 LRU 缓存。
 #[tauri::command]
 pub async fn load_result_field_binary(
     session: tauri::State<'_, ResultSession>,
@@ -128,6 +128,22 @@ pub async fn load_result_field_binary(
         }
     }
     Ok(Response::new(field_binary::encode(&loaded)))
+}
+
+/// 矢量场三分量通道：[magic][meta JSON][f32 值区 ×3]（每单元 x/y/z 顺序平铺）。
+/// 供变形显示与矢量派生消费；标量模量仍走 load_result_field_binary。
+#[tauri::command]
+pub async fn load_vector_field_binary(
+    case_dir: String,
+    time_dir: String,
+    field: String,
+) -> Result<Response> {
+    let vectors = tauri::async_runtime::spawn_blocking(move || {
+        results::read_vector_field(std::path::Path::new(&case_dir), &time_dir, &field)
+    })
+    .await
+    .map_err(|e| KairosError::internal(format!("矢量场加载任务失败：{e}")))??;
+    Ok(Response::new(field_binary::encode_vector(&vectors)))
 }
 
 /// 派生场：基于会话主场的归一化 / 阈值掩码 / 线性映射，返回新场。
