@@ -33,6 +33,7 @@ function material(id: string, name: string): Material {
     thermalConductivity: [[200, 0.2]],
     mechanics: null,
     filler: null,
+    blowing: null,
     dataNote: "",
   } as unknown as Material;
 }

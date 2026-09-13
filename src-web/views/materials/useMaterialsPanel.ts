@@ -106,6 +106,21 @@ export function useMaterialsPanel() {
     ];
   });
 
+  /** 微发泡近似参数组（未启用为 null）：面板明确标注「近似模型」。 */
+  const blowingRows = computed<[string, string][] | null>(() => {
+    const blowing = selected.value?.blowing;
+    if (!blowing) {
+      return null;
+    }
+    return [
+      ["发泡剂", blowing.kind],
+      ["质量分数", `${blowing.massFractionPercent.toFixed(1)} %`],
+      ["有效密度下降", `${blowing.densityReductionPercent.toFixed(1)} %`],
+      ["表观黏度下降", `${blowing.viscosityReductionPercent.toFixed(1)} %`],
+      ["备注", blowing.note],
+    ];
+  });
+
   const importDisabled = computed(() => working.value);
   const exportDisabled = computed(() => materials.materials.custom.length === 0 || working.value);
   const copyDisabled = computed(() => !selectedId.value || working.value);
@@ -155,6 +170,7 @@ export function useMaterialsPanel() {
     lambdaRows,
     mechanicsRows,
     fillerRows,
+    blowingRows,
     importDisabled,
     exportDisabled,
     copyDisabled,

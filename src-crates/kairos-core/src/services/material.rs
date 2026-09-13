@@ -71,6 +71,24 @@ pub fn validate(material: &Material) -> Result<()> {
             "Tait 转变温度 b5 必须为正数（K）。",
         ));
     }
+    if let Some(blowing) = &material.blowing {
+        if blowing.kind.trim().is_empty() {
+            return Err(KairosError::validation("发泡剂类型不能为空。"));
+        }
+        if !(0.0..=30.0).contains(&blowing.mass_fraction_percent) {
+            return Err(KairosError::validation("发泡剂质量分数必须在 0~30% 之间。"));
+        }
+        if !(0.0..=60.0).contains(&blowing.density_reduction_percent) {
+            return Err(KairosError::validation(
+                "微发泡密度下降率必须在 0~60% 之间。",
+            ));
+        }
+        if !(0.0..90.0).contains(&blowing.viscosity_reduction_percent) {
+            return Err(KairosError::validation(
+                "微发泡黏度下降率必须在 0~90% 之间。",
+            ));
+        }
+    }
     validate_table(&material.specific_heat, "比热表").map_err(KairosError::validation)?;
     validate_table(&material.conductivity, "导热系数表").map_err(KairosError::validation)?;
     if let Some(filler) = &material.filler {
@@ -237,6 +255,7 @@ pub fn parse_custom_csv(content: &str) -> Result<Vec<Material>> {
             conductivity: table(19, "conductivity")?,
             mechanics: None,
             filler,
+            blowing: None,
             data_note: "CSV 批量导入".to_string(),
         };
         validate(&material)?;
@@ -472,5 +491,168 @@ mod tests {
         material.filler = Some(filler("玻纤", 0.3, 0.0));
         let error = validate(&material).unwrap_err();
         assert!(error.to_string().contains("填料长径比"));
+    }
+}
+
+/// 微发泡近似：按发泡参数组修正材料系数，返回 **case 用**的材料副本。
+///
+/// 只做两项经验修正（非预测级，不建模泡核与长大）：
+/// - 有效密度下降 `x%` → 比容增加 `1/(1-x)`：缩放 Tait 的 `b1m` / `b1s`
+///   （b2*/b3/b4* 是温度与压力项，量纲上不随密度缩放）；
+/// - 表观黏度下降 `y%` → 缩放 Cross-WLF 的 `D1`（零剪切黏度前因子，与 η 成正比）。
+///
+/// 未启用发泡时原样返回。修正后仍走同一套 `validate`，越界参数直接拒绝。
+pub fn apply_blowing_correction(material: &Material) -> Result<Material> {
+    let Some(blowing) = &material.blowing else {
+        return Ok(material.clone());
+    };
+    if blowing.density_reduction_percent == 0.0 && blowing.viscosity_reduction_percent == 0.0 {
+        return Ok(material.clone());
+    }
+    let mut corrected = material.clone();
+    let volume_scale = 1.0 / (1.0 - blowing.density_reduction_percent / 100.0);
+    corrected.pvt.b1m *= volume_scale;
+    corrected.pvt.b1s *= volume_scale;
+    let viscosity_scale = 1.0 - blowing.viscosity_reduction_percent / 100.0;
+    corrected.rheology.d1 *= viscosity_scale;
+    validate(&corrected)?;
+    Ok(corrected)
+}
+
+/// 微发泡修正的说明文案（case 报告与 CLI 展示；未启用返回 None）。
+pub fn blowing_note(material: &Material) -> Option<String> {
+    let blowing = material.blowing.as_ref()?;
+    Some(format!(
+        "微发泡近似（{} 质量分数 {:.1}%）：有效密度 −{:.1}%、表观黏度 −{:.1}%——经验修正，非预测级。",
+        blowing.kind.trim(),
+        blowing.mass_fraction_percent,
+        blowing.density_reduction_percent,
+        blowing.viscosity_reduction_percent
+    ))
+}
+
+#[cfg(test)]
+mod blowing_tests {
+    use super::*;
+    use crate::models::material::{BlowingGroup, CrossWlf, Mechanics, Tait};
+
+    fn base() -> Material {
+        Material {
+            id: "m-1".into(),
+            name: "PP-REF".into(),
+            manufacturer: "参考".into(),
+            family: "PP".into(),
+            rheology: CrossWlf {
+                n: 0.32,
+                tau_star: 2.0e4,
+                d1: 1.1e13,
+                d2: 263.15,
+                d3: 0.0,
+                a1: 31.0,
+                a2: 51.6,
+            },
+            pvt: Tait {
+                b1m: 1.28e-3,
+                b1s: 1.22e-3,
+                b2m: 7.5e-7,
+                b2s: 3e-7,
+                b3: 1.4e8,
+                b4m: 3e-3,
+                b4s: 1.5e-3,
+                b5: 418.0,
+            },
+            specific_heat: vec![(300.0, 1900.0)],
+            conductivity: vec![(300.0, 0.2)],
+            mechanics: Some(Mechanics {
+                elastic_modulus: 1.5e9,
+                poisson_ratio: 0.4,
+            }),
+            filler: None,
+            blowing: None,
+            data_note: "参考值".into(),
+        }
+    }
+
+    fn with_blowing(density: f64, viscosity: f64) -> Material {
+        let mut material = base();
+        material.blowing = Some(BlowingGroup {
+            kind: "N₂".into(),
+            mass_fraction_percent: 2.0,
+            density_reduction_percent: density,
+            viscosity_reduction_percent: viscosity,
+            note: "工程默认".into(),
+        });
+        material
+    }
+
+    /// 未启用 / 全零修正时原样返回（不改工程里的材料）。
+    #[test]
+    fn correction_is_identity_without_blowing() {
+        let material = base();
+        assert_eq!(apply_blowing_correction(&material).unwrap(), material);
+        assert_eq!(
+            apply_blowing_correction(&with_blowing(0.0, 0.0))
+                .unwrap()
+                .pvt
+                .b1m,
+            material.pvt.b1m
+        );
+        assert!(blowing_note(&material).is_none());
+    }
+
+    /// 密度 −20% → 比容 ×1.25；黏度 −30% → D1 ×0.7；b2/b3/b4 与 n 不动。
+    #[test]
+    fn correction_scales_tait_volume_and_cross_wlf_d1() {
+        let material = with_blowing(20.0, 30.0);
+        let corrected = apply_blowing_correction(&material).unwrap();
+        assert!((corrected.pvt.b1m - material.pvt.b1m * 1.25).abs() < 1e-15);
+        assert!((corrected.pvt.b1s - material.pvt.b1s * 1.25).abs() < 1e-15);
+        assert!((corrected.rheology.d1 - material.rheology.d1 * 0.7).abs() < 1.0);
+        assert_eq!(corrected.pvt.b2m, material.pvt.b2m);
+        assert_eq!(corrected.pvt.b5, material.pvt.b5);
+        assert_eq!(corrected.rheology.n, material.rheology.n);
+        // 原材料不被就地修改
+        assert_eq!(material.pvt.b1m, 1.28e-3);
+
+        let note = blowing_note(&material).unwrap();
+        assert!(note.contains("N₂"));
+        assert!(note.contains("密度 −20.0%"));
+        assert!(note.contains("黏度 −30.0%"));
+        assert!(note.contains("非预测级"));
+    }
+
+    /// 参数越界在校验层拒绝（密度 ≥100% 会让比容发散）。
+    #[test]
+    fn blown_parameters_are_validated() {
+        let mut material = with_blowing(70.0, 10.0);
+        assert!(
+            validate(&material)
+                .unwrap_err()
+                .message()
+                .contains("密度下降率")
+        );
+        material = with_blowing(10.0, 95.0);
+        assert!(
+            validate(&material)
+                .unwrap_err()
+                .message()
+                .contains("黏度下降率")
+        );
+        material = with_blowing(10.0, 10.0);
+        material.blowing.as_mut().unwrap().mass_fraction_percent = 40.0;
+        assert!(
+            validate(&material)
+                .unwrap_err()
+                .message()
+                .contains("质量分数")
+        );
+        material.blowing.as_mut().unwrap().mass_fraction_percent = 2.0;
+        material.blowing.as_mut().unwrap().kind = "  ".into();
+        assert!(
+            validate(&material)
+                .unwrap_err()
+                .message()
+                .contains("发泡剂类型")
+        );
     }
 }

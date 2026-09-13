@@ -103,6 +103,19 @@ export interface FillerGroup {
   note: string;
 }
 
+/** 对应 `kairos-core::models::material::BlowingGroup`（微发泡近似，非预测级）。 */
+export interface BlowingGroup {
+  /** 发泡剂类型，如「N₂」「CO₂」。 */
+  kind: string;
+  /** 发泡剂质量分数（百分数 0~30）。 */
+  massFractionPercent: number;
+  /** 有效密度相对下降（百分数 0~60）。 */
+  densityReductionPercent: number;
+  /** 表观黏度相对下降（百分数 0~90）。 */
+  viscosityReductionPercent: number;
+  note: string;
+}
+
 /** 对应 `kairos-core::models::material::Material`。 */
 export interface Material {
   id: string;
@@ -116,6 +129,8 @@ export interface Material {
   mechanics: Mechanics | null;
   /** 纤维 / 填料参数组（无填料牌号为 null）。 */
   filler: FillerGroup | null;
+  /** 微发泡近似参数组（未启用为 null）。 */
+  blowing: BlowingGroup | null;
   dataNote: string;
 }
 

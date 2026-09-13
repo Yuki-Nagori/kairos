@@ -7,7 +7,7 @@ use kairos_core::models::system::SystemInfo;
 use kairos_core::services::system;
 use serde_json::json;
 
-use kairos_core::models::material::Material;
+use kairos_core::models::material::{BlowingGroup, Material};
 use kairos_core::models::mesh::{
     DualDomainReport, MeshEstimate, MeshQuality, MeshRefinement, MeshingReport, MidplaneReport,
     RefineRegion,
@@ -90,6 +90,29 @@ fn project_serializes_with_camel_case() {
     );
 }
 
+/// BlowingGroup 的形状：camelCase 微发泡近似参数，前端材料面板与之对应。
+#[test]
+fn blowing_group_serializes_with_camel_case() {
+    let group = BlowingGroup {
+        kind: "N₂".into(),
+        mass_fraction_percent: 2.0,
+        density_reduction_percent: 12.0,
+        viscosity_reduction_percent: 20.0,
+        note: "工程默认量级".into(),
+    };
+    let json = serde_json::to_value(&group).unwrap();
+    assert_eq!(
+        json,
+        json!({
+            "kind": "N₂",
+            "massFractionPercent": 2.0,
+            "densityReductionPercent": 12.0,
+            "viscosityReductionPercent": 20.0,
+            "note": "工程默认量级",
+        })
+    );
+}
+
 /// GeometryRef 的形状：camelCase 相对路径引用，前端工程树与之对应。
 #[test]
 fn geometry_ref_serializes_with_camel_case() {
@@ -120,6 +143,7 @@ fn material_serializes_with_camel_case() {
     assert_eq!(json["specificHeat"][0], json!([300.0, 1900.0]));
     assert_eq!(json["mechanics"]["elasticModulus"], 1.5e9);
     assert_eq!(json["filler"], serde_json::Value::Null);
+    assert_eq!(json["blowing"], serde_json::Value::Null);
     assert!(json["dataNote"].is_string());
 }
 

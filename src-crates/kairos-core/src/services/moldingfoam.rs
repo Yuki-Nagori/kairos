@@ -599,6 +599,9 @@ pub fn write_case_files(
         channels,
         ..
     } = *inputs;
+    // 微发泡近似：修正后的材料用于本 case 的全部字典（工程里的原材料保持可回退对比）
+    let corrected = crate::services::material::apply_blowing_correction(material)?;
+    let material = &corrected;
     let zero = case_dir.join("0");
     let system = case_dir.join("system");
     let constant = case_dir.join("constant");
@@ -633,7 +636,6 @@ pub fn write_case_files(
         &constant.join("physicalProperties.air"),
         PHYSICAL_PROPERTIES_AIR,
     )?;
-
     let melt_k = kelvin(process.melt_temp_c);
     let mold_k = kelvin(process.mold_temp_c);
     // 注射流量 = 型腔体积 / 注射时间（moldingInletVelocity 体积流量口径，m³/s）。
@@ -650,6 +652,11 @@ pub fn write_case_files(
 /// 生成完整 case：polyMesh + 场 + 字典。
 pub fn generate_case(case_dir: &Path, inputs: &CaseInputs<'_>) -> Result<CaseReport> {
     let report = write_poly_mesh(case_dir, inputs.mesh, inputs.gates)?;
+    // 微发泡近似说明进告警（CLI JSON 与工艺面板都会展示）
+    let mut report = report;
+    if let Some(note) = crate::services::material::blowing_note(inputs.material) {
+        report.warnings.push(note);
+    }
     let areas = PatchAreas {
         inlet_m2: report.inlet_area_m2,
         vent_m2: report.vent_area_m2,
@@ -1755,6 +1762,83 @@ mod tests {
 
     /// 冷却水路 → 模壁 1D 通道 BC：有通道时 walls 写 moldingMoldTemperature +
     /// coolant 子字典（SI 单位），无通道保持恒定模温。
+    /// 微发泡近似：材料带发泡参数时 case 用修正后的 Tait / Cross-WLF 系数，
+    /// 且生成报告带「非预测级」说明；未启用发泡时字典与材料原值一致。
+    #[test]
+    fn blowing_parameters_correct_case_dictionaries() {
+        let dir = std::env::temp_dir().join(format!("kairos-blowing-{}", std::process::id()));
+        let case = dir.join("case");
+        let mesh = crate::services::meshing::generate(
+            &crate::models::geometry::TriangleMesh::sample_box(4.0),
+            &crate::services::meshing::VolumeMeshParams {
+                refinement: None,
+                target_size: 2.0,
+            },
+        )
+        .unwrap();
+        let mut material = sample_material();
+        let base_b1m = material.pvt.b1m;
+        let base_d1 = material.rheology.d1;
+        material.blowing = Some(crate::models::material::BlowingGroup {
+            kind: "N₂".into(),
+            mass_fraction_percent: 2.0,
+            density_reduction_percent: 20.0,
+            viscosity_reduction_percent: 30.0,
+            note: "工程默认".into(),
+        });
+
+        let report = generate_case(
+            &case,
+            &CaseInputs {
+                mesh: &mesh,
+                material: &material,
+                process: &process(),
+                stage: &AnalysisStage::Fill,
+                cores: 2,
+                gates: &[],
+                channels: &[],
+            },
+        )
+        .unwrap();
+        assert_eq!(report.warnings.len(), 1);
+        assert!(report.warnings[0].contains("微发泡近似"));
+        assert!(report.warnings[0].contains("非预测级"));
+
+        // 比容 ×1.25（密度 −20%）写进 physicalProperties.melt
+        let melt = fs::read_to_string(case.join("constant/physicalProperties.melt")).unwrap();
+        assert!(melt.contains(&format!("{:.6e}", base_b1m * 1.25)), "{melt}");
+        // D1 ×0.7（黏度 −30%）写进 momentumTransport
+        let momentum = fs::read_to_string(case.join("constant/momentumTransport")).unwrap();
+        assert!(
+            momentum.contains(&format!("{:.6e}", base_d1 * 0.7)),
+            "{momentum}"
+        );
+        // 工程里的材料未被就地修改（可回退对比）
+        assert_eq!(material.pvt.b1m, base_b1m);
+
+        // 未启用发泡：无告警，字典用原值
+        let plain = dir.join("plain");
+        let report = generate_case(
+            &plain,
+            &CaseInputs {
+                mesh: &mesh,
+                material: &sample_material(),
+                process: &process(),
+                stage: &AnalysisStage::Fill,
+                cores: 2,
+                gates: &[],
+                channels: &[],
+            },
+        )
+        .unwrap();
+        assert!(report.warnings.is_empty());
+        let plain_melt =
+            fs::read_to_string(plain.join("constant/physicalProperties.melt")).unwrap();
+        assert!(plain_melt.contains(&format!("{:.6e}", base_b1m)));
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
     #[test]
     fn coolant_channels_land_on_mold_wall_boundary() {
         let dir = std::env::temp_dir().join(format!("kairos-coolant-{}", std::process::id()));

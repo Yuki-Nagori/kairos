@@ -98,6 +98,7 @@ const material: Material = {
   conductivity: [[300, 0.22]],
   mechanics: { elasticModulus: 1.5e9, poissonRatio: 0.35 },
   filler: null,
+  blowing: null,
   dataNote: "示例数据",
 };
 

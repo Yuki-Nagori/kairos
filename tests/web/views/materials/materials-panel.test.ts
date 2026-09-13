@@ -55,6 +55,7 @@ function materialFixture(overrides: Partial<Material> = {}): Material {
     conductivity: [[300, 0.22]],
     mechanics: { elasticModulus: 1.5e9, poissonRatio: 0.35 },
     filler: null,
+    blowing: null,
     dataNote: "示例数据，仅用于演示。",
     ...overrides,
   };
@@ -373,5 +374,47 @@ describe("MaterialsPanel", () => {
     // 模板不渲染力学表时该 computed 不被求值，直接驱动其早退分支。
     const panel = useMaterialsPanel();
     expect(panel.mechanicsRows.value).toEqual([]);
+  });
+});
+
+describe("MaterialsPanel：微发泡近似参数组", () => {
+  let pinia: Pinia;
+
+  beforeEach(() => {
+    pinia = createPinia();
+    setActivePinia(pinia);
+    vi.resetAllMocks();
+  });
+
+  it("未启用发泡不显示；启用后逐项展示并标注非预测级", async () => {
+    const materials = useMaterialsStore();
+    materials.materials = {
+      builtin: [materialFixture()],
+      custom: [],
+    };
+    const wrapper = mount(MaterialsPanel, { global: { plugins: [pinia] } });
+    expect(wrapper.text()).not.toContain("微发泡近似");
+
+    materials.materials = {
+      builtin: [
+        materialFixture({
+          blowing: {
+            kind: "N₂",
+            massFractionPercent: 2,
+            densityReductionPercent: 12,
+            viscosityReductionPercent: 20,
+            note: "工程默认量级",
+          },
+        }),
+      ],
+      custom: [],
+    };
+    await nextTick();
+    expect(wrapper.text()).toContain("微发泡近似（非预测级");
+    expect(wrapper.text()).toContain("N₂");
+    expect(wrapper.text()).toContain("2.0 %");
+    expect(wrapper.text()).toContain("12.0 %");
+    expect(wrapper.text()).toContain("20.0 %");
+    expect(wrapper.text()).toContain("工程默认量级");
   });
 });

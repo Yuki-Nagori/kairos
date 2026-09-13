@@ -28,6 +28,7 @@ function materialFixture(): Material {
     conductivity: [[200, 0.2]] as [number, number][],
     mechanics: null,
     filler: null,
+    blowing: null,
     dataNote: "",
   };
 }

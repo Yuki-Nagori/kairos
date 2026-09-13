@@ -65,6 +65,24 @@ pub struct FillerGroup {
     pub note: String,
 }
 
+/// 微发泡（MuCell 类）近似参数组：经验修正，**非预测级**。
+/// 只做「有效密度下降 + 表观黏度下降」两项修正，应用到 case 的 Tait / Cross-WLF 系数，
+/// 不建模泡核与气泡长大（需要群体平衡模型，属上游能力）。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BlowingGroup {
+    /// 发泡剂类型，如「N₂」「CO₂」。
+    pub kind: String,
+    /// 发泡剂质量分数（百分数，0~30）。
+    pub mass_fraction_percent: f64,
+    /// 有效密度相对下降（百分数，0~60）：按 `v = v₀ / (1 - x)` 缩放 Tait 比容系数。
+    pub density_reduction_percent: f64,
+    /// 表观黏度相对下降（百分数，0~90）：按 `η = η₀ × (1 - y)` 缩放 Cross-WLF 的 D1。
+    pub viscosity_reduction_percent: f64,
+    /// 数据来源或工艺提示。
+    pub note: String,
+}
+
 /// 一个材料牌号的完整物理描述。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -85,6 +103,9 @@ pub struct Material {
     pub mechanics: Option<Mechanics>,
     /// 纤维 / 填料参数组（无填料牌号为 null）。
     pub filler: Option<FillerGroup>,
+    /// 微发泡近似参数组（未启用发泡为 null）。
+    #[serde(default)]
+    pub blowing: Option<BlowingGroup>,
     /// 数据来源与免责声明（内置参考牌号必须标注）。
     pub data_note: String,
 }

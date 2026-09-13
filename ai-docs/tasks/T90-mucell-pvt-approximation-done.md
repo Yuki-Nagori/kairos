@@ -3,7 +3,9 @@
 - 阶段：E1（特殊工艺）
 - 依赖：T04/T81（材料模型与填料分组）、T09–T11（case 生成）
 - 优先级：P3（可先行，不阻塞上游）
-- 状态：**待开工**
+- 状态：**已实现**（2026-09-13，近似路线）——`BlowingGroup` DTO + `apply_blowing_correction`
+  （Tait 比容 / Cross-WLF D1）+ `blowing_note` 告警 + 面板标注；真机发泡/不发泡对照归 T29。
+  见 [T90 评审](../reviews/T90-review.md)
 - 来源：[特殊工艺可行性](../research/special-process-feasibility.md)
 
 ## 目标

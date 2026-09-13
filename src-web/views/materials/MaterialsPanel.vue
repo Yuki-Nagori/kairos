@@ -17,6 +17,7 @@ const {
   lambdaRows,
   mechanicsRows,
   fillerRows,
+  blowingRows,
   importDisabled,
   exportDisabled,
   copyDisabled,
@@ -144,6 +145,20 @@ const {
             <table class="text-xs">
               <tbody>
                 <tr v-for="[key, value] in fillerRows" :key="key">
+                  <td class="pr-4 py-0.5 text-zinc-500">{{ key }}</td>
+                  <td class="py-0.5 text-zinc-300">{{ value }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </template>
+
+          <template v-if="blowingRows">
+            <p class="text-[11px] font-semibold tracking-wide text-amber-400">
+              微发泡近似（非预测级：只做有效密度与表观黏度修正）
+            </p>
+            <table class="text-xs">
+              <tbody>
+                <tr v-for="[key, value] in blowingRows" :key="key">
                   <td class="pr-4 py-0.5 text-zinc-500">{{ key }}</td>
                   <td class="py-0.5 text-zinc-300">{{ value }}</td>
                 </tr>

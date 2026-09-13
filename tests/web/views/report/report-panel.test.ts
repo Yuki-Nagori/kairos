@@ -39,6 +39,7 @@ function materialFixture(): Material {
     conductivity: [[300, 0.22]],
     mechanics: null,
     filler: null,
+    blowing: null,
     dataNote: "示例数据",
   };
 }
