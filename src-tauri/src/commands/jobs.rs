@@ -28,6 +28,8 @@ struct Inner {
     children: HashMap<String, Child>,
     channels: HashMap<String, Channel<String>>,
     limits: SchedulerLimits,
+    /// 原生（Linux）求解环境根目录：Some 时作业先 source 其 bashrc。
+    native_env: Option<String>,
 }
 
 /// 调度器共享状态（线程安全：作业线程与命令线程共享同一份 Inner）。
@@ -49,6 +51,7 @@ impl Default for JobScheduler {
                 children: HashMap::new(),
                 channels: HashMap::new(),
                 limits: SchedulerLimits::new(2, 8),
+                native_env: None,
             })),
             vm_shell: None,
         }
@@ -61,6 +64,37 @@ impl JobScheduler {
         self.vm_shell = vm_shell;
         self
     }
+
+    /// 注入原生（Linux）求解环境根目录（构造期）。
+    pub fn with_native_env(self, native_env: Option<String>) -> Self {
+        let mut inner = self
+            .inner
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        inner.native_env = native_env;
+        drop(inner);
+        self
+    }
+
+    /// 运行期刷新原生环境（启动后下载 / 部署 bundle 时调用）。
+    pub fn set_native_env(&self, native_env: Option<String>) {
+        let mut inner = self
+            .inner
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        inner.native_env = native_env;
+    }
+}
+
+/// 刷新调度器的原生求解环境（启动时与部署 / 下载后调用）：
+/// 找到本机解压好的 bundle（含 `openfoam14/etc/bashrc`）并注入其根目录，
+/// 使原生平台提交作业时先 source 该环境。没找到则清空（回退系统 OpenFOAM）。
+/// 三个平台都调用同一实现：VM 通道存在时 vm_shell 分支优先，不受影响。
+pub fn refresh_native_env(app: &tauri::AppHandle) {
+    use tauri::Manager;
+    let root =
+        super::downloads::native_env_root(app).map(|path| path.to_string_lossy().to_string());
+    app.state::<JobScheduler>().set_native_env(root);
 }
 
 /// 探测本机的 VM 执行通道：macOS 用 multipass，Windows 用 wsl；Linux 原生执行。
@@ -249,13 +283,54 @@ fn script_case_dir(os: &str, case_dir: &str, vm_case: Option<&str>) -> String {
     dir.replace('\'', "'\\''")
 }
 
-fn spawn_run_script(
-    case_dir: &str,
-    vm_case: Option<&str>,
+/// 运行期上下文：受管 bin 目录前缀 + 执行通道（VM shell / 原生环境）。
+/// 作业线程与收尾路径共用一份快照，避免长参数表在多个函数间传递。
+#[derive(Clone)]
+struct RunContext {
+    /// 受管 bin 目录的 PATH 前缀（下载解压后由命令层注入）。
+    managed_path: Option<String>,
+    /// VM 执行通道：Some("multipass"/"wsl") 时作业在虚拟机内运行。
+    vm_shell: Option<String>,
+    /// 原生（Linux）求解环境根目录：Some 时脚本先 source 其 bashrc。
+    native_env: Option<String>,
+}
+
+/// 原生求解启动参数（结构体承载，避免长参数表）。
+struct NativeRun<'a> {
+    case_dir: &'a str,
+    vm_case: Option<&'a str>,
     cores: u32,
+    context: &'a RunContext,
+}
+
+/// 原生求解脚本：`[source env; ] [export PATH; ] cd '<case>' && <solve>`。
+/// 顺序固定——环境 source 在最前（它决定 OpenFOAM 的 PATH / LD_LIBRARY_PATH），
+/// 受管 bin 目录随后追加，避免被环境树的 PATH 覆盖。
+fn native_solve_script(
+    case_dir: &str,
+    env_source: Option<&str>,
     managed_path: Option<&str>,
-    vm_shell: Option<&str>,
-) -> Result<Child> {
+    solve: &str,
+) -> String {
+    let source = env_source
+        .map(|command| format!("{command}; "))
+        .unwrap_or_default();
+    let path_export = managed_path
+        .map(|prefix| format!("export PATH='{prefix}:$PATH'; "))
+        .unwrap_or_default();
+    format!("{source}{path_export}cd '{case_dir}' && {solve}")
+}
+
+fn spawn_run_script(run: NativeRun<'_>) -> Result<Child> {
+    let NativeRun {
+        case_dir,
+        vm_case,
+        cores,
+        context,
+    } = run;
+    let managed_path = context.managed_path.as_deref();
+    let vm_shell = context.vm_shell.as_deref();
+    let native_env = context.native_env.as_deref();
     let solve = moldingfoam::solve_command(cores);
     // VM 执行通道只在 macOS（multipass）与 Windows（WSL）存在；原生平台直接本机执行。
     #[cfg(any(target_os = "macos", target_os = "windows"))]
@@ -284,15 +359,16 @@ fn spawn_run_script(
     }
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     let _ = vm_shell;
-    let path_export = managed_path
-        .map(|prefix| format!("export PATH='{prefix}:$PATH'; "))
-        .unwrap_or_default();
     // 原生平台走宿主路径分支（同一处做 shell 单引号转义，防路径注入）。
     let safe_dir = script_case_dir(std::env::consts::OS, case_dir, vm_case);
+    // 原生（Linux）环境：bundle 解压在本机时先 source 其 bashrc，
+    // 布局与 VM 内一致（core 侧单点构造，路径含空格 / 引号时自动转义）。
+    let env_source =
+        native_env.map(|root| vm_logic::native_env_source_command(std::path::Path::new(root)));
     // 求解入口：foamRun 是 OpenFOAM 11+ 的模块化运行器，具体求解模块由
     // case 的 controlDict（solver 键，见 moldingfoam.rs::SOLVER_MODULE）提供；
     // 并行由 mpirun 发起（见 moldingfoam::solve_command）。
-    let script = format!("{path_export}cd '{safe_dir}' && {solve}");
+    let script = native_solve_script(&safe_dir, env_source.as_deref(), managed_path, &solve);
     let mut command = Command::new("bash");
     command
         .arg("-lc")
@@ -333,40 +409,36 @@ impl JobScheduler {
             job_logic::promote_ready(&mut inner.jobs, &limits, now)
         };
         for job_id in started {
-            let (case_dir, cores, managed_path, vm_shell) = {
+            let (case_dir, cores, context) = {
                 let inner = self.lock();
                 let job = inner.jobs.iter().find(|job| job.id == job_id);
                 (
                     job.map(|job| job.case_dir.clone()).unwrap_or_default(),
                     job.map(|job| job.cores).unwrap_or(1),
-                    self.managed_path.clone(),
-                    self.vm_shell.clone(),
+                    RunContext {
+                        managed_path: self.managed_path.clone(),
+                        vm_shell: self.vm_shell.clone(),
+                        native_env: inner.native_env.clone(),
+                    },
                 )
             };
             let inner = self.arc();
             thread::spawn(move || {
                 let staged =
-                    copy_case_into_vm(&case_dir, vm_shell.as_deref()).and_then(|vm_case| {
-                        spawn_run_script(
-                            &case_dir,
-                            vm_case.as_deref(),
+                    copy_case_into_vm(&case_dir, context.vm_shell.as_deref()).and_then(|vm_case| {
+                        spawn_run_script(NativeRun {
+                            case_dir: &case_dir,
+                            vm_case: vm_case.as_deref(),
                             cores,
-                            managed_path.as_deref(),
-                            vm_shell.as_deref(),
-                        )
+                            context: &context,
+                        })
                         .map(|child| (child, vm_case))
                     });
                 match staged {
-                    Ok((child, vm_case)) => run_job_body(
-                        inner,
-                        job_id,
-                        child,
-                        case_dir,
-                        vm_case,
-                        managed_path,
-                        vm_shell,
-                    ),
-                    Err(e) => fail_and_promote(inner, job_id, e.message(), managed_path, vm_shell),
+                    Ok((child, vm_case)) => {
+                        run_job_body(inner, job_id, child, case_dir, vm_case, context)
+                    }
+                    Err(e) => fail_and_promote(inner, job_id, e.message(), context),
                 }
             });
         }
@@ -375,13 +447,7 @@ impl JobScheduler {
 
 /// 作业失败收尾：标记失败并立即尝试提升下一个排队作业（与正常结束路径的
 /// 语义一致，避免队列因单个作业启动失败而停滞）。
-fn fail_and_promote(
-    inner: Arc<Mutex<Inner>>,
-    job_id: String,
-    message: &str,
-    managed_path: Option<String>,
-    vm_shell: Option<String>,
-) {
+fn fail_and_promote(inner: Arc<Mutex<Inner>>, job_id: String, message: &str, context: RunContext) {
     let now = now_ms();
     {
         let mut guard = inner
@@ -390,10 +456,11 @@ fn fail_and_promote(
         let _ = job_logic::mark_failed(&mut guard.jobs, &job_id, message, now);
     }
     let scheduler = JobScheduler {
-        inner,
-        managed_path,
-        vm_shell,
+        inner: Arc::clone(&inner),
+        managed_path: context.managed_path.clone(),
+        vm_shell: context.vm_shell.clone(),
     };
+    scheduler.set_native_env(context.native_env.clone());
     scheduler.promote_and_spawn(now);
 }
 
@@ -404,8 +471,7 @@ fn run_job_body(
     mut child: Child,
     case_dir: String,
     vm_case: Option<String>,
-    managed_path: Option<String>,
-    vm_shell: Option<String>,
+    context: RunContext,
 ) {
     let mut stdout = child.stdout.take();
     let mut solver_aborted = false;
@@ -464,22 +530,26 @@ fn run_job_body(
     }
     // 一个作业结束 → 立即尝试提升队列中的下一个（自动续跑）
     let scheduler = JobScheduler {
-        inner,
-        managed_path,
-        vm_shell,
+        inner: Arc::clone(&inner),
+        managed_path: context.managed_path.clone(),
+        vm_shell: context.vm_shell.clone(),
     };
+    scheduler.set_native_env(context.native_env.clone());
     scheduler.promote_and_spawn(now);
 }
 
 /// 提交求解作业：入队并按预算立即尝试启动。progress 通道回传日志行与 __TIME__ 进度标记。
 #[tauri::command]
 pub fn submit_job(
+    app: tauri::AppHandle,
     scheduler: State<'_, JobScheduler>,
     case_dir: String,
     cores: u32,
     study_id: Option<String>,
     progress: Channel<String>,
 ) -> Result<Job> {
+    // 提交前刷新原生求解环境：刚下载 / 解压 bundle 的会话也能直接跑（Linux 通道）。
+    refresh_native_env(&app);
     let id = new_id("job");
     let now = now_ms();
     let job = {
@@ -534,6 +604,39 @@ pub fn list_jobs(scheduler: State<'_, JobScheduler>) -> Result<Vec<Job>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 原生求解脚本：环境 source 在最前，随后 PATH 导出、cd、求解命令。
+    #[test]
+    fn native_solve_script_orders_source_path_and_solve() {
+        let script = native_solve_script(
+            "/data/cases/study-1",
+            Some("source '/opt/moldingfoam-env/openfoam14/etc/bashrc'"),
+            Some("/data/downloads/moldingfoam/bin"),
+            "decomposePar -force && mpirun -np 4 foamRun -parallel; reconstructPar",
+        );
+        assert_eq!(
+            script,
+            "source '/opt/moldingfoam-env/openfoam14/etc/bashrc'; export PATH='/data/downloads/moldingfoam/bin:$PATH'; cd '/data/cases/study-1' && decomposePar -force && mpirun -np 4 foamRun -parallel; reconstructPar"
+        );
+    }
+
+    /// 无环境 / 无受管目录（VM 通道未介入时的原生回退）只留 cd + 求解；
+    /// 单引号路径原样透传（转义已由 script_case_dir 完成）。
+    #[test]
+    fn native_solve_script_without_optional_segments() {
+        let script = native_solve_script("/cases/plain", None, None, "foamRun");
+        assert_eq!(script, "cd '/cases/plain' && foamRun");
+        let env_only = native_solve_script(
+            "/cases/a",
+            Some("source '/env/openfoam14/etc/bashrc'"),
+            None,
+            "foamRun",
+        );
+        assert_eq!(
+            env_only,
+            "source '/env/openfoam14/etc/bashrc'; cd '/cases/a' && foamRun"
+        );
+    }
 
     #[test]
     fn script_case_dir_picks_path_per_platform() {

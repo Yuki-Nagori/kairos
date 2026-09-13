@@ -251,3 +251,59 @@ describe("JobsPanel 作业列表与提交", () => {
     await vi.waitFor(() => expect(listJobs).toHaveBeenCalledTimes(1));
   });
 });
+
+describe("JobsPanel 求解环境提醒（原生 / VM 措辞）", () => {
+  let pinia: Pinia;
+
+  beforeEach(() => {
+    pinia = createPinia();
+    setActivePinia(pinia);
+    vi.resetAllMocks();
+  });
+
+  function primePendingDeploy(provider: "native" | "multipass"): void {
+    const deps = useDependenciesStore();
+    deps.downloadedFiles = {
+      moldingfoam: {
+        fileName: "moldingfoam.tar.xz",
+        sizeBytes: 1024,
+        downloadedAtMs: 1,
+        extractDir: null,
+        releaseTag: "v0.2.5",
+      },
+    };
+    const vm = useVmStore();
+    vm.vmStatus = {
+      provider,
+      toolInstalled: true,
+      instanceName: "kairos",
+      instanceState: "running",
+      hint: "",
+    };
+    vm.deployedReleaseTag = "v0.2.4";
+  }
+
+  it("Linux 原生平台提示「本机旧环境 / 部署到本机」", () => {
+    primePendingDeploy("native");
+    vi.mocked(probeMoldingfoam).mockResolvedValue({
+      moldingfoam: true,
+      solver: true,
+      hint: "就绪",
+    });
+    const wrapper = mount(JobsPanel, { global: { plugins: [pinia] } });
+    expect(wrapper.text()).toContain("提交的作业将使用本机旧环境");
+    expect(wrapper.text()).toContain("「部署到本机」");
+  });
+
+  it("VM 平台提示「VM 内旧环境 / 部署到虚拟机」", () => {
+    primePendingDeploy("multipass");
+    vi.mocked(probeMoldingfoam).mockResolvedValue({
+      moldingfoam: true,
+      solver: true,
+      hint: "就绪",
+    });
+    const wrapper = mount(JobsPanel, { global: { plugins: [pinia] } });
+    expect(wrapper.text()).toContain("提交的作业将使用 VM 内旧环境");
+    expect(wrapper.text()).toContain("「部署到虚拟机」");
+  });
+});

@@ -361,6 +361,51 @@ fn extract_archive(archive: &Path, dest: &Path) -> Result<()> {
     Ok(())
 }
 
+/// 原生（Linux）求解环境根目录：受管 downloads/moldingfoam 下含
+/// `openfoam14/etc/bashrc` 的目录（bundle 解压后即就位，无需「部署」）。
+/// 多个版本并存时取**最后修改**的那个（最近解压的 bundle 生效）。
+pub fn native_env_root(app: &AppHandle) -> Option<PathBuf> {
+    let dir = downloads_dir(app).ok()?.join("moldingfoam");
+    let mut found: Option<(std::time::SystemTime, PathBuf)> = None;
+    collect_env_roots(&dir, 0, 4, &mut found);
+    found.map(|(_, path)| path)
+}
+
+fn collect_env_roots(
+    dir: &Path,
+    depth: u8,
+    max_depth: u8,
+    found: &mut Option<(std::time::SystemTime, PathBuf)>,
+) {
+    if depth > max_depth {
+        return;
+    }
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let bashrc = kairos_core::services::vm::native_env_bashrc(&path);
+        if bashrc.exists() {
+            let modified = bashrc
+                .metadata()
+                .and_then(|meta| meta.modified())
+                .unwrap_or(std::time::UNIX_EPOCH);
+            if found
+                .as_ref()
+                .is_none_or(|(current, _)| modified > *current)
+            {
+                *found = Some((modified, path));
+            }
+            continue;
+        }
+        collect_env_roots(&path, depth + 1, max_depth, found);
+    }
+}
+
 /// 收集受管目录下的 bin 目录（求解器运行 / 网格生成的 PATH 前缀）。
 pub fn managed_bin_dirs(app: &AppHandle) -> Vec<PathBuf> {
     let mut out = Vec::new();

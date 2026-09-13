@@ -5,8 +5,18 @@ import Card from "../../components/ui/UiCard.vue";
 import ShellIcon from "../../components/ui/icons/ShellIcon.vue";
 import UiButton from "../../components/ui/UiButton.vue";
 
-const { app, vm, deps, rows, downloadsDir, pendingDeployText, openDownloadsDir } =
-  useDependenciesPanel();
+const {
+  app,
+  vm,
+  deps,
+  rows,
+  downloadsDir,
+  pendingDeployText,
+  deployLabel,
+  nativeHints,
+  downloadComponent,
+  openDownloadsDir,
+} = useDependenciesPanel();
 </script>
 
 <template>
@@ -24,13 +34,20 @@ const { app, vm, deps, rows, downloadsDir, pendingDeployText, openDownloadsDir }
     <UiButton :disabled="app.busy !== null" @click="openDownloadsDir()">打开下载目录</UiButton>
     <p class="text-xs text-zinc-500">下载目录：{{ downloadsDir }}</p>
     <UiButton :disabled="app.busy !== null" @click="deps.refreshDependencies()">重新探测</UiButton>
+    <p
+      v-for="hint in nativeHints"
+      :key="hint"
+      class="rounded-lg border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-xs text-amber-300"
+    >
+      {{ hint }}
+    </p>
     <div class="space-y-2">
       <template v-for="row in rows" :key="row.dep.id">
         <div
           class="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-zinc-800 px-3 py-2 text-xs"
         >
           <UiButton v-if="row.dep.id === 'moldingfoam' && row.already" @click="vm.deployVmBundle()">
-            部署到虚拟机
+            {{ deployLabel }}
           </UiButton>
           <UiButton v-if="row.dep.updatable && row.already" @click="deps.checkUpdate(row.dep.id)">
             检查更新
@@ -50,7 +67,7 @@ const { app, vm, deps, rows, downloadsDir, pendingDeployText, openDownloadsDir }
             :variant="row.downloadVariant"
             :disabled="row.downloading"
             :title="row.downloadTitle"
-            @click="deps.downloadComponent(row.dep.id, row.downloadUrl)"
+            @click="downloadComponent(row.dep.id, row.downloadUrl)"
           >
             {{ row.downloadLabel }}
           </UiButton>

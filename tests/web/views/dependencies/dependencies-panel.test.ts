@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
+import { nextTick } from "vue";
 import { createPinia, setActivePinia } from "pinia";
 import type { Pinia } from "pinia";
 import DependenciesPanel from "../../../../src-web/views/dependencies/DependenciesPanel.vue";
@@ -11,7 +12,7 @@ import {
   listRuntimeDependencies,
   openDependencyPage,
 } from "../../../../src-web/api/dependencies";
-import { getDeployedReleaseTag } from "../../../../src-web/api/vm";
+import { getDeployedReleaseTag, nativeEnvStatus, getVmStatus } from "../../../../src-web/api/vm";
 import {
   downloadComponentFile,
   getDownloadsDir,
@@ -39,6 +40,8 @@ vi.mock("../../../../src-web/api/downloads", () => ({
   openDownloadsDir: vi.fn(),
 }));
 vi.mock("../../../../src-web/api/vm", () => ({
+  nativeEnvStatus: vi.fn(),
+  nativeDeployBundle: vi.fn(),
   getVmStatus: vi.fn(),
   getDeployedReleaseTag: vi.fn(async () => null),
   installVm: vi.fn(),
@@ -405,5 +408,138 @@ describe("DependenciesPanel", () => {
     expect(wrapper.text()).toContain("GPL-2.0");
     const badge = wrapper.find(".rounded-full");
     expect(badge.classes().join(" ")).toContain("border-zinc-700");
+  });
+});
+
+describe("原生（Linux）通道：文案与提示", () => {
+  let pinia: Pinia;
+
+  beforeEach(() => {
+    pinia = createPinia();
+    setActivePinia(pinia);
+    vi.resetAllMocks();
+    localStorage.clear();
+    // 面板挂载即探测依赖 + 下载状态：两个探测都要有返回值，否则行不渲染
+    vi.mocked(listDownloads).mockResolvedValue({});
+    vi.mocked(getDownloadsDir).mockResolvedValue("/data/downloads");
+  });
+
+  async function mountPanel(deps: DependencyStatus[]) {
+    vi.mocked(listRuntimeDependencies).mockResolvedValue(deps);
+    const wrapper = mount(DependenciesPanel, { global: { plugins: [pinia] } });
+    await vi.waitFor(() => {
+      expect(wrapper.findAll("button").some((button) => button.text() === "官方页")).toBe(
+        deps.length > 0,
+      );
+    });
+    return wrapper;
+  }
+
+  /** 已下载的 moldingfoam 条目（部署按钮与版本提醒的输入）。 */
+  function mockDownloadedMoldingfoam(releaseTag: string | null = null): void {
+    vi.mocked(listDownloads).mockResolvedValue({
+      moldingfoam: {
+        fileName: "moldingfoam.tar.xz",
+        sizeBytes: 1024,
+        downloadedAtMs: 1,
+        extractDir: "/data/downloads/moldingfoam",
+        releaseTag,
+      },
+    });
+  }
+
+  /** 原生平台基座：provider=native + moldingfoam 已下载（部署按钮可见）。 */
+  function primeNative(hints: string[] = []): DependencyStatus[] {
+    const vm = useVmStore();
+    vm.vmStatus = {
+      provider: "native",
+      toolInstalled: true,
+      instanceName: "kairos",
+      instanceState: "running",
+      hint: "",
+    };
+    vi.mocked(getVmStatus).mockResolvedValue(vm.vmStatus);
+    vi.mocked(nativeEnvStatus).mockResolvedValue({
+      envRoot: "/env/moldingfoam-env",
+      envReady: hints.length === 0,
+      mpiReady: true,
+      hints,
+    });
+    // 已下载 → 行内出现「部署」按钮（already 判定读的是探测结果，不能只改 store）
+    mockDownloadedMoldingfoam();
+    return [
+      makeDep({
+        id: "moldingfoam",
+        name: "moldingFoam 求解环境",
+        required: true,
+        ready: true,
+        managedReady: true,
+      }),
+    ];
+  }
+
+  it("原生平台：部署按钮改文案、探测原生环境、提示行展示", async () => {
+    const deps = primeNative(["缺少 OpenMPI 运行时（foamRun 依赖 libmpi.so.40）"]);
+    const wrapper = await mountPanel(deps);
+    await nextTick();
+
+    expect(nativeEnvStatus).toHaveBeenCalled();
+    const button = wrapper.findAll("button").find((node) => node.text() === "部署到本机");
+    expect(button).toBeDefined();
+    expect(wrapper.text()).not.toContain("部署到虚拟机");
+    expect(wrapper.text()).toContain("缺少 OpenMPI 运行时");
+  });
+
+  it("原生平台下载完成后刷新原生环境提示行", async () => {
+    const rows = primeNative();
+    vi.mocked(downloadComponentFile).mockResolvedValue({
+      path: "/data/downloads/gmsh.tgz",
+      fileName: "gmsh.tgz",
+      sizeBytes: 2048,
+      extractDir: null,
+      releaseTag: null,
+    });
+    const wrapper = await mountPanel(rows);
+    vi.mocked(nativeEnvStatus).mockClear();
+    // 已下载状态行显示「重新下载」，点它同样会走下载完成后的原生环境刷新
+    await findButton(wrapper, "重新下载").trigger("click");
+    await flushPromises();
+    expect(nativeEnvStatus).toHaveBeenCalled();
+  });
+
+  it("原生平台待部署提醒用「本机」措辞", async () => {
+    const rows = primeNative();
+    mockDownloadedMoldingfoam("v0.2.5");
+    // 挂载即刷新已部署版本 → 用 mock 提供（直接改 store 会被覆盖）
+    vi.mocked(getDeployedReleaseTag).mockResolvedValue("v0.2.4");
+    const wrapper = await mountPanel(rows);
+    await nextTick();
+
+    expect(wrapper.text()).toContain(
+      "求解环境有更新未部署：v0.2.5 → 本机 v0.2.4，请部署到本机后提交作业",
+    );
+  });
+
+  it("非原生平台不探测原生环境、文案保持「虚拟机」", async () => {
+    vi.mocked(getVmStatus).mockResolvedValue({
+      provider: "multipass",
+      toolInstalled: true,
+      instanceName: "kairos",
+      instanceState: "running",
+      hint: "",
+    });
+    mockDownloadedMoldingfoam();
+    const wrapper = await mountPanel([
+      makeDep({
+        id: "moldingfoam",
+        name: "moldingFoam 求解环境",
+        required: true,
+        ready: true,
+        managedReady: true,
+      }),
+    ]);
+    await nextTick();
+    expect(nativeEnvStatus).not.toHaveBeenCalled();
+    expect(wrapper.text()).toContain("部署到虚拟机");
   });
 });

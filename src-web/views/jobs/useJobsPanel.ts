@@ -30,11 +30,14 @@ export function useJobsPanel() {
   const deps = useDependenciesStore();
   const vm = useVmStore();
 
-  /** 求解环境「已下载新版本但 VM 内未部署」提醒。 */
+  /** 求解环境「已下载新版本但未部署」提醒（VM 通道 / Linux 原生通道措辞不同）。 */
   const pendingDeployText = computed(() => {
     const downloaded = deps.downloadedFiles["moldingfoam"]?.releaseTag ?? null;
     if (downloaded === null || !isPendingDeploy(downloaded, vm.deployedReleaseTag)) {
       return null;
+    }
+    if (vm.vmStatus?.provider === "native") {
+      return `求解环境有更新未部署（${downloaded}）：提交的作业将使用本机旧环境，请先到依赖面板「部署到本机」`;
     }
     return `求解环境有更新未部署（${downloaded}）：提交的作业将使用 VM 内旧环境，请先到依赖面板「部署到虚拟机」`;
   });

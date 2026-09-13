@@ -11,6 +11,7 @@ use std::time::{Duration, Instant};
 use kairos_core::error::{KairosError, Result};
 use kairos_core::models::vm::{VmProviderKind, VmState, VmStatus};
 use kairos_core::services::vm as vm_logic;
+use serde::Serialize;
 use std::path::{Path, PathBuf};
 use tauri::ipc::Channel;
 use tauri::{AppHandle, State};
@@ -368,6 +369,18 @@ pub fn parse_deployed_tag(stdout: &str) -> Option<String> {
 /// null——提示只在真正可比对的环境中出现。
 #[tauri::command]
 pub async fn vm_deployed_release_tag(app: AppHandle) -> Result<Option<String>> {
+    // 原生（Linux）：环境就在本机，标记文件直接读盘。
+    if provider()? == VmProviderKind::Native {
+        let Some(root) = super::downloads::native_env_root(&app) else {
+            return Ok(None);
+        };
+        let marker = vm_logic::native_env_tag(&root);
+        let tag = std::fs::read_to_string(marker)
+            .ok()
+            .map(|content| content.trim().to_string())
+            .filter(|tag| !tag.is_empty());
+        return Ok(tag);
+    }
     if provider()? != VmProviderKind::Multipass {
         return Ok(None);
     }
@@ -392,6 +405,67 @@ pub async fn vm_deployed_release_tag(app: AppHandle) -> Result<Option<String>> {
     })
     .await
     .map_err(|e| KairosError::internal(format!("读取部署版本失败：{e}")))?
+}
+
+/// 原生（Linux）求解环境状态：环境根 / 是否就绪 / OpenMPI 运行时 / 处置提示。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NativeEnvStatus {
+    /// 环境根目录（未解压时为 null）。
+    pub env_root: Option<String>,
+    /// bashrc 是否就位（就绪 = 可直接提交作业）。
+    pub env_ready: bool,
+    /// OpenMPI 运行时（`mpirun`）是否可用。
+    pub mpi_ready: bool,
+    /// 面向用户的处置提示（空 = 无问题）。
+    pub hints: Vec<String>,
+}
+
+/// 探测原生求解环境（Linux 面板用；其它平台也返回结果，由前端按 provider 决定是否展示）。
+#[tauri::command]
+pub fn native_env_status(app: AppHandle) -> Result<NativeEnvStatus> {
+    let root = super::downloads::native_env_root(&app);
+    let env_ready = root
+        .as_ref()
+        .map(|path| vm_logic::native_env_bashrc(path).exists())
+        .unwrap_or(false);
+    let mpi_ready = Command::new("bash")
+        .arg("-lc")
+        .arg("command -v mpirun >/dev/null 2>&1")
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false);
+    Ok(NativeEnvStatus {
+        env_root: root.map(|path| path.to_string_lossy().to_string()),
+        env_ready,
+        mpi_ready,
+        hints: vm_logic::native_dependency_hints(mpi_ready, env_ready),
+    })
+}
+
+/// 原生（Linux）「部署」：bundle 解压在本机即已就位，这里只做结构校验
+/// 与版本标记落盘（供「更新未部署」提醒比对），不复制大文件。
+#[tauri::command]
+pub fn native_deploy_bundle(app: AppHandle) -> Result<String> {
+    let root = super::downloads::native_env_root(&app).ok_or_else(|| {
+        KairosError::not_found(
+            "尚未下载求解环境 bundle：请在依赖面板下载（下载后本机自动解压即就位）。",
+        )
+    })?;
+    let bashrc = vm_logic::native_env_bashrc(&root);
+    if !bashrc.exists() {
+        return Err(KairosError::validation(format!(
+            "求解环境结构异常：缺少 {}，请重新下载 bundle。",
+            bashrc.to_string_lossy()
+        )));
+    }
+    let entry = super::downloads::manifest_entry(&app, "moldingfoam")?;
+    if let Some(tag) = entry.and_then(|entry| entry.release_tag) {
+        let marker = vm_logic::native_env_tag(&root);
+        std::fs::write(&marker, &tag)
+            .map_err(|e| KairosError::io(format!("写入版本标记失败：{e}")))?;
+    }
+    Ok(root.to_string_lossy().to_string())
 }
 
 /// 部署求解环境：把受管的 moldingFoam bundle 传输进虚拟机并解压到

@@ -15,6 +15,8 @@ import {
 import type { VmStatus } from "../../../src-web/types";
 
 vi.mock("../../../src-web/api/vm", () => ({
+  nativeEnvStatus: vi.fn(),
+  nativeDeployBundle: vi.fn(),
   getVmStatus: vi.fn(),
   getDeployedReleaseTag: vi.fn(async () => null),
   installVm: vi.fn(),
@@ -249,5 +251,84 @@ describe("vm store", () => {
     expect(vm.vmShellLogs).toHaveLength(500);
     expect(vm.vmShellLogs[0]).toBe("line-5");
     expect(vm.vmShellLogs.at(-1)).toBe("line-504");
+  });
+});
+
+describe("原生（Linux）求解环境", () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    vi.resetAllMocks();
+  });
+
+  it("探测原生环境写入状态；失败进全局错误", async () => {
+    const app = useAppStore();
+    const vm = useVmStore();
+    const { nativeEnvStatus } = (await import("../../../src-web/api/vm")) as unknown as {
+      nativeEnvStatus: ReturnType<typeof vi.fn>;
+    };
+    nativeEnvStatus.mockResolvedValue({
+      envRoot: "/home/u/.local/share/kairos/moldingfoam-env",
+      envReady: true,
+      mpiReady: false,
+      hints: ["缺少 OpenMPI 运行时"],
+    });
+    await vm.refreshNativeEnv();
+    expect(vm.nativeEnv?.envReady).toBe(true);
+    expect(vm.nativeEnv?.hints).toHaveLength(1);
+
+    nativeEnvStatus.mockRejectedValue(new Error("探测失败"));
+    await vm.refreshNativeEnv();
+    expect(app.error?.message).toBe("探测失败");
+  });
+
+  it("原生平台「部署」走本机就位分支（不传 bundle 进 VM）", async () => {
+    const vm = useVmStore();
+    vm.vmStatus = {
+      provider: "native",
+      toolInstalled: true,
+      instanceName: "kairos",
+      instanceState: "running",
+      hint: "",
+    };
+    const api = (await import("../../../src-web/api/vm")) as unknown as {
+      nativeDeployBundle: ReturnType<typeof vi.fn>;
+      deployVmBundle: ReturnType<typeof vi.fn>;
+      getVmStatus: ReturnType<typeof vi.fn>;
+      getDeployedReleaseTag: ReturnType<typeof vi.fn>;
+    };
+    api.nativeDeployBundle.mockResolvedValue("/env/moldingfoam-env");
+    api.getVmStatus.mockResolvedValue(vm.vmStatus);
+    api.getDeployedReleaseTag.mockResolvedValue("v0.2.4");
+
+    await vm.deployVmBundle();
+    expect(api.nativeDeployBundle).toHaveBeenCalled();
+    expect(api.deployVmBundle).not.toHaveBeenCalled();
+    expect(vm.vmShellLogs.some((line) => line.includes("求解环境已就位"))).toBe(true);
+    expect(vm.deployedReleaseTag).toBe("v0.2.4");
+    expect(vm.vmBusy).toBeNull();
+  });
+
+  it("VM 平台「部署」仍走 multipass 传输分支", async () => {
+    const vm = useVmStore();
+    vm.vmStatus = {
+      provider: "multipass",
+      toolInstalled: true,
+      instanceName: "kairos",
+      instanceState: "running",
+      hint: "",
+    };
+    const api = (await import("../../../src-web/api/vm")) as unknown as {
+      nativeDeployBundle: ReturnType<typeof vi.fn>;
+      deployVmBundle: ReturnType<typeof vi.fn>;
+      getVmStatus: ReturnType<typeof vi.fn>;
+      getDeployedReleaseTag: ReturnType<typeof vi.fn>;
+    };
+    api.deployVmBundle.mockResolvedValue("/home/ubuntu/moldingfoam-env");
+    api.getVmStatus.mockResolvedValue(vm.vmStatus);
+    api.getDeployedReleaseTag.mockResolvedValue(null);
+
+    await vm.deployVmBundle();
+    expect(api.deployVmBundle).toHaveBeenCalled();
+    expect(api.nativeDeployBundle).not.toHaveBeenCalled();
   });
 });

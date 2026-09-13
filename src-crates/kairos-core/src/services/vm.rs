@@ -2,6 +2,8 @@
 //! 进程副作用（安装 / 启动 / Shell 子进程）全部住在 src-tauri 适配层；
 //! 这里只产出参数与解析结果，保证可测（覆盖率门槛适用）。
 
+use std::path::{Path, PathBuf};
+
 use crate::models::vm::{VmProviderKind, VmState, VmStatus};
 
 /// 受管实例名：Kairos 自己管理的 multipass 虚拟机，与 moldingFoam README
@@ -212,6 +214,64 @@ pub fn env_probe_command() -> String {
     format!("test -f {ENV_ROOT}/{ENV_BASHRC}")
 }
 
+/// 原生（Linux）求解环境的目录名：应用数据目录下的 `moldingfoam-env`。
+pub const NATIVE_ENV_DIR: &str = "moldingfoam-env";
+
+/// 版本标记文件名（VM 与原生环境共用；「更新未部署」提醒的比对源）。
+pub const RELEASE_TAG_FILE: &str = ".kairos-release-tag";
+
+/// 原生环境的 bashrc 路径：`<env_root>/openfoam14/etc/bashrc`。
+pub fn native_env_bashrc(env_root: &Path) -> PathBuf {
+    env_root.join(ENV_BASHRC)
+}
+
+/// 原生环境版本标记路径：`<env_root>/.kairos-release-tag`。
+pub fn native_env_tag(env_root: &Path) -> PathBuf {
+    env_root.join(RELEASE_TAG_FILE)
+}
+
+/// 原生求解脚本首段：加载本机解压好的求解环境。
+/// 路径用单引号包裹并转义（应用数据目录可能含空格或引号）。
+pub fn native_env_source_command(env_root: &Path) -> String {
+    format!(
+        "source '{}'",
+        bash_single_quote(&native_env_bashrc(env_root).to_string_lossy())
+    )
+}
+
+/// 原生环境就绪探测：bashrc 存在即视为已部署（bundle 结构校验）。
+pub fn native_env_probe_command(env_root: &Path) -> String {
+    format!(
+        "test -f '{}'",
+        bash_single_quote(&native_env_bashrc(env_root).to_string_lossy())
+    )
+}
+
+/// 单引号内的字面量转义：`'` → `'\''`（shell 单引号串里唯一的转义形式）。
+pub fn bash_single_quote(value: &str) -> String {
+    value.replace('\'', "'\\''")
+}
+
+/// 原生依赖处置提示：OpenMPI 是 foamRun 的动态链接依赖（libmpi.so.40）。
+/// 返回空 = 无需提示；`env_ready` = bundle 已解压且 bashrc 就位。
+pub fn native_dependency_hints(mpi_ready: bool, env_ready: bool) -> Vec<String> {
+    let mut hints = Vec::new();
+    if !env_ready {
+        hints.push(
+            "求解环境未就绪：请在依赖面板下载 moldingFoam bundle（本机解压后即可直接提交作业）。"
+                .to_string(),
+        );
+    }
+    if !mpi_ready {
+        hints.push(
+            "缺少 OpenMPI 运行时（foamRun 依赖 libmpi.so.40）：Debian/Ubuntu 上执行 \
+             `sudo apt install libopenmpi3 openmpi-bin`。"
+                .to_string(),
+        );
+    }
+    hints
+}
+
 /// 停止受管实例（退出联动时以 detached 方式派发，不等其退出）。
 pub fn stop_args(provider: VmProviderKind) -> Vec<String> {
     match provider {
@@ -372,6 +432,66 @@ fn instance_hint(provider: VmProviderKind, instance_state: VmState) -> &'static 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 原生（Linux）环境路径：bashrc 与版本标记都挂在环境根下，
+    /// 目录名与 VM 内一致（`moldingfoam-env/openfoam14/etc/bashrc`）。
+    #[test]
+    fn native_env_paths_mirror_vm_layout() {
+        let root = Path::new("/home/u/.local/share/kairos/moldingfoam-env");
+        assert_eq!(NATIVE_ENV_DIR, "moldingfoam-env");
+        assert_eq!(RELEASE_TAG_FILE, ".kairos-release-tag");
+        assert_eq!(
+            native_env_bashrc(root),
+            Path::new("/home/u/.local/share/kairos/moldingfoam-env/openfoam14/etc/bashrc")
+        );
+        assert_eq!(
+            native_env_tag(root),
+            Path::new("/home/u/.local/share/kairos/moldingfoam-env/.kairos-release-tag")
+        );
+        // 与 VM 内的相对布局同源（ENV_BASHRC 单点维护）
+        assert!(native_env_bashrc(root).ends_with(ENV_BASHRC));
+    }
+
+    /// 路径含空格 / 单引号时仍能安全拼进 bash：全部走单引号字面量转义。
+    #[test]
+    fn native_env_commands_quote_paths() {
+        let plain = Path::new("/opt/kairos env");
+        assert_eq!(
+            native_env_source_command(plain),
+            "source '/opt/kairos env/openfoam14/etc/bashrc'"
+        );
+        assert_eq!(
+            native_env_probe_command(plain),
+            "test -f '/opt/kairos env/openfoam14/etc/bashrc'"
+        );
+
+        // 单引号路径：' → '\''（shell 单引号串里唯一的转义形式）
+        let quoted = Path::new("/opt/it's here");
+        assert_eq!(
+            native_env_source_command(quoted),
+            "source '/opt/it'\\''s here/openfoam14/etc/bashrc'"
+        );
+        assert_eq!(bash_single_quote("a'b"), "a'\\''b");
+        assert_eq!(bash_single_quote("plain"), "plain");
+    }
+
+    /// 依赖提示按状态组合给出，且互不重复。
+    #[test]
+    fn native_dependency_hints_follow_state() {
+        assert!(native_dependency_hints(true, true).is_empty());
+
+        let env_only = native_dependency_hints(true, false);
+        assert_eq!(env_only.len(), 1);
+        assert!(env_only[0].contains("依赖面板下载"));
+
+        let mpi_only = native_dependency_hints(false, true);
+        assert_eq!(mpi_only.len(), 1);
+        assert!(mpi_only[0].contains("libmpi.so.40"));
+        assert!(mpi_only[0].contains("apt install libopenmpi3 openmpi-bin"));
+
+        let both = native_dependency_hints(false, false);
+        assert_eq!(both.len(), 2);
+    }
 
     #[test]
     fn provider_maps_by_os() {

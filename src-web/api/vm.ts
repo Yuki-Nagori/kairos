@@ -51,7 +51,29 @@ export function deployVmBundle(onLog: (line: string) => void): Promise<string> {
   return invokeCommand("vm_deploy_bundle", { progress: channel });
 }
 
-/** 读取 VM 内已部署的求解环境版本标签（非 multipass / 未部署 → null）。 */
+/** 读取已部署的求解环境版本标签（VM 内 / 本机原生；未知 → null）。 */
 export function getDeployedReleaseTag(): Promise<string | null> {
   return invokeCommand("vm_deployed_release_tag");
+}
+
+/** 原生（Linux）求解环境状态。 */
+export interface NativeEnvStatus {
+  /** 环境根目录（bundle 未解压时为 null）。 */
+  envRoot: string | null;
+  /** bashrc 是否就位（就绪 = 可直接提交作业）。 */
+  envReady: boolean;
+  /** OpenMPI 运行时（mpirun）是否可用。 */
+  mpiReady: boolean;
+  /** 处置提示（空 = 无问题）。 */
+  hints: string[];
+}
+
+/** 探测原生（Linux）求解环境（bundle 是否解压就位、OpenMPI 是否可用）。 */
+export function nativeEnvStatus(): Promise<NativeEnvStatus> {
+  return invokeCommand("native_env_status");
+}
+
+/** 原生平台「部署」：bundle 已在本机解压即就位，这里做结构校验 + 版本标记落盘。 */
+export function nativeDeployBundle(): Promise<string> {
+  return invokeCommand("native_deploy_bundle");
 }

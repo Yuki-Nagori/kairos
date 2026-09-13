@@ -73,6 +73,7 @@
 | T63 | [T63-thin-feature-hint-done.md](T63-thin-feature-hint-done.md)                             | 网格最小特征提示（体素尺寸 vs 壁厚）                                            |
 | T64 | [T64-warpage-field-consumption-done.md](T64-warpage-field-consumption-done.md)             | 翘曲结果场消费（位移场口径）                                                    |
 | T65 | [T65-warpage-deformation-view-done.md](T65-warpage-deformation-view-done.md)               | 翘曲变形可视化（视口位移显示）                                                  |
+| T85 | [T85-linux-native-channel-done.md](T85-linux-native-channel-done.md)                       | Linux 原生执行通道                                                              |
 | T66 | [T66-case-si-and-vent-alignment-done.md](T66-case-si-and-vent-alignment-done.md)           | case 单位制与排气边界对齐契约（SI + moldingVent）                               |
 | T67 | [T67-coolant-channel-landing-done.md](T67-coolant-channel-landing-done.md)                 | 冷却水路落地（模壁 1D 通道 BC → case）                                          |
 | T68 | [T68-study-creation-entry-done.md](T68-study-creation-entry-done.md)                       | 方案创建入口缺失（新建工程自带默认方案 + 工程面板「＋ 新建方案」）              |
@@ -111,7 +112,6 @@
 | T60 | [T60-import-log-and-pptx.md](T60-import-log-and-pptx.md)                                     | 导入日志流 + PPT 报告导出（低优先 / 可选拆分） | 低优先；PPTX 需要新依赖决策，可先做导入日志               |
 | T82 | [T82-dualdomain-midplane-solve-consumption.md](T82-dualdomain-midplane-solve-consumption.md) | 双域 / 中面网格的求解消费                      | 求解侧消费（双域/中面），依赖上游降维能力                 |
 | T83 | [T83-multi-cavity-runner-fill.md](T83-multi-cavity-runner-fill.md)                           | 多型腔与流道系统参与填充                       | 流道体进网格 + 多腔分配，依赖 T29 闭环                    |
-| T85 | [T85-linux-native-channel.md](T85-linux-native-channel.md)                                   | Linux 原生执行通道                             | Linux 本机执行通道；需 Ubuntu 真机验收                    |
 | T89 | [T89-gaim-integration.md](T89-gaim-integration.md)                                           | 气体辅助注塑（GAIM）集成                       | 等上游三相 / 气芯场                                       |
 | T90 | [T90-mucell-pvt-approximation.md](T90-mucell-pvt-approximation.md)                           | 微发泡近似（PVT 修正路线）                     | 可先行（Kairos 侧 PVT 近似）                              |
 | T91 | [T91-fiber-orientation-chain.md](T91-fiber-orientation-chain.md)                             | 纤维取向链路（取向场 → 各向异性展示）          | 等上游取向张量；第一步可先行                              |

@@ -3,7 +3,11 @@
 - 阶段：D0（平台底座 · 求解执行）
 - 依赖：T35（VM 适配层）、T36（case 与执行链路）、T27（依赖管理）
 - 优先级：**P2**
-- 状态：**待开工**（状态文档 D0 的未勾选项）
+- 状态：**已实现**（2026-09-13，Kairos 侧）——bundle 解压即就位（环境根 = 含
+  `openfoam14/etc/bashrc` 的目录）、求解脚本 source 环境 + PATH + cd + 求解、
+  `native_env_status` / `native_deploy_bundle` / 版本标记、提交前刷新环境快照、
+  面板原生措辞；**Ubuntu 真机复跑归 T29**（本机 macOS 只能跑纯函数单测）。见
+  [T85 评审](../reviews/T85-review.md)
 
 ## 目标
 

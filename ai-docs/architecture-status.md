@@ -259,7 +259,12 @@
       提示（不静默），有 GPU 环境全量验证，「GPU 必需但 CI 可验证」策略落地
 - [ ] updater 签名证书（T33 尾项：证书就绪后启用 macOS 公证 / Windows
       signtool）
-- [ ] Linux 原生执行通道（T85；当前 Linux 走本机 bash，OpenFOAM 需自装）
+- [x] Linux 原生执行通道（T85）：bundle 解压在本机即就位——`downloads/moldingfoam/**`
+      下含 `openfoam14/etc/bashrc` 的目录为环境根，求解脚本先 `source` 再
+      `export PATH` / `cd` / `decomposePar …`；`native_env_status` 报环境与 OpenMPI
+      运行时（`libmpi.so.40`）状态并给处置提示，`native_deploy_bundle` 做结构校验 +
+      写版本标记（Linux 上 T54 的「更新未部署」提醒同样生效）；提交作业前刷新环境快照；
+      依赖 / 作业面板在原生平台改用「部署到本机」措辞。真机（Ubuntu）验收归 T29
 
 ---
 

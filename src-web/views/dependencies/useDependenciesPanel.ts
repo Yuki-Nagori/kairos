@@ -126,8 +126,20 @@ export function useDependenciesPanel() {
   void deps.refreshDownloadsDir();
 
   void deps.refreshDependencies();
-  // VM 内已部署版本（「更新未部署」提醒的比对源）
+  // VM 内 / 本机已部署版本（「更新未部署」提醒的比对源）；Linux 原生通道另探测环境
   void vm.refreshDeployedReleaseTag();
+  if (vm.vmStatus?.provider === "native") {
+    void vm.refreshNativeEnv();
+  }
+
+  /** 部署按钮文案：Linux 是「本机就位」而不是「部署到虚拟机」。 */
+  const deployLabel = computed(() =>
+    vm.vmStatus?.provider === "native" ? "部署到本机" : "部署到虚拟机",
+  );
+  /** 原生（Linux）环境提示行（空 = 无问题 / 非原生平台）。 */
+  const nativeHints = computed(() =>
+    vm.vmStatus?.provider === "native" ? (vm.nativeEnv?.hints ?? []) : [],
+  );
 
   /** 待部署提示文案（版本从 → 到；VM 侧未知显示「未部署」）。 */
   const pendingDeployText = computed(() => {
@@ -135,16 +147,29 @@ export function useDependenciesPanel() {
     if (downloaded === null || !isPendingDeploy(downloaded, vm.deployedReleaseTag)) {
       return null;
     }
-    return `求解环境有更新未部署：${downloaded} → VM 内 ${vm.deployedReleaseTag ?? "未部署"}，请部署到虚拟机后提交作业`;
+    const where = vm.vmStatus?.provider === "native" ? "本机" : "VM 内";
+    const action = vm.vmStatus?.provider === "native" ? "部署到本机" : "部署到虚拟机";
+    return `求解环境有更新未部署：${downloaded} → ${where} ${vm.deployedReleaseTag ?? "未部署"}，请${action}后提交作业`;
   });
+
+  /** 下载完成后（Linux 上解压即就位）刷新原生环境提示行。 */
+  async function downloadComponent(componentId: string, url: string): Promise<void> {
+    await deps.downloadComponent(componentId, url);
+    if (vm.vmStatus?.provider === "native") {
+      await vm.refreshNativeEnv();
+    }
+  }
 
   return {
     app,
     vm,
     deps,
     rows,
+    downloadComponent,
     downloadsDir,
     pendingDeployText,
+    deployLabel,
+    nativeHints,
     openDownloadsDir: deps.openDownloadsDir,
   };
 }

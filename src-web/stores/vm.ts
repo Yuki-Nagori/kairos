@@ -18,6 +18,8 @@ export const useVmStore = defineStore("vm", {
     vmBusy: null as VmAction | null,
     /** 终端抽屉是否可见（状态栏右侧 Shell 按钮与原生菜单切换）。 */
     vmPanelVisible: false,
+    /** 原生（Linux）求解环境状态（null = 尚未探测；非 Linux 平台不使用）。 */
+    nativeEnv: null as api.NativeEnvStatus | null,
   }),
   actions: {
     /** 追加一行 Shell 输出（环形缓冲）。 */
@@ -42,11 +44,26 @@ export const useVmStore = defineStore("vm", {
         this.vmBusy = null;
       }
     },
-    /** 部署求解环境：传输 bundle 进虚拟机并解压，日志实时滚动进终端面板；
-     *  成功后刷新 VM 内版本标记（供「更新未部署」提醒比对）。 */
+    /** 探测原生（Linux）求解环境：bundle 是否解压就位、OpenMPI 是否可用。 */
+    async refreshNativeEnv(): Promise<void> {
+      const app = useAppStore();
+      try {
+        this.nativeEnv = await api.nativeEnvStatus();
+      } catch (error) {
+        app.setError(error);
+      }
+    },
+    /** 部署求解环境：VM 通道传输 bundle 进虚拟机并解压（日志滚动进终端面板）；
+     *  原生（Linux）通道只做结构校验 + 版本标记（解压即就位）。成功后刷新版本标记。 */
     async deployVmBundle(): Promise<void> {
       await this.withBusy("shell", async () => {
-        await api.deployVmBundle((line) => this.appendShellLog(line));
+        if (this.vmStatus?.provider === "native") {
+          const root = await api.nativeDeployBundle();
+          this.appendShellLog(`求解环境已就位：${root}`);
+          await this.refreshNativeEnv();
+        } else {
+          await api.deployVmBundle((line) => this.appendShellLog(line));
+        }
         await this.refreshVmStatus();
         await this.refreshDeployedReleaseTag();
       });

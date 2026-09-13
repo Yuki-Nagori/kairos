@@ -22,6 +22,9 @@ pub fn run() {
         .manage(commands::vm::VmShellState::default())
         .manage(commands::results::ResultSession::default())
         .setup(|_app| {
+            // 原生（Linux）求解环境：已解压的 bundle 直接 source 其 bashrc。
+            // 需要 AppHandle 才能定位应用数据目录，因此在 setup 里注入。
+            commands::jobs::refresh_native_env(_app.handle());
             // 启动即最大化：配置式的 center/maximized 在 macOS 不扣除 Dock 与
             // 菜单栏可见区域，居中窗口会偏左。原生全屏会藏掉标题栏，故不用。
             if let Some(window) = _app.get_webview_window("main") {
@@ -235,6 +238,8 @@ pub fn run() {
             commands::vm::vm_start,
             commands::vm::vm_deploy_bundle,
             commands::vm::vm_deployed_release_tag,
+            commands::vm::native_env_status,
+            commands::vm::native_deploy_bundle,
             commands::vm::vm_shell_start,
             commands::vm::vm_shell_send,
             commands::vm::vm_shell_stop,
