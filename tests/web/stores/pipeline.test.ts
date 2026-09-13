@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 import { useAppStore } from "../../../src-web/stores/app";
+import { useProcessStore } from "../../../src-web/stores/process";
 import { useGeometryStore } from "../../../src-web/stores/geometry";
 import { useJobsStore } from "../../../src-web/stores/jobs";
 import { useMaterialsStore } from "../../../src-web/stores/materials";
@@ -10,6 +11,7 @@ import { defaultCaseDir } from "../../../src-web/api/project";
 import { generateMoldingfoamCase } from "../../../src-web/api/solver";
 import { listJobs, submitJob } from "../../../src-web/api/jobs";
 import type {
+  CaseOutcome,
   GeometrySummary,
   Job,
   Material,
@@ -149,6 +151,17 @@ function primeStores(options: { withGeometry?: boolean; withMesh?: boolean; stud
   projectStore.activeStudyId = study.id;
 }
 
+function makeCaseOutcome(overrides: Partial<CaseOutcome> = {}): CaseOutcome {
+  return {
+    caseDir: "/data/cases/s-1",
+    inletAreaM2: 5e-5,
+    inletEquivalentDiameterMm: 7.98,
+    gates: [],
+    warnings: [],
+    ...overrides,
+  };
+}
+
 describe("pipeline store", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
@@ -222,7 +235,7 @@ describe("pipeline store", () => {
     const busyDuring: (string | null)[] = [];
     vi.mocked(generateMoldingfoamCase).mockImplementation(async () => {
       busyDuring.push(useAppStore().busy);
-      return "/data/cases/s-1";
+      return makeCaseOutcome();
     });
 
     await pipeline.submitPipeline(4, "fill_pack");
@@ -243,6 +256,10 @@ describe("pipeline store", () => {
     expect(busyDuring).toEqual(["正在准备求解…"]);
     expect(app.busy).toBeNull();
     expect(app.error).toBeNull();
+    // 入口口径回显落到工艺 store（供工艺面板的工况量级校验使用）。
+    expect(useProcessStore().caseInlet?.studyId).toBe("s-1");
+    expect(useProcessStore().effectiveInletAreaM2("s-1")).toBe(5e-5);
+    expect(useProcessStore().effectiveInletAreaM2("s-other")).toBeUndefined();
   });
 
   it("reports case generation failures and clears busy", async () => {

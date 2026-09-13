@@ -9,6 +9,8 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
+use serde::Serialize;
+
 use crate::error::{KairosError, Result};
 use crate::models::material::Material;
 use crate::models::mesh::VolumeMesh;
@@ -143,17 +145,96 @@ fn distance(left: [f64; 3], right: [f64; 3]) -> f64 {
         .sqrt()
 }
 
-/// 按浇口圈定入口面：半径内的边界面全取；等效面积（πr²）不足时按距离从近到远
-/// 继续补足——体素网格上浇口常小于一个单元，没有补足就会出现「入口为空」的
-/// case（求解器直接没有进料口）。
-fn gate_inlet_faces(
+/// 单个浇口的入口口径回显：请求半径 vs 实际落进 case 的入口面。
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GateInlet {
+    /// 浇口序号（`gate_portals` 下标，从 1 起算便于面板展示）。
+    pub index: usize,
+    pub requested_radius_mm: f64,
+    pub requested_area_mm2: f64,
+    /// 实际落进 inlet patch 的入口面积（mm²）与面数。
+    pub actual_area_mm2: f64,
+    pub face_count: usize,
+    /// 由实际面积反推的等效圆直径（mm）。
+    pub equivalent_diameter_mm: f64,
+    /// 实际 / 请求面积比。
+    pub area_ratio: f64,
+    /// 网格能否表达该浇口：面积比在上限内，且入口不是「单个超大面」。
+    pub expressible: bool,
+    /// 入口面中的最小面积（mm²）：单个面就超过请求面积时说明网格太粗。
+    pub min_face_area_mm2: f64,
+}
+
+/// case 生成结果：patch 面积 + 浇口入口口径回显与告警。
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CaseReport {
+    pub inlet_area_m2: f64,
+    pub vent_area_m2: f64,
+    pub walls_area_m2: f64,
+    /// 浇口入口口径逐项回显（无浇口时为空——此时 inlet 由 z 分带回退）。
+    pub gates: Vec<GateInlet>,
+    /// 面板 / CLI 直接展示的告警（空 = 通过）。
+    pub warnings: Vec<String>,
+}
+
+impl CaseReport {
+    /// 由 patch 面积与浇口回显组装报告（含不可表达告警文案）。
+    pub fn new(areas: PatchAreas, gates: Vec<GateInlet>) -> Self {
+        let warnings = gates
+            .iter()
+            .filter(|gate| !gate.expressible)
+            .map(|gate| {
+                format!(
+                    "浇口 #{} 请求 Ø{:.1} mm（{:.1} mm²），实际入口 {:.1} mm²（等效 Ø{:.1} mm，{:.1}×）——当前网格无法表达该浇口（最小入口面 {:.1} mm²，等效边长 ≈ {:.1} mm）；请加密网格或加大浇口。",
+                    gate.index,
+                    gate.requested_radius_mm * 2.0,
+                    gate.requested_area_mm2,
+                    gate.actual_area_mm2,
+                    gate.equivalent_diameter_mm,
+                    gate.area_ratio,
+                    gate.min_face_area_mm2,
+                    (2.0 * gate.min_face_area_mm2).sqrt(),
+                )
+            })
+            .collect();
+        Self {
+            inlet_area_m2: areas.inlet_m2,
+            vent_area_m2: areas.vent_m2,
+            walls_area_m2: areas.walls_m2,
+            gates,
+            warnings,
+        }
+    }
+
+    /// 入口等效圆直径（mm；inlet 为空时为 0）。
+    pub fn inlet_equivalent_diameter_mm(&self) -> f64 {
+        if self.inlet_area_m2 <= 0.0 {
+            return 0.0;
+        }
+        (4.0 * self.inlet_area_m2 / std::f64::consts::PI).sqrt() * 1000.0
+    }
+}
+
+/// 面积比上限：实际 / 请求超过该值时判为「网格无法表达该浇口」。
+const GATE_AREA_RATIO_LIMIT: f64 = 2.0;
+
+/// 按浇口圈定入口面：从最近面起累积，一达到请求面积（πr²）就停——
+/// 这样即使网格比浇口粗，多吃的面积也不会超过最后一个面（可表达时偏差 ≤ 2×）。
+/// 半径内没有面（浇口小于一个单元）时按距离继续从半径外补，至少保底一个面：
+/// 入口为空会让求解器完全没有进料口。
+///
+/// 返回（面序号，逐浇口口径回显）。同一面被多个浇口圈中时只保留一次。
+fn select_gate_inlet_faces(
     boundary: &[usize],
     centres: &[[f64; 3]],
     areas: &[f64],
     gates: &[GatePortal],
-) -> Vec<usize> {
+) -> (Vec<usize>, Vec<GateInlet>) {
     let mut inlet: Vec<usize> = Vec::new();
-    for gate in gates {
+    let mut reports: Vec<GateInlet> = Vec::new();
+    for (gate_index, gate) in gates.iter().enumerate() {
         let target_area = std::f64::consts::PI * gate.radius_mm * gate.radius_mm;
         let mut candidates: Vec<(f64, usize)> = boundary
             .iter()
@@ -165,38 +246,57 @@ fn gate_inlet_faces(
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
         let mut area = 0.0;
-        for (distance, index) in candidates {
-            if distance > gate.radius_mm && area >= target_area {
+        let mut face_count = 0usize;
+        let mut min_face_area = f64::INFINITY;
+        for (_, index) in candidates {
+            // 一达到请求面积就停手：多吃的只有最后那一个面。
+            if face_count > 0 && area >= target_area {
                 break;
             }
             inlet.push(index);
             area += areas[index];
+            face_count += 1;
+            min_face_area = min_face_area.min(areas[index]);
         }
+        // 边界面集合为空（退化网格）时没有候选面：面积与最小面面积都记 0。
+        let min_face_area = if face_count > 0 { min_face_area } else { 0.0 };
+        let area_ratio = area / target_area;
+        reports.push(GateInlet {
+            index: gate_index + 1,
+            requested_radius_mm: gate.radius_mm,
+            requested_area_mm2: target_area,
+            actual_area_mm2: area,
+            face_count,
+            equivalent_diameter_mm: 2.0 * (area / std::f64::consts::PI).sqrt(),
+            area_ratio,
+            expressible: area_ratio <= GATE_AREA_RATIO_LIMIT,
+            min_face_area_mm2: min_face_area,
+        });
     }
     inlet.sort_unstable();
     inlet.dedup();
-    inlet
+    (inlet, reports)
 }
 
 /// 边界面分带：先由浇口圈定 inlet，其余按分带回退（给了浇口时底带不再是入口）。
+/// `boundary` 与 `gate_faces` 由调用方一次算好传入——同一份面集合也用于
+/// 浇口口径回显，避免重复判定。
 /// 返回 [inlet, vent, walls] 三组面序号。
 fn classify_boundary_faces(
     neighbour: &[Option<usize>],
+    boundary: &[usize],
+    gate_faces: &[usize],
     face_centres: &[[f64; 3]],
-    face_areas: &[f64],
     face_normal_z: &[f64],
     (z_min, z_max): (f64, f64),
     gates: &[GatePortal],
 ) -> [Vec<usize>; 3] {
-    let boundary: Vec<usize> = (0..neighbour.len())
-        .filter(|index| neighbour[*index].is_none())
-        .collect();
     let mut is_gate_face = vec![false; neighbour.len()];
-    for index in gate_inlet_faces(&boundary, face_centres, face_areas, gates) {
+    for &index in gate_faces {
         is_gate_face[index] = true;
     }
     let mut band_faces: [Vec<usize>; 3] = [Vec::new(), Vec::new(), Vec::new()];
-    for &index in &boundary {
+    for &index in boundary {
         if is_gate_face[index] {
             band_faces[0].push(index);
             continue;
@@ -225,7 +325,7 @@ pub fn write_poly_mesh(
     case_dir: &Path,
     mesh: &VolumeMesh,
     gates: &[GatePortal],
-) -> Result<PatchAreas> {
+) -> Result<CaseReport> {
     let poly = case_dir.join("constant/polyMesh");
     fs::create_dir_all(&poly)
         .map_err(|e| KairosError::io(format!("创建 polyMesh 目录失败：{e}")))?;
@@ -352,10 +452,16 @@ pub fn write_poly_mesh(
     // triangular order。
     order.sort_by_key(|&index| (owner[index], neighbour[index].unwrap_or(0)));
     let n_internal = order.len();
+    let boundary: Vec<usize> = (0..neighbour.len())
+        .filter(|index| neighbour[*index].is_none())
+        .collect();
+    let (gate_faces, gate_reports) =
+        select_gate_inlet_faces(&boundary, &face_centres, &face_areas, gates);
     let band_faces = classify_boundary_faces(
         &neighbour,
+        &boundary,
+        &gate_faces,
         &face_centres,
-        &face_areas,
         &face_normal_z,
         (z_min, z_max),
         gates,
@@ -385,6 +491,7 @@ pub fn write_poly_mesh(
         vent_m2: patch_area_m2(1),
         walls_m2: patch_area_m2(2),
     };
+    let report = CaseReport::new(areas, gate_reports);
 
     let ordered = |pick: &dyn Fn(usize) -> String| -> Vec<String> {
         order.iter().map(|&index| pick(index)).collect()
@@ -450,7 +557,7 @@ pub fn write_poly_mesh(
     write(&poly.join("owner"), &owner_content)?;
     write(&poly.join("neighbour"), &neighbour_content)?;
     write(&poly.join("boundary"), &boundary_content)?;
-    Ok(areas)
+    Ok(report)
 }
 
 /// 网格体积（m³）：四面体有向体积求和（绕向已保证正值）。
@@ -543,10 +650,15 @@ pub fn generate_case(
     stage: &AnalysisStage,
     cores: usize,
     gates: &[GatePortal],
-) -> Result<PatchAreas> {
-    let areas = write_poly_mesh(case_dir, mesh, gates)?;
+) -> Result<CaseReport> {
+    let report = write_poly_mesh(case_dir, mesh, gates)?;
+    let areas = PatchAreas {
+        inlet_m2: report.inlet_area_m2,
+        vent_m2: report.vent_area_m2,
+        walls_m2: report.walls_area_m2,
+    };
     write_case_files(case_dir, mesh, material, process, stage, cores, &areas)?;
-    Ok(areas)
+    Ok(report)
 }
 
 /// 解析求解器 stdout 中的时间步行（如 "Time = 0.05"），返回物理进度秒数。
@@ -1286,9 +1398,108 @@ mod tests {
             center: [0.0, 0.0, 0.0],
             radius_mm: 0.5,
         }];
+        let (faces, reports) = select_gate_inlet_faces(&boundary, &centres, &areas, &gates);
+        assert_eq!(faces, vec![0, 1]);
+        assert_eq!(reports.len(), 1);
+        let report = &reports[0];
+        assert_eq!(report.index, 1);
+        assert_eq!(report.face_count, 2);
+        assert!((report.actual_area_mm2 - 0.8).abs() < 1e-12);
+        assert!((report.requested_area_mm2 - std::f64::consts::PI * 0.25).abs() < 1e-12);
+        // 0.8 / 0.785 ≈ 1.02 → 可表达
+        assert!(report.area_ratio > 1.0 && report.area_ratio < 1.1);
+        assert!(report.expressible);
+        assert!(report.min_face_area_mm2 > 0.0);
+    }
+
+    /// 退化网格（没有边界面）不 panic：入口面数为 0、面积记 0。
+    #[test]
+    fn gate_inlet_handles_mesh_without_boundary_faces() {
+        let gates = vec![GatePortal {
+            center: [0.0, 0.0, 0.0],
+            radius_mm: 1.0,
+        }];
+        let (faces, reports) = select_gate_inlet_faces(&[], &[], &[], &gates);
+        assert!(faces.is_empty());
+        assert_eq!(reports[0].face_count, 0);
+        assert_eq!(reports[0].actual_area_mm2, 0.0);
+        assert_eq!(reports[0].min_face_area_mm2, 0.0);
+        assert_eq!(reports[0].equivalent_diameter_mm, 0.0);
+        assert!(reports[0].expressible);
+    }
+
+    #[test]
+    fn gate_inlet_stops_at_target_instead_of_swallowing_a_huge_face() {
+        // 半径内 5 个面（0.2 / 0.2 / 3.0 / 3.0 / 3.0）：目标 π ≈ 3.14。
+        // 从最近面起累积，一达到目标就停手——旧实现会把半径内的面全部吃掉（9.4）。
+        let centres: Vec<[f64; 3]> = vec![
+            [0.0, 0.0, 0.0],
+            [0.2, 0.0, 0.0],
+            [0.4, 0.0, 0.0],
+            [0.6, 0.0, 0.0],
+            [0.8, 0.0, 0.0],
+        ];
+        let areas = vec![0.2, 0.2, 3.0, 3.0, 3.0];
+        let boundary: Vec<usize> = (0..centres.len()).collect();
+        let gates = vec![GatePortal {
+            center: [0.0, 0.0, 0.0],
+            radius_mm: 1.0,
+        }];
+        let (faces, reports) = select_gate_inlet_faces(&boundary, &centres, &areas, &gates);
+        assert_eq!(faces, vec![0, 1, 2]);
+        assert!((reports[0].actual_area_mm2 - 3.4).abs() < 1e-12);
+        assert!(reports[0].area_ratio < 1.1);
+        assert!(reports[0].expressible);
+    }
+
+    #[test]
+    fn gate_inlet_flags_unexpressible_gate_on_coarse_mesh() {
+        // 请求 r = 0.5 mm（πr² ≈ 0.785），最近的入口面就有 8.0 mm²：
+        // 一个面已经超请求面积 10 倍 → 判为不可表达并给出告警文案。
+        let centres: Vec<[f64; 3]> = vec![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]];
+        let areas = vec![8.0, 8.0];
+        let boundary: Vec<usize> = (0..2).collect();
+        let gates = vec![GatePortal {
+            center: [0.0, 0.0, 0.0],
+            radius_mm: 0.5,
+        }];
+        let (faces, reports) = select_gate_inlet_faces(&boundary, &centres, &areas, &gates);
+        // 保底至少一个面：入口不能为空
+        assert_eq!(faces, vec![0]);
+        let report = &reports[0];
+        assert!(!report.expressible);
+        assert!(report.area_ratio > 10.0);
+        assert!(
+            (report.equivalent_diameter_mm - 2.0 * (8.0f64 / std::f64::consts::PI).sqrt()).abs()
+                < 1e-12
+        );
+
+        let case = CaseReport::new(
+            PatchAreas {
+                inlet_m2: 8e-6,
+                vent_m2: 1e-6,
+                walls_m2: 2e-6,
+            },
+            reports,
+        );
+        assert_eq!(case.warnings.len(), 1);
+        assert!(case.warnings[0].contains("无法表达该浇口"));
+        assert!(case.warnings[0].contains("请加密网格或加大浇口"));
+        // 等效直径回显：由实际面积反推（8 mm² → Ø3.19 mm）
+        let diameter = case.inlet_equivalent_diameter_mm();
+        assert!((diameter - 2.0 * (8.0f64 / std::f64::consts::PI).sqrt()).abs() < 1e-9);
+        // 空 inlet：等效直径为 0（不产生 NaN）
         assert_eq!(
-            gate_inlet_faces(&boundary, &centres, &areas, &gates),
-            vec![0, 1]
+            CaseReport::new(
+                PatchAreas {
+                    inlet_m2: 0.0,
+                    vent_m2: 0.0,
+                    walls_m2: 0.0,
+                },
+                Vec::new(),
+            )
+            .inlet_equivalent_diameter_mm(),
+            0.0
         );
     }
 
@@ -1373,6 +1584,71 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
+    /// 可表达网格上入口面积偏差收敛在 2 倍内；网格太粗时给出不可表达告警。
+    #[test]
+    fn gate_inlet_area_converges_and_warns_on_coarse_mesh() {
+        let dir = std::env::temp_dir().join(format!("kairos-gate-area-{}", std::process::id()));
+        let fine = crate::services::meshing::generate(
+            &crate::models::geometry::TriangleMesh::sample_box(4.0),
+            &crate::services::meshing::VolumeMeshParams {
+                refinement: None,
+                target_size: 1.0,
+            },
+        )
+        .unwrap();
+        // 细网格（1 mm 面元 0.5 mm²）+ 2 mm 浇口（目标 12.57 mm²）：偏差 ≤ 2 倍
+        let fine_report = write_poly_mesh(
+            &dir.join("fine"),
+            &fine,
+            &[GatePortal {
+                center: [2.0, 2.0, 0.0],
+                radius_mm: 2.0,
+            }],
+        )
+        .unwrap();
+        assert_eq!(fine_report.gates.len(), 1);
+        let gate = &fine_report.gates[0];
+        assert!(
+            gate.area_ratio <= 2.0,
+            "细网格上面积比应 ≤ 2：{}（{} mm² vs {} mm²）",
+            gate.area_ratio,
+            gate.actual_area_mm2,
+            gate.requested_area_mm2
+        );
+        assert!(gate.expressible);
+        assert!(fine_report.warnings.is_empty());
+        // patch 面积与回显一致（同一份面集合）
+        assert!((fine_report.inlet_area_m2 - gate.actual_area_mm2 * 1e-6).abs() < 1e-12);
+
+        // 粗网格（2 mm 面元 2 mm²）+ 0.5 mm 浇口（目标 0.785 mm²）：一个面就超 2 倍
+        let coarse = crate::services::meshing::generate(
+            &crate::models::geometry::TriangleMesh::sample_box(4.0),
+            &crate::services::meshing::VolumeMeshParams {
+                refinement: None,
+                target_size: 2.0,
+            },
+        )
+        .unwrap();
+        let coarse_report = write_poly_mesh(
+            &dir.join("coarse"),
+            &coarse,
+            &[GatePortal {
+                center: [2.0, 2.0, 0.0],
+                radius_mm: 0.5,
+            }],
+        )
+        .unwrap();
+        let coarse_gate = &coarse_report.gates[0];
+        assert!(!coarse_gate.expressible);
+        assert_eq!(coarse_gate.face_count, 1, "保底取最近一个面，不吞整圈");
+        assert_eq!(coarse_report.warnings.len(), 1);
+        assert!(coarse_report.warnings[0].contains("无法表达该浇口"));
+        let coarse_inlet_mm2 = coarse_report.inlet_area_m2 * 1e6;
+        assert!(coarse_inlet_mm2 <= 2.5, "粗网格入口不应被放大成宽带");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
     #[test]
     fn written_mesh_is_si_with_patch_areas() {
         // 4 mm 立方体、1 mm 体素：写出的点应在米制（≤ 4e-3），
@@ -1395,12 +1671,14 @@ mod tests {
 
         let expected = 1.6e-5;
         assert!(
-            (areas.inlet_m2 - expected).abs() < expected * 0.01,
+            (areas.inlet_area_m2 - expected).abs() < expected * 0.01,
             "inlet 面积 {:#e} 应为 {expected:#e}",
-            areas.inlet_m2
+            areas.inlet_area_m2
         );
-        assert!((areas.vent_m2 - expected).abs() < expected * 0.01);
-        assert!(areas.walls_m2 > 0.0);
+        assert!((areas.vent_area_m2 - expected).abs() < expected * 0.01);
+        assert!(areas.walls_area_m2 > 0.0);
+        assert!(areas.gates.is_empty(), "无浇口时入口口径回显为空");
+        assert!(areas.warnings.is_empty());
         std::fs::remove_dir_all(&dir).ok();
     }
 

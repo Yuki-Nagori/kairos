@@ -418,7 +418,7 @@ fn run_pipeline(
         .map(|spec| parse_gate(spec))
         .collect::<kairos_core::error::Result<Vec<_>>>()?;
     let process = default_process_with(injection_time_s);
-    let areas = moldingfoam::generate_case(
+    let case_report = moldingfoam::generate_case(
         out,
         &volume,
         &material,
@@ -432,13 +432,21 @@ fn run_pipeline(
     let thickness_hints = services::thickness::thin_feature_hints(target_size, &thickness);
     // 填充工况量级提示（与工艺面板同一套 core 校验）
     let volume_mm3 = services::moldingfoam::mesh_volume(&volume);
-    let load_hints = services::process::fill_load_hints(volume_mm3, &process, Some(areas.inlet_m2));
+    let inlet = serde_json::json!({
+        "areaM2": case_report.inlet_area_m2,
+        "equivalentDiameterMm": case_report.inlet_equivalent_diameter_mm(),
+        "gates": case_report.gates,
+        "warnings": case_report.warnings,
+    });
+    let load_hints =
+        services::process::fill_load_hints(volume_mm3, &process, Some(case_report.inlet_area_m2));
     if json {
         emit_json(&serde_json::json!({
             "caseDir": out_dir,
             "nodes": volume.nodes.len(),
             "tets": volume.tets.len(),
             "solved": solve,
+            "inlet": inlet,
             "loadHints": load_hints,
             "thicknessHints": thickness_hints,
             "thickness": {
@@ -455,8 +463,27 @@ fn run_pipeline(
             volume.nodes.len(),
             volume.tets.len()
         );
+        println!(
+            "浇口入口：实际 {:.1} mm²（等效 Ø{:.1} mm）",
+            case_report.inlet_area_m2 * 1e6,
+            case_report.inlet_equivalent_diameter_mm()
+        );
+        for gate in &case_report.gates {
+            println!(
+                "  浇口 #{}：请求 Ø{:.1} mm（{:.1} mm²）→ 实际 {:.1} mm² / {} 面（{:.2}×）",
+                gate.index,
+                gate.requested_radius_mm * 2.0,
+                gate.requested_area_mm2,
+                gate.actual_area_mm2,
+                gate.face_count,
+                gate.area_ratio
+            );
+        }
         for hint in &thickness_hints {
             println!("网格提示：{hint}");
+        }
+        for warning in &case_report.warnings {
+            println!("入口提示：{warning}");
         }
         for hint in &load_hints {
             println!("工况提示：{hint}");

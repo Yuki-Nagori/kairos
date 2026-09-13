@@ -179,6 +179,32 @@ export interface MeshingReport {
   thinFeatureHints: string[];
 }
 
+/** 对应 `kairos-core::services::moldingfoam::GateInlet`（case 生成回显，单浇口）。 */
+export interface GateInlet {
+  /** 浇口序号（从 1 起算）。 */
+  index: number;
+  requestedRadiusMm: number;
+  requestedAreaMm2: number;
+  /** 实际落进 inlet patch 的面积（mm²）与面数。 */
+  actualAreaMm2: number;
+  faceCount: number;
+  equivalentDiameterMm: number;
+  /** 实际 / 请求面积比。 */
+  areaRatio: number;
+  /** 网格能否表达该浇口（面积比在上限内）。 */
+  expressible: boolean;
+  minFaceAreaMm2: number;
+}
+
+/** 对应 `src-tauri::commands::solver::CaseOutcome`（case 生成结果）。 */
+export interface CaseOutcome {
+  caseDir: string;
+  inletAreaM2: number;
+  inletEquivalentDiameterMm: number;
+  gates: GateInlet[];
+  warnings: string[];
+}
+
 /** 对应 `kairos-core::models::mesh::MeshEstimate`。 */
 export interface MeshEstimate {
   /** 引擎标识（voxel / gmsh）。 */

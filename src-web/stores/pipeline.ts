@@ -7,6 +7,7 @@ import { useAppStore } from "./app";
 import { useGeometryStore } from "./geometry";
 import { useJobsStore } from "./jobs";
 import { useMaterialsStore } from "./materials";
+import { useProcessStore } from "./process";
 import { useProjectStore } from "./project";
 
 export const usePipelineStore = defineStore("pipeline", {
@@ -50,7 +51,7 @@ export const usePipelineStore = defineStore("pipeline", {
 
       await app.withBusy("正在准备求解…", async () => {
         const caseDir = await defaultCaseDir(activeStudy.id);
-        await generateMoldingfoamCase({
+        const outcome = await generateMoldingfoamCase({
           geometryId: geometry.geometryId,
           caseDir,
           material,
@@ -59,6 +60,8 @@ export const usePipelineStore = defineStore("pipeline", {
           cores,
           runnerElements: activeStudy.runnerElements,
         });
+        // 入口口径回显落到工艺 store：工艺面板的工况量级校验改用有效面积。
+        useProcessStore().recordCaseInlet(activeStudy.id, outcome);
         await useJobsStore().submitJob(caseDir, cores);
       });
     },

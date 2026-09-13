@@ -7,6 +7,7 @@ import ProcessPanel from "../../../../src-web/views/process/ProcessPanel.vue";
 import { useProcessPanel } from "../../../../src-web/views/process/useProcessPanel";
 import { useAppStore } from "../../../../src-web/stores/app";
 import { useGeometryStore } from "../../../../src-web/stores/geometry";
+import { useProcessStore } from "../../../../src-web/stores/process";
 import { useProjectStore } from "../../../../src-web/stores/project";
 import { checkProcess } from "../../../../src-web/api/process";
 import type { ProcessSettings, Project, Study } from "../../../../src-web/types";
@@ -150,7 +151,108 @@ describe("ProcessPanel 填充工况上下文", () => {
       inletAreaM2: Math.PI * (0.75 / 1000) ** 2,
     });
   });
+
+  it("有 case 回显时改用有效面积并渲染请求 vs 实际行", async () => {
+    primeForInlet(pinia);
+    const process = useProcessStore();
+    process.recordCaseInlet("s-1", {
+      caseDir: "/case/s-1",
+      inletAreaM2: 1.2e-3,
+      inletEquivalentDiameterMm: 39.1,
+      gates: [
+        {
+          index: 1,
+          requestedRadiusMm: 4,
+          requestedAreaMm2: 50.27,
+          actualAreaMm2: 1200.3,
+          faceCount: 7,
+          equivalentDiameterMm: 39.1,
+          areaRatio: 23.88,
+          expressible: false,
+          minFaceAreaMm2: 493,
+        },
+      ],
+      warnings: [
+        "浇口 #1 请求 Ø8.0 mm（50.3 mm²），当前网格无法表达该浇口；请加密网格或加大浇口。",
+      ],
+    });
+    vi.mocked(checkProcess).mockResolvedValue([]);
+
+    const wrapper = mount(ProcessPanel, { global: { plugins: [pinia] } });
+    expect(wrapper.text()).toContain("浇口入口（最近一次 case）：实际 1200.0 mm² · 等效 Ø39.1 mm");
+    expect(wrapper.text()).toContain(
+      "浇口 #1：请求 Ø8.0 mm（50.3 mm²）→ 实际 1200.3 mm² / 7 面（23.88×）",
+    );
+    const warning = wrapper.findAll("p").find((node) => node.text().includes("无法表达该浇口"));
+    expect(warning?.classes()).toContain("text-rose-400");
+
+    // 工况量级校验改用有效面积（不再用请求半径）。
+    await findButton(wrapper, "校验并应用到研究").trigger("click");
+    await flushPromises();
+    expect(checkProcess).toHaveBeenCalledWith(expect.anything(), {
+      volumeMm3: 880000,
+      inletAreaM2: 1.2e-3,
+    });
+  });
+
+  it("回显属于其他研究时不显示也不参与校验", () => {
+    primeForInlet(pinia);
+    const process = useProcessStore();
+    process.recordCaseInlet("s-other", {
+      caseDir: "/case/s-other",
+      inletAreaM2: 9e-4,
+      inletEquivalentDiameterMm: 33.8,
+      gates: [],
+      warnings: [],
+    });
+    vi.mocked(checkProcess).mockResolvedValue([]);
+
+    const wrapper = mount(ProcessPanel, { global: { plugins: [pinia] } });
+    expect(wrapper.text()).not.toContain("浇口入口（最近一次 case）");
+    expect(process.effectiveInletAreaM2("s-1")).toBeUndefined();
+  });
 });
+
+function primeForInlet(pinia: Pinia): void {
+  const project = useProjectStore();
+  const study = studyFixture("s-1", null);
+  study.runnerElements = [
+    { id: "re-1", kind: "gate", diameterMm: 1.5, start: [0, 0, 0], end: [1, 1, 1] },
+  ];
+  project.project = projectFixture([study]);
+  project.activeStudyId = "s-1";
+  const geometry = useGeometryStore(pinia);
+  geometry.geometries = [
+    {
+      geometryId: "geo-1",
+      fileName: "part.stl",
+      triangleCount: 12,
+      size: [10, 10, 10],
+      surfaceArea: 600,
+      signedVolume: 1000,
+      suggestedUnit: "mm",
+      issues: {
+        degenerate: 0,
+        openEdges: 0,
+        nonManifoldEdges: 0,
+        normalInconsistentEdges: 0,
+      },
+    },
+  ];
+  geometry.meshReports = {
+    "geo-1": {
+      engine: "voxel",
+      nodeCount: 10,
+      elementCount: 20,
+      surfaceFaceCount: 30,
+      totalVolume: 880000,
+      quality: { minEdgeRatio: 1, avgEdgeRatio: 1, maxEdgeRatio: 1, minVolume: 1 },
+      aspectMax: 3.4,
+      aspectAvg: 1.6,
+      thinFeatureHints: [],
+    },
+  };
+}
 
 function findButton(wrapper: ReturnType<typeof mount>, label: string) {
   const found = wrapper.findAll("button").find((candidate) => candidate.text() === label);

@@ -4,7 +4,7 @@
  * 出厂默认量级只进 placeholder，不预填 value。回填仅跟随活跃研究切换触发，
  * 其余状态变化不得覆盖用户正在编辑的表单。
  */
-import { reactive, ref, watch } from "vue";
+import { computed, reactive, ref, watch } from "vue";
 import { useAppStore } from "../../stores/app";
 import { useProcessStore } from "../../stores/process";
 import { useGeometryStore } from "../../stores/geometry";
@@ -105,10 +105,16 @@ export function useProcessPanel() {
   const issueLines = ref<string[]>([]);
   const notice = ref<string | null>(null);
 
-  /** 填充工况上下文：活跃几何的网格体积 + 研究上第一个浇口的等效流通面积。 */
+  /** 填充工况上下文：活跃几何的网格体积 + 浇口流通面积。
+   *  面积优先用最近一次 case 生成回显的**有效面积**（网格实际表达出来的入口），
+   *  没有回显时退回请求半径的等效面积。 */
   function fillLoadContext(): { volumeMm3?: number; inletAreaM2?: number } {
     const geometry = geometryStore.geometries[0];
     const report = geometry ? geometryStore.meshReports[geometry.geometryId] : undefined;
+    const effective = processStore.effectiveInletAreaM2(project.activeStudyId);
+    if (effective !== undefined) {
+      return { volumeMm3: report?.totalVolume, inletAreaM2: effective };
+    }
     const gate = project.activeStudy?.runnerElements.find(
       (element) => element.kind === "gate" && element.diameterMm > 0,
     );
@@ -118,6 +124,24 @@ export function useProcessPanel() {
       inletAreaM2: radiusM === undefined ? undefined : Math.PI * radiusM * radiusM,
     };
   }
+
+  /** case 生成回显行：请求 vs 实际入口面积（无回显时不显示）。 */
+  const caseInlet = computed(() => {
+    const record = processStore.caseInlet;
+    if (record === null || record.studyId !== project.activeStudyId) {
+      return null;
+    }
+    const { outcome } = record;
+    return {
+      text: `浇口入口（最近一次 case）：实际 ${(outcome.inletAreaM2 * 1e6).toFixed(1)} mm² · 等效 Ø${outcome.inletEquivalentDiameterMm.toFixed(1)} mm`,
+      gates: outcome.gates.map((gate) => ({
+        key: gate.index,
+        text: `浇口 #${gate.index}：请求 Ø${(gate.requestedRadiusMm * 2).toFixed(1)} mm（${gate.requestedAreaMm2.toFixed(1)} mm²）→ 实际 ${gate.actualAreaMm2.toFixed(1)} mm² / ${gate.faceCount} 面（${gate.areaRatio.toFixed(2)}×）`,
+        warn: !gate.expressible,
+      })),
+      warnings: outcome.warnings,
+    };
+  });
 
   function applyProcess(): void {
     const settings = collectSettings();
@@ -194,6 +218,7 @@ export function useProcessPanel() {
     FIELDS,
     issueLines,
     notice,
+    caseInlet,
     applyProcess,
     presetName,
     selectedPreset,

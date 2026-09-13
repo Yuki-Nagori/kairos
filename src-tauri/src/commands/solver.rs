@@ -29,6 +29,21 @@ pub struct EnvironmentCheck {
     pub hint: String,
 }
 
+/// case 生成结果：case 目录 + 浇口入口口径回显（有效面积 / 等效直径 / 偏差）
+/// 与不可表达告警。面板据此展示「请求 vs 实际」，提示不必再猜网格是否表达了浇口。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CaseOutcome {
+    pub case_dir: String,
+    /// inlet patch 的实际面积（m²）与等效圆直径（mm）。
+    pub inlet_area_m2: f64,
+    pub inlet_equivalent_diameter_mm: f64,
+    /// 逐浇口回显（请求半径 vs 实际面积、面数、面积比、是否可表达）。
+    pub gates: Vec<moldingfoam::GateInlet>,
+    /// 不可表达等告警（空 = 通过）。
+    pub warnings: Vec<String>,
+}
+
 #[tauri::command]
 pub fn probe_moldingfoam() -> Result<EnvironmentCheck> {
     let check = |command: &str| -> bool {
@@ -70,7 +85,7 @@ pub async fn generate_moldingfoam_case(
     stage: AnalysisStage,
     cores: u32,
     runner_elements: Vec<RunnerElement>,
-) -> Result<String> {
+) -> Result<CaseOutcome> {
     let cores = cores.clamp(1, 64) as usize;
     let gates = moldingfoam::gate_portals(&runner_elements);
     // 锁只用于取网格快照；polyMesh 与场文件的写入在锁外、阻塞线程池中进行。
@@ -86,7 +101,7 @@ pub async fn generate_moldingfoam_case(
             .clone()
     };
     tauri::async_runtime::spawn_blocking(move || {
-        moldingfoam::generate_case(
+        let report = moldingfoam::generate_case(
             std::path::Path::new(&case_dir),
             &volume_mesh,
             &material,
@@ -95,7 +110,13 @@ pub async fn generate_moldingfoam_case(
             cores,
             &gates,
         )?;
-        Ok(case_dir)
+        Ok(CaseOutcome {
+            case_dir,
+            inlet_area_m2: report.inlet_area_m2,
+            inlet_equivalent_diameter_mm: report.inlet_equivalent_diameter_mm(),
+            gates: report.gates,
+            warnings: report.warnings,
+        })
     })
     .await
     .map_err(|e| KairosError::internal(format!("case 生成任务失败：{e}")))?

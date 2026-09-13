@@ -13,6 +13,7 @@ const {
   FIELDS,
   issueLines,
   notice,
+  caseInlet,
   applyProcess,
   presetName,
   selectedPreset,
@@ -50,6 +51,22 @@ const {
         </p>
       </template>
       <p v-else-if="notice !== null" class="text-xs text-zinc-500">{{ notice }}</p>
+      <template v-if="caseInlet !== null">
+        <p class="border-t border-zinc-800 pt-1 text-[11px] text-zinc-400">
+          {{ caseInlet.text }}
+        </p>
+        <p
+          v-for="gate in caseInlet.gates"
+          :key="gate.key"
+          class="text-[11px]"
+          :class="gate.warn ? 'text-rose-400' : 'text-zinc-500'"
+        >
+          {{ gate.text }}
+        </p>
+        <p v-for="warning in caseInlet.warnings" :key="warning" class="text-[11px] text-rose-400">
+          {{ warning }}
+        </p>
+      </template>
     </div>
     <hr class="border-zinc-800" />
     <div class="flex flex-wrap items-center gap-2">

@@ -14,6 +14,7 @@ use kairos_core::models::mesh::{
 };
 use kairos_core::models::project::{Project, Study};
 use kairos_core::models::results::{DeriveRequest, ResultCatalog, ScalarField, TimeStepMeta};
+use kairos_core::services::moldingfoam::{CaseReport, GateInlet, PatchAreas};
 use kairos_core::services::{geometry, material};
 
 /// SystemInfo 的形状：camelCase 字段，前端 `src-web/types.ts` 的 SystemInfo 与之对应。
@@ -193,6 +194,44 @@ fn mesh_estimate_serializes_with_camel_case() {
             "cellLimit": 2_000_000,
         })
     );
+}
+
+/// 浇口入口口径回显的形状：camelCase，前端工艺面板的「请求 vs 实际」行与之对应。
+#[test]
+fn gate_inlet_report_serializes_with_camel_case() {
+    let gate = GateInlet {
+        index: 1,
+        requested_radius_mm: 4.0,
+        requested_area_mm2: 50.26548245743669,
+        actual_area_mm2: 1200.5,
+        face_count: 7,
+        equivalent_diameter_mm: 39.1,
+        area_ratio: 23.9,
+        expressible: false,
+        min_face_area_mm2: 493.0,
+    };
+    let json = serde_json::to_value(&gate).unwrap();
+    assert_eq!(json["index"], 1);
+    assert_eq!(json["requestedRadiusMm"], 4.0);
+    assert_eq!(json["actualAreaMm2"], 1200.5);
+    assert_eq!(json["faceCount"], 7);
+    assert_eq!(json["areaRatio"], 23.9);
+    assert_eq!(json["expressible"], false);
+    assert!(json["minFaceAreaMm2"].is_number());
+
+    let report = CaseReport::new(
+        PatchAreas {
+            inlet_m2: 1.2e-3,
+            vent_m2: 2.5e-5,
+            walls_m2: 3.0e-3,
+        },
+        vec![gate],
+    );
+    let json = serde_json::to_value(&report).unwrap();
+    assert_eq!(json["inletAreaM2"], 1.2e-3);
+    assert_eq!(json["ventAreaM2"], 2.5e-5);
+    assert_eq!(json["gates"][0]["index"], 1);
+    assert_eq!(json["warnings"].as_array().map(Vec::len), Some(1));
 }
 
 /// DualDomainReport 的形状：统计字段 camelCase，前端几何面板与之对应。

@@ -2,6 +2,7 @@
 import { invokeCommand } from "../utils/ipc";
 import type {
   AnalysisStage,
+  CaseOutcome,
   EnvironmentCheck,
   Material,
   ProcessSettings,
@@ -19,8 +20,8 @@ interface GenerateCaseInput {
   runnerElements: RunnerElement[];
 }
 
-/** 生成 moldingFoam case（polyMesh + 场 + 字典）。 */
-export function generateMoldingfoamCase(input: GenerateCaseInput): Promise<string> {
+/** 生成 moldingFoam case（polyMesh + 场 + 字典），返回浇口入口口径回显与告警。 */
+export function generateMoldingfoamCase(input: GenerateCaseInput): Promise<CaseOutcome> {
   return invokeCommand("generate_moldingfoam_case", {
     geometryId: input.geometryId,
     caseDir: input.caseDir,
