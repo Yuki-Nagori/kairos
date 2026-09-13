@@ -80,21 +80,24 @@
 
 ## 待开工 / 待验收任务
 
-| ID  | 文件                                                                 | 任务                              | 依赖     |
-| --- | -------------------------------------------------------------------- | --------------------------------- | -------- |
-| T21 | [T21-milestone-review.md](T21-milestone-review.md)                   | 里程碑评审循环（随里程碑触发）    | 随里程碑 |
-| T29 | [T29-real-solve-e2e.md](T29-real-solve-e2e.md)                       | 真实求解端到端验证（OpenFOAM）    | T09–T11  |
-| T33 | [T33-updater-hardening.md](T33-updater-hardening.md)                 | 发布加固：updater + CSP 收窄      | T18      |
-| T48 | [T48-renderer-bench-realdevice.md](T48-renderer-bench-realdevice.md) | 渲染后端三端真机验收与 FPS 回填   | T39      |
-| T55 | [T55-gate-location-analysis.md](T55-gate-location-analysis.md)       | 浇口位置分析序列（P1，最大缺口）  | T11/T44  |
-| T56 | [T56-mesh-aspect-match-rate.md](T56-mesh-aspect-match-rate.md)       | 网格纵横比 + 双域匹配率（立即做） | T06/T41  |
-| T57 | [T57-mesh-estimate-preview.md](T57-mesh-estimate-preview.md)         | 网格预估单元数（立即做）          | T06      |
-| T58 | [T58-viewport-gate-picking.md](T58-viewport-gate-picking.md)         | 视口拾取放浇口 + 节点吸附         | T45/T07  |
-| T59 | [T59-fill-preview.md](T59-fill-preview.md)                           | 填充预览（依赖 T55）              | T55      |
-| T60 | [T60-import-log-and-pptx.md](T60-import-log-and-pptx.md)             | 导入日志流 + PPT 报告（低优先）   | T52      |
-| T65 | [T65-warpage-deformation-view.md](T65-warpage-deformation-view.md)   | 翘曲变形可视化（视口位移显示）    | T64      |
-| T67 | [T67-coolant-channel-landing.md](T67-coolant-channel-landing.md)     | 冷却水路落地（模壁 1D 通道 BC）   | T07/T66  |
-| T69 | [T69-terminology-unification.md](T69-terminology-unification.md)     | 术语统一：「方案 / 研究」混用收口 | T68      |
+| ID  | 文件                                                                           | 任务                              | 依赖     |
+| --- | ------------------------------------------------------------------------------ | --------------------------------- | -------- |
+| T21 | [T21-milestone-review.md](T21-milestone-review.md)                             | 里程碑评审循环（随里程碑触发）    | 随里程碑 |
+| T29 | [T29-real-solve-e2e.md](T29-real-solve-e2e.md)                                 | 真实求解端到端验证（OpenFOAM）    | T09–T11  |
+| T33 | [T33-updater-hardening.md](T33-updater-hardening.md)                           | 发布加固：updater + CSP 收窄      | T18      |
+| T48 | [T48-renderer-bench-realdevice.md](T48-renderer-bench-realdevice.md)           | 渲染后端三端真机验收与 FPS 回填   | T39      |
+| T55 | [T55-gate-location-analysis.md](T55-gate-location-analysis.md)                 | 浇口位置分析序列（P1，最大缺口）  | T11/T44  |
+| T56 | [T56-mesh-aspect-match-rate.md](T56-mesh-aspect-match-rate.md)                 | 网格纵横比 + 双域匹配率（立即做） | T06/T41  |
+| T57 | [T57-mesh-estimate-preview.md](T57-mesh-estimate-preview.md)                   | 网格预估单元数（立即做）          | T06      |
+| T58 | [T58-viewport-gate-picking.md](T58-viewport-gate-picking.md)                   | 视口拾取放浇口 + 节点吸附         | T45/T07  |
+| T59 | [T59-fill-preview.md](T59-fill-preview.md)                                     | 填充预览（依赖 T55）              | T55      |
+| T60 | [T60-import-log-and-pptx.md](T60-import-log-and-pptx.md)                       | 导入日志流 + PPT 报告（低优先）   | T52      |
+| T65 | [T65-warpage-deformation-view.md](T65-warpage-deformation-view.md)             | 翘曲变形可视化（视口位移显示）    | T64      |
+| T67 | [T67-coolant-channel-landing.md](T67-coolant-channel-landing.md)               | 冷却水路落地（模壁 1D 通道 BC）   | T07/T66  |
+| T69 | [T69-terminology-unification.md](T69-terminology-unification.md)               | 术语统一：「方案 / 研究」混用收口 | T68      |
+| T72 | [T72-inlet-portal-area.md](T72-inlet-portal-area.md)                           | 浇口入口面口径与有效面积回显      | T61/T62  |
+| T73 | [T73-download-version-display.md](T73-download-version-display.md)             | 下载面板显示 release 版本号       | T27/T54  |
+| T74 | [T74-gate-velocity-si-recalibration.md](T74-gate-velocity-si-recalibration.md) | 浇口速度阈值按 SI 重标定（5→20）  | T62/T66  |
 
 > T29 优先级最高：样例方盒与真实 STL（46.7 万面）两条链路都已在 bundle v0.2.1
 > 上复跑——样例全程 exit 0 且结果可读；真实件导入/网格/case 通过，求解在固定

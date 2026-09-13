@@ -1,0 +1,53 @@
+# moldingFoam v0.2.3 复测报告（B / C 用例）
+
+- 日期：2026-09-13
+- 环境：release `v0.2.3`（arm64 bundle，20260913 资产）部署进 multipass `kairos`
+  （Ubuntu 24.04，OpenMPI 4.1.6），`decomposePar -force` + `mpirun -np 4 foamRun
+-parallel` + `reconstructPar`，case 由 Kairos 生成后**原参数复跑**
+- 回传材料：`samples/cases/handoff-v023/`（log 全文、字典、场文件、故障前最后三帧）
+
+## 结果
+
+| 用例                        | v0.2.2 结局           | v0.2.3 结局                                                          |
+| --------------------------- | --------------------- | -------------------------------------------------------------------- |
+| B 点浇口样例盒（v3-point）  | t=1.1321 s non-finite | **通过**：跑到 endTime 2 s，`Phase-1 volume fraction 0.9983`，exit 0 |
+| C 真实件 873 cm³（v3-real） | t=4.3409 s non-finite | **仍失败**：t=4.3463 s `The melt state became non-finite`            |
+
+### 关键证据
+
+- **B**：`pressureRamp = 0.05` 生效。V/P 切换点 t=1.1307 s（filled fraction
+  0.9604、`p_gate = 2.97 MPa`、switchPressure 60 MPa）——与 v0.2.2 的崩溃时刻
+  （t=1.1321 s）几乎是同一处：切换不再造成单步 ~57 MPa 阶跃后存活到结束。
+  全程无 `freeze-off`、无 FATAL，仅一条 timePrecision 提升的非致命 Warning。
+- **C**：切换点 t=4.3404 s（filled 0.9600、`p_gate = 5.44 MPa`）→ **6 ms 后**
+  `Courant mean 51173 / max 2.0e8`、`deltaT = 5.07e-153`、T 与 p_rgh 残差 NaN
+  → t=4.3463 s 各 rank 同时报 non-finite。50 ms 的 ramp 还没走完就已失稳，
+  说明该用例不是被切换阶跃直接打死的。
+- C 的密集写盘复跑（`writeInterval 1e-3` + `purgeWrite 4`）复现同一时刻，
+  故障前最后三帧 4.344 / 4.345 / 4.346 已随包回传。
+
+## 工况量级（C）
+
+| 项           | 值                                                                                                                     |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| 注射         | 4 s、2.183706e-4 m³/s（873 cm³ 件）                                                                                    |
+| 温度         | 熔体 503.15 K、模温 313.15 K                                                                                           |
+| 材料         | b5 = 418 K（Tait 转变温度）、Cp 2500、mu 100、Pr 4、smoothBand 0.5                                                     |
+| 无流温度     | **Kairos 材料模型无此字段**，未写 `freezeOffTemperature`（保持缺省关闭）                                               |
+| 网格         | 19107 单元（约 3.6 mm 单元）                                                                                           |
+| 浇口（请求） | 8 mm                                                                                                                   |
+| 浇口（实际） | inlet patch = 7 个三角形 / **1200.3 mm²**（等效 φ39 mm，面心横跨 ~30 mm，单面最大 493 mm²）→ 名义入口速度 **0.18 m/s** |
+
+> 浇口的口径差异是 **Kairos 侧 case 生成缺陷**（请求 8 mm、落进 case 的是 39 mm
+> 宽带，面积差 24 倍），已建档 T72。请按「宽入口带 + 低速注入」的视角解读 C 的
+> 失稳，不要按 8 mm 浇口的高速射流来推断。
+
+## 结论
+
+1. `pressureRamp` 对「填充分数触发切换」的软化**确实有效**（B 从死到活，且正是
+   旧崩溃点），上游该项修复在本链路确认；
+2. C 仍在切换后数毫秒失稳，且与阶跃幅度无关（C 的 p_gate 更低、阶跃更小反而死）
+   ——按通告「附日志即可」，材料已回传，请按新签名继续排查；
+3. 未出现 `short shot` / `freeze-off` 提示，也未出现 fill velocity 超限告警；
+4. Kairos 侧跟进项：T72（浇口入口面口径与有效面积回显）、T74（浇口速度阈值按
+   SI 重标定到上游的 20 m/s）。
