@@ -47,6 +47,13 @@ Tauri v2 updater 插件需要：
   （`TAURI_SIGNING_PRIVATE_KEY` / `_PASSWORD`）；
 - release.yml 在 `tauri build` 前注入上述 Secrets 即可产出
   `.sig` 更新签名清单；`latest.json` 按官方 updater 格式手写生成脚本（后续）；
-- CSP 收窄结论：`img-src` 已去掉 `blob:`（无运行时 blob 图片）；
-  `style-src 'unsafe-inline'` 暂保留——主题切换依赖运行时 `<style>` 注入，
-  移除需 nonce 化改造（记录为接受项，待主题文件化时重评）。
+- CSP 收窄结论：
+  - 已生效：`img-src` 去掉 `blob:`（无运行时 blob 图片）；本轮补齐
+    `script-src 'self'`（显式化，原由 default-src 隐含）、`object-src 'none'`、
+    `base-uri 'self'`、`frame-ancestors 'none'`、`form-action 'none'`——这几项对应的
+    能力（`<object>`/`<embed>`、`<base>`、被 iframe 嵌入、`<form>` 提交）在应用里
+    从未使用（`grep` 全仓为 0），属于零行为变化的加固；
+  - 待办：`style-src 'unsafe-inline'` 仍保留——主题切换在运行时注入 `<style>` 元素
+    （`useTheme` 的 `style.textContent = css`），移除需把主题改成构建期产出的独立
+    CSS 文件（或注入 nonce 并在 Tauri 侧放行）。这是**行为性改动**，必须真机回归
+    （主题切换、动态 `:style` 绑定如色标渐变），当前无桌面控制权限，归 GUI 走查一并做。

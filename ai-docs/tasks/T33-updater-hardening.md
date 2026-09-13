@@ -3,6 +3,11 @@
 - 阶段：下一阶段（分发质量）
 - 依赖：T18（发布流水线，已完成）
 - 优先级：P3（受代码签名证书可用性约束）
+- 状态：**部分实现**（2026-09-13）——CSP 已完成零行为变化的加固（`script-src 'self'` 显式、
+  `object-src 'none'`、`base-uri 'self'`、`frame-ancestors 'none'`、`form-action 'none'`）；
+  `style-src 'unsafe-inline'` 移除（主题 nonce 化 / 文件化）与 updater 插件接入、三平台签名
+  仍需**真机回归 + 签名密钥**，清单已写进 release.md 与评审记录。见
+  [T33 评审](../reviews/T33-review.md)
 
 ## 目标
 
