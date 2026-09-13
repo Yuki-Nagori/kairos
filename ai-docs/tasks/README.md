@@ -81,6 +81,7 @@
 | T79 | [T79-sample-geometry-done.md](T79-sample-geometry-done.md)                                 | 内置样例几何（补档）                             |
 | T80 | [T80-material-catalog-csv-done.md](T80-material-catalog-csv-done.md)                       | 牌号数据集扩充与 21 列 CSV 导入（补档）          |
 | T81 | [T81-filler-parameters-done.md](T81-filler-parameters-done.md)                             | 纤维 / 填料参数组（补档）                        |
+| T56 | [T56-mesh-aspect-match-rate-done.md](T56-mesh-aspect-match-rate-done.md)                   | 网格纵横比 + 双域匹配率                          |
 
 > T26/T27 落地后的增量打磨（系统窗口按钮、原生应用菜单、主题注入统一、
 > 品牌图标、emoji 清理、启动窗口位置）见 `ai-docs/timeline.md` 对应条目，
@@ -95,7 +96,6 @@
 | T33 | [T33-updater-hardening.md](T33-updater-hardening.md)                                         | 发布加固：updater + CSP 收窄                  | T18         |
 | T48 | [T48-renderer-bench-realdevice.md](T48-renderer-bench-realdevice.md)                         | 渲染后端三端真机验收与 FPS 回填               | T39         |
 | T55 | [T55-gate-location-analysis.md](T55-gate-location-analysis.md)                               | 浇口位置分析序列（P1，最大缺口）              | T11/T44     |
-| T56 | [T56-mesh-aspect-match-rate.md](T56-mesh-aspect-match-rate.md)                               | 网格纵横比 + 双域匹配率（立即做）             | T06/T41     |
 | T57 | [T57-mesh-estimate-preview.md](T57-mesh-estimate-preview.md)                                 | 网格预估单元数（立即做）                      | T06         |
 | T58 | [T58-viewport-gate-picking.md](T58-viewport-gate-picking.md)                                 | 视口拾取放浇口 + 节点吸附                     | T45/T07     |
 | T59 | [T59-fill-preview.md](T59-fill-preview.md)                                                   | 填充预览（依赖 T55）                          | T55         |

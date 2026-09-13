@@ -28,6 +28,8 @@ const report: MeshingReport = {
   surfaceFaceCount: 900,
   totalVolume: 42.5,
   quality: { minEdgeRatio: 1.01, avgEdgeRatio: 1.7, maxEdgeRatio: 8.9, minVolume: 0.001 },
+  aspectMax: 3.4,
+  aspectAvg: 1.6,
   thinFeatureHints: [],
 };
 

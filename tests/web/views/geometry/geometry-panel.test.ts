@@ -62,6 +62,8 @@ function meshReportFixture(): MeshingReport {
     surfaceFaceCount: 6,
     totalVolume: 1000,
     quality: { minEdgeRatio: 0.7, avgEdgeRatio: 0.85, maxEdgeRatio: 0.99, minVolume: 1 },
+    aspectMax: 3.4,
+    aspectAvg: 1.6,
     thinFeatureHints: [],
   };
 }
@@ -259,7 +261,7 @@ describe("GeometryPanel", () => {
     expect(generateVolumeMesh).toHaveBeenCalledWith("geo-1", 2.5, undefined);
     expect(geometry.meshReports["geo-1"]).toBeDefined();
     expect(wrapper.text()).toContain(
-      "节点 8 · 四面体 12 · 表面 6 · 体积 1000.000 · 质量比 min 0.70 / avg 0.85 / max 0.99",
+      "节点 8 · 四面体 12 · 表面 6 · 体积 1000.000 · 质量比 min 0.70 / avg 0.85 / max 0.99 · 纵横比 avg 1.60 / max 3.40",
     );
   });
 
@@ -333,6 +335,7 @@ describe("GeometryPanel", () => {
       couplingCount: 1,
       uncoupledEndpoints: 3,
       unpairedTriangles: 0,
+      matchRatio: 1,
       thicknessMin: 1.8,
       thicknessMax: 2.2,
       thicknessAvg: 2.0,
@@ -348,7 +351,7 @@ describe("GeometryPanel", () => {
     expect(generateDualDomainMesh).toHaveBeenCalledWith("geo-1", []);
     expect(geometry.dualDomainReports["geo-1"]).toBeDefined();
     expect(wrapper.text()).toContain(
-      "三角形 12 · 厚度 1.80 ~ 2.20（avg 2.00）· 未配对 0 · 梁 2（耦合 1 / 自由 3）",
+      "三角形 12 · 匹配率 100.0% · 厚度 1.80 ~ 2.20（avg 2.00）· 未配对 0 · 梁 2（耦合 1 / 自由 3）",
     );
   });
 

@@ -132,6 +132,8 @@ describe("ProcessPanel 填充工况上下文", () => {
           maxEdgeRatio: 1,
           minVolume: 1,
         },
+        aspectMax: 3.4,
+        aspectAvg: 1.6,
         thinFeatureHints: [],
       },
     };

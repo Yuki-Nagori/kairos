@@ -401,6 +401,8 @@ pub fn report(volume_mesh: &VolumeMesh) -> MeshingReport {
     let mut ratio_sum = 0.0f64;
     let mut min_volume = f64::INFINITY;
     let mut total_volume = 0.0f64;
+    let mut aspect_max = 0.0f64;
+    let mut aspect_sum = 0.0f64;
 
     for tet in &volume_mesh.tets {
         let p: Vec<[f64; 3]> = tet.iter().map(|&i| volume_mesh.nodes[i]).collect();
@@ -413,15 +415,26 @@ pub fn report(volume_mesh: &VolumeMesh) -> MeshingReport {
             shortest = shortest.min(len);
         }
         let ratio = longest / shortest.max(1e-15);
-        let volume = dot3(
+        let det = dot3(
             &cross3(&sub(&p[1], &p[0]), &sub(&p[2], &p[0])),
             &sub(&p[3], &p[0]),
         )
-        .abs()
-            / 6.0;
+        .abs();
+        let volume = det / 6.0;
+        // 纵横比 = 最长棱 ÷ 最短高；最短高 = 3V / 最大面面积 = det / (2 · A_max)。
+        let max_area = [(0, 1, 2), (0, 1, 3), (0, 2, 3), (1, 2, 3)]
+            .iter()
+            .map(|(a, b, c)| {
+                let cross = cross3(&sub(&p[*b], &p[*a]), &sub(&p[*c], &p[*a]));
+                0.5 * dot3(&cross, &cross).sqrt()
+            })
+            .fold(0.0f64, f64::max);
+        let aspect = 2.0 * longest * max_area / det.max(1e-15);
         min_ratio = min_ratio.min(ratio);
         max_ratio = max_ratio.max(ratio);
         ratio_sum += ratio;
+        aspect_max = aspect_max.max(aspect);
+        aspect_sum += aspect;
         min_volume = min_volume.min(volume);
         total_volume += volume;
     }
@@ -444,6 +457,12 @@ pub fn report(volume_mesh: &VolumeMesh) -> MeshingReport {
         surface_face_count: volume_mesh.surface_faces.len(),
         total_volume,
         quality,
+        aspect_max: if count > 0 { aspect_max } else { 0.0 },
+        aspect_avg: if count > 0 {
+            aspect_sum / count as f64
+        } else {
+            0.0
+        },
         // 由命令层按输入三角面网格补充（这里只有体积网格，拿不到原始特征）
         thin_feature_hints: Vec::new(),
     }
@@ -783,5 +802,79 @@ mod tests {
         )
         .unwrap();
         assert!(report(&volume).quality.min_edge_ratio <= report(&uniform).quality.min_edge_ratio);
+    }
+
+    /// 单四面体的纵横比（最长棱 ÷ 最短高）：角点四面体 = √6，正四面体 = √6/2。
+    #[test]
+    fn aspect_ratio_matches_analytic_value_for_single_tets() {
+        let corner = VolumeMesh {
+            nodes: vec![
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                [0.0, 0.0, 1.0],
+            ],
+            tets: vec![[0, 1, 2, 3]],
+            surface_faces: Vec::new(),
+        };
+        let corner_report = report(&corner);
+        let expected = 6.0f64.sqrt();
+        assert!(
+            (corner_report.aspect_max - expected).abs() < 1e-9,
+            "{}",
+            corner_report.aspect_max
+        );
+        assert!((corner_report.aspect_avg - expected).abs() < 1e-9);
+
+        let regular = VolumeMesh {
+            nodes: vec![
+                [1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                [0.0, 0.0, 1.0],
+                [1.0, 1.0, 1.0],
+            ],
+            tets: vec![[0, 1, 2, 3]],
+            surface_faces: Vec::new(),
+        };
+        let regular_report = report(&regular);
+        assert!(
+            (regular_report.aspect_max - 6.0f64.sqrt() / 2.0).abs() < 1e-9,
+            "{}",
+            regular_report.aspect_max
+        );
+        // 纵横比无量纲：整体放大不改变取值。
+        let scaled = VolumeMesh {
+            nodes: regular
+                .nodes
+                .iter()
+                .map(|p| [p[0] * 1000.0, p[1] * 1000.0, p[2] * 1000.0])
+                .collect(),
+            tets: vec![[0, 1, 2, 3]],
+            surface_faces: Vec::new(),
+        };
+        assert!((report(&scaled).aspect_max - regular_report.aspect_max).abs() < 1e-9);
+    }
+
+    /// 退化（零体积）四面体的纵横比取大有限值——IPC 数值字段不接受无穷。
+    #[test]
+    fn degenerate_tet_aspect_is_large_but_finite() {
+        let flat = VolumeMesh {
+            nodes: vec![
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                [1.0, 1.0, 0.0],
+            ],
+            tets: vec![[0, 1, 2, 3]],
+            surface_faces: Vec::new(),
+        };
+        let flat_report = report(&flat);
+        assert!(flat_report.aspect_max.is_finite());
+        assert!(flat_report.aspect_max > 1e10, "{}", flat_report.aspect_max);
+
+        // 空网格：纵横比归零（与 edge ratio 的空场口径一致）。
+        let empty = report(&VolumeMesh::default());
+        assert_eq!(empty.aspect_max, 0.0);
+        assert_eq!(empty.aspect_avg, 0.0);
     }
 }

@@ -127,6 +127,8 @@ function prime(_pinia: Pinia): void {
     surfaceFaceCount: 1000,
     totalVolume: 8000,
     quality: { minEdgeRatio: 0.4, avgEdgeRatio: 0.8, maxEdgeRatio: 1.2, minVolume: 0.01 },
+    aspectMax: 3.4,
+    aspectAvg: 1.6,
     thinFeatureHints: [],
   };
   project.project = projectFixture();

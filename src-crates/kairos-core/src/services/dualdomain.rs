@@ -201,6 +201,11 @@ pub fn report(mesh: &DualDomainMesh) -> DualDomainReport {
         coupling_count: mesh.couplings.len(),
         uncoupled_endpoints: mesh.beams.len() * 2 - mesh.couplings.len(),
         unpaired_triangles: mesh.thickness.len() - paired,
+        match_ratio: if mesh.thickness.is_empty() {
+            0.0
+        } else {
+            paired as f64 / mesh.thickness.len() as f64
+        },
         thickness_min: if paired > 0 { min } else { 0.0 },
         thickness_max: max,
         thickness_avg: if paired > 0 { sum / paired as f64 } else { 0.0 },
@@ -633,6 +638,21 @@ mod tests {
         assert_eq!(stats.thickness_min, 0.0);
         assert_eq!(stats.thickness_max, 0.0);
         assert_eq!(stats.thickness_avg, 0.0);
+        // 全未配对 → 匹配率 0；空网格同样归零（口径与 thickness 统计一致）。
+        assert_eq!(stats.match_ratio, 0.0);
+        assert_eq!(report(&DualDomainMesh::default()).match_ratio, 0.0);
+    }
+
+    /// 匹配率 = 已配对 / 全部：闭合板件全配对为 1，混合场按比例。
+    #[test]
+    fn match_ratio_is_paired_fraction() {
+        let closed = generate(&cube(2.0), &[], &DualDomainParams::default()).unwrap();
+        assert_eq!(report(&closed).match_ratio, 1.0);
+
+        // 手工把一个三角形的厚度清零（未配对）→ 11 / 12。
+        let mut mixed = closed.clone();
+        mixed.thickness[0] = 0.0;
+        assert!((report(&mixed).match_ratio - 11.0 / 12.0).abs() < 1e-12);
     }
 
     #[test]

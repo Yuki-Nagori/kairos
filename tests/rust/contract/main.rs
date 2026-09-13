@@ -147,6 +147,8 @@ fn meshing_report_serializes_with_camel_case() {
             max_edge_ratio: 1.73,
             min_volume: 0.01,
         },
+        aspect_max: 2.4,
+        aspect_avg: 1.5,
         thin_feature_hints: vec![
             "目标尺寸 5.00 mm 超过最薄特征的 1/2（5% 分位壁厚 3.00 mm）。".into(),
         ],
@@ -159,6 +161,8 @@ fn meshing_report_serializes_with_camel_case() {
     assert_eq!(json["totalVolume"], 1.0);
     assert_eq!(json["quality"]["minEdgeRatio"], 1.0);
     assert_eq!(json["quality"]["minVolume"], 0.01);
+    assert_eq!(json["aspectMax"], 2.4);
+    assert_eq!(json["aspectAvg"], 1.5);
     assert_eq!(
         json["thinFeatureHints"][0],
         "目标尺寸 5.00 mm 超过最薄特征的 1/2（5% 分位壁厚 3.00 mm）。"
@@ -175,6 +179,7 @@ fn dual_domain_report_serializes_with_camel_case() {
         coupling_count: 3,
         uncoupled_endpoints: 1,
         unpaired_triangles: 0,
+        match_ratio: 0.75,
         thickness_min: 1.8,
         thickness_max: 2.2,
         thickness_avg: 2.0,
@@ -189,6 +194,7 @@ fn dual_domain_report_serializes_with_camel_case() {
             "couplingCount": 3,
             "uncoupledEndpoints": 1,
             "unpairedTriangles": 0,
+            "matchRatio": 0.75,
             "thicknessMin": 1.8,
             "thicknessMax": 2.2,
             "thicknessAvg": 2.0,

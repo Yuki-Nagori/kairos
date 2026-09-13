@@ -50,6 +50,8 @@ function reportFixture(): MeshingReport {
       maxEdgeRatio: 1.2,
       minVolume: 0.01,
     },
+    aspectMax: 3.4,
+    aspectAvg: 1.6,
     thinFeatureHints: [],
   };
 }

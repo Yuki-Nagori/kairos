@@ -92,6 +92,10 @@ pub struct MeshingReport {
     /// 网格总体积（与制品体积对比可评估占用率）。
     pub total_volume: f64,
     pub quality: MeshQuality,
+    /// 纵横比（最长棱 ÷ 最短高）的 max / avg；无量纲，与网格尺度无关。
+    /// 退化单元的分母取下限，返回大有限值而不是无穷——IPC 数值字段不接受非有限数。
+    pub aspect_max: f64,
+    pub aspect_avg: f64,
     /// 网格尺寸与最小特征的匹配提示（空 = 通过；见 services::thickness）。
     #[serde(default)]
     pub thin_feature_hints: Vec<String>,
@@ -133,6 +137,8 @@ pub struct DualDomainReport {
     pub uncoupled_endpoints: usize,
     /// 未配对到对面（厚度为 0）的表面三角形数。
     pub unpaired_triangles: usize,
+    /// 双域匹配率 = paired / (paired + unpaired)，无三角形时为 0。
+    pub match_ratio: f64,
     pub thickness_min: f64,
     pub thickness_max: f64,
     /// 已配对三角形的平均厚度。

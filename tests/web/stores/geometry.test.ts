@@ -73,6 +73,8 @@ function makeReport(): MeshingReport {
     surfaceFaceCount: 12,
     totalVolume: 1000,
     quality: { minEdgeRatio: 1, avgEdgeRatio: 1.2, maxEdgeRatio: 2, minVolume: 0.5 },
+    aspectMax: 3.4,
+    aspectAvg: 1.6,
     thinFeatureHints: [],
   };
 }
@@ -100,6 +102,7 @@ function makeDualReport(): DualDomainReport {
     couplingCount: 1,
     uncoupledEndpoints: 1,
     unpairedTriangles: 0,
+    matchRatio: 1,
     thicknessMin: 2,
     thicknessMax: 2,
     thicknessAvg: 2,
@@ -241,6 +244,8 @@ describe("geometry store", () => {
         surfaceFaceCount: 120,
         totalVolume: 1000,
         quality: { minEdgeRatio: 0.4, avgEdgeRatio: 0.8, maxEdgeRatio: 1.2, minVolume: 0.01 },
+        aspectMax: 3.4,
+        aspectAvg: 1.6,
         thinFeatureHints: [],
       };
 
@@ -277,6 +282,8 @@ describe("geometry store", () => {
         surfaceFaceCount: 120,
         totalVolume: 1000,
         quality: { minEdgeRatio: 0.4, avgEdgeRatio: 0.8, maxEdgeRatio: 1.2, minVolume: 0.01 },
+        aspectMax: 3.4,
+        aspectAvg: 1.6,
         thinFeatureHints: [],
       };
       vi.mocked(repairGeometry).mockRejectedValueOnce(new Error("修复失败"));

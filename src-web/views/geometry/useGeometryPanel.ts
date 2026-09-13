@@ -122,7 +122,7 @@ export function useGeometryPanel() {
     if (!report) {
       return "划分体积网格供求解使用。";
     }
-    return `节点 ${report.nodeCount} · 四面体 ${report.elementCount} · 表面 ${report.surfaceFaceCount} · 体积 ${report.totalVolume.toFixed(3)} · 质量比 min ${report.quality.minEdgeRatio.toFixed(2)} / avg ${report.quality.avgEdgeRatio.toFixed(2)} / max ${report.quality.maxEdgeRatio.toFixed(2)}`;
+    return `节点 ${report.nodeCount} · 四面体 ${report.elementCount} · 表面 ${report.surfaceFaceCount} · 体积 ${report.totalVolume.toFixed(3)} · 质量比 min ${report.quality.minEdgeRatio.toFixed(2)} / avg ${report.quality.avgEdgeRatio.toFixed(2)} / max ${report.quality.maxEdgeRatio.toFixed(2)} · 纵横比 avg ${report.aspectAvg.toFixed(2)} / max ${report.aspectMax.toFixed(2)}`;
   }
 
   function dualReportText(report: DualDomainReport | undefined): string {
@@ -130,7 +130,7 @@ export function useGeometryPanel() {
       return "表面厚度配对 + 杆系梁耦合（2.5D 快速分析路线）。";
     }
     const thickness = report.thicknessMin.toFixed(2);
-    return `三角形 ${report.triangleCount} · 厚度 ${thickness} ~ ${report.thicknessMax.toFixed(2)}（avg ${report.thicknessAvg.toFixed(2)}）· 未配对 ${report.unpairedTriangles} · 梁 ${report.beamCount}（耦合 ${report.couplingCount} / 自由 ${report.uncoupledEndpoints}）`;
+    return `三角形 ${report.triangleCount} · 匹配率 ${(report.matchRatio * 100).toFixed(1)}% · 厚度 ${thickness} ~ ${report.thicknessMax.toFixed(2)}（avg ${report.thicknessAvg.toFixed(2)}）· 未配对 ${report.unpairedTriangles} · 梁 ${report.beamCount}（耦合 ${report.couplingCount} / 自由 ${report.uncoupledEndpoints}）`;
   }
 
   function midplaneReportText(report: MidplaneReport | undefined): string {

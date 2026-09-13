@@ -97,6 +97,10 @@ export function useReportPanel() {
         "体积网格",
         `${meshReport.engine} · 节点 ${meshReport.nodeCount} · 四面体 ${meshReport.elementCount} · 体积 ${meshReport.totalVolume.toFixed(3)}`,
       ]);
+      geometryRows.push([
+        "网格质量",
+        `最长边/最短边 max ${meshReport.quality.maxEdgeRatio.toFixed(2)} · 纵横比 avg ${meshReport.aspectAvg.toFixed(2)} / max ${meshReport.aspectMax.toFixed(2)}`,
+      ]);
     }
 
     // 探针数值：当前加载场下各探针的取值。

@@ -172,6 +172,9 @@ export interface MeshingReport {
   surfaceFaceCount: number;
   totalVolume: number;
   quality: MeshQuality;
+  /** 纵横比（最长棱 ÷ 最短高）的 max / avg；无量纲。 */
+  aspectMax: number;
+  aspectAvg: number;
   /** 网格尺寸与最小特征的匹配提示（空 = 通过）。 */
   thinFeatureHints: string[];
 }
@@ -187,6 +190,8 @@ export interface DualDomainReport {
   uncoupledEndpoints: number;
   /** 未配对到对面（厚度为 0）的表面三角形数。 */
   unpairedTriangles: number;
+  /** 双域匹配率 = paired / (paired + unpaired)，无三角形时为 0。 */
+  matchRatio: number;
   thicknessMin: number;
   thicknessMax: number;
   thicknessAvg: number;

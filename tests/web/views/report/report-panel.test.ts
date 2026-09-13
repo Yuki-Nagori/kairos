@@ -247,6 +247,8 @@ describe("ReportPanel", () => {
       surfaceFaceCount: 60,
       totalVolume: 200,
       quality: { minEdgeRatio: 1, avgEdgeRatio: 1.2, maxEdgeRatio: 2, minVolume: 0.5 },
+      aspectMax: 3.4,
+      aspectAvg: 1.6,
       thinFeatureHints: [],
     };
     const results = useResultsStore();
