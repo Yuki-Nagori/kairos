@@ -5,10 +5,11 @@
 - 优先级：**P3**
 - 状态：**已解决（上游资产改名，Kairos 侧无需改动）**
 
-> 2026-09-13 上游已把资产名改为 `moldingFoam-<version>-<arch>.tar.xz`：
-> 文件名自带版本号，面板上「已下载 `moldingFoam-v0.2.4-linuxArm64.tar.xz`」即可读出
-> 版本，同名歧义消失。Kairos 侧只做了配套加固（资产架构匹配放宽到 aarch64 /
-> arm64 / x86_64 / amd64 等写法，并排除同一 release 里的 macOS / Windows 资产）。
+> 2026-09-13 上游已把资产名改为 `moldingFoam-<version>-<arch>.tar.xz`（现行产物
+> `moldingFoam-v0.2.4-{arm64,amd64}.tar.xz`）：文件名自带版本号，面板上就能读出
+> 版本，同名歧义消失。Kairos 侧只做了配套加固：资产匹配放宽到 `arm64` / `aarch64`
+> 与 `amd64` / `x86_64` 等写法（bundle 只跑在 Linux 虚拟机里，发布侧也只出这一种
+> 包，故只按架构判、不区分平台）。
 
 ## 现象（2026-09-13 复测遇到）
 
