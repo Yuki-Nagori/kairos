@@ -1,7 +1,14 @@
 /** 求解结果 IPC：结果目录扫描、场数据加载与派生算子。 */
 import { invokeCommand } from "../utils/ipc";
 import { decodeFieldBinary, decodeVectorFieldBinary } from "../utils/field-binary";
-import type { DeriveRequest, FieldSlot, ResultCatalog, ScalarField, VectorField } from "../types";
+import type {
+  DeriveRequest,
+  FieldSlot,
+  RenderMeshData,
+  ResultCatalog,
+  ScalarField,
+  VectorField,
+} from "../types";
 
 /** 扫描 case 目录的时间步与场文件清单。 */
 export function listResultTimes(caseDir: string): Promise<ResultCatalog> {
@@ -37,6 +44,11 @@ export async function loadVectorField(
     field,
   });
   return decodeVectorFieldBinary(buffer);
+}
+
+/** 变形显示：按会话里已加载的矢量场（位移）偏移渲染网格，返回变形后的网格。 */
+export function deformRenderMesh(geometryId: string, scale: number): Promise<RenderMeshData> {
+  return invokeCommand("deform_render_mesh", { geometryId, scale });
 }
 
 /** 对会话主场执行单场派生（归一化 / 阈值掩码 / 线性映射），返回派生后的场。 */

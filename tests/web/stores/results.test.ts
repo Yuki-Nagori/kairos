@@ -5,6 +5,7 @@ import { useProjectStore } from "../../../src-web/stores/project";
 import { downloadTextFile } from "../../../src-web/utils/download";
 import { useResultsStore } from "../../../src-web/stores/results";
 import {
+  deformRenderMesh,
   deriveDifference as deriveDifferenceApi,
   deriveField as deriveFieldApi,
   listResultTimes,
@@ -23,6 +24,7 @@ vi.mock("../../../src-web/api/results", () => ({
   listResultTimes: vi.fn(),
   loadResultField: vi.fn(),
   loadVectorField: vi.fn(),
+  deformRenderMesh: vi.fn(),
   deriveField: vi.fn(),
   deriveDifference: vi.fn(),
 }));
@@ -627,5 +629,26 @@ describe("loadVectorComponents（矢量场三分量）", () => {
     await results.loadVectorComponents("/case/run", "3", "D");
     expect(app.error?.message).toBe("场文件不存在");
     expect(results.vectorField).toEqual(vectors);
+  });
+});
+
+describe("deformMesh（变形显示）", () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    vi.resetAllMocks();
+  });
+
+  it("成功返回变形网格；失败进全局错误并返回 null", async () => {
+    const app = useAppStore();
+    const results = useResultsStore();
+    const deformed = { positions: [1, 2, 3], indices: [0], faceCells: [0] };
+    vi.mocked(deformRenderMesh).mockResolvedValue(deformed);
+    await expect(results.deformMesh("g-1", 5)).resolves.toEqual(deformed);
+    expect(deformRenderMesh).toHaveBeenCalledWith("g-1", 5);
+    expect(app.error).toBeNull();
+
+    vi.mocked(deformRenderMesh).mockRejectedValue(new Error("尚未加载矢量场"));
+    await expect(results.deformMesh("g-1", 5)).resolves.toBeNull();
+    expect(app.error?.message).toBe("尚未加载矢量场");
   });
 });

@@ -91,6 +91,7 @@
 | T84 | [T84-result-data-chain-remainder-done.md](T84-result-data-chain-remainder-done.md)         | 大结果数据链剩余（压缩/LRU/矢量场）              |
 | T75 | [T75-workspace-layout-done.md](T75-workspace-layout-done.md)                               | 工作区布局（工程自包含：几何/网格/case/结果）    |
 | T67 | [T67-coolant-channel-landing-done.md](T67-coolant-channel-landing-done.md)                 | 冷却水路落地（模壁 1D 通道 BC）                  |
+| T65 | [T65-warpage-deformation-view-done.md](T65-warpage-deformation-view-done.md)               | 翘曲变形可视化（视口位移显示）                   |
 | T86 | [T86-special-process-modules-done.md](T86-special-process-modules-done.md)                 | 扩展工艺模块规划（GAIM/双色/微发泡）             |
 | T87 | [T87-multiphysics-coupling-done.md](T87-multiphysics-coupling-done.md)                     | 多物理场耦合规划（纤维取向/流固）                |
 | T88 | [T88-e3-optimization-planning-done.md](T88-e3-optimization-planning-done.md)               | 优化与自动化规划（DOE/寻优）                     |
@@ -108,7 +109,6 @@
 | T33 | [T33-updater-hardening.md](T33-updater-hardening.md)                                         | 发布加固：updater + CSP 收窄    | T18      |
 | T48 | [T48-renderer-bench-realdevice.md](T48-renderer-bench-realdevice.md)                         | 渲染后端三端真机验收与 FPS 回填 | T39      |
 | T60 | [T60-import-log-and-pptx.md](T60-import-log-and-pptx.md)                                     | 导入日志流 + PPT 报告（低优先） | T52      |
-| T65 | [T65-warpage-deformation-view.md](T65-warpage-deformation-view.md)                           | 翘曲变形可视化（视口位移显示）  | T64      |
 | T82 | [T82-dualdomain-midplane-solve-consumption.md](T82-dualdomain-midplane-solve-consumption.md) | 双域 / 中面网格的求解消费       | T41/T42  |
 | T83 | [T83-multi-cavity-runner-fill.md](T83-multi-cavity-runner-fill.md)                           | 多型腔与流道系统参与填充        | T07/T61  |
 | T85 | [T85-linux-native-channel.md](T85-linux-native-channel.md)                                   | Linux 原生执行通道              | T35/T36  |

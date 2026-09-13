@@ -4,7 +4,8 @@
 use std::sync::{Arc, Mutex};
 
 use kairos_core::error::{KairosError, Result};
-use kairos_core::models::results::{DeriveRequest, ResultCatalog, ScalarField};
+use kairos_core::models::render::RenderMeshData;
+use kairos_core::models::results::{DeriveRequest, ResultCatalog, ScalarField, VectorField};
 use kairos_core::services::results;
 use kairos_core::services::results::{FieldCache, field_binary};
 use tauri::ipc::Response;
@@ -17,6 +18,8 @@ pub struct ResultSlots {
     pub compare: Option<ScalarField>,
     /// 有界场缓存（FIFO 淘汰）：命中时跳过磁盘读取。
     pub cache: FieldCache,
+    /// 最近加载的矢量场三分量（变形显示用；与标量槽位分开，避免形状混淆）。
+    pub vectors: Option<VectorField>,
 }
 
 /// 会话缓存：主场与对比场双槽 + 有界场缓存（差值派生需要两份场数据）。
@@ -28,6 +31,7 @@ impl Default for ResultSession {
             primary: None,
             compare: None,
             cache: FieldCache::new(8).expect("默认容量在合法区间"),
+            vectors: None,
         })))
     }
 }
@@ -134,6 +138,7 @@ pub async fn load_result_field_binary(
 /// 供变形显示与矢量派生消费；标量模量仍走 load_result_field_binary。
 #[tauri::command]
 pub async fn load_vector_field_binary(
+    session: tauri::State<'_, ResultSession>,
     case_dir: String,
     time_dir: String,
     field: String,
@@ -143,7 +148,45 @@ pub async fn load_vector_field_binary(
     })
     .await
     .map_err(|e| KairosError::internal(format!("矢量场加载任务失败：{e}")))??;
+    // 入会话槽位：变形显示直接复用，不必再把分量回传前端绕一圈。
+    session.lock().vectors = Some(vectors.clone());
     Ok(Response::new(field_binary::encode_vector(&vectors)))
+}
+
+/// 变形显示：用会话里最近加载的矢量场（位移）偏移渲染网格顶点。
+/// 位移单位按 m → mm 换算（case 场是 SI）；scale 为显示倍数（0 = 原位）。
+#[tauri::command]
+pub fn deform_render_mesh(
+    session: tauri::State<'_, ResultSession>,
+    store: tauri::State<'_, crate::commands::geometry::GeometryStore>,
+    geometry_id: String,
+    scale: f64,
+) -> Result<RenderMeshData> {
+    if !scale.is_finite() || scale < 0.0 {
+        return Err(KairosError::validation("变形倍数必须为非负有限数。"));
+    }
+    let displacements = {
+        let slots = session.lock();
+        let vectors = slots.vectors.as_ref().ok_or_else(|| {
+            KairosError::validation(
+                "尚未加载矢量场：请在结果面板加载位移场（如 D）后再开变形显示。",
+            )
+        })?;
+        vectors.components.clone()
+    };
+    let sessions = store.lock();
+    let session_mesh = sessions
+        .get(&geometry_id)
+        .ok_or_else(|| KairosError::not_found(format!("几何不存在：{geometry_id}")))?;
+    let render = match &session_mesh.volume {
+        Some(volume) => kairos_core::services::render_mesh::from_volume_mesh(volume),
+        None => kairos_core::services::render_mesh::from_surface_mesh(&session_mesh.mesh),
+    };
+    Ok(kairos_core::services::deformation::deformed_render_mesh(
+        &render,
+        &displacements,
+        scale,
+    ))
 }
 
 /// 派生场：基于会话主场的归一化 / 阈值掩码 / 线性映射，返回新场。

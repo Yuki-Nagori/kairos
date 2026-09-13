@@ -10,6 +10,7 @@ import { defineComponent, h, nextTick, reactive, type Ref } from "vue";
 import { createPinia, setActivePinia } from "pinia";
 import type { Pinia } from "pinia";
 import { useViewportPanel } from "../../../../src-web/views/viewport/useViewportPanel";
+import { useAppStore } from "../../../../src-web/stores/app";
 import { useViewportStore } from "../../../../src-web/stores/viewport";
 import { useResultsStore } from "../../../../src-web/stores/results";
 import { useGeometryStore } from "../../../../src-web/stores/geometry";
@@ -83,6 +84,8 @@ vi.mock("../../../../src-web/api/geometry", () => ({ getRenderMesh: vi.fn() }));
 vi.mock("../../../../src-web/api/results", () => ({
   listResultTimes: vi.fn(),
   loadResultField: vi.fn(),
+  loadVectorField: vi.fn(),
+  deformRenderMesh: vi.fn(),
   deriveField: vi.fn(),
   deriveDifference: vi.fn(),
 }));
@@ -727,6 +730,109 @@ describe("useViewportPanel：网格载入边界", () => {
     panel.attachCanvas(0, canvas());
     await flushPromises();
     expect(createMock).toHaveBeenCalledTimes(1);
+    panel.unmount();
+  });
+});
+
+describe("useViewportPanel：变形显示", () => {
+  it("开启变形：按倍数请求变形网格并上传；关闭还原原位", async () => {
+    const { panel } = await mountLoaded();
+    const { deformRenderMesh } = (await import("../../../../src-web/api/results")) as unknown as {
+      deformRenderMesh: Mock;
+    };
+    const backend = backends[0]!;
+    const uploadedBefore = backend.uploadMesh.mock.calls.length;
+
+    deformRenderMesh.mockResolvedValue({
+      positions: [0, 0, 0, 5, 0, 0, 0, 5, 0],
+      indices: [0, 1, 2],
+      faceCells: [0],
+    });
+    panel.toggleDeform();
+    await flushPromises();
+    await nextTick();
+
+    expect(deformRenderMesh).toHaveBeenCalledWith("g-1", 1);
+    expect(backend.uploadMesh.mock.calls.length).toBeGreaterThan(uploadedBefore);
+    const uploaded = backend.uploadMesh.mock.calls.at(-1)?.[0] as { positions: Float32Array };
+    expect(Array.from(uploaded.positions)).toEqual([0, 0, 0, 5, 0, 0, 0, 5, 0]);
+
+    // 改倍数后点「应用」：按新倍数再请求
+    // reactive 解包后可直写（写回底层 ref）
+    panel.deformScale = 10;
+    await panel.applyDeformation();
+    expect(deformRenderMesh).toHaveBeenLastCalledWith("g-1", 10);
+
+    // 关闭：请求倍数 0（后端按原位网格返回同一形状）并上传
+    deformRenderMesh.mockResolvedValue({
+      positions: [0, 0, 0, 1, 0, 0, 0, 1, 0],
+      indices: [0, 1, 2],
+      faceCells: [0],
+    });
+    panel.toggleDeform();
+    await flushPromises();
+    await nextTick();
+    expect(deformRenderMesh).toHaveBeenLastCalledWith("g-1", 0);
+    expect(panel.deformOn).toBe(false);
+    const restored = backend.uploadMesh.mock.calls.at(-1)?.[0] as { positions: Float32Array };
+    expect(Array.from(restored.positions)).toEqual([0, 0, 0, 1, 0, 0, 0, 1, 0]);
+    panel.unmount();
+  });
+
+  it("变形请求失败：不改动网格（保持原位）", async () => {
+    const { panel } = await mountLoaded();
+    const { deformRenderMesh } = (await import("../../../../src-web/api/results")) as unknown as {
+      deformRenderMesh: Mock;
+    };
+    const backend = backends[0]!;
+    const before = backend.uploadMesh.mock.calls.length;
+    deformRenderMesh.mockResolvedValue(null);
+
+    panel.toggleDeform();
+    await flushPromises();
+    await nextTick();
+    expect(backend.uploadMesh.mock.calls.length).toBe(before);
+    expect(useAppStore().error).toBeNull();
+    panel.unmount();
+  });
+
+  it("载入网格后几何被移除：变形为空转（防御分支）", async () => {
+    const { panel } = await mountLoaded();
+    const geometry = useGeometryStore();
+    const { deformRenderMesh } = (await import("../../../../src-web/api/results")) as unknown as {
+      deformRenderMesh: Mock;
+    };
+    geometry.geometries = [];
+    await panel.applyDeformation();
+    expect(deformRenderMesh).not.toHaveBeenCalled();
+    panel.unmount();
+  });
+
+  it("倍数 0 时开启变形等于原位（请求 scale 0 并保留原位网格）", async () => {
+    const { panel } = await mountLoaded();
+    const { deformRenderMesh } = (await import("../../../../src-web/api/results")) as unknown as {
+      deformRenderMesh: Mock;
+    };
+    deformRenderMesh.mockResolvedValue({
+      positions: [9, 9, 9],
+      indices: [0, 1, 2],
+      faceCells: [0],
+    });
+    panel.deformScale = 0;
+    await panel.applyDeformation();
+    // 仍会请求（后端按原位返回，顺带确认矢量场可用）
+    expect(deformRenderMesh).toHaveBeenCalledWith("g-1", 0);
+    panel.unmount();
+  });
+
+  it("未载入网格 / 未导入几何时变形为空转", async () => {
+    const { panel } = mountPanel();
+    panel.toggleDeform();
+    await flushPromises();
+    const { deformRenderMesh } = (await import("../../../../src-web/api/results")) as unknown as {
+      deformRenderMesh: Mock;
+    };
+    expect(deformRenderMesh).not.toHaveBeenCalled();
     panel.unmount();
   });
 });

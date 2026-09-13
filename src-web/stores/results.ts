@@ -4,6 +4,7 @@ import { analyzeGateLocation, previewFill } from "../api/geometry";
 import {
   deriveDifference as deriveDifferenceApi,
   deriveField as deriveFieldApi,
+  deformRenderMesh,
   listResultTimes,
   loadResultField,
   loadVectorField,
@@ -14,6 +15,7 @@ import type {
   FillPreviewReport,
   GateLocationReport,
   Probe,
+  RenderMeshData,
   VectorField,
   ProbeTimeSeries,
   ResultCatalog,
@@ -64,6 +66,16 @@ export const useResultsStore = defineStore("results", {
           complete: true,
         };
       });
+    },
+    /** 变形显示：按已加载的矢量场（位移）偏移渲染网格；失败进全局错误并返回 null。 */
+    async deformMesh(geometryId: string, scale: number): Promise<RenderMeshData | null> {
+      const app = useAppStore();
+      try {
+        return await deformRenderMesh(geometryId, scale);
+      } catch (error) {
+        app.setError(error);
+        return null;
+      }
     },
     /** 加载矢量场三分量（如位移 D）：供矢量展示与派生消费；失败进全局错误。 */
     async loadVectorComponents(caseDir: string, timeDir: string, field: string): Promise<void> {

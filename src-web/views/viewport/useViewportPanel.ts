@@ -102,6 +102,56 @@ export function useViewportPanel() {
   const playing = ref(false);
   const playLabel = computed(() => (playing.value ? "停止动画" : "播放动画"));
 
+  // —— 变形显示（翘曲/位移场）——
+  // 变形网格由 Rust 侧按「顶点 → 邻接单元平均位移」生成（避免共享顶点撕裂），
+  // 这里只负责请求、上传与还原；倍数 0 或关闭时回到原位网格。
+  const deformOn = ref(false);
+  const deformScale = ref(1);
+  const deformPending = ref(false);
+
+  async function applyDeformation(): Promise<void> {
+    if (sharedMesh === null || slots[0] === undefined) {
+      return;
+    }
+    const first = geometry.geometries[0];
+    if (first === undefined) {
+      return;
+    }
+    // 倍数 0 时后端按原位网格返回（同一条通道），前端不做备份/还原分支。
+    const target = deformOn.value ? deformScale.value : 0;
+    deformPending.value = true;
+    const deformed = await results.deformMesh(first.geometryId, target);
+    deformPending.value = false;
+    if (deformed === null) {
+      return;
+    }
+    const mesh: PickMesh = {
+      positions: new Float32Array(deformed.positions),
+      indices: new Uint32Array(deformed.indices),
+      faceCells: new Uint32Array(deformed.faceCells),
+    };
+    sharedMesh = mesh;
+    for (const slot of slots) {
+      if (slot.renderer === null) {
+        continue;
+      }
+      slot.renderMesh = mesh;
+      slot.renderer.uploadMesh({
+        positions: mesh.positions,
+        indices: mesh.indices,
+        faceCells: mesh.faceCells,
+      });
+      // 顶点位置变了：云图逐面色值与剖切面都要按新位置重算
+      applyField(results.loadedField);
+      applyClip();
+    }
+  }
+
+  function toggleDeform(): void {
+    deformOn.value = !deformOn.value;
+    void applyDeformation();
+  }
+
   /** 共享网格数据：一次获取，所有实例（含后续新增）复用上传。 */
   let sharedMesh: PickMesh | null = null;
   /** 在途渲染器创建（按实例 id）：attachCanvas 与 setupSlot 可能并发触发
@@ -432,6 +482,11 @@ export function useViewportPanel() {
   return {
     layout,
     slotIds,
+    deformOn,
+    deformScale,
+    deformPending,
+    toggleDeform,
+    applyDeformation,
     attachCanvas,
     slots,
     emptyText,

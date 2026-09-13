@@ -29,6 +29,11 @@ const {
   loadMesh,
   togglePlay,
   toggleClip,
+  deformOn,
+  deformScale,
+  deformPending,
+  toggleDeform,
+  applyDeformation,
   resetView,
   zoomBy,
   fitView,
@@ -148,6 +153,20 @@ const VIEW_TOOLS = [
           <label class="flex items-center gap-1 text-xs text-zinc-400">
             <input v-model="clipInvert" type="checkbox" /> 反向
           </label>
+        </template>
+        <UiButton :disabled="!meshReady || deformPending" @click="toggleDeform()">
+          变形显示：{{ deformOn ? "开" : "关" }}
+        </UiButton>
+        <template v-if="deformOn">
+          <p class="text-xs text-zinc-500">倍数</p>
+          <input
+            v-model.number="deformScale"
+            type="number"
+            class="w-16 rounded border border-zinc-700 bg-zinc-900 px-1 py-0.5 text-xs"
+            step="1"
+            min="0"
+          />
+          <UiButton :disabled="deformPending" @click="applyDeformation()">应用</UiButton>
         </template>
         <p class="text-xs text-zinc-500">{{ fpsText }}</p>
         <p class="text-xs text-zinc-500">点击模型表面：拾取单元加入探针（XY 图表显示数值）</p>
