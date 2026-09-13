@@ -152,19 +152,20 @@ describe("geometry store", () => {
     it("appends the imported summary and clears busy", async () => {
       vi.mocked(pickOpenGeometryPath).mockResolvedValue("/models/box.stl");
       const summary = makeSummary();
-      vi.mocked(importStl).mockResolvedValue(summary);
+      vi.mocked(importStl).mockResolvedValue({ summary, log: [] });
 
       const app = useAppStore();
       const geometry = useGeometryStore();
       const busyDuring: (string | null)[] = [];
       vi.mocked(importStl).mockImplementation(async () => {
         busyDuring.push(useAppStore().busy);
-        return summary;
+        return { summary, log: ["导入 STL：box.stl"] };
       });
       await geometry.importGeometry();
 
       expect(importStl).toHaveBeenCalledWith("/models/box.stl");
       expect(geometry.geometries).toEqual([summary]);
+      expect(geometry.importLogs[0]).toBe("导入 STL：box.stl");
       expect(busyDuring).toEqual(["正在导入几何…"]);
       expect(app.busy).toBeNull();
       expect(app.error).toBeNull();
@@ -173,7 +174,7 @@ describe("geometry store", () => {
     it("STEP 文件分派到镶嵌导入", async () => {
       vi.mocked(pickOpenGeometryPath).mockResolvedValue("/models/壳体.step");
       const summary = makeSummary();
-      vi.mocked(importStep).mockResolvedValue(summary);
+      vi.mocked(importStep).mockResolvedValue({ summary, log: [] });
 
       const geometry = useGeometryStore();
       await geometry.importGeometry();
@@ -186,7 +187,7 @@ describe("geometry store", () => {
     it.each(["igs", "iges"])("%S 文件分派到 IGES 镶嵌导入", async (extension) => {
       vi.mocked(pickOpenGeometryPath).mockResolvedValue(`/models/壳体.${extension}`);
       const summary = makeSummary();
-      vi.mocked(importIges).mockResolvedValue(summary);
+      vi.mocked(importIges).mockResolvedValue({ summary, log: [] });
 
       const geometry = useGeometryStore();
       await geometry.importGeometry();
@@ -435,7 +436,7 @@ describe("geometry store", () => {
   describe("importSampleGeometry", () => {
     it("imports the sample box with the default size", async () => {
       const summary = makeSummary("sample");
-      vi.mocked(importSampleBox).mockResolvedValue(summary);
+      vi.mocked(importSampleBox).mockResolvedValue({ summary, log: [] });
 
       const app = useAppStore();
       const geometry = useGeometryStore();
@@ -443,11 +444,15 @@ describe("geometry store", () => {
 
       expect(importSampleBox).toHaveBeenCalledWith(10);
       expect(geometry.geometries).toEqual([summary]);
+      // 导入日志进环形缓冲（日志区展示用）
       expect(app.busy).toBeNull();
     });
 
     it("imports the sample box with a custom size", async () => {
-      vi.mocked(importSampleBox).mockResolvedValue(makeSummary("sample"));
+      vi.mocked(importSampleBox).mockResolvedValue({
+        summary: makeSummary("sample"),
+        log: ["导入 样例：样例立方体.stl"],
+      });
       const geometry = useGeometryStore();
       await geometry.importSampleGeometry(42);
       expect(importSampleBox).toHaveBeenCalledWith(42);
@@ -695,7 +700,7 @@ describe("工作区：几何归档与恢复", () => {
       relativePath: "geometry/demo.stl",
     });
     vi.mocked(pickOpenGeometryPath).mockResolvedValue("/models/demo.stl");
-    vi.mocked(importStl).mockResolvedValue(makeSummary());
+    vi.mocked(importStl).mockResolvedValue({ summary: makeSummary(), log: [] });
     await geometry.importGeometry();
 
     // 归档用导入摘要里的几何 id（默认 fixture 为 g-1）

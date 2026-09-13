@@ -24,6 +24,7 @@ import {
 import type {
   DualDomainReport,
   GeometrySummary,
+  ImportOutcome,
   MeshEstimate,
   MeshingReport,
   MeshRefinement,
@@ -32,6 +33,9 @@ import type {
   RepairReport,
 } from "../types";
 import { useAppStore } from "./app";
+
+/** 导入日志环形上限：连续导入多个大件时不无限增长。 */
+const IMPORT_LOG_LIMIT = 200;
 import { useProjectStore } from "./project";
 
 export const useGeometryStore = defineStore("geometry", {
@@ -48,6 +52,8 @@ export const useGeometryStore = defineStore("geometry", {
     repairReports: {} as Record<string, RepairReport>,
     /** 每个几何当前的网格规模估算（key = geometryId；生成前预览）。 */
     meshEstimates: {} as Record<string, MeshEstimate>,
+    /** 几何导入日志（环形缓冲，最近一次导入在最前；日志区展示）。 */
+    importLogs: [] as string[],
   }),
   actions: {
     /** 导入 STL：弹出文件对话框，解析检查后入列表；工作区工程顺带归档源文件。 */
@@ -59,15 +65,20 @@ export const useGeometryStore = defineStore("geometry", {
       }
       await app.withBusy("正在导入几何…", async () => {
         const extension = path.split(".").pop()?.toLowerCase();
-        const summary =
+        const outcome =
           extension === "step" || extension === "stp"
             ? await apiImportStep(path)
             : extension === "igs" || extension === "iges"
               ? await apiImportIges(path)
               : await importStl(path);
-        this.geometries = [...this.geometries, summary];
-        await this.archiveIntoWorkspace(summary.geometryId, path);
+        this.recordImport(outcome);
+        await this.archiveIntoWorkspace(outcome.summary.geometryId, path);
       });
+    },
+    /** 登记导入结果：几何入列表 + 导入日志进环形缓冲（不阻塞导入主流程）。 */
+    recordImport(outcome: ImportOutcome): void {
+      this.geometries = [...this.geometries, outcome.summary];
+      this.importLogs = [...outcome.log, ...this.importLogs].slice(0, IMPORT_LOG_LIMIT);
     },
     /** 几何归档进工作区（无工作区时为静默 no-op）：失败只记录，不影响导入本身。 */
     async archiveIntoWorkspace(geometryId: string, sourcePath: string): Promise<void> {
@@ -210,8 +221,8 @@ export const useGeometryStore = defineStore("geometry", {
     async importSampleGeometry(size = 10): Promise<void> {
       const app = useAppStore();
       await app.withBusy("正在导入样例…", async () => {
-        const summary = await importSampleBox(size);
-        this.geometries = [...this.geometries, summary];
+        const outcome = await importSampleBox(size);
+        this.recordImport(outcome);
       });
     },
     /** 工作区恢复：按工程里的相对路径读回几何，并把各方案的体积网格读回会话。

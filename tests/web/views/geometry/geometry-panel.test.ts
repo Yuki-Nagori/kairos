@@ -110,7 +110,7 @@ describe("GeometryPanel", () => {
   });
 
   it("导入样例：摘要行、健康文案与按最大边二十分之一的表单初值", async () => {
-    vi.mocked(importSampleBox).mockResolvedValue(geometryFixture());
+    vi.mocked(importSampleBox).mockResolvedValue({ summary: geometryFixture(), log: [] });
     const geometry = useGeometryStore();
     const wrapper = mount(GeometryPanel, { global: { plugins: [pinia] } });
 
@@ -142,7 +142,10 @@ describe("GeometryPanel", () => {
   });
 
   it("导入 STL：取消不触发 IPC；成功入列；失败进全局错误", async () => {
-    vi.mocked(importStl).mockResolvedValue(geometryFixture({ geometryId: "geo-2" }));
+    vi.mocked(importStl).mockResolvedValue({
+      summary: geometryFixture({ geometryId: "geo-2" }),
+      log: [],
+    });
     const geometry = useGeometryStore();
     const wrapper = mount(GeometryPanel, { global: { plugins: [pinia] } });
 

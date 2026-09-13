@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 
 use kairos_core::error::{KairosError, Result};
 use kairos_core::models::analysis::{FillPreviewReport, GateLocationReport};
-use kairos_core::models::geometry::{GeometrySummary, TriangleMesh};
+use kairos_core::models::geometry::{GeometrySummary, ImportOutcome, TriangleMesh};
 use kairos_core::models::mesh::{
     DualDomainMesh, DualDomainReport, MeshRefinement, MeshingReport, MidplaneMesh, MidplaneReport,
     VolumeMesh,
@@ -56,24 +56,38 @@ impl GeometryStore {
 }
 
 #[tauri::command]
-pub async fn import_stl(store: State<'_, GeometryStore>, path: String) -> Result<GeometrySummary> {
+pub async fn import_stl(store: State<'_, GeometryStore>, path: String) -> Result<ImportOutcome> {
     let store = store.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
+        let started = std::time::Instant::now();
         let mesh = geometry_service::parse_stl_file(Path::new(&path))?;
-        Ok(store_import(&store, &path, mesh))
+        Ok(store_import(
+            &store,
+            &path,
+            mesh,
+            "STL",
+            started.elapsed().as_millis(),
+        ))
     })
     .await
     .map_err(|e| KairosError::internal(format!("导入任务失败：{e}")))?
 }
 
-/// 解析后的网格登记入会话缓存并生成摘要。
-fn store_import(store: &GeometryStore, path: &str, mesh: TriangleMesh) -> GeometrySummary {
+/// 解析后的网格登记入会话缓存并生成摘要 + 导入日志。
+fn store_import(
+    store: &GeometryStore,
+    path: &str,
+    mesh: TriangleMesh,
+    source_kind: &str,
+    elapsed_ms: u128,
+) -> ImportOutcome {
     let file_name = Path::new(path)
         .file_name()
         .map(|name| name.to_string_lossy().to_string())
         .unwrap_or_else(|| path.to_string());
     let geometry_id = new_id("geom");
     let summary = geometry_service::summarize(geometry_id.clone(), file_name.clone(), &mesh);
+    let log = geometry_service::import_log(&summary.file_name, source_kind, &summary, elapsed_ms);
     store.lock().insert(
         geometry_id,
         MeshSession {
@@ -84,7 +98,7 @@ fn store_import(store: &GeometryStore, path: &str, mesh: TriangleMesh) -> Geomet
             midplane: None,
         },
     );
-    summary
+    ImportOutcome { summary, log }
 }
 
 /// 修复已导入几何：顶点焊接 / 退化面移除 / 孔洞填充 / 法向一致化 / 自交检测。
@@ -124,11 +138,18 @@ pub async fn repair_geometry(
 
 /// 导入 STEP 镶嵌网格（AP242 TRIANGULATED_FACE_SET / POLY_LOOP 子集）。
 #[tauri::command]
-pub async fn import_step(store: State<'_, GeometryStore>, path: String) -> Result<GeometrySummary> {
+pub async fn import_step(store: State<'_, GeometryStore>, path: String) -> Result<ImportOutcome> {
     let store = store.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
+        let started = std::time::Instant::now();
         let mesh = step::parse_step_file(Path::new(&path))?;
-        Ok(store_import(&store, &path, mesh))
+        Ok(store_import(
+            &store,
+            &path,
+            mesh,
+            "STEP",
+            started.elapsed().as_millis(),
+        ))
     })
     .await
     .map_err(|e| KairosError::internal(format!("导入任务失败：{e}")))?
@@ -136,11 +157,18 @@ pub async fn import_step(store: State<'_, GeometryStore>, path: String) -> Resul
 
 /// 导入 IGES 镶嵌网格（实体 106 / 63 子集）。
 #[tauri::command]
-pub async fn import_iges(store: State<'_, GeometryStore>, path: String) -> Result<GeometrySummary> {
+pub async fn import_iges(store: State<'_, GeometryStore>, path: String) -> Result<ImportOutcome> {
     let store = store.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
+        let started = std::time::Instant::now();
         let mesh = iges::parse_iges_file(Path::new(&path))?;
-        Ok(store_import(&store, &path, mesh))
+        Ok(store_import(
+            &store,
+            &path,
+            mesh,
+            "IGES",
+            started.elapsed().as_millis(),
+        ))
     })
     .await
     .map_err(|e| KairosError::internal(format!("导入任务失败：{e}")))?
@@ -538,10 +566,11 @@ pub fn get_render_mesh(
 
 /// 导入内置样例立方体（首次使用引导 / 端到端冒烟），无需外部 STL 文件。
 #[tauri::command]
-pub fn import_sample_box(store: State<'_, GeometryStore>, size: f64) -> Result<GeometrySummary> {
+pub fn import_sample_box(store: State<'_, GeometryStore>, size: f64) -> Result<ImportOutcome> {
     let mesh = TriangleMesh::sample_box(size);
     let geometry_id = new_id("geom");
     let summary = geometry_service::summarize(geometry_id.clone(), "样例立方体.stl".into(), &mesh);
+    let log = geometry_service::import_log(&summary.file_name, "样例", &summary, 0);
     store.lock().insert(
         geometry_id,
         MeshSession {
@@ -552,5 +581,5 @@ pub fn import_sample_box(store: State<'_, GeometryStore>, size: f64) -> Result<G
             midplane: None,
         },
     );
-    Ok(summary)
+    Ok(ImportOutcome { summary, log })
 }

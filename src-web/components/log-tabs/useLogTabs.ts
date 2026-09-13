@@ -23,12 +23,14 @@ export function useLogTabs() {
     }
     if (active.value === "网格日志") {
       const report = Object.values(geometry.meshReports).at(-1);
-      return report
+      const meshLines = report
         ? [
             `引擎 ${report.engine} · ${report.nodeCount} 节点 / ${report.elementCount} 四面体`,
             `质量（长径比）min ${report.quality.minEdgeRatio.toFixed(2)} / avg ${report.quality.avgEdgeRatio.toFixed(2)} / max ${report.quality.maxEdgeRatio.toFixed(2)}`,
           ]
         : [];
+      // 导入日志置顶（最近一次导入在最前），随后是当前网格报告
+      return [...geometry.importLogs.slice(0, 40), ...meshLines];
     }
     return vm.vmShellLogs.slice(-40);
   });

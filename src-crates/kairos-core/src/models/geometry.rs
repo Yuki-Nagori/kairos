@@ -34,6 +34,15 @@ impl Triangle {
     }
 }
 
+/// 导入结果：摘要 + 导入日志行（文件头 / 单位判定 / 规模 / 耗时 / 修复建议）。
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportOutcome {
+    pub summary: GeometrySummary,
+    /// 面向用户的日志行（追加到日志区；不阻塞导入主流程）。
+    pub log: Vec<String>,
+}
+
 /// 三角网格（STL 导入产物）。
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct TriangleMesh {

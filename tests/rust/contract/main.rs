@@ -20,6 +20,21 @@ use kairos_core::models::runners::CoolingChannel;
 use kairos_core::services::moldingfoam::{CaseReport, GateInlet, PatchAreas};
 use kairos_core::services::{geometry, material};
 
+/// ImportOutcome 的形状：导入摘要 + 日志行，前端几何面板日志区与之对应。
+#[test]
+fn import_outcome_serializes_with_camel_case() {
+    let mesh = TriangleMesh::sample_box(1.0);
+    let summary = geometry::summarize("g-1".into(), "盒.stl".into(), &mesh);
+    let outcome = kairos_core::models::geometry::ImportOutcome {
+        log: vec!["导入 STL：盒.stl".into()],
+        summary,
+    };
+    let json = serde_json::to_value(&outcome).unwrap();
+    assert_eq!(json["summary"]["geometryId"], "g-1");
+    assert_eq!(json["summary"]["triangleCount"], 12);
+    assert_eq!(json["log"][0], "导入 STL：盒.stl");
+}
+
 /// SystemInfo 的形状：camelCase 字段，前端 `src-web/types.ts` 的 SystemInfo 与之对应。
 #[test]
 fn system_info_serializes_with_camel_case() {

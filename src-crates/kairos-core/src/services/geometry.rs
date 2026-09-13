@@ -208,6 +208,46 @@ pub fn infer_unit(max_dimension: f64) -> &'static str {
 }
 
 /// 解析 STL 并生成导入摘要（网格本体由调用方存入会话缓存）。
+/// 导入日志行：导入过程的可复读记录（面板日志区展示，不参与任何判定）。
+/// `source_kind` 是导入格式标签（STL / STEP / IGES），`elapsed_ms` 为解析 + 检查耗时。
+pub fn import_log(
+    file_name: &str,
+    source_kind: &str,
+    summary: &GeometrySummary,
+    elapsed_ms: u128,
+) -> Vec<String> {
+    let mut lines = vec![
+        format!("导入 {source_kind}：{file_name}"),
+        format!(
+            "规模：{} 个三角形 · 包围盒 {} × {} × {} {}（推断单位）",
+            summary.triangle_count,
+            summary.size[0].round(),
+            summary.size[1].round(),
+            summary.size[2].round(),
+            summary.suggested_unit
+        ),
+        format!(
+            "表面积 {:.1} · 有符号体积 {:.1} · 解析耗时 {} ms",
+            summary.surface_area, summary.signed_volume, elapsed_ms
+        ),
+    ];
+    let issues = &summary.issues;
+    let problem_count = issues.open_edges
+        + issues.degenerate
+        + issues.non_manifold_edges
+        + issues.normal_inconsistent_edges;
+    if problem_count == 0 {
+        lines.push("健康检查：通过（无开放边 / 退化面 / 非流形边 / 法向不一致）。".to_string());
+    } else {
+        lines.push(format!(
+            "健康检查：开放边 {} · 退化面 {} · 非流形边 {} · 法向不一致 {} ——              建议在几何面板执行「修复」（焊接 / 去退化 / 填孔 / 一致化）。",
+            issues.open_edges, issues.degenerate, issues.non_manifold_edges,
+            issues.normal_inconsistent_edges
+        ));
+    }
+    lines
+}
+
 pub fn summarize(geometry_id: String, file_name: String, mesh: &TriangleMesh) -> GeometrySummary {
     let (min, max) = mesh.bounding_box();
     let size = [max[0] - min[0], max[1] - min[1], max[2] - min[2]];
@@ -331,6 +371,34 @@ mod tests {
         let mut writer = FailingWriter { allow_calls: 99 };
         write_stl_binary_to(&mut writer, &single_triangle()).unwrap();
         writer.flush().unwrap();
+    }
+
+    /// 导入日志：健康件给通过行，问题件给计数与修复建议；格式标签与耗时入首行。
+    #[test]
+    fn import_log_reports_scale_health_and_hint() {
+        let mesh = TriangleMesh::sample_box(10.0);
+        let summary = summarize("g-1".into(), "盒.stl".into(), &mesh);
+        let lines = import_log("盒.stl", "STL", &summary, 12);
+        assert_eq!(lines.len(), 4);
+        assert!(lines[0].contains("导入 STL：盒.stl"));
+        assert!(lines[1].contains("12 个三角形"));
+        assert!(lines[1].contains("10 × 10 × 10 mm"));
+        assert!(lines[2].contains("解析耗时 12 ms"));
+        assert!(lines[3].contains("健康检查：通过"));
+
+        // 不健康件：四类问题计数 + 修复建议
+        let open = TriangleMesh {
+            triangles: vec![Triangle {
+                a: [0.0, 0.0, 0.0],
+                b: [1.0, 0.0, 0.0],
+                c: [0.0, 1.0, 0.0],
+                normal: [0.0; 3],
+            }],
+        };
+        let summary = summarize("g-2".into(), "面片.stl".into(), &open);
+        let lines = import_log("面片.stl", "STL", &summary, 3);
+        assert!(lines[3].contains("开放边 3"));
+        assert!(lines[3].contains("建议在几何面板执行「修复」"));
     }
 
     #[test]

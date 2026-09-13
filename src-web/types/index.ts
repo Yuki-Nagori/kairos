@@ -276,6 +276,13 @@ export interface FillPreviewReport {
   basis: string;
 }
 
+/** 对应 `kairos-core::models::geometry::ImportOutcome`（导入摘要 + 导入日志行）。 */
+export interface ImportOutcome {
+  summary: GeometrySummary;
+  /** 面向用户的日志行（文件头 / 单位判定 / 规模 / 耗时 / 修复建议）。 */
+  log: string[];
+}
+
 /** 对应 `kairos-core::models::mesh::MeshEstimate`。 */
 export interface MeshEstimate {
   /** 引擎标识（voxel / gmsh）。 */

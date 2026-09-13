@@ -2,9 +2,9 @@
 import { invokeCommand } from "../utils/ipc";
 import type {
   DualDomainReport,
+  ImportOutcome,
   FillPreviewReport,
   GateLocationReport,
-  GeometrySummary,
   MeshEstimate,
   MeshingReport,
   MeshRefinement,
@@ -15,7 +15,7 @@ import type {
 } from "../types";
 
 /** 导入 STL（全量网格留在 Rust 侧），返回摘要与健康检查结果。 */
-export function importStl(path: string): Promise<GeometrySummary> {
+export function importStl(path: string): Promise<ImportOutcome> {
   return invokeCommand("import_stl", { path });
 }
 
@@ -57,17 +57,17 @@ export function previewFill(
 }
 
 /** 导入内置样例立方体（首次使用引导）。 */
-export function importSampleBox(size: number): Promise<GeometrySummary> {
+export function importSampleBox(size: number): Promise<ImportOutcome> {
   return invokeCommand("import_sample_box", { size });
 }
 
 /** 导入 STEP 镶嵌网格（AP242 子集）。 */
-export function importStep(path: string): Promise<GeometrySummary> {
+export function importStep(path: string): Promise<ImportOutcome> {
   return invokeCommand("import_step", { path });
 }
 
 /** 导入 IGES 镶嵌网格（实体 106 / 63 子集）。 */
-export function importIges(path: string): Promise<GeometrySummary> {
+export function importIges(path: string): Promise<ImportOutcome> {
   return invokeCommand("import_iges", { path });
 }
 
