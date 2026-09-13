@@ -108,7 +108,7 @@
 
 | ID  | 文件                                                                                         | 任务                                            | 依赖 / 状态                                                                                             |
 | --- | -------------------------------------------------------------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| T29 | [T29-real-solve-e2e.md](T29-real-solve-e2e.md)                                               | 真实求解端到端验证（OpenFOAM 环境）             | 求解链路真机复跑 + 前端视口验证（求解器仍在完善，放最后）                                               |
+| T29 | [T29-real-solve-e2e.md](T29-real-solve-e2e.md)                                               | 真实求解端到端验证（OpenFOAM 环境）             | v0.2.5 轮三条链路已跑通；剩最小连通性复跑 + 视口截图核验（真实件 4 进程并行待上游 issue #7）            |
 | T33 | [T33-updater-hardening.md](T33-updater-hardening.md)                                         | 发布加固：CSP 已加固 + updater / 签名待密钥证书 | CSP 零行为变化加固已落地；`style-src 'unsafe-inline'` 移除需真机回归，updater 与三平台签名需密钥 / 证书 |
 | T48 | [T48-renderer-bench-realdevice.md](T48-renderer-bench-realdevice.md)                         | 渲染后端三端真机验收与 FPS 回填                 | 等三端真机（macOS/Windows/Linux WebView）                                                               |
 | T60 | [T60-import-log-and-pptx.md](T60-import-log-and-pptx.md)                                     | 导入日志流 + PPT 报告导出（低优先 / 可选拆分）  | 低优先；PPTX 需要新依赖决策，可先做导入日志                                                             |
