@@ -59,6 +59,18 @@ Windows CI 复跑又暴露两处，都是**把用户输入的「名字」当路�
 **名字 ≠ 路径**——用户输入的工程名 / 文件名 / 报告名用 `path_segment`（纯字符清洗，
 不解析），真实文件路径取末段用 `file_name_of`（`Path::file_name`）。
 
+## 第三轮（Windows 再次复跑）
+
+只剩一条：`workspace.rs` 的 `relative_paths_reject_escape_and_absolute` 里
+`validate_relative("C:/Users/x/part.stl")` 断言了「不得含盘符」文案——Windows 上该输入
+先被 `has_root()` 拦下，文案是「必须是相对路径」。这一条在上一轮已经意识到（同文件里
+改过一处），但漏改了 workspace 侧的副本；本轮改成只断言报错，文案断言统一留在
+平台无关的 `geometry/a:b.stl` 用例上。
+
+顺带把全仓同类断言扫了一遍（`grep '不得含盘符|必须是相对路径'`）：现在只剩 `paths.rs`
+与 `workspace.rs` 各一条，且都挂在 `geometry/a:b.stl`（相对路径 + 冒号，两个平台都由
+冒号规则命中，文案一致）。
+
 ## 处理记录
 
 - **立即修**：三处手写路径、一处前端扩展名解析、两处平台相关断言。

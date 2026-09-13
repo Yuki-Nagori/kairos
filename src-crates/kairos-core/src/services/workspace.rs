@@ -215,14 +215,15 @@ mod tests {
         assert!(validate_relative("").is_err());
         assert!(validate_relative("   ").is_err());
         assert!(validate_relative("/etc/passwd").is_err());
-        // 绝对路径在 is_absolute 之前就被组件级校验拦下（含 Windows 盘符形态）
+        // 盘符形态：两个平台由不同判定先拦下（Windows `has_root()` / Unix 冒号检查），
+        // 因此只断言「报错」；文案断言留给平台无关的用例（下面的相对冒号路径）。
+        assert!(validate_relative("C:/Users/x/part.stl").is_err());
         assert!(
-            validate_relative("C:/Users/x/part.stl")
+            validate_relative("geometry/a:b.stl")
                 .unwrap_err()
                 .message()
                 .contains("不得含盘符")
         );
-        assert!(validate_relative("geometry/a:b.stl").is_err());
         assert!(validate_relative("geometry/../../etc/passwd").is_err());
         assert!(validate_relative("../outside.stl").is_err());
         // 拼接结果始终落在工作区内
