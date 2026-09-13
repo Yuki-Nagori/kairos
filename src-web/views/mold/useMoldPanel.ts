@@ -3,9 +3,10 @@
  * 作用于活跃研究；未选研究或有操作进行中时整个表单禁用。
  * 坐标输入按「起点 xyz → 终点 xyz」成组，数值统一 mm（入口温度 °C）。
  */
-import { computed, reactive, ref } from "vue";
+import { computed, reactive, ref, watch } from "vue";
 import { useAppStore } from "../../stores/app";
 import { useProjectStore } from "../../stores/project";
+import { useViewportStore } from "../../stores/viewport";
 import type { CoolingChannel, RunnerElement, RunnerKind } from "../../types";
 
 export function useMoldPanel() {
@@ -24,6 +25,7 @@ export function useMoldPanel() {
 
   const app = useAppStore();
   const project = useProjectStore();
+  const viewport = useViewportStore();
 
   const working = computed(() => app.busy !== null);
 
@@ -70,6 +72,60 @@ export function useMoldPanel() {
     void project.checkNetwork();
   }
 
+  // —— 视口拾取放置 ——
+  // 拾取点写入浇口**终点**（型腔端，与 case 生成的 GatePortal 取端一致），
+  // 起点保持表单值：用户可先填起点，或拾取后再微调。
+  const placementActive = computed(() => viewport.placement.active);
+  const placementContinuous = computed(() => viewport.placement.continuous);
+  /** 连续放置开关（按钮式切换，拾取后不自动退出）。 */
+  function toggleContinuous(): void {
+    viewport.placement = { ...viewport.placement, continuous: !viewport.placement.continuous };
+  }
+  const placementDisabledReason = computed(() => {
+    if (study.value === null) {
+      return "请先创建或选择一个方案。";
+    }
+    if (!viewport.meshLoaded) {
+      return "请在视口载入网格后再拾取放置。";
+    }
+    return "";
+  });
+  const placementDisabled = computed(() => placementDisabledReason.value !== "" || working.value);
+  /** 拾取结果提示：未拾取时给操作指引。 */
+  const placementHint = computed(() => {
+    if (placementDisabledReason.value !== "") {
+      return placementDisabledReason.value;
+    }
+    if (!placementActive.value) {
+      return viewport.placement.picks > 0
+        ? `已拾取 ${viewport.placement.picks} 个点，最后一点已填入终点。`
+        : "点击「视口拾取放置」后单击模型表面，坐标吸附到最近网格节点。";
+    }
+    return "放置模式：请在视口中单击模型表面，或点「取消拾取」退出。";
+  });
+
+  function startPlacement(): void {
+    viewport.beginPlacement(viewport.placement.continuous);
+  }
+
+  function cancelPlacement(): void {
+    viewport.cancelPlacement();
+  }
+
+  /** 拾取点回填终点坐标（面板显示 mm，与网格同单位）。 */
+  watch(
+    () => viewport.placement.picks,
+    () => {
+      const point = viewport.placement.point;
+      if (point === null) {
+        return;
+      }
+      runnerEnd.x = String(point[0]);
+      runnerEnd.y = String(point[1]);
+      runnerEnd.z = String(point[2]);
+    },
+  );
+
   function runnerLabel(element: RunnerElement): string {
     return `${element.kind === "gate" ? "浇口" : "流道"} ${element.id} · Ø${element.diameterMm} mm`;
   }
@@ -81,7 +137,15 @@ export function useMoldPanel() {
   return {
     AXES,
     project,
+    working,
     formDisabled,
+    placementActive,
+    placementContinuous,
+    toggleContinuous,
+    placementDisabled,
+    placementHint,
+    startPlacement,
+    cancelPlacement,
     study,
     runnerKind,
     runnerDiameter,

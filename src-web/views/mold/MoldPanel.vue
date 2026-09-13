@@ -9,6 +9,7 @@ import UiButton from "../../components/ui/UiButton.vue";
 const {
   AXES,
   project,
+  working,
   formDisabled,
   study,
   runnerKind,
@@ -16,6 +17,13 @@ const {
   runnerStart,
   runnerEnd,
   addRunner,
+  placementActive,
+  placementContinuous,
+  toggleContinuous,
+  placementDisabled,
+  placementHint,
+  startPlacement,
+  cancelPlacement,
   runnerLabel,
   channelDiameter,
   channelStart,
@@ -82,7 +90,28 @@ const {
         </template>
       </div>
       <UiButton :disabled="formDisabled" @click="addRunner">添加单元</UiButton>
+      <UiButton
+        v-if="placementActive"
+        variant="danger"
+        :disabled="working"
+        @click="cancelPlacement"
+      >
+        取消拾取
+      </UiButton>
+      <UiButton v-else :disabled="placementDisabled" @click="startPlacement">
+        视口拾取放置
+      </UiButton>
+      <UiButton
+        :disabled="placementDisabled"
+        :title="placementContinuous ? '拾取后继续等待下一次点击' : '拾取一次后自动退出放置模式'"
+        @click="toggleContinuous"
+      >
+        {{ placementContinuous ? "连续放置：开" : "连续放置：关" }}
+      </UiButton>
     </div>
+    <p class="text-[11px]" :class="placementActive ? 'text-emerald-400' : 'text-zinc-500'">
+      {{ placementHint }}
+    </p>
 
     <div class="space-y-1">
       <p v-if="study === null" class="text-xs text-zinc-500">请先在左侧工程面板新建或选择方案。</p>

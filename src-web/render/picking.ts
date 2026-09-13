@@ -26,6 +26,8 @@ interface PickResult {
   cell: number;
   /** 射线参数 t（相机到命中点距离）。 */
   distance: number;
+  /** 命中点世界坐标（位于命中三角形内）。 */
+  point: Vec3;
 }
 
 /** 指针坐标（相对画布左上角，CSS 像素）→ 世界射线。 */
@@ -71,14 +73,98 @@ export function pickCell(mesh: PickMesh, ray: PointerRay): PickResult | null {
       if (cell === undefined) {
         continue;
       }
-      best = { face, cell, distance: t };
+      best = {
+        face,
+        cell,
+        distance: t,
+        point: [
+          ray.origin[0] + ray.dir[0] * t,
+          ray.origin[1] + ray.dir[1] * t,
+          ray.origin[2] + ray.dir[2] * t,
+        ],
+      };
     }
   }
   return best;
 }
 
+/**
+ * 命中点吸附到网格节点：取命中三角形三个顶点里离命中点最近的那个。
+ * 表面网格的顶点即制品网格节点，落在顶点上才能被求解侧当作浇口落点。
+ * 节点坐标不可用（索引越界 / 无节点数据）时回退命中单元的中心。
+ */
+export function snapToNode(mesh: PickMesh, hit: PickResult): Vec3 {
+  const indices = [hit.face * 3, hit.face * 3 + 1, hit.face * 3 + 2].map(
+    (offset) => mesh.indices[offset],
+  );
+  let nearest: Vec3 | null = null;
+  let nearestDistance = Number.POSITIVE_INFINITY;
+  for (const index of indices) {
+    if (index === undefined) {
+      continue;
+    }
+    const vertex = strictVertexAt(mesh.positions, index);
+    if (vertex === null) {
+      continue;
+    }
+    const distance =
+      (vertex[0] - hit.point[0]) ** 2 +
+      (vertex[1] - hit.point[1]) ** 2 +
+      (vertex[2] - hit.point[2]) ** 2;
+    if (distance < nearestDistance) {
+      nearestDistance = distance;
+      nearest = vertex;
+    }
+  }
+  if (nearest !== null) {
+    return nearest;
+  }
+  return cellCenter(mesh, hit.cell) ?? hit.point;
+}
+
+/** 命中单元的中心：该单元所有表面顶点的平均（无匹配面时返回 null）。 */
+function cellCenter(mesh: PickMesh, cell: number): Vec3 | null {
+  const sum: Vec3 = [0, 0, 0];
+  let count = 0;
+  const faceCount = Math.floor(mesh.indices.length / 3);
+  for (let face = 0; face < faceCount; face += 1) {
+    if (mesh.faceCells[face] !== cell) {
+      continue;
+    }
+    for (let corner = 0; corner < 3; corner += 1) {
+      const index = mesh.indices[face * 3 + corner];
+      if (index === undefined) {
+        continue;
+      }
+      const vertex = strictVertexAt(mesh.positions, index);
+      if (vertex === null) {
+        continue;
+      }
+      sum[0] += vertex[0];
+      sum[1] += vertex[1];
+      sum[2] += vertex[2];
+      count += 1;
+    }
+  }
+  if (count === 0) {
+    return null;
+  }
+  return [sum[0] / count, sum[1] / count, sum[2] / count];
+}
+
 function vertexAt(positions: Float32Array, index: number): Vec3 {
   return [positions[index * 3] ?? 0, positions[index * 3 + 1] ?? 0, positions[index * 3 + 2] ?? 0];
+}
+
+/** 严格顶点读取：索引越界返回 null（吸附拒绝以残缺坐标落点）。 */
+function strictVertexAt(positions: Float32Array, index: number): Vec3 | null {
+  const x = positions[index * 3];
+  const y = positions[index * 3 + 1];
+  const z = positions[index * 3 + 2];
+  if (x === undefined || y === undefined || z === undefined) {
+    return null;
+  }
+  return [x, y, z];
 }
 
 /** Möller–Trumbore：射线与三角形相交的参数 t（t > 0），平行 / 背向返回 null。 */

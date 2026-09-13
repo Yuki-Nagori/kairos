@@ -69,13 +69,15 @@ vi.mock("../../../../src-web/render/capability", () => ({
   detectRenderCapabilityInBrowser: capabilityMock,
 }));
 vi.mock("../../../../src-web/render/snapshot", () => ({ registerSnapshot: vi.fn() }));
-const { pickCellMock, rayMock } = vi.hoisted(() => ({
+const { pickCellMock, rayMock, snapMock } = vi.hoisted(() => ({
   pickCellMock: vi.fn(),
   rayMock: vi.fn(() => ({ origin: [0, 0, 5], dir: [0, 0, -1] })),
+  snapMock: vi.fn(),
 }));
 vi.mock("../../../../src-web/render/picking", () => ({
   pickCell: pickCellMock,
   rayFromPointer: rayMock,
+  snapToNode: snapMock,
 }));
 vi.mock("../../../../src-web/api/geometry", () => ({ getRenderMesh: vi.fn() }));
 vi.mock("../../../../src-web/api/results", () => ({
@@ -497,6 +499,52 @@ describe("useViewportPanel：空间拾取", () => {
     expect(pickCellMock).toHaveBeenCalled();
     expect(results.probes.map((probe) => probe.nodeIndex)).toEqual([3]);
     expect(panel.probeHits).toBe(1);
+    panel.unmount();
+  });
+
+  it("放置模式下点击回填吸附点且不建探针；单次模式自动退出", async () => {
+    const { panel, el } = await mountLoaded();
+    const results = useResultsStore();
+    const viewport = useViewportStore();
+    pickCellMock.mockReturnValueOnce({ cell: 3, face: 1, distance: 2, point: [1.234, 5.6789, 0] });
+    snapMock.mockReturnValueOnce([1.2345, 5.6789, 0.0004]);
+
+    viewport.beginPlacement();
+
+    const down = new Event("pointerdown");
+    Object.assign(down, { clientX: 10, clientY: 10 });
+    el.dispatchEvent(down);
+    const up = new Event("pointerup");
+    Object.assign(up, { clientX: 12, clientY: 12 });
+    el.dispatchEvent(up);
+
+    expect(snapMock).toHaveBeenCalled();
+    // 吸附点按 mm 取整到微米（1.2345 → 1.235），写进 store；探针不受影响。
+    expect(viewport.placement.point).toEqual([1.235, 5.679, 0]);
+    expect(viewport.placement.picks).toBe(1);
+    expect(viewport.placement.active).toBe(false);
+    expect(results.probes).toHaveLength(0);
+    expect(panel.probeHits).toBe(0);
+
+    // 连续放置：拾取后仍等待下一次点击。
+    viewport.beginPlacement(true);
+    pickCellMock.mockReturnValueOnce({ cell: 4, face: 2, distance: 2, point: [0, 0, 0] });
+    snapMock.mockReturnValueOnce([9, 8, 7]);
+    const down2 = new Event("pointerdown");
+    Object.assign(down2, { clientX: 10, clientY: 10 });
+    el.dispatchEvent(down2);
+    const up2 = new Event("pointerup");
+    Object.assign(up2, { clientX: 11, clientY: 11 });
+    el.dispatchEvent(up2);
+    expect(viewport.placement.active).toBe(true);
+    expect(viewport.placement.point).toEqual([9, 8, 7]);
+    panel.unmount();
+  });
+
+  it("载入网格后置位共享标志，供模具面板判断拾取可用性", async () => {
+    const { panel } = await mountLoaded();
+    const viewport = useViewportStore();
+    expect(viewport.meshLoaded).toBe(true);
     panel.unmount();
   });
 

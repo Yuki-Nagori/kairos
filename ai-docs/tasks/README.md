@@ -83,6 +83,7 @@
 | T81 | [T81-filler-parameters-done.md](T81-filler-parameters-done.md)                             | 纤维 / 填料参数组（补档）                        |
 | T56 | [T56-mesh-aspect-match-rate-done.md](T56-mesh-aspect-match-rate-done.md)                   | 网格纵横比 + 双域匹配率                          |
 | T57 | [T57-mesh-estimate-preview-done.md](T57-mesh-estimate-preview-done.md)                     | 网格预估单元数（生成前预览）                     |
+| T58 | [T58-viewport-gate-picking-done.md](T58-viewport-gate-picking-done.md)                     | 视口拾取放置浇口 + 节点吸附                      |
 
 > T26/T27 落地后的增量打磨（系统窗口按钮、原生应用菜单、主题注入统一、
 > 品牌图标、emoji 清理、启动窗口位置）见 `ai-docs/timeline.md` 对应条目，
@@ -97,7 +98,6 @@
 | T33 | [T33-updater-hardening.md](T33-updater-hardening.md)                                         | 发布加固：updater + CSP 收窄                  | T18         |
 | T48 | [T48-renderer-bench-realdevice.md](T48-renderer-bench-realdevice.md)                         | 渲染后端三端真机验收与 FPS 回填               | T39         |
 | T55 | [T55-gate-location-analysis.md](T55-gate-location-analysis.md)                               | 浇口位置分析序列（P1，最大缺口）              | T11/T44     |
-| T58 | [T58-viewport-gate-picking.md](T58-viewport-gate-picking.md)                                 | 视口拾取放浇口 + 节点吸附                     | T45/T07     |
 | T59 | [T59-fill-preview.md](T59-fill-preview.md)                                                   | 填充预览（依赖 T55）                          | T55         |
 | T60 | [T60-import-log-and-pptx.md](T60-import-log-and-pptx.md)                                     | 导入日志流 + PPT 报告（低优先）               | T52         |
 | T65 | [T65-warpage-deformation-view.md](T65-warpage-deformation-view.md)                           | 翘曲变形可视化（视口位移显示）                | T64         |

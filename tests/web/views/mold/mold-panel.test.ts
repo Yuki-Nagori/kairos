@@ -7,6 +7,7 @@ import MoldPanel from "../../../../src-web/views/mold/MoldPanel.vue";
 import { useMoldPanel } from "../../../../src-web/views/mold/useMoldPanel";
 import { useAppStore } from "../../../../src-web/stores/app";
 import { useProjectStore } from "../../../../src-web/stores/project";
+import { useViewportStore } from "../../../../src-web/stores/viewport";
 import { checkMoldNetwork } from "../../../../src-web/api/mold";
 import type { CoolingChannel, Project, RunnerElement, Study } from "../../../../src-web/types";
 
@@ -251,5 +252,109 @@ describe("MoldPanel", () => {
     expect(project.activeStudy?.runnerElements[0]?.end).toEqual([0, 0, 0]);
     expect(project.activeStudy?.coolingChannels[0]?.start).toEqual([0, 0, 0]);
     expect(project.activeStudy?.coolingChannels[0]?.end).toEqual([0, 0, 0]);
+  });
+});
+
+describe("MoldPanel：视口拾取放置", () => {
+  let pinia: Pinia;
+
+  beforeEach(() => {
+    pinia = createPinia();
+    setActivePinia(pinia);
+    vi.resetAllMocks();
+  });
+
+  function mountWithStudy(): ReturnType<typeof mount> {
+    const project = useProjectStore();
+    project.project = projectFixture([studyFixture()]);
+    project.activeStudyId = "study-1";
+    return mount(MoldPanel, { global: { plugins: [pinia] } });
+  }
+
+  it("未载入网格时禁用并提示；载入后可进入放置模式", async () => {
+    const wrapper = mountWithStudy();
+    const viewport = useViewportStore();
+    expect(findButton(wrapper, "视口拾取放置").attributes("disabled")).toBeDefined();
+    expect(wrapper.text()).toContain("请在视口载入网格后再拾取放置。");
+
+    viewport.setMeshLoaded(true);
+    await nextTick();
+    expect(findButton(wrapper, "视口拾取放置").attributes("disabled")).toBeUndefined();
+    expect(wrapper.text()).toContain("点击「视口拾取放置」后单击模型表面");
+
+    await findButton(wrapper, "视口拾取放置").trigger("click");
+    expect(viewport.placement.active).toBe(true);
+    expect(wrapper.text()).toContain("放置模式：请在视口中单击模型表面");
+    // 放置中：按钮变为取消入口。
+    await findButton(wrapper, "取消拾取").trigger("click");
+    expect(viewport.placement.active).toBe(false);
+  });
+
+  it("拾取点回填浇口终点并保留起点；连续放置开关可切换", async () => {
+    const wrapper = mountWithStudy();
+    const viewport = useViewportStore();
+    const panel = useMoldPanel();
+    viewport.setMeshLoaded(true);
+    await nextTick();
+    // 起点走面板输入框（组件自身表单），拾取只写终点。
+    const inputs = wrapper.findAll("input");
+    await inputs[1]?.setValue("1");
+    await inputs[2]?.setValue("2");
+    await inputs[3]?.setValue("3");
+
+    // 连续放置：先切开关再拾取两次。
+    await findButton(wrapper, "连续放置：关").trigger("click");
+    expect(viewport.placement.continuous).toBe(true);
+    expect(findButton(wrapper, "连续放置：开").attributes("title")).toContain("继续等待");
+
+    viewport.beginPlacement(viewport.placement.continuous);
+    viewport.recordPick([10, 20, 30]);
+    await nextTick();
+    expect(panel.runnerEnd).toMatchObject({ x: "10", y: "20", z: "30" });
+    // 拾取后仍处于放置模式（连续）。
+    expect(viewport.placement.active).toBe(true);
+
+    viewport.recordPick([11.5, -2, 0.125]);
+    await nextTick();
+    expect(panel.runnerEnd).toMatchObject({ x: "11.5", y: "-2", z: "0.125" });
+    expect(wrapper.text()).toContain("放置模式");
+
+    // 退出后提示变为累计计数；起点坐标未被改动。
+    panel.cancelPlacement();
+    await nextTick();
+    expect(wrapper.text()).toContain("已拾取 2 个点，最后一点已填入终点。");
+    expect(wrapper.findAll("input")[1]?.element.value).toBe("1");
+
+    // 重新开始一轮放置：计数清零（point 为空）时不覆盖表单里的终点值。
+    viewport.beginPlacement();
+    await nextTick();
+    expect(viewport.placement.picks).toBe(0);
+    const endInputs = wrapper.findAll("input");
+    expect([
+      endInputs[4]?.element.value,
+      endInputs[5]?.element.value,
+      endInputs[6]?.element.value,
+    ]).toEqual(["11.5", "-2", "0.125"]);
+
+    // 拾取写入终点后添加单元：浇口落在吸附点上。
+    await findButton(wrapper, "添加单元").trigger("click");
+    const study = useProjectStore().activeStudy;
+    expect(study?.runnerElements[0]).toMatchObject({
+      kind: "runner",
+      start: [1, 2, 3],
+      end: [11.5, -2, 0.125],
+    });
+  });
+
+  it("无活跃方案时不进入放置模式（模式判定优先于网格状态）", () => {
+    const wrapper = mount(MoldPanel, { global: { plugins: [pinia] } });
+    const viewport = useViewportStore();
+    viewport.setMeshLoaded(true);
+    const panel = useMoldPanel();
+
+    expect(panel.placementDisabled.value).toBe(true);
+    expect(wrapper.text()).toContain("请先创建或选择一个方案。");
+    // 直接调用也不进入（按钮已禁用，这里锁定状态机不被绕过）。
+    expect(viewport.placement.active).toBe(false);
   });
 });

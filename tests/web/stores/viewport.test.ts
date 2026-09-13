@@ -53,3 +53,57 @@ describe("viewport store", () => {
     });
   });
 });
+
+describe("视口拾取放置", () => {
+  let pinia: Pinia;
+
+  beforeEach(() => {
+    pinia = createPinia();
+    setActivePinia(pinia);
+  });
+
+  it("载入标志置位与复位；复位时退出放置模式", () => {
+    const viewport = useViewportStore();
+    expect(viewport.meshLoaded).toBe(false);
+    expect(viewport.placement).toEqual({ active: false, continuous: false, point: null, picks: 0 });
+
+    viewport.setMeshLoaded(true);
+    expect(viewport.meshLoaded).toBe(true);
+
+    viewport.beginPlacement();
+    expect(viewport.placement.active).toBe(true);
+    viewport.setMeshLoaded(false);
+    expect(viewport.meshLoaded).toBe(false);
+    expect(viewport.placement.active).toBe(false);
+  });
+
+  it("单次模式：拾取后退出并记录点与计数", () => {
+    const viewport = useViewportStore();
+    viewport.beginPlacement();
+    viewport.recordPick([1, 2, 3]);
+    expect(viewport.placement).toEqual({
+      active: false,
+      continuous: false,
+      point: [1, 2, 3],
+      picks: 1,
+    });
+    viewport.recordPick([4, 5, 6]);
+    expect(viewport.placement.point).toEqual([4, 5, 6]);
+    expect(viewport.placement.picks).toBe(2);
+  });
+
+  it("连续模式：拾取后保持活动；beginPlacement 重置计数", () => {
+    const viewport = useViewportStore();
+    viewport.beginPlacement(true);
+    viewport.recordPick([0, 0, 1]);
+    expect(viewport.placement.active).toBe(true);
+    expect(viewport.placement.picks).toBe(1);
+
+    viewport.cancelPlacement();
+    expect(viewport.placement.active).toBe(false);
+    expect(viewport.placement.point).toEqual([0, 0, 1]);
+
+    viewport.beginPlacement();
+    expect(viewport.placement).toEqual({ active: true, continuous: false, point: null, picks: 0 });
+  });
+});

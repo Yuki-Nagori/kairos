@@ -8,7 +8,7 @@ import { useResultsStore } from "../../stores/results";
 import { useViewportStore, type ViewportLayout } from "../../stores/viewport";
 import type { ScalarField } from "../../types";
 import { createViewportRenderer, type ViewportBackend } from "../../render/backend";
-import { pickCell, rayFromPointer, type PickMesh } from "../../render/picking";
+import { pickCell, rayFromPointer, snapToNode, type PickMesh } from "../../render/picking";
 import { buildOverlayLayers, OVERLAY_IDS } from "../../render/overlays";
 import { detectRenderCapabilityInBrowser } from "../../render/capability";
 import { registerSnapshot } from "../../render/snapshot";
@@ -114,6 +114,10 @@ export function useViewportPanel() {
   // pointerdown/up 位移小于阈值视为点击（大于阈值是旋转拖拽），命中单元加入探针。
   const PICK_SLOP_PIXELS = 4;
   const probeHits = ref(0);
+  /** 拾取坐标按微米取整：浇口坐标面板显示 mm，避免长浮点尾数。 */
+  function roundMm(value: number): number {
+    return Math.round(value * 1000) / 1000;
+  }
 
   function attachPointerHandlers(slot: ViewportSlot): void {
     const el = slot.el;
@@ -140,10 +144,17 @@ export function useViewportPanel() {
         event.clientY - rect.top,
       );
       const hit = pickCell(slot.renderMesh, ray);
-      if (hit !== null) {
-        results.addProbe(hit.cell);
-        probeHits.value += 1;
+      if (hit === null) {
+        return;
       }
+      // 放置模式下点击不建探针：吸附到最近网格节点后回填模具网络面板的表单。
+      if (viewport.placement.active) {
+        const node = snapToNode(slot.renderMesh, hit);
+        viewport.recordPick([roundMm(node[0]), roundMm(node[1]), roundMm(node[2])]);
+        return;
+      }
+      results.addProbe(hit.cell);
+      probeHits.value += 1;
     });
   }
 
@@ -338,6 +349,7 @@ export function useViewportPanel() {
     if (slots[0]?.loaded === true) {
       registerSnapshot("viewport", slots[0]!.el!);
     }
+    viewport.setMeshLoaded(meshLoaded.value);
   }
 
   /** 把当前研究的浇注系统 / 冷却水路上传为线段叠加层（全部实例）。 */
