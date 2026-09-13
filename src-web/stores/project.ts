@@ -18,7 +18,10 @@ import { useMaterialsStore } from "./materials";
 let studySeq = 0;
 let elementSeq = 0;
 
-/** 结构编辑只改内存，落盘统一经保存/另存为动作（writeProject）。 */
+/** 方案配置（材料 / 工艺 / 杆系）与几何引用编辑后防抖自动保存：
+ *  这些编辑不落盘的话，关掉再打开工程就全丢了。显式保存 / 另存为仍走 writeProject。 */
+const AUTO_SAVE_DELAY_MS = 800;
+let autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
 /** 冷却介质默认口径：水 0.05 kg/s、cp 4180 J/kg/K（面板初值与 core 默认一致）。 */
 export const DEFAULT_COOLANT_MASS_FLOW_KG_S = 0.05;
 export const WATER_SPECIFIC_HEAT = 4180;
@@ -120,6 +123,7 @@ export const useProjectStore = defineStore("project", {
         geometries.push(reference);
       }
       this.project = { ...this.project, geometries, updatedMs: Date.now() };
+      this.scheduleAutoSave();
     },
     /** 装载工程后的活跃方案兜底：原选中项不在新工程里就落到首个方案。
      * 活跃方案是材料 / 工艺 / 浇注系统的编辑目标，缺了它整条工作流无处落笔。 */
@@ -219,6 +223,33 @@ export const useProjectStore = defineStore("project", {
       }
       mutate(study);
       this.project = { ...this.project, updatedMs: Date.now() };
+      this.scheduleAutoSave();
+    },
+    /** 派发一次防抖自动保存（无工程 / 无路径时不排队：散装工程仍只在显式保存时落盘）。 */
+    scheduleAutoSave(): void {
+      if (this.project === null || this.projectPath === null) {
+        return;
+      }
+      if (autoSaveTimer !== null) {
+        clearTimeout(autoSaveTimer);
+      }
+      autoSaveTimer = setTimeout(() => {
+        autoSaveTimer = null;
+        void this.autoSaveNow();
+      }, AUTO_SAVE_DELAY_MS);
+    },
+    /** 立即落盘当前工程（自动保存尾部）；失败进全局错误，不打断编辑。 */
+    async autoSaveNow(): Promise<void> {
+      const path = this.projectPath;
+      const project = this.project;
+      if (path === null || project === null) {
+        return;
+      }
+      try {
+        await saveProjectFile(path, project);
+      } catch (error) {
+        useAppStore().setError(error);
+      }
     },
     /** 添加流道 / 浇口单元到活跃方案。 */
     addRunnerElement(

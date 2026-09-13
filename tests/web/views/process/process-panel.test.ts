@@ -278,7 +278,7 @@ describe("ProcessPanel", () => {
     localStorage.clear();
   });
 
-  it("挂载即回填活跃方案的工艺；切换方案时重新回填，无工艺则保持", async () => {
+  it("挂载即回填活跃方案的工艺；切换方案时重新回填，无工艺则带出厂默认", async () => {
     const project = useProjectStore();
     project.project = projectFixture([
       studyFixture("study-1", processP1()),
@@ -290,26 +290,27 @@ describe("ProcessPanel", () => {
 
     let inputs = fieldInputs(wrapper);
     expect(inputs[0]?.element.value).toBe("230");
-    expect(inputs[5]?.element.value).toBe("48"); // 保压压力取曲线末点
+    expect(inputs[5]?.element.value).toBe("60"); // 保压压力取曲线峰值（起点）
 
     // 切到方案 2：整表重新回填。
     project.activeStudyId = "study-2";
     await nextTick();
     inputs = fieldInputs(wrapper);
     expect(inputs[0]?.element.value).toBe("255");
-    expect(inputs[5]?.element.value).toBe("30");
+    expect(inputs[5]?.element.value).toBe("50");
 
-    // 切到无工艺的方案：不回填，保留上一份表单。
+    // 切到无工艺的方案：带出厂默认（用户改完即可应用，不必逐格手填）。
     project.activeStudyId = "study-3";
     await nextTick();
     inputs = fieldInputs(wrapper);
-    expect(inputs[0]?.element.value).toBe("255");
+    expect(inputs[0]?.element.value).toBe("230");
+    expect(inputs[3]?.element.value).toBe("1.5");
 
-    // 切到不存在的 id：同样不回填。
+    // 切到不存在的 id：同样带出厂默认。
     project.activeStudyId = "ghost";
     await nextTick();
     inputs = fieldInputs(wrapper);
-    expect(inputs[0]?.element.value).toBe("255");
+    expect(inputs[0]?.element.value).toBe("230");
   });
 
   it("回填时保压曲线为空则落 60 兜底", () => {
@@ -366,6 +367,14 @@ describe("ProcessPanel", () => {
     expect(project.project?.studies[1]?.process).toEqual(processP2());
     expect(wrapper.text()).toContain("已应用到当前方案");
     expect(useAppStore().error).toBeNull();
+
+    // 幂等：切走再切回触发回填，压力字段仍是峰值 55（曲线 100% → 80% 两点），
+    // 取曲线末点会让每次「回填 → 再应用」衰减到 80%。
+    project.activeStudyId = "study-2";
+    await nextTick();
+    project.activeStudyId = "study-1";
+    await nextTick();
+    expect(fieldInputs(wrapper)[5]?.element.value).toBe("55");
   });
 
   it("校验发现问题：渲染问题清单且不写入方案", async () => {
@@ -426,7 +435,7 @@ describe("ProcessPanel", () => {
     await findButton(wrapper, "保存预设").trigger("click");
     await fieldInputs(wrapper)[9]?.setValue("   ");
     await findButton(wrapper, "保存预设").trigger("click");
-    expect(wrapper.findAll("option")).toHaveLength(1); // 仅「选择预设…」占位
+    expect(wrapper.findAll("option")).toHaveLength(2); // 占位 + 内置预设
 
     await fieldInputs(wrapper)[0]?.setValue("250");
     await fieldInputs(wrapper)[9]?.setValue("快速启动");
@@ -450,5 +459,30 @@ describe("ProcessPanel", () => {
     await fieldInputs(wrapper)[0]?.setValue("777");
     await findButton(wrapper, "载入预设").trigger("click");
     expect(fieldInputs(wrapper)[0]?.element.value).toBe("777");
+  });
+
+  it("内置预设常驻清单：选中即回填出厂默认，同名保存被拒", async () => {
+    const wrapper = mount(ProcessPanel, { global: { plugins: [pinia] } });
+
+    // 内置预设排在选择清单首位（不落 localStorage）。
+    const options = wrapper.findAll("option");
+    expect(options[0]?.text()).toBe("选择预设…");
+    expect(options[1]?.text()).toBe("出厂默认");
+    expect(localStorage.length).toBe(0);
+
+    // 改几个字段后载入内置预设：整表回到出厂默认。
+    await fieldInputs(wrapper)[0]?.setValue("300");
+    await fieldInputs(wrapper)[3]?.setValue("9");
+    await wrapper.find("select").setValue("出厂默认");
+    await findButton(wrapper, "载入预设").trigger("click");
+    expect(fieldInputs(wrapper)[0]?.element.value).toBe("230");
+    expect(fieldInputs(wrapper)[3]?.element.value).toBe("1.5");
+
+    // 与内置预设重名：不写存储、清单不出现第二项，并给出提示。
+    await fieldInputs(wrapper)[9]?.setValue("出厂默认");
+    await findButton(wrapper, "保存预设").trigger("click");
+    expect(localStorage.getItem("kairos:process-preset:出厂默认")).toBeNull();
+    expect(wrapper.findAll("option")).toHaveLength(2);
+    expect(wrapper.text()).toContain("是内置预设名");
   });
 });

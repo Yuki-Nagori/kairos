@@ -425,6 +425,103 @@ describe("project store", () => {
     });
   });
 
+  describe("自动保存（方案配置编辑后防抖落盘）", () => {
+    it("连续编辑只落盘一次，写的是最新工程", async () => {
+      vi.useFakeTimers();
+      try {
+        vi.mocked(saveProjectFile).mockResolvedValue(undefined);
+        const { project } = primeActiveStudy();
+        project.projectPath = "/w/未命名项目/project.kairos";
+
+        project.touchActiveStudy((study) => {
+          study.materialId = "builtin-pp-001";
+        });
+        await vi.advanceTimersByTimeAsync(400); // 防抖窗口内再改一次
+        project.touchActiveStudy((study) => {
+          study.process = {
+            meltTempC: 230,
+            moldTempC: 40,
+            ejectionTempC: 90,
+            injectionTimeS: 1.5,
+            vpSwitchVolumePercent: 96,
+            packingPressureMpaCurve: [
+              [0, 60],
+              [8, 48],
+            ],
+            packingTimeS: 8,
+            coolingTimeS: 15,
+            coolantTempC: 25,
+          };
+        });
+        expect(saveProjectFile).not.toHaveBeenCalled();
+
+        await vi.advanceTimersByTimeAsync(800);
+        expect(saveProjectFile).toHaveBeenCalledTimes(1);
+        const [path, written] = vi.mocked(saveProjectFile).mock.calls[0] ?? [];
+        expect(path).toBe("/w/未命名项目/project.kairos");
+        expect(written?.studies[0]?.materialId).toBe("builtin-pp-001");
+        expect(written?.studies[0]?.process?.meltTempC).toBe(230);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("几何引用登记同样触发自动保存", async () => {
+      vi.useFakeTimers();
+      try {
+        vi.mocked(saveProjectFile).mockResolvedValue(undefined);
+        const { project } = primeActiveStudy();
+        project.projectPath = "/w/未命名项目/project.kairos";
+
+        project.upsertGeometryRef({
+          id: "geo-1",
+          fileName: "part.stl",
+          relativePath: "geometry/part.stl",
+        });
+        await vi.advanceTimersByTimeAsync(800);
+
+        expect(saveProjectFile).toHaveBeenCalledTimes(1);
+        expect(vi.mocked(saveProjectFile).mock.calls[0]?.[1]?.geometries).toHaveLength(1);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("没有保存路径时不排队（散装工程仍只在显式保存时落盘）", async () => {
+      vi.useFakeTimers();
+      try {
+        const { project } = primeActiveStudy();
+        project.projectPath = null;
+
+        project.touchActiveStudy((study) => {
+          study.materialId = "builtin-pp-001";
+        });
+        await vi.advanceTimersByTimeAsync(2000);
+
+        expect(saveProjectFile).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("自动保存失败进全局错误；缺工程 / 缺路径时直接返回", async () => {
+      const app = useAppStore();
+      const project = useProjectStore();
+      vi.mocked(saveProjectFile).mockRejectedValue(new Error("磁盘满了"));
+
+      await project.autoSaveNow(); // 无工程：直接返回
+      expect(saveProjectFile).not.toHaveBeenCalled();
+
+      const { project: primed } = primeActiveStudy();
+      await primed.autoSaveNow(); // 有工程无路径：直接返回
+      expect(saveProjectFile).not.toHaveBeenCalled();
+
+      primed.projectPath = "/w/未命名项目/project.kairos";
+      await primed.autoSaveNow();
+      expect(app.error?.message).toContain("磁盘满了");
+    });
+  });
+
   describe("syncActiveStudy", () => {
     it("活跃方案失效时落到首个方案", () => {
       const project = useProjectStore();

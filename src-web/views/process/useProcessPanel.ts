@@ -1,7 +1,8 @@
 /**
  * 工艺设置面板：参数表单、校验、应用到活跃方案、预设（localStorage）。
  * 输入值保持字符串形态（原生 input.value 即字符串）、空输入经 Number() 落为 0；
- * 出厂默认量级只进 placeholder，不预填 value。回填仅跟随活跃方案切换触发，
+ * 方案没有工艺时表单直接带出厂默认值（用户改完即可应用，不必逐格手填），
+ * 出厂默认同时常驻「选择预设」清单可随时回填。回填仅跟随活跃方案切换触发，
  * 其余状态变化不得覆盖用户正在编辑的表单。
  */
 import { computed, reactive, ref, watch } from "vue";
@@ -16,6 +17,9 @@ export function useProcessPanel() {
   /** 预设存储域：清单在 kairos:process-preset:index，条目在 kairos:process-preset:<名>。 */
   const PRESET_DOMAIN = "process-preset";
   const presets = storageIndex();
+
+  /** 内置预设名：常驻选择清单（不落存储），选中即回填出厂默认。 */
+  const BUILTIN_PRESET = "出厂默认";
 
   /** 出厂默认工艺（量级取通用热塑性塑料的典型值，用户可覆盖）。 */
   function defaultProcess(): ProcessSettings {
@@ -95,7 +99,10 @@ export function useProcessPanel() {
     form.ejectionTempC = String(settings.ejectionTempC);
     form.injectionTimeS = String(settings.injectionTimeS);
     form.vpSwitchVolumePercent = String(settings.vpSwitchVolumePercent);
-    form.packingPressureMpa = String(settings.packingPressureMpaCurve.at(-1)?.[1] ?? 60);
+    // 表单字段是曲线**峰值**（应用时按峰值铺成 100% → 80% 两点，
+    // 见 collectSettings）：回填取起点才对得上，取末点会让「应用 → 回填 → 再应用」
+    // 每来一次就衰减到 80%。
+    form.packingPressureMpa = String(settings.packingPressureMpaCurve.at(0)?.[1] ?? 60);
     form.packingTimeS = String(settings.packingTimeS);
     form.coolingTimeS = String(settings.coolingTimeS);
     form.coolantTempC = String(settings.coolantTempC);
@@ -171,13 +178,20 @@ export function useProcessPanel() {
   const presetNames = ref<string[]>([]);
 
   // localStorage 非响应式，选项清单以显式刷新驱动（保存后面板内同步重建一次）。
+  // 内置预设排在最前：不落存储，随时可回填出厂默认。
   function refreshPresetSelect(): void {
-    presetNames.value = presets.list(PRESET_DOMAIN);
+    presetNames.value = [BUILTIN_PRESET, ...presets.list(PRESET_DOMAIN)];
   }
 
   function savePreset(): void {
     const name = presetName.value.trim();
     if (!name) {
+      return;
+    }
+    if (name === BUILTIN_PRESET) {
+      // 内置预设不落存储：同名保存会让清单出现两项、载入语义分叉。
+      notice.value = `「${BUILTIN_PRESET}」是内置预设名，请换一个名称。`;
+      issueLines.value = [];
       return;
     }
     storageSet(storageKey(PRESET_DOMAIN, name), collectSettings());
@@ -187,6 +201,10 @@ export function useProcessPanel() {
   }
 
   function loadPreset(): void {
+    if (selectedPreset.value === BUILTIN_PRESET) {
+      backfill(defaults);
+      return;
+    }
     const saved = storageGet<ProcessSettings | null>(
       storageKey(PRESET_DOMAIN, selectedPreset.value),
       null,
@@ -198,15 +216,13 @@ export function useProcessPanel() {
 
   refreshPresetSelect();
 
-  // 仅在切换活跃方案时回填该方案的工艺设置；其他状态变化不覆盖表单
-  // （watch 自带「值变化」判定；immediate 覆盖首帧）。
+  // 仅在切换活跃方案时回填该方案的工艺设置；方案还没有工艺时带出厂默认值，
+  // 其他状态变化不覆盖表单（watch 自带「值变化」判定；immediate 覆盖首帧）。
   watch(
     () => project.activeStudyId,
     (activeStudyId) => {
       const study = project.project?.studies.find((s) => s.id === activeStudyId) ?? null;
-      if (study?.process) {
-        backfill(study.process);
-      }
+      backfill(study?.process ?? defaults);
     },
     { immediate: true },
   );
