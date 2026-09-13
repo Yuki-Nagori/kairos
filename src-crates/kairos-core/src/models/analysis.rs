@@ -37,3 +37,25 @@ pub struct GateLocationReport {
     /// 评分口径说明（面板直接展示，避免把它当求解结果读）。
     pub basis: String,
 }
+
+/// 填充预览报告：从浇口出发的充填覆盖估计（图连通 + 到达序，非求解结果）。
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FillPreviewReport {
+    /// 逐单元归一化到达序（0 = 浇口所在单元，1 = 最远可达单元）。
+    /// 未覆盖单元固定为 1.0，需结合 `uncoveredCells` 判读。
+    pub field: Vec<f64>,
+    /// 被充填覆盖的单元数与占比（0~1）。
+    pub covered_count: usize,
+    pub coverage_ratio: f64,
+    /// 无法从任何浇口到达的单元（孤立区域 / 与大块断开的薄壁）。
+    pub uncovered_cells: Vec<usize>,
+    /// 各浇口命中的单元（按浇口顺序）。
+    pub gate_cells: Vec<usize>,
+    /// 最远可达单元的最短路径长度（mm）。
+    pub arrival_max_mm: f64,
+    /// 落点提示（浇口离制品过远、存在孤立区域等）。
+    pub warnings: Vec<String>,
+    /// 口径说明（面板直接展示）。
+    pub basis: String,
+}

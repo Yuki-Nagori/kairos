@@ -233,6 +233,22 @@ export interface GateLocationReport {
   basis: string;
 }
 
+/** 对应 `kairos-core::models::analysis::FillPreviewReport`。 */
+export interface FillPreviewReport {
+  /** 逐单元归一化到达序（0 = 浇口，1 = 最远可达）；未覆盖单元固定为 1。 */
+  field: number[];
+  coveredCount: number;
+  /** 覆盖占比（0~1）。 */
+  coverageRatio: number;
+  /** 无法从任何浇口到达的单元。 */
+  uncoveredCells: number[];
+  /** 各浇口命中的单元。 */
+  gateCells: number[];
+  arrivalMaxMm: number;
+  warnings: string[];
+  basis: string;
+}
+
 /** 对应 `kairos-core::models::mesh::MeshEstimate`。 */
 export interface MeshEstimate {
   /** 引擎标识（voxel / gmsh）。 */

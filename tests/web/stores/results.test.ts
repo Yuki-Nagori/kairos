@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 import { useAppStore } from "../../../src-web/stores/app";
+import { useProjectStore } from "../../../src-web/stores/project";
 import { downloadTextFile } from "../../../src-web/utils/download";
 import { useResultsStore } from "../../../src-web/stores/results";
 import {
@@ -9,8 +10,13 @@ import {
   listResultTimes,
   loadResultField,
 } from "../../../src-web/api/results";
-import { analyzeGateLocation } from "../../../src-web/api/geometry";
-import type { GateLocationReport, ResultCatalog, ScalarField } from "../../../src-web/types";
+import { analyzeGateLocation, previewFill } from "../../../src-web/api/geometry";
+import type {
+  FillPreviewReport,
+  GateLocationReport,
+  ResultCatalog,
+  ScalarField,
+} from "../../../src-web/types";
 
 vi.mock("../../../src-web/api/results", () => ({
   listResultTimes: vi.fn(),
@@ -20,6 +26,7 @@ vi.mock("../../../src-web/api/results", () => ({
 }));
 vi.mock("../../../src-web/api/geometry", () => ({
   analyzeGateLocation: vi.fn(),
+  previewFill: vi.fn(),
 }));
 vi.mock("../../../src-web/utils/download", () => ({ downloadTextFile: vi.fn() }));
 
@@ -503,5 +510,86 @@ describe("runGateLocation（浇口位置分析）", () => {
     await results.runGateLocation("g-1");
     expect(app.error?.message).toBe("尚未生成体积网格");
     expect(results.gateLocation).toEqual(report);
+  });
+});
+
+describe("runFillPreview（填充预览）", () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    vi.resetAllMocks();
+  });
+
+  const report: FillPreviewReport = {
+    field: [0, 0.5, 1],
+    coveredCount: 2,
+    coverageRatio: 2 / 3,
+    uncoveredCells: [2],
+    gateCells: [0],
+    arrivalMaxMm: 8.2,
+    warnings: ["存在无法从浇口充填的孤立区域：1 个单元（占比 33.3%）。"],
+    basis: "图连通覆盖 + 最短流动路径到达序（启发式预览，非求解结果）",
+  };
+
+  it("以活跃方案浇口为源运行；覆盖场作为当前场", async () => {
+    vi.mocked(previewFill).mockResolvedValue(report);
+    const project = useProjectStore();
+    project.project = {
+      schemaVersion: 4,
+      id: "p-1",
+      name: "演示",
+      createdMs: 1,
+      updatedMs: 1,
+      studies: [
+        {
+          id: "s-1",
+          name: "填充",
+          createdMs: 1,
+          runnerElements: [
+            { id: "re-1", kind: "gate", diameterMm: 2, start: [0, 0, 0], end: [1, 1, 1] },
+          ],
+          coolingChannels: [],
+          process: null,
+          materialId: null,
+        },
+      ],
+    };
+    project.activeStudyId = "s-1";
+
+    const app = useAppStore();
+    const results = useResultsStore();
+    const busyDuring: (string | null)[] = [];
+    vi.mocked(previewFill).mockImplementation(async () => {
+      busyDuring.push(useAppStore().busy);
+      return report;
+    });
+
+    await results.runFillPreview("g-1");
+
+    expect(previewFill).toHaveBeenCalledWith("g-1", [
+      { id: "re-1", kind: "gate", diameterMm: 2, start: [0, 0, 0], end: [1, 1, 1] },
+    ]);
+    expect(busyDuring).toEqual(["正在估算充填覆盖…"]);
+    expect(results.fillPreview).toEqual(report);
+    expect(results.loadedField).toEqual({
+      field: "充填覆盖",
+      timeDir: "—",
+      timeS: 0,
+      values: report.field,
+      isMagnitude: false,
+      complete: true,
+    });
+    expect(app.error).toBeNull();
+  });
+
+  it("无活跃方案时按空浇口调用；失败进全局错误", async () => {
+    vi.mocked(previewFill).mockRejectedValue(new Error("需要至少一个浇口"));
+    const app = useAppStore();
+    const results = useResultsStore();
+
+    await results.runFillPreview("g-1");
+
+    expect(previewFill).toHaveBeenCalledWith("g-1", []);
+    expect(app.error?.message).toBe("需要至少一个浇口");
+    expect(results.fillPreview).toBeNull();
   });
 });

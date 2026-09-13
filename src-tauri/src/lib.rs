@@ -201,6 +201,7 @@ pub fn run() {
             commands::geometry::generate_gmsh_mesh,
             commands::geometry::estimate_volume_mesh,
             commands::geometry::analyze_gate_location,
+            commands::geometry::preview_fill,
             commands::mold::check_mold_network,
             commands::process::check_process,
             commands::solver::probe_moldingfoam,

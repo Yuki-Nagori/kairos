@@ -17,6 +17,10 @@ const {
   runnerStart,
   runnerEnd,
   addRunner,
+  fillPreview,
+  fillPreviewDisabled,
+  fillPreviewHint,
+  runPreview,
   gateSuggestions,
   gateLocationBasis,
   applySuggestion,
@@ -129,6 +133,21 @@ const {
         </div>
         <p v-if="study.runnerElements.length === 0" class="text-xs text-zinc-500">尚无单元。</p>
       </template>
+    </div>
+
+    <div class="space-y-1 rounded-lg border border-zinc-800 p-2">
+      <div class="flex flex-wrap items-center gap-2">
+        <UiButton :disabled="fillPreviewDisabled" @click="runPreview">填充预览</UiButton>
+        <p class="text-[11px] text-zinc-500">{{ fillPreviewHint }}</p>
+      </div>
+      <p
+        v-for="warning in fillPreview?.warnings ?? []"
+        :key="warning"
+        class="text-[11px] text-amber-400"
+      >
+        {{ warning }}
+      </p>
+      <p v-if="fillPreview !== null" class="text-[10px] text-zinc-600">{{ fillPreview.basis }}</p>
     </div>
 
     <div v-if="gateSuggestions.length > 0" class="space-y-1 rounded-lg border border-zinc-800 p-2">

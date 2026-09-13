@@ -4,6 +4,7 @@ use criterion::{Criterion, criterion_group, criterion_main};
 use kairos_core::error::KairosError;
 use kairos_core::models::geometry::TriangleMesh;
 use kairos_core::models::system::SystemInfo;
+use kairos_core::services::fill_preview;
 use kairos_core::services::gate_location::{self, GateLocationParams};
 use kairos_core::services::{meshing, system};
 
@@ -36,10 +37,26 @@ fn bench_gate_location(c: &mut Criterion) {
     });
 }
 
+/// 填充预览：同一网格上的多源最短路（预算见 ai-docs/perf-budget.md）。
+fn bench_fill_preview(c: &mut Criterion) {
+    let mesh = meshing::generate(
+        &TriangleMesh::sample_box(50.0),
+        &meshing::VolumeMeshParams {
+            refinement: None,
+            target_size: 1.0,
+        },
+    )
+    .expect("mesh");
+    c.bench_function("fill_preview_625k_tets", |b| {
+        b.iter(|| fill_preview::preview(&mesh, &[[25.0, 25.0, 0.0]]).expect("preview"))
+    });
+}
+
 criterion_group!(
     benches,
     bench_system_info_serialize,
     bench_error_serialize,
-    bench_gate_location
+    bench_gate_location,
+    bench_fill_preview
 );
 criterion_main!(benches);

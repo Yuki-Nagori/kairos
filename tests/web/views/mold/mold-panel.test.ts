@@ -7,6 +7,8 @@ import MoldPanel from "../../../../src-web/views/mold/MoldPanel.vue";
 import { useMoldPanel } from "../../../../src-web/views/mold/useMoldPanel";
 import { useAppStore } from "../../../../src-web/stores/app";
 import { useProjectStore } from "../../../../src-web/stores/project";
+import type { Mock } from "vitest";
+import { useGeometryStore } from "../../../../src-web/stores/geometry";
 import { useResultsStore } from "../../../../src-web/stores/results";
 import { useViewportStore } from "../../../../src-web/stores/viewport";
 import { checkMoldNetwork } from "../../../../src-web/api/mold";
@@ -14,6 +16,10 @@ import type { CoolingChannel, Project, RunnerElement, Study } from "../../../../
 
 vi.mock("../../../../src-web/api/mold", () => ({
   checkMoldNetwork: vi.fn(),
+}));
+vi.mock("../../../../src-web/api/geometry", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  previewFill: vi.fn(),
 }));
 
 function runnerElementFixture(overrides: Partial<RunnerElement> = {}): RunnerElement {
@@ -425,5 +431,105 @@ describe("MoldPanel：浇口位置建议", () => {
       start: [2, 5, 5],
       end: [5, 5, 5],
     });
+  });
+});
+
+describe("MoldPanel：填充预览", () => {
+  let pinia: Pinia;
+
+  beforeEach(() => {
+    pinia = createPinia();
+    setActivePinia(pinia);
+    vi.resetAllMocks();
+  });
+
+  it("无浇口 / 无网格时禁用并给出原因；就绪后运行并展示覆盖率与告警", async () => {
+    const project = useProjectStore();
+    project.project = projectFixture([studyFixture()]);
+    project.activeStudyId = "study-1";
+    const geometry = useGeometryStore();
+    const wrapper = mount(MoldPanel, { global: { plugins: [pinia] } });
+
+    // 无浇口：禁用 + 原因
+    expect(findButton(wrapper, "填充预览").attributes("disabled")).toBeDefined();
+    expect(wrapper.text()).toContain("填充预览需要至少一个浇口。");
+
+    // 有浇口但无网格：原因切换
+    await wrapper.findAll("input")[8]!.setValue("2"); // 水路直径占位：这里直接改方案数据
+    const study = project.activeStudy!;
+    study.runnerElements.push({
+      id: "re-1",
+      kind: "gate",
+      diameterMm: 2,
+      start: [0, 0, 0],
+      end: [5, 5, 5],
+    });
+    await nextTick();
+    expect(wrapper.text()).toContain("填充预览需要先划分体积网格。");
+
+    // 补网格 → 可运行；运行后展示覆盖统计与告警
+    geometry.meshReports["g-1"] = {
+      engine: "voxel",
+      nodeCount: 10,
+      elementCount: 20,
+      surfaceFaceCount: 30,
+      totalVolume: 1000,
+      quality: { minEdgeRatio: 1, avgEdgeRatio: 1, maxEdgeRatio: 1, minVolume: 1 },
+      aspectMax: 3.4,
+      aspectAvg: 1.6,
+      thinFeatureHints: [],
+    };
+    geometry.geometries = [
+      {
+        geometryId: "g-1",
+        fileName: "part.stl",
+        triangleCount: 12,
+        size: [10, 10, 10],
+        surfaceArea: 600,
+        signedVolume: 1000,
+        suggestedUnit: "mm",
+        issues: {
+          degenerate: 0,
+          openEdges: 0,
+          nonManifoldEdges: 0,
+          normalInconsistentEdges: 0,
+        },
+      },
+    ];
+    await nextTick();
+    const button = findButton(wrapper, "填充预览");
+    expect(button.attributes("disabled")).toBeUndefined();
+    expect(wrapper.text()).toContain("不改跑求解");
+
+    const { previewFill } = (await import("../../../../src-web/api/geometry")) as unknown as {
+      previewFill: Mock;
+    };
+    previewFill.mockResolvedValue({
+      field: [0, 0.5, 1],
+      coveredCount: 2,
+      coverageRatio: 2 / 3,
+      uncoveredCells: [2],
+      gateCells: [0],
+      arrivalMaxMm: 8.2,
+      warnings: ["存在无法从浇口充填的孤立区域：1 个单元（占比 33.3%）。"],
+      basis: "图连通覆盖 + 最短流动路径到达序（启发式预览，非求解结果）",
+    });
+    await button.trigger("click");
+    await flushPromises();
+
+    expect(previewFill).toHaveBeenCalledWith("g-1", expect.any(Array));
+    expect(wrapper.text()).toContain("覆盖 66.7% · 未覆盖 1 单元 · 最长流动 8.2 mm");
+    const warning = wrapper.findAll("p").find((node) => node.text().includes("孤立区域"));
+    expect(warning?.classes()).toContain("text-amber-400");
+    expect(wrapper.text()).toContain("非求解结果");
+  });
+
+  it("无活跃方案时提示先选方案；几何缺失时运行不改动状态（防御分支）", () => {
+    const wrapper = mount(MoldPanel, { global: { plugins: [pinia] } });
+    expect(wrapper.text()).toContain("请先创建或选择一个方案。");
+
+    const panel = useMoldPanel();
+    panel.runPreview();
+    expect(useResultsStore().fillPreview).toBeNull();
   });
 });

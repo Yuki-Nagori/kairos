@@ -2,6 +2,7 @@
 import { invokeCommand } from "../utils/ipc";
 import type {
   DualDomainReport,
+  FillPreviewReport,
   GateLocationReport,
   GeometrySummary,
   MeshEstimate,
@@ -45,6 +46,14 @@ export function estimateVolumeMesh(
 /** 浇口位置分析：轻量流动启发式评分（适合度场 + Top-N 建议）。 */
 export function analyzeGateLocation(geometryId: string, topN: number): Promise<GateLocationReport> {
   return invokeCommand("analyze_gate_location", { geometryId, topN });
+}
+
+/** 填充预览：以研究浇口为源的图连通覆盖估计（不走求解器）。 */
+export function previewFill(
+  geometryId: string,
+  runnerElements: RunnerElement[],
+): Promise<FillPreviewReport> {
+  return invokeCommand("preview_fill", { geometryId, runnerElements });
 }
 
 /** 导入内置样例立方体（首次使用引导）。 */

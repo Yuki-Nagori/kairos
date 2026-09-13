@@ -6,6 +6,7 @@
 import { computed, reactive, ref, watch } from "vue";
 import { useAppStore } from "../../stores/app";
 import { useProjectStore } from "../../stores/project";
+import { useGeometryStore } from "../../stores/geometry";
 import { useResultsStore } from "../../stores/results";
 import { useViewportStore } from "../../stores/viewport";
 import type { CoolingChannel, RunnerElement, RunnerKind } from "../../types";
@@ -130,6 +131,46 @@ export function useMoldPanel() {
     },
   );
 
+  // —— 填充预览（以当前浇口为源的覆盖估计）——
+  const geometryStore = useGeometryStore();
+  const fillPreview = computed(() => results.fillPreview);
+  const fillPreviewDisabled = computed(() => {
+    if (app.busy !== null) {
+      return true;
+    }
+    const study = project.activeStudy;
+    const hasGate = study?.runnerElements.some((element) => element.kind === "gate") ?? false;
+    const first = geometryStore.geometries[0];
+    const meshed = first !== undefined && geometryStore.meshReports[first.geometryId] !== undefined;
+    return !hasGate || !meshed;
+  });
+  const fillPreviewHint = computed(() => {
+    const study = project.activeStudy;
+    if (study === null) {
+      return "请先创建或选择一个方案。";
+    }
+    if (!study.runnerElements.some((element) => element.kind === "gate")) {
+      return "填充预览需要至少一个浇口。";
+    }
+    const first = geometryStore.geometries[0];
+    if (first === undefined || geometryStore.meshReports[first.geometryId] === undefined) {
+      return "填充预览需要先划分体积网格。";
+    }
+    const report = results.fillPreview;
+    if (report === null) {
+      return "不改跑求解：以浇口为源估算可充填覆盖范围。";
+    }
+    return `覆盖 ${(report.coverageRatio * 100).toFixed(1)}% · 未覆盖 ${report.uncoveredCells.length} 单元 · 最长流动 ${report.arrivalMaxMm.toFixed(1)} mm`;
+  });
+
+  function runPreview(): void {
+    const first = geometryStore.geometries[0];
+    if (first === undefined) {
+      return;
+    }
+    void results.runFillPreview(first.geometryId);
+  }
+
   // —— 浇口位置分析建议（Top-N）——
   // 分析在方案任务窗格运行（无需浇口），这里负责把建议落成浇口单元。
   const gateSuggestions = computed(() =>
@@ -166,6 +207,10 @@ export function useMoldPanel() {
     project,
     working,
     formDisabled,
+    fillPreview,
+    fillPreviewDisabled,
+    fillPreviewHint,
+    runPreview,
     gateSuggestions,
     gateLocationBasis,
     applySuggestion,

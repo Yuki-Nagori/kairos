@@ -1,6 +1,6 @@
 /** 求解结果状态：结果目录清单、最近加载的场与探针列表。 */
 import { defineStore } from "pinia";
-import { analyzeGateLocation } from "../api/geometry";
+import { analyzeGateLocation, previewFill } from "../api/geometry";
 import {
   deriveDifference as deriveDifferenceApi,
   deriveField as deriveFieldApi,
@@ -10,6 +10,7 @@ import {
 import type {
   DeriveRequest,
   FieldSlot,
+  FillPreviewReport,
   GateLocationReport,
   Probe,
   ProbeTimeSeries,
@@ -19,6 +20,7 @@ import type {
 import { toCsv } from "../utils/chart";
 import { downloadTextFile } from "../utils/download";
 import { useAppStore } from "./app";
+import { useProjectStore } from "./project";
 
 let probeSeq = 0;
 
@@ -38,6 +40,8 @@ export const useResultsStore = defineStore("results", {
     probes: [] as Probe[],
     /** 最近一次浇口位置分析报告（null = 未运行过）。 */
     gateLocation: null as GateLocationReport | null,
+    /** 最近一次填充预览报告（null = 未运行过）。 */
+    fillPreview: null as FillPreviewReport | null,
   }),
   actions: {
     /** 运行浇口位置分析（轻量启发式，不经求解器）：适合度场直接作为当前场
@@ -49,6 +53,24 @@ export const useResultsStore = defineStore("results", {
         this.gateLocation = report;
         this.loadedField = {
           field: "浇口适合度",
+          timeDir: "—",
+          timeS: 0,
+          values: report.field,
+          isMagnitude: false,
+          complete: true,
+        };
+      });
+    },
+    /** 填充预览：以当前方案的浇口为源做覆盖估计，覆盖场作为当前场载入视口；
+     *  未覆盖 / 落点异常等提示进预览报告（面板展示）。 */
+    async runFillPreview(geometryId: string): Promise<void> {
+      const app = useAppStore();
+      const runners = useProjectStore().activeStudy?.runnerElements ?? [];
+      await app.withBusy("正在估算充填覆盖…", async () => {
+        const report = await previewFill(geometryId, runners);
+        this.fillPreview = report;
+        this.loadedField = {
+          field: "充填覆盖",
           timeDir: "—",
           timeS: 0,
           values: report.field,

@@ -5,7 +5,7 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use kairos_core::error::{KairosError, Result};
-use kairos_core::models::analysis::GateLocationReport;
+use kairos_core::models::analysis::{FillPreviewReport, GateLocationReport};
 use kairos_core::models::geometry::{GeometrySummary, TriangleMesh};
 use kairos_core::models::mesh::{
     DualDomainMesh, DualDomainReport, MeshRefinement, MeshingReport, MidplaneMesh, MidplaneReport,
@@ -15,11 +15,13 @@ use kairos_core::models::render::RenderMeshData;
 use kairos_core::models::repair::RepairOutcome;
 use kairos_core::models::runners::RunnerElement;
 use kairos_core::services::dualdomain::{self, DualDomainParams};
+use kairos_core::services::fill_preview;
 use kairos_core::services::gate_location::{self, GateLocationParams};
 use kairos_core::services::geometry as geometry_service;
 use kairos_core::services::iges;
 use kairos_core::services::meshing::{self, VolumeMeshParams};
 use kairos_core::services::midplane::{self, MidplaneParams};
+use kairos_core::services::moldingfoam;
 use kairos_core::services::project::new_id;
 use kairos_core::services::render_mesh;
 use kairos_core::services::repair;
@@ -358,6 +360,37 @@ pub async fn analyze_gate_location(
     })
     .await
     .map_err(|e| KairosError::internal(format!("浇口位置分析任务失败：{e}")))?
+}
+
+/// 填充预览：以研究浇口为源做图连通覆盖估计（不走求解器），返回覆盖场、
+/// 未覆盖单元与落点告警；浇口为空或网格缺失时给出明确校验错误。
+#[tauri::command]
+pub async fn preview_fill(
+    store: State<'_, GeometryStore>,
+    geometry_id: String,
+    runner_elements: Vec<RunnerElement>,
+) -> Result<FillPreviewReport> {
+    let gates = moldingfoam::gate_portals(&runner_elements);
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let volume = {
+            let sessions = store.lock();
+            let session = sessions
+                .get(&geometry_id)
+                .ok_or_else(|| KairosError::not_found(format!("几何不存在：{geometry_id}")))?;
+            session
+                .volume
+                .as_ref()
+                .ok_or_else(|| {
+                    KairosError::validation("该几何尚未生成体积网格，请先执行网格划分。")
+                })?
+                .clone()
+        };
+        let centers: Vec<[f64; 3]> = gates.iter().map(|gate| gate.center).collect();
+        fill_preview::preview(&volume, &centers)
+    })
+    .await
+    .map_err(|e| KairosError::internal(format!("填充预览任务失败：{e}")))?
 }
 
 #[tauri::command]
