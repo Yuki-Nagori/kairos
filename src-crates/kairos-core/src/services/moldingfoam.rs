@@ -34,6 +34,22 @@ const VENT_SEAL_ALPHA: f64 = 0.9;
 /// 看到 `patch vent: alphaPhi1` 的量级。
 const MASS_BUDGET_INTERVAL: u32 = 200;
 
+/// const 输运的熔体动力黏度占位 [Pa·s]：黏度的物理模型由 momentumTransport 的
+/// CrossWlf 提供，这里只作为 `Pr` 的换算基准——**产物 `k = mu·Cp/Pr` 必须等于
+/// 材料导热系数的真值**（见 physical_properties_melt）。
+const MELT_TRANSPORT_MU: f64 = 100.0;
+
+/// 冻死短射守卫的可动熔体占比阈值（与求解器缺省一致）：低于该占比即判短射，
+/// 封闸并把阶段切到保压，避免冻结区把解推到非有限。
+const FREEZE_OFF_FRACTION: f64 = 0.01;
+
+/// 保压压力斜坡：V/P 切换后闸口压力从实测值线性升到保压曲线，避免单步阶跃
+/// （大件实测切换瞬间 p_gate 仅 5.4 MPa、曲线起点 60 MPa，阶跃会把熔体推到
+/// 不可解）。斜坡时长按注射时间的固定比例给，再夹到工程区间。
+const PACKING_RAMP_OF_INJECTION: f64 = 0.05;
+const PACKING_RAMP_MIN_S: f64 = 0.05;
+const PACKING_RAMP_MAX_S: f64 = 0.5;
+
 /// 边界分带比例：底带 = 浇口（inlet），顶带 = 排气（vent），其余 = 模壁。
 const INLET_BAND: f64 = 0.05;
 const VENT_BAND: f64 = 0.05;
@@ -485,7 +501,8 @@ pub fn write_case_files(
     write(&system.join("fvSchemes"), FV_SCHEMES)?;
     write(&system.join("fvSolution"), FV_SOLUTION)?;
 
-    write(&constant.join("moldingDict"), &molding_dict(process))?;
+    let dict = molding_dict(material, process);
+    write(&constant.join("moldingDict"), &dict)?;
     write(
         &constant.join("momentumTransport"),
         &momentum_transport_dict(material),
@@ -595,7 +612,12 @@ fn decompose_dict(cores: usize) -> String {
 /// 切换压力取曲线起点，使闸口压力在切换瞬间连续、无压力阶跃。不能再额外
 /// 写一个大气压首点——曲线起点在 t=0 时会出现重复横坐标，被求解器的
 /// `Function1s::Table::check` 判为 out-of-order 而拒绝启动。
-fn molding_dict(process: &ProcessSettings) -> String {
+/// 保压压力斜坡时长 [s]：注射时间的 5%，夹在 [0.05, 0.5]。
+fn packing_ramp_s(injection_time_s: f64) -> f64 {
+    (injection_time_s * PACKING_RAMP_OF_INJECTION).clamp(PACKING_RAMP_MIN_S, PACKING_RAMP_MAX_S)
+}
+
+fn molding_dict(material: &Material, process: &ProcessSettings) -> String {
     let curve = &process.packing_pressure_mpa_curve;
     let mut table = String::new();
     // 空曲线兜底：services::process::validate 会拦下，但生成器被直接调用时
@@ -613,12 +635,18 @@ fn molding_dict(process: &ProcessSettings) -> String {
         .first()
         .map(|(_, pressure_mpa)| format!("    switchPressure  {:.6e};\n", pressure_mpa * 1e6))
         .unwrap_or_default();
+    // 冻死短射守卫：以 Tait 转变温度 b5 作无流温度代理（材料库暂无显式字段）。
+    // 开启后冷模/慢充工况在填充早期即判短射并封闸收尾，而不是把冻结区推到非有限。
+    // 键位即求解器的读取位置（moldingDict 顶层）；日志里回显的
+    // gateFreezeTemperature 是另一个旧键（闸口冻结封闸），不代表本开关的状态。
     foam_header("dictionary", "moldingDict")
         + &format!(
-            "injection\n{{\n    meltTemperature  {:.4};\n}}\npacking\n{{\n    switchFraction   {:.4};\n{switch_pressure}    pressure\n    {{\n        type            table;\n        values\n        (\n{table}        );\n    }}\n}}\nventSealAlpha  {VENT_SEAL_ALPHA:.4};\nmassBudget  true;\nmassBudgetInterval  {MASS_BUDGET_INTERVAL};\ncooling\n{{\n    ejectionTemperature  {:.4};\n    releasePressure  1e5;\n}}\n",
+            "injection\n{{\n    meltTemperature  {:.4};\n}}\npacking\n{{\n    switchFraction   {:.4};\n    pressureRamp  {ramp:.4};\n{switch_pressure}    pressure\n    {{\n        type            table;\n        values\n        (\n{table}        );\n    }}\n}}\nventSealAlpha  {VENT_SEAL_ALPHA:.4};\nmassBudget  true;\nmassBudgetInterval  {MASS_BUDGET_INTERVAL};\nfreezeOffTemperature  {:.4};\nfreezeOffFraction  {FREEZE_OFF_FRACTION:.4};\ncooling\n{{\n    ejectionTemperature  {:.4};\n    releasePressure  1e5;\n}}\n",
             kelvin(process.melt_temp_c),
             process.vp_switch_volume_percent / 100.0,
-            kelvin(process.ejection_temp_c)
+            material.pvt.b5,
+            kelvin(process.ejection_temp_c),
+            ramp = packing_ramp_s(process.injection_time_s)
         )
 }
 
@@ -639,9 +667,20 @@ fn physical_properties_melt(material: &Material, process: &ProcessSettings) -> R
     let melt_k = kelvin(process.melt_temp_c);
     let cp = table_value_at(&material.specific_heat, melt_k)
         .ok_or_else(|| KairosError::validation("材料比热表为空，无法生成熔体热物性。"))?;
+    let conductivity = table_value_at(&material.conductivity, melt_k)
+        .ok_or_else(|| KairosError::validation("材料导热系数表为空，无法生成熔体热物性。"))?;
+    if conductivity <= 0.0 || conductivity.is_nan() {
+        return Err(KairosError::validation(
+            "材料导热系数必须为正，无法生成熔体热物性。",
+        ));
+    }
+    // const 输运吃 (mu, Pr)，导热率由求解器按 k = mu·Cp/Pr 反推：Pr 必须由材料的
+    // 导热真值算出来。写死常数会让 k 与真值差若干数量级（聚合物 k ~0.2 W/m·K，
+    // 写死 Pr=4 时 k = 62500），熔体入模即冻、必然短射。
+    let pr = MELT_TRANSPORT_MU * cp / conductivity;
     Ok(foam_header("dictionary", "physicalProperties.melt")
         + &format!(
-            "thermoType\n{{\n    type            heRhoThermo;\n    mixture         pureMixture;\n    transport       const;\n    thermo          hMelt;\n    equationOfState Tait;\n    specie          specie;\n    energy          sensibleInternalEnergy;\n}}\n\nmixture\n{{\n    specie\n    {{\n        molWeight   1;\n    }}\n\n    equationOfState\n    {{\n        b1m         {:.6e};\n        b2m         {:.6e};\n        b1s         {:.6e};\n        b2s         {:.6e};\n        b3          {:.6e};\n        b4          {:.6e};\n        b5          {:.4};\n        b6          0;\n        C           0.0894;\n        smoothBand  0.5;\n    }}\n\n    thermodynamics\n    {{\n        Cp          {:.4};\n        latentHeat  0;\n        hf          0;\n    }}\n\n    transport\n    {{\n        mu          100;\n        Pr          4;\n    }}\n}}\n",
+            "thermoType\n{{\n    type            heRhoThermo;\n    mixture         pureMixture;\n    transport       const;\n    thermo          hMelt;\n    equationOfState Tait;\n    specie          specie;\n    energy          sensibleInternalEnergy;\n}}\n\nmixture\n{{\n    specie\n    {{\n        molWeight   1;\n    }}\n\n    equationOfState\n    {{\n        b1m         {:.6e};\n        b2m         {:.6e};\n        b1s         {:.6e};\n        b2s         {:.6e};\n        b3          {:.6e};\n        b4          {:.6e};\n        b5          {:.4};\n        b6          0;\n        C           0.0894;\n        smoothBand  0.5;\n    }}\n\n    thermodynamics\n    {{\n        Cp          {:.4};\n        latentHeat  0;\n        hf          0;\n    }}\n\n    transport\n    {{\n        mu          {MELT_TRANSPORT_MU:.4};\n        Pr          {pr:.6e};\n    }}\n}}\n",
             pvt.b1m, pvt.b2m, pvt.b1s, pvt.b2s, pvt.b3, pvt.b4m, pvt.b5, cp
         ))
 }
@@ -778,12 +817,49 @@ mod tests {
         assert!(error.to_string().contains("写入"));
     }
 
+    /// 内置 PP：比热 / 导热 / PVT 齐全，用于生成器用例。
+    fn sample_material() -> Material {
+        crate::services::material::builtin_materials()[0].clone()
+    }
+
     #[test]
     fn physical_properties_melt_requires_specific_heat_table() {
-        let mut material = crate::services::material::builtin_materials()[0].clone();
+        let mut material = sample_material();
         material.specific_heat = Vec::new();
         let error = physical_properties_melt(&material, &process()).unwrap_err();
         assert!(error.to_string().contains("材料比热表为空"));
+    }
+
+    #[test]
+    fn physical_properties_melt_derives_pr_from_conductivity() {
+        let mut material = sample_material();
+        material.specific_heat = vec![(500.0, 2500.0)];
+        material.conductivity = vec![(500.0, 0.22)];
+        let melt = physical_properties_melt(&material, &process()).unwrap();
+        // Pr = mu·Cp/k = 100·2500/0.22 ≈ 1.136e6 → 求解器反推的 k 才是材料真值
+        assert!(melt.contains("Pr          1.136364e6"), "{melt}");
+        assert!(melt.contains("mu          100.0000"));
+        assert!(melt.contains("Cp          2500.0000"));
+    }
+
+    #[test]
+    fn physical_properties_melt_requires_positive_conductivity() {
+        let mut material = sample_material();
+        material.conductivity = Vec::new();
+        let error = physical_properties_melt(&material, &process()).unwrap_err();
+        assert!(error.to_string().contains("材料导热系数表为空"));
+
+        material.conductivity = vec![(500.0, 0.0)];
+        let error = physical_properties_melt(&material, &process()).unwrap_err();
+        assert!(error.to_string().contains("材料导热系数必须为正"));
+    }
+
+    #[test]
+    fn packing_ramp_scales_with_injection_time_and_clamps() {
+        // 注射 1 s → 5% = 0.05 命中下限；4 s → 0.2；20 s → 夹到上限 0.5
+        assert_eq!(packing_ramp_s(1.0), PACKING_RAMP_MIN_S);
+        assert!((packing_ramp_s(4.0) - 0.2).abs() < 1e-12);
+        assert_eq!(packing_ramp_s(20.0), PACKING_RAMP_MAX_S);
     }
 
     fn two_tet_mesh() -> VolumeMesh {
@@ -883,14 +959,19 @@ mod tests {
 
     #[test]
     fn molding_dict_reflects_process_settings() {
-        let material = crate::services::material::builtin_materials()[0].clone();
-        let dict = molding_dict(&process());
+        let material = sample_material();
+        let dict = molding_dict(&material, &process());
         assert!(dict.contains("switchFraction   0.96"));
         // 切换压力 = 曲线起点，避免切换瞬间压力阶跃（MPa → Pa）
         assert!(dict.contains("switchPressure  6.000000e7;"));
         assert!(dict.contains("(0.0000 6.000000e7)"));
         assert!(dict.contains("(8.0000 4.000000e7)"));
         assert!(dict.contains("ejectionTemperature  363.15"));
+        // 冻死短射守卫：无流温度取 Tait 转变温度 b5（内置 PP 为 418 K）
+        assert!(dict.contains("freezeOffTemperature  418.0000"), "{dict}");
+        assert!(dict.contains("freezeOffFraction  0.0100"));
+        // 保压斜坡：注射 1 s → 5% = 0.05（下限），避免切换瞬间单步阶跃
+        assert!(dict.contains("pressureRamp  0.0500"), "{dict}");
         let momentum = momentum_transport_dict(&material);
         assert!(momentum.contains("viscosityModel  CrossWlf;"));
         let melt = physical_properties_melt(&material, &process()).unwrap();
@@ -902,7 +983,7 @@ mod tests {
     fn molding_dict_falls_back_on_empty_curve() {
         let mut settings = process();
         settings.packing_pressure_mpa_curve = vec![];
-        let dict = molding_dict(&settings);
+        let dict = molding_dict(&sample_material(), &settings);
         // 空曲线：单点大气压表且不写切换压力（求解器 Table 仍需至少一点）
         assert!(dict.contains("(0 1e5)"));
         assert!(!dict.contains("switchPressure"));
