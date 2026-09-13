@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { flushPromises, mount } from "@vue/test-utils";
+import { enableAutoUnmount, flushPromises, mount } from "@vue/test-utils";
 import { nextTick } from "vue";
 import { createPinia, setActivePinia } from "pinia";
 import type { Pinia } from "pinia";
@@ -90,6 +90,10 @@ function findButton(wrapper: ReturnType<typeof mount>, label: string) {
   return found;
 }
 
+// 防抖估算用真实/假计时器混跑：用例结束统一卸载组件（触发 scope 释放清掉挂起计时器），
+// 否则漏网的 300ms 计时器会在后续用例里触发额外 IPC 调用（套件并行加载时暴露）。
+enableAutoUnmount(afterEach);
+
 describe("GeometryPanel", () => {
   let pinia: Pinia;
 
@@ -137,7 +141,7 @@ describe("GeometryPanel", () => {
     await findButton(wrapper, "导入样例").trigger("click");
     await flushPromises();
 
-    expect(app.error?.message).toBe("样例缺失");
+    await vi.waitFor(() => expect(app.error?.message).toBe("样例缺失"));
     expect(app.busy).toBeNull();
   });
 
@@ -163,7 +167,7 @@ describe("GeometryPanel", () => {
     vi.mocked(importStl).mockRejectedValue(new Error("非二进制 STL"));
     await findButton(wrapper, "导入几何").trigger("click");
     await flushPromises();
-    expect(useAppStore().error?.message).toBe("非二进制 STL");
+    await vi.waitFor(() => expect(useAppStore().error?.message).toBe("非二进制 STL"));
   });
 
   it("网格健康摘要：四类问题逐项拼接，干净几何显示健康并着绿色", () => {
@@ -344,7 +348,7 @@ describe("GeometryPanel", () => {
     await findButton(wrapper, "生成体积网格").trigger("click");
     await flushPromises();
 
-    expect(useAppStore().error?.message).toBe("网格退化");
+    await vi.waitFor(() => expect(useAppStore().error?.message).toBe("网格退化"));
   });
 
   it("双域网格：透传当前方案杆系并渲染报告行", async () => {
@@ -425,7 +429,7 @@ describe("GeometryPanel", () => {
     vi.mocked(removeGeometry).mockRejectedValue(new Error("移除失败"));
     await findButton(wrapper, "移除").trigger("click");
     await flushPromises();
-    expect(useAppStore().error?.message).toBe("移除失败");
+    await vi.waitFor(() => expect(useAppStore().error?.message).toBe("移除失败"));
   });
 
   it("忙碌中：导入 / 移除 / 生成按钮禁用", async () => {
@@ -455,13 +459,14 @@ describe("GeometryPanel", () => {
     expect(estimateVolumeMesh).toHaveBeenCalledWith("geo-1", 1.5, undefined, "voxel");
     expect(wrapper.text()).toContain("约 40 单元（包围盒上限）");
 
-    // 连续编辑只保留最后一次：第二次输入后 300ms 内再改，中间态不发请求。
+    // 连续编辑只保留最后一次：防抖窗口内再改，计时器被清掉，只发一次末次尺寸的请求。
+    // （两次编辑之间不推进时钟——否则测的是「恰好谁先到」，而不是防抖语义。）
     vi.mocked(estimateVolumeMesh).mockClear();
     await wrapper.find("input").setValue("2.5");
-    await vi.advanceTimersByTimeAsync(100);
+    await nextTick();
     await wrapper.find("input").setValue("3.5");
     await vi.advanceTimersByTimeAsync(300);
-    expect(estimateVolumeMesh).not.toHaveBeenCalledWith("geo-1", 2.5, undefined, "voxel");
+    expect(estimateVolumeMesh).toHaveBeenCalledTimes(1);
     expect(estimateVolumeMesh).toHaveBeenCalledWith("geo-1", 3.5, undefined, "voxel");
 
     // 超限估算：文案带告警且着警示色。
