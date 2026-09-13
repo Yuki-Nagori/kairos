@@ -15,7 +15,7 @@ export function useReportPanel() {
   const results = useResultsStore();
   const geometry = useGeometryStore();
 
-  // 状态行三种结局：初始引导语 → 缺项目/研究 → 生成成功。
+  // 状态行三种结局：初始引导语 → 缺项目/方案 → 生成成功。
   const status = ref("生成自包含 HTML（浏览器打开后 Ctrl+P 打印为 PDF）。");
 
   // 报告模板：自定义标题（空 = 默认）、备注、分区开关。
@@ -38,7 +38,7 @@ export function useReportPanel() {
     const loadedField = results.loadedField;
     const study = project.activeStudy;
     if (currentProject === null || study === null) {
-      status.value = "请先创建项目与研究。";
+      status.value = "请先创建项目与方案。";
       return;
     }
     const material = study.materialId

@@ -141,7 +141,7 @@ describe("ProjectTree", () => {
     expect(text).toContain("Python: 就绪");
   });
 
-  it("方案层渲染并可点击切换活跃研究", async () => {
+  it("方案层渲染并可点击切换活跃方案", async () => {
     const project = useProjectStore();
     project.project = projectFixture({
       studies: [studyFixture(), studyFixture({ id: "study-2", name: "方案 B", createdMs: 2 })],

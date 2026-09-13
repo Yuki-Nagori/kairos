@@ -33,7 +33,7 @@ impl JobStatus {
 #[serde(rename_all = "camelCase")]
 pub struct Job {
     pub id: String,
-    /// 关联研究（可空：手工提交的冒烟作业）。
+    /// 关联方案（可空：手工提交的冒烟作业）。
     pub study_id: Option<String>,
     pub case_dir: String,
     /// 该作业使用的并行核数（并发预算以核数为单位）。

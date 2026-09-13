@@ -429,7 +429,7 @@ fn project_validate_rejects_duplicate_study_names() {
         });
     }
     let error = project_service::validate(&project).unwrap_err();
-    assert!(error.message().contains("研究名称重复"));
+    assert!(error.message().contains("方案名称重复"));
 }
 
 #[test]

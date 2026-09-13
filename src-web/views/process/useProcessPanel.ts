@@ -1,7 +1,7 @@
 /**
- * 工艺设置面板：参数表单、校验、应用到活跃研究、预设（localStorage）。
+ * 工艺设置面板：参数表单、校验、应用到活跃方案、预设（localStorage）。
  * 输入值保持字符串形态（原生 input.value 即字符串）、空输入经 Number() 落为 0；
- * 出厂默认量级只进 placeholder，不预填 value。回填仅跟随活跃研究切换触发，
+ * 出厂默认量级只进 placeholder，不预填 value。回填仅跟随活跃方案切换触发，
  * 其余状态变化不得覆盖用户正在编辑的表单。
  */
 import { computed, reactive, ref, watch } from "vue";
@@ -155,13 +155,13 @@ export function useProcessPanel() {
       }
       issueLines.value = [];
       if (project.project === null || project.activeStudyId === null) {
-        notice.value = "请先选择一个研究。";
+        notice.value = "请先选择一个方案。";
         return;
       }
       project.touchActiveStudy((study) => {
         study.process = settings;
       });
-      notice.value = "已应用到当前研究";
+      notice.value = "已应用到当前方案";
     });
   }
 
@@ -198,7 +198,7 @@ export function useProcessPanel() {
 
   refreshPresetSelect();
 
-  // 仅在切换活跃研究时回填该研究的工艺设置；其他状态变化不覆盖表单
+  // 仅在切换活跃方案时回填该方案的工艺设置；其他状态变化不覆盖表单
   // （watch 自带「值变化」判定；immediate 覆盖首帧）。
   watch(
     () => project.activeStudyId,

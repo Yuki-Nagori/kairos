@@ -340,8 +340,8 @@ describe("project store", () => {
       project.addStudy("填充分析");
       const studies = project.project?.studies ?? [];
       expect(studies).toHaveLength(1);
-      expect(app.error?.message).toContain("已存在同名研究");
-      // 新增的研究成为活跃研究（activeStudy getter 跟随 activeStudyId）。
+      expect(app.error?.message).toContain("已存在同名方案");
+      // 新增的方案成为活跃方案（activeStudy getter 跟随 activeStudyId）。
       expect(project.activeStudyId).toBe(studies[0]?.id);
       expect(project.activeStudy?.name).toBe("填充分析");
     });
@@ -362,7 +362,7 @@ describe("project store", () => {
       const project = useProjectStore();
       project.touchActiveStudy(() => {});
 
-      expect(app.error?.message).toContain("请先选择一个研究");
+      expect(app.error?.message).toContain("请先选择一个方案");
     });
 
     it("requires an active study", () => {
@@ -371,7 +371,7 @@ describe("project store", () => {
       project.project = makeProject();
       project.touchActiveStudy(() => {});
 
-      expect(app.error?.message).toContain("请先选择一个研究");
+      expect(app.error?.message).toContain("请先选择一个方案");
     });
 
     it("applies the mutation and stamps updatedMs", () => {
@@ -485,9 +485,9 @@ describe("project store", () => {
       const app = useAppStore();
       const project = useProjectStore();
       project.addRunnerElement("runner", 5, [0, 0, 0], [1, 0, 0]);
-      expect(app.error?.message).toContain("请先选择一个研究");
+      expect(app.error?.message).toContain("请先选择一个方案");
       project.addCoolingChannel(8, [0, 0, 0], [1, 0, 0], 25);
-      expect(app.error?.message).toContain("请先选择一个研究");
+      expect(app.error?.message).toContain("请先选择一个方案");
       project.removeRunnerElement("re-x");
       project.removeCoolingChannel("cc-x");
       expect(project.project).toBeNull();
@@ -500,7 +500,7 @@ describe("project store", () => {
       const project = useProjectStore();
       await project.checkNetwork();
 
-      expect(app.error?.message).toContain("请先选择一个研究");
+      expect(app.error?.message).toContain("请先选择一个方案");
       expect(checkMoldNetwork).not.toHaveBeenCalled();
     });
 

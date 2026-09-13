@@ -24,7 +24,7 @@ const {
 </script>
 
 <template>
-  <Card title="工艺设置（作用于活跃研究）">
+  <Card title="工艺设置（作用于活跃方案）">
     <div class="flex flex-wrap gap-3">
       <label v-for="field in FIELDS" :key="field.key" class="flex flex-col gap-1">
         <span class="text-xs text-zinc-400">{{ field.label }}</span>
@@ -42,7 +42,7 @@ const {
       :disabled="project.activeStudy === null || app.busy !== null"
       @click="applyProcess"
     >
-      校验并应用到研究
+      校验并应用到方案
     </UiButton>
     <div class="space-y-1">
       <template v-if="issueLines.length > 0">

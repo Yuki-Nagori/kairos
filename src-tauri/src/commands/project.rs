@@ -74,7 +74,7 @@ fn recents_file(app: &AppHandle) -> Result<PathBuf> {
     Ok(dir.join("recent-projects.json"))
 }
 
-/// 新研究的默认 case 目录（应用数据目录下，按研究 ID 隔离）。
+/// 新方案的默认 case 目录（应用数据目录下，按方案 ID 隔离）。
 #[tauri::command]
 pub fn default_case_dir(app: AppHandle, study_id: String) -> Result<String> {
     let dir = app

@@ -179,7 +179,7 @@ export function useViewportPanel() {
     }
   }
 
-  // 视口标题：当前几何与研究（未载入网格时不显示）。
+  // 视口标题：当前几何与方案（未载入网格时不显示）。
   const title = computed(() => {
     if (!meshLoaded.value) {
       return "";
@@ -352,7 +352,7 @@ export function useViewportPanel() {
     viewport.setMeshLoaded(meshLoaded.value);
   }
 
-  /** 把当前研究的浇注系统 / 冷却水路上传为线段叠加层（全部实例）。 */
+  /** 把当前方案的浇注系统 / 冷却水路上传为线段叠加层（全部实例）。 */
   function uploadOverlays(slot: ViewportSlot): void {
     const study = project.activeStudy;
     if (study === null || slot.renderer === null) {

@@ -63,14 +63,14 @@ impl Project {
         }
     }
 
-    /// 添加研究：名称去空白、非空、项目内唯一。
+    /// 添加方案：名称去空白、非空、项目内唯一。
     pub fn add_study(&mut self, id: String, name: &str, now_ms: u64) -> Result<Study, String> {
         let name = name.trim();
         if name.is_empty() {
-            return Err("研究名称不能为空。".into());
+            return Err("方案名称不能为空。".into());
         }
         if self.studies.iter().any(|s| s.name == name) {
-            return Err(format!("已存在同名研究：{name}"));
+            return Err(format!("已存在同名方案：{name}"));
         }
         let study = Study {
             id,
@@ -90,7 +90,7 @@ impl Project {
         let before = self.studies.len();
         self.studies.retain(|s| s.id != study_id);
         if self.studies.len() == before {
-            return Err(format!("研究不存在：{study_id}"));
+            return Err(format!("方案不存在：{study_id}"));
         }
         self.updated_ms = now_ms;
         Ok(())

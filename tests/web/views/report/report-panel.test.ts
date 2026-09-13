@@ -38,7 +38,7 @@ function materialFixture(): Material {
 function studyFixture(overrides: Partial<Study> = {}): Study {
   return {
     id: "study-1",
-    name: "填充研究",
+    name: "填充方案",
     createdMs: 1,
     runnerElements: [],
     coolingChannels: [],
@@ -111,18 +111,18 @@ describe("ReportPanel", () => {
     vi.spyOn(URL, "revokeObjectURL");
   });
 
-  it("初始引导语；无项目或无活跃研究时提示先创建", async () => {
+  it("初始引导语；无项目或无活跃方案时提示先创建", async () => {
     const wrapper = mount(ReportPanel, { global: { plugins: [pinia] } });
     expect(wrapper.text()).toContain("生成自包含 HTML（浏览器打开后 Ctrl+P 打印为 PDF）。");
 
     await findButton(wrapper, "生成 HTML 报告").trigger("click");
-    expect(wrapper.text()).toContain("请先创建项目与研究。");
+    expect(wrapper.text()).toContain("请先创建项目与方案。");
 
-    // 项目存在但未选活跃研究 → 活跃研究为 null（守卫的第二个操作数）。
+    // 项目存在但未选活跃方案 → 活跃方案为 null（守卫的第二个操作数）。
     const project = useProjectStore();
     project.project = projectFixture([studyFixture()]);
     await findButton(wrapper, "生成 HTML 报告").trigger("click");
-    expect(wrapper.text()).toContain("请先创建项目与研究。");
+    expect(wrapper.text()).toContain("请先创建项目与方案。");
   });
 
   it("生成报告：无材料 / 工艺时参数行给占位，无快照与场统计", async () => {
@@ -138,7 +138,7 @@ describe("ReportPanel", () => {
     expect(URL.revokeObjectURL).toHaveBeenCalledTimes(1);
     const blob = vi.mocked(URL.createObjectURL).mock.calls[0]?.[0] as Blob;
     expect(blob.type).toBe("text/html;charset=utf-8");
-    expect(html).toContain("<title>Kairos 仿真报告 · 演示项目 / 填充研究</title>");
+    expect(html).toContain("<title>Kairos 仿真报告 · 演示项目 / 填充方案</title>");
     expect(html).toContain("<th>材料</th><td>未登记</td>");
     expect(html).toContain("<th>熔体温度</th><td>未设置</td>");
     expect(html).not.toContain("<figure>");

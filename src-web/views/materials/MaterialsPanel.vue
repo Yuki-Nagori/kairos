@@ -36,7 +36,7 @@ const {
       <UiButton :disabled="importDisabled" @click="doImport">导入 JSON</UiButton>
       <UiButton :disabled="exportDisabled" @click="doExport">导出自定义</UiButton>
       <UiButton :disabled="copyDisabled" @click="doCopy">复制为自定义</UiButton>
-      <UiButton :disabled="useDisabled" @click="doUse">用于当前研究</UiButton>
+      <UiButton :disabled="useDisabled" @click="doUse">用于当前方案</UiButton>
       <UiButton variant="danger" :disabled="deleteDisabled" @click="doDelete">删除</UiButton>
     </div>
 

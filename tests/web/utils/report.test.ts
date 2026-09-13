@@ -45,7 +45,7 @@ describe("buildReportHtml", () => {
   it("几何摘要 / 探针数值 / 时间序列节按数据渲染且转义", () => {
     const html = buildReportHtml({
       projectName: "项目 <A>",
-      studyName: "研究",
+      studyName: "方案",
       materialName: "PP",
       generatedAt: "now",
       parameterRows: [["材料", "PP"]],

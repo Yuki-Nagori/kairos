@@ -51,7 +51,7 @@ function geometryHealthy(geometry: GeometrySummary): boolean {
   );
 }
 
-/** 活跃研究相关作业的任务状态：running > queued > failed > done > 无作业。
+/** 活跃方案相关作业的任务状态：running > queued > failed > done > 无作业。
  *  作业归属按 studyId 过滤（旧作业 studyId 为 null 时视为公共作业）。 */
 function analysisJobState(jobs: Job[], activeStudyId: string | null): StudyTaskState | null {
   const relevant = jobs.filter((job) => job.studyId === null || job.studyId === activeStudyId);
@@ -138,7 +138,7 @@ export function evaluateStudyTasks(input: StudyTasksInput): StudyTask[] {
       label: "选择材料",
       state: material !== null ? "done" : "todo",
       detail: material !== null ? material.name : null,
-      hint: material !== null ? null : "在材料库面板选择材料并「用于当前研究」。",
+      hint: material !== null ? null : "在材料库面板选择材料并「用于当前方案」。",
       blockReason: null,
       stage: "process",
     },
@@ -150,7 +150,7 @@ export function evaluateStudyTasks(input: StudyTasksInput): StudyTask[] {
         study?.process != null
           ? `熔体 ${study.process.meltTempC} °C · 模具 ${study.process.moldTempC} °C`
           : null,
-      hint: study?.process != null ? null : "在工艺面板填写参数并「校验并应用到研究」。",
+      hint: study?.process != null ? null : "在工艺面板填写参数并「校验并应用到方案」。",
       blockReason: null,
       stage: "process",
     },

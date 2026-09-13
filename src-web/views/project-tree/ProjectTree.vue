@@ -1,5 +1,5 @@
 <script setup lang="ts">
-/** 项目树面板：工程 + 方案层（点击切换活跃研究 / ＋ 新建）+ 次级分组。逻辑见 useProjectTree。 */
+/** 项目树面板：工程 + 方案层（点击切换活跃方案 / ＋ 新建）+ 次级分组。逻辑见 useProjectTree。 */
 import { useProjectTree } from "./useProjectTree";
 
 const { studies, groups, projectName, hasProject, selectStudy, createStudy } = useProjectTree();
@@ -19,7 +19,7 @@ const { studies, groups, projectName, hasProject, selectStudy, createStudy } = u
       >
     </div>
     <div class="px-2 py-2">
-      <!-- 方案层：工程视图的核心交互——点击方案切换活跃研究，＋ 新建方案 -->
+      <!-- 方案层：工程视图的核心交互——点击方案切换活跃方案，＋ 新建方案 -->
       <template v-if="hasProject">
         <div
           class="flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-semibold text-zinc-500"

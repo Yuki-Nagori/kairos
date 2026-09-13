@@ -85,6 +85,7 @@
 | T57 | [T57-mesh-estimate-preview-done.md](T57-mesh-estimate-preview-done.md)                     | 网格预估单元数（生成前预览）                     |
 | T58 | [T58-viewport-gate-picking-done.md](T58-viewport-gate-picking-done.md)                     | 视口拾取放置浇口 + 节点吸附                      |
 | T72 | [T72-inlet-portal-area-done.md](T72-inlet-portal-area-done.md)                             | 浇口入口面口径与有效面积回显                     |
+| T69 | [T69-terminology-unification-done.md](T69-terminology-unification-done.md)                 | 术语统一：「方案 / 研究」混用收口                |
 
 > T26/T27 落地后的增量打磨（系统窗口按钮、原生应用菜单、主题注入统一、
 > 品牌图标、emoji 清理、启动窗口位置）见 `ai-docs/timeline.md` 对应条目，
@@ -103,7 +104,6 @@
 | T60 | [T60-import-log-and-pptx.md](T60-import-log-and-pptx.md)                                     | 导入日志流 + PPT 报告（低优先）               | T52         |
 | T65 | [T65-warpage-deformation-view.md](T65-warpage-deformation-view.md)                           | 翘曲变形可视化（视口位移显示）                | T64         |
 | T67 | [T67-coolant-channel-landing.md](T67-coolant-channel-landing.md)                             | 冷却水路落地（模壁 1D 通道 BC）               | T07/T66     |
-| T69 | [T69-terminology-unification.md](T69-terminology-unification.md)                             | 术语统一：「方案 / 研究」混用收口             | T68         |
 | T75 | [T75-workspace-layout.md](T75-workspace-layout.md)                                           | 工作区布局（工程自包含：几何/网格/case/结果） | T03/T06/T68 |
 | T82 | [T82-dualdomain-midplane-solve-consumption.md](T82-dualdomain-midplane-solve-consumption.md) | 双域 / 中面网格的求解消费                     | T41/T42     |
 | T83 | [T83-multi-cavity-runner-fill.md](T83-multi-cavity-runner-fill.md)                           | 多型腔与流道系统参与填充                      | T07/T61     |

@@ -40,7 +40,7 @@ function channelFixture(overrides: Partial<CoolingChannel> = {}): CoolingChannel
 function studyFixture(overrides: Partial<Study> = {}): Study {
   return {
     id: "study-1",
-    name: "填充研究",
+    name: "填充方案",
     createdMs: 1,
     runnerElements: [],
     coolingChannels: [],
@@ -78,7 +78,7 @@ describe("MoldPanel", () => {
     vi.resetAllMocks();
   });
 
-  it("未选研究：表单整体禁用并给出引导文案", () => {
+  it("未选方案：表单整体禁用并给出引导文案", () => {
     const wrapper = mount(MoldPanel, { global: { plugins: [pinia] } });
     const text = wrapper.text();
     expect(wrapper.text().match(/请先在左侧工程面板新建或选择方案。/g)).toHaveLength(2);

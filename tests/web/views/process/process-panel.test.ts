@@ -53,7 +53,7 @@ function processP2(): ProcessSettings {
 function studyFixture(id: string, process: ProcessSettings | null): Study {
   return {
     id,
-    name: `研究-${id}`,
+    name: `方案-${id}`,
     createdMs: 1,
     runnerElements: [],
     coolingChannels: [],
@@ -141,7 +141,7 @@ describe("ProcessPanel 填充工况上下文", () => {
     vi.mocked(checkProcess).mockResolvedValue([]);
 
     const wrapper = mount(ProcessPanel, { global: { plugins: [pinia] } });
-    await findButton(wrapper, "校验并应用到研究").trigger("click");
+    await findButton(wrapper, "校验并应用到方案").trigger("click");
     await flushPromises();
 
     // 工艺字段的取值由面板重算（保压曲线末点 80% 等），此处只锁新增上下文。
@@ -187,7 +187,7 @@ describe("ProcessPanel 填充工况上下文", () => {
     expect(warning?.classes()).toContain("text-rose-400");
 
     // 工况量级校验改用有效面积（不再用请求半径）。
-    await findButton(wrapper, "校验并应用到研究").trigger("click");
+    await findButton(wrapper, "校验并应用到方案").trigger("click");
     await flushPromises();
     expect(checkProcess).toHaveBeenCalledWith(expect.anything(), {
       volumeMm3: 880000,
@@ -195,7 +195,7 @@ describe("ProcessPanel 填充工况上下文", () => {
     });
   });
 
-  it("回显属于其他研究时不显示也不参与校验", () => {
+  it("回显属于其他方案时不显示也不参与校验", () => {
     primeForInlet(pinia);
     const process = useProcessStore();
     process.recordCaseInlet("s-other", {
@@ -277,7 +277,7 @@ describe("ProcessPanel", () => {
     localStorage.clear();
   });
 
-  it("挂载即回填活跃研究的工艺；切换研究时重新回填，无工艺则保持", async () => {
+  it("挂载即回填活跃方案的工艺；切换方案时重新回填，无工艺则保持", async () => {
     const project = useProjectStore();
     project.project = projectFixture([
       studyFixture("study-1", processP1()),
@@ -291,14 +291,14 @@ describe("ProcessPanel", () => {
     expect(inputs[0]?.element.value).toBe("230");
     expect(inputs[5]?.element.value).toBe("48"); // 保压压力取曲线末点
 
-    // 切到研究 2：整表重新回填。
+    // 切到方案 2：整表重新回填。
     project.activeStudyId = "study-2";
     await nextTick();
     inputs = fieldInputs(wrapper);
     expect(inputs[0]?.element.value).toBe("255");
     expect(inputs[5]?.element.value).toBe("30");
 
-    // 切到无工艺的研究：不回填，保留上一份表单。
+    // 切到无工艺的方案：不回填，保留上一份表单。
     project.activeStudyId = "study-3";
     await nextTick();
     inputs = fieldInputs(wrapper);
@@ -322,7 +322,7 @@ describe("ProcessPanel", () => {
     expect(fieldInputs(wrapper)[5]?.element.value).toBe("60");
   });
 
-  it("校验通过后应用到活跃研究：曲线末点取 80% 保压压力", async () => {
+  it("校验通过后应用到活跃方案：曲线末点取 80% 保压压力", async () => {
     vi.mocked(checkProcess).mockResolvedValue([]);
     const project = useProjectStore();
     project.project = projectFixture([
@@ -342,7 +342,7 @@ describe("ProcessPanel", () => {
     await inputs[6]?.setValue("8"); // packingTimeS
     await inputs[7]?.setValue("20"); // coolingTimeS
     await inputs[8]?.setValue("30"); // coolantTempC
-    await findButton(wrapper, "校验并应用到研究").trigger("click");
+    await findButton(wrapper, "校验并应用到方案").trigger("click");
     await flushPromises();
 
     const expected: ProcessSettings = {
@@ -361,13 +361,13 @@ describe("ProcessPanel", () => {
     };
     expect(checkProcess).toHaveBeenCalledWith(expected, expect.anything());
     expect(project.project?.studies[0]?.process).toEqual(expected);
-    // 非活跃研究不受影响。
+    // 非活跃方案不受影响。
     expect(project.project?.studies[1]?.process).toEqual(processP2());
-    expect(wrapper.text()).toContain("已应用到当前研究");
+    expect(wrapper.text()).toContain("已应用到当前方案");
     expect(useAppStore().error).toBeNull();
   });
 
-  it("校验发现问题：渲染问题清单且不写入研究", async () => {
+  it("校验发现问题：渲染问题清单且不写入方案", async () => {
     vi.mocked(checkProcess).mockResolvedValue(["熔体温度超过上限"]);
     const project = useProjectStore();
     project.project = projectFixture([studyFixture("study-1", null)]);
@@ -375,45 +375,45 @@ describe("ProcessPanel", () => {
     const wrapper = mount(ProcessPanel, { global: { plugins: [pinia] } });
 
     await fieldInputs(wrapper)[0]?.setValue("999");
-    await findButton(wrapper, "校验并应用到研究").trigger("click");
+    await findButton(wrapper, "校验并应用到方案").trigger("click");
     await flushPromises();
 
     expect(wrapper.text()).toContain("• 熔体温度超过上限");
-    expect(wrapper.text()).not.toContain("已应用到当前研究");
+    expect(wrapper.text()).not.toContain("已应用到当前方案");
     expect(project.project?.studies[0]?.process).toBeNull();
   });
 
-  it("无项目或无活跃研究：提示先选研究（按钮禁用态外的守卫分支）", async () => {
+  it("无项目或无活跃方案：提示先选方案（按钮禁用态外的守卫分支）", async () => {
     vi.mocked(checkProcess).mockResolvedValue([]);
     const project = useProjectStore();
     const panel = useProcessPanel();
 
     panel.applyProcess();
     await flushPromises();
-    expect(panel.notice.value).toBe("请先选择一个研究。");
+    expect(panel.notice.value).toBe("请先选择一个方案。");
 
     project.project = projectFixture([studyFixture("study-1", null)]);
     project.activeStudyId = null;
     panel.applyProcess();
     await flushPromises();
-    expect(panel.notice.value).toBe("请先选择一个研究。");
+    expect(panel.notice.value).toBe("请先选择一个方案。");
     expect(project.project?.studies[0]?.process).toBeNull();
   });
 
-  it("应用按钮在无活跃研究或忙碌时禁用", async () => {
+  it("应用按钮在无活跃方案或忙碌时禁用", async () => {
     const wrapper = mount(ProcessPanel, { global: { plugins: [pinia] } });
-    expect(findButton(wrapper, "校验并应用到研究").attributes("disabled")).toBeDefined();
+    expect(findButton(wrapper, "校验并应用到方案").attributes("disabled")).toBeDefined();
 
     const project = useProjectStore();
     project.project = projectFixture([studyFixture("study-1", null)]);
     project.activeStudyId = "study-1";
     await nextTick();
-    expect(findButton(wrapper, "校验并应用到研究").attributes("disabled")).toBeUndefined();
+    expect(findButton(wrapper, "校验并应用到方案").attributes("disabled")).toBeUndefined();
 
     const app = useAppStore();
     app.beginBusy("正在保存项目…");
     await nextTick();
-    expect(findButton(wrapper, "校验并应用到研究").attributes("disabled")).toBeDefined();
+    expect(findButton(wrapper, "校验并应用到方案").attributes("disabled")).toBeDefined();
   });
 
   it("预设：空名不保存；保存后进入下拉并可载回表单", async () => {

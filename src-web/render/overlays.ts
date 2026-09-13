@@ -1,5 +1,5 @@
 /**
- * 视口线段叠加层的纯数据构造：把研究的浇注系统 / 冷却水路定义
+ * 视口线段叠加层的纯数据构造：把方案的浇注系统 / 冷却水路定义
  * 换算为渲染器可上传的线段坐标与配色（与 WebGL 无关，可独立单测）。
  */
 import type { CoolingChannel, RunnerElement } from "../types";
@@ -36,13 +36,13 @@ function flattenSegments(
   return positions;
 }
 
-/** 研究中参与叠加层构造的几何定义子集。 */
+/** 方案中参与叠加层构造的几何定义子集。 */
 interface OverlaySource {
   runnerElements: RunnerElement[];
   coolingChannels: CoolingChannel[];
 }
 
-/** 按研究定义构造三层叠加层：浇口 / 流道按 kind 分组，冷却水路独立。 */
+/** 按方案定义构造三层叠加层：浇口 / 流道按 kind 分组，冷却水路独立。 */
 export function buildOverlayLayers(source: OverlaySource): {
   gates: OverlayLayer;
   runners: OverlayLayer;

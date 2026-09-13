@@ -6,7 +6,7 @@ import type { FillLoadContext } from "../api/process";
 import type { CaseOutcome, ProcessSettings } from "../types";
 import { useAppStore } from "./app";
 
-/** case 生成回显 + 归属研究：跨研究时不复用（避免拿旧浇口面积算新研究）。 */
+/** case 生成回显 + 归属方案：跨方案时不复用（避免拿旧浇口面积算新方案）。 */
 interface CaseInletRecord {
   studyId: string;
   outcome: CaseOutcome;
@@ -24,7 +24,7 @@ export const useProcessStore = defineStore("process", {
     recordCaseInlet(studyId: string, outcome: CaseOutcome): void {
       this.caseInlet = { studyId, outcome };
     },
-    /** 指定研究的有效浇口面积（m²）：有该研究的 case 回显时用实际值。 */
+    /** 指定方案的有效浇口面积（m²）：有该方案的 case 回显时用实际值。 */
     effectiveInletAreaM2(studyId: string | null): number | undefined {
       if (studyId === null || this.caseInlet?.studyId !== studyId) {
         return undefined;

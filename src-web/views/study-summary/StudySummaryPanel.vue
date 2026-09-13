@@ -24,7 +24,7 @@ const { materialRows, processRows, jobRows } = useStudySummary();
           </div>
         </template>
         <p v-else class="text-[11px] text-zinc-600">
-          未登记材料——在材料库面板选择并「用于当前研究」。
+          未登记材料——在材料库面板选择并「用于当前方案」。
         </p>
       </section>
       <!-- 成型工艺 -->
@@ -40,7 +40,7 @@ const { materialRows, processRows, jobRows } = useStudySummary();
             <span class="font-mono text-zinc-200">{{ row.v }}</span>
           </div>
         </template>
-        <p v-else class="text-[11px] text-zinc-600">未设置工艺——在工艺面板填写并应用到研究。</p>
+        <p v-else class="text-[11px] text-zinc-600">未设置工艺——在工艺面板填写并应用到方案。</p>
       </section>
       <!-- 最新作业 -->
       <section>

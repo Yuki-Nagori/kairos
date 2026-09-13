@@ -163,7 +163,7 @@ function mountPanel(): Mounted {
   return { panel, unmount: () => wrapper.unmount() };
 }
 
-/** 登记一个活跃研究（叠加层上传路径需要）。 */
+/** 登记一个活跃方案（叠加层上传路径需要）。 */
 function primeStudy(): void {
   const project = useProjectStore();
   project.project = {
@@ -263,7 +263,7 @@ describe("useViewportPanel：渲染器生命周期", () => {
 
     const backend = backends[0]!;
     expect(backend.uploadMesh).toHaveBeenCalledTimes(1);
-    // 浇注系统叠加层（研究为空 → buildOverlayLayers 空层仍上传三个 id）
+    // 浇注系统叠加层（方案为空 → buildOverlayLayers 空层仍上传三个 id）
     expect(backend.uploadOverlay).toHaveBeenCalledTimes(3);
     // 图层可见性意图同步
     expect(backend.setMeshVisible).toHaveBeenCalledWith(true);
@@ -340,7 +340,7 @@ describe("useViewportPanel：云图 / 剖切 / 图层（renderMesh 回归锁定�
     // 图例：max/mid/min（中值 quickselect 取位 2 → 30）
     expect(panel.legendValues).toEqual([40, 30, 10]);
     expect(panel.legendVisible).toBe(true);
-    // 无活跃研究 → 标题走「未选择方案」回退
+    // 无活跃方案 → 标题走「未选择方案」回退
     expect(panel.title).toBe("demo.stl · 未选择方案");
 
     // 场值比面数短 → 越界面回退 0（applyField 的 ?? 0 分支）

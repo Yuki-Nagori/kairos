@@ -43,7 +43,7 @@ pub fn create(name: &str, now: u64) -> Result<Project> {
     Ok(project)
 }
 
-/// 保存前的一致性校验（名称非空、研究名唯一、schema 版本正确）。
+/// 保存前的一致性校验（名称非空、方案名唯一、schema 版本正确）。
 pub fn validate(project: &Project) -> Result<()> {
     if project.name.trim().is_empty() {
         return Err(KairosError::validation("项目名称不能为空。"));
@@ -58,7 +58,7 @@ pub fn validate(project: &Project) -> Result<()> {
     for study in &project.studies {
         if !names.insert(study.name.as_str()) {
             return Err(KairosError::validation(format!(
-                "研究名称重复：{}",
+                "方案名称重复：{}",
                 study.name
             )));
         }

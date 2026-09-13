@@ -55,7 +55,7 @@ describe("buildOverlayLayers", () => {
     expect(layers.cooling.color).toEqual([0.3, 0.6, 0.95]);
   });
 
-  it("空研究构造零长度坐标（渲染器将其视为清除该层）", () => {
+  it("空方案构造零长度坐标（渲染器将其视为清除该层）", () => {
     const layers = buildOverlayLayers({ runnerElements: [], coolingChannels: [] });
     expect(layers.gates.positions.length).toBe(0);
     expect(layers.runners.positions.length).toBe(0);

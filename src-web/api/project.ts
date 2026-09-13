@@ -22,7 +22,7 @@ export function listRecentProjects(): Promise<RecentProject[]> {
   return invokeCommand("list_recent_projects");
 }
 
-/** 新研究的默认 case 目录（应用数据目录，按研究 ID 隔离）。 */
+/** 新方案的默认 case 目录（应用数据目录，按方案 ID 隔离）。 */
 export function defaultCaseDir(studyId: string): Promise<string> {
   return invokeCommand("default_case_dir", { studyId });
 }

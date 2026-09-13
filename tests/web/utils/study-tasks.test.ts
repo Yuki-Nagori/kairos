@@ -157,7 +157,7 @@ describe("evaluateStudyTasks（方案任务序列）", () => {
     expect(unhealthy.findIndex((task) => task.id === "repair")).toBe(2);
   });
 
-  it("材料与工艺：研究登记材料且工艺应用后完成，详情带摘要", () => {
+  it("材料与工艺：方案登记材料且工艺应用后完成，详情带摘要", () => {
     const tasks = evaluateStudyTasks(
       input({
         geometries: [geometry()],

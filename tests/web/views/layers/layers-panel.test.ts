@@ -69,14 +69,14 @@ describe("LayersPanel", () => {
     setActivePinia(pinia);
   });
 
-  it("无研究时四个图层都不可用（◎ 熄灭态）", () => {
+  it("无方案时四个图层都不可用（◎ 熄灭态）", () => {
     const wrapper = mount(LayersPanel, { global: { plugins: [pinia] } });
     expect(wrapper.findAll("button").length).toBe(4);
     expect(wrapper.text()).toContain("制品网格");
     expect(wrapper.text()).not.toContain("5");
   });
 
-  it("研究带浇口/流道/水路时行可用并显示数量", () => {
+  it("方案带浇口/流道/水路时行可用并显示数量", () => {
     const project = useProjectStore();
     project.project = projectFixture(studyFixture());
     project.activeStudyId = "study-1";
@@ -105,7 +105,7 @@ describe("LayersPanel", () => {
     await row(wrapper, "浇口").trigger("click");
     expect(viewport.layers.gates).toBe(true);
 
-    // 无研究时冷却行不可用，点击不改变状态
+    // 无方案时冷却行不可用，点击不改变状态
     project.project = null;
     await wrapper.vm.$nextTick();
     await row(wrapper, "冷却水路").trigger("click");

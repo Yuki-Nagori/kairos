@@ -200,7 +200,7 @@ describe("pipeline store", () => {
     const pipeline = usePipelineStore();
     await pipeline.submitPipeline(4, "fill");
 
-    expect(app.error?.message).toBe("请先在研究上登记材料。");
+    expect(app.error?.message).toBe("请先在方案上登记材料。");
     expect(generateMoldingfoamCase).not.toHaveBeenCalled();
   });
 
@@ -211,7 +211,7 @@ describe("pipeline store", () => {
     const pipeline = usePipelineStore();
     await pipeline.submitPipeline(4, "fill");
 
-    expect(app.error?.message).toBe("请先在研究上登记材料。");
+    expect(app.error?.message).toBe("请先在方案上登记材料。");
   });
 
   it("refuses to run without process settings on the study", async () => {
@@ -221,7 +221,7 @@ describe("pipeline store", () => {
     const pipeline = usePipelineStore();
     await pipeline.submitPipeline(4, "fill");
 
-    expect(app.error?.message).toBe("请先设置工艺并应用到研究。");
+    expect(app.error?.message).toBe("请先设置工艺并应用到方案。");
     expect(generateMoldingfoamCase).not.toHaveBeenCalled();
   });
 
@@ -250,7 +250,7 @@ describe("pipeline store", () => {
       cores: 4,
       runnerElements: expect.any(Array),
     });
-    // 作业提交走 jobs store：同一 case 目录 + 核数 + 活跃研究 id。
+    // 作业提交走 jobs store：同一 case 目录 + 核数 + 活跃方案 id。
     expect(submitJob).toHaveBeenCalledWith("/data/cases/s-1", 4, "s-1", expect.anything());
     expect(useJobsStore().jobs).toHaveLength(1);
     expect(busyDuring).toEqual(["正在准备求解…"]);

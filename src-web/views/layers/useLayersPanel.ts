@@ -1,4 +1,4 @@
-/** 层管理面板：制品网格与浇注系统 / 冷却水路图层的可见性切换（数据来自项目研究）。 */
+/** 层管理面板：制品网格与浇注系统 / 冷却水路图层的可见性切换（数据来自项目方案）。 */
 import { computed } from "vue";
 import { useGeometryStore } from "../../stores/geometry";
 import { useProjectStore } from "../../stores/project";

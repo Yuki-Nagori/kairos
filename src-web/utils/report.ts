@@ -48,7 +48,7 @@ const ALL_SECTIONS: ReportSections = {
   snapshots: true,
 };
 
-/** 转义 HTML 特殊字符：报告内容含用户输入（项目/研究名等），防止破坏标记结构。 */
+/** 转义 HTML 特殊字符：报告内容含用户输入（项目/方案名等），防止破坏标记结构。 */
 export function escapeHtml(text: string): string {
   return text
     .replace(/&/g, "&amp;")
@@ -131,7 +131,7 @@ export function buildReportHtml(input: ReportInput, options: ReportOptions = {})
 </head>
 <body>
 <h1>${escapeHtml(reportTitle)}</h1>
-<p class="meta">项目：${escapeHtml(input.projectName)} · 研究：${escapeHtml(input.studyName)} · 生成时间：${escapeHtml(input.generatedAt)}</p>
+<p class="meta">项目：${escapeHtml(input.projectName)} · 方案：${escapeHtml(input.studyName)} · 生成时间：${escapeHtml(input.generatedAt)}</p>
 ${
   sections.parameters
     ? `<h2>材料与工艺</h2>

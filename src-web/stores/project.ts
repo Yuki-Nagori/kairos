@@ -1,4 +1,4 @@
-/** 工程文档状态：项目/研究/流道与水路单元，以及最近项目与模具网络校验问题。 */
+/** 工程文档状态：项目/方案/流道与水路单元，以及最近项目与模具网络校验问题。 */
 import { defineStore } from "pinia";
 import { getSystemInfo } from "../api/system";
 import {
@@ -25,13 +25,13 @@ export const useProjectStore = defineStore("project", {
     projectPath: null as string | null,
     /** 最近打开的工程（跨会话，来自应用数据目录）。 */
     recents: [] as Awaited<ReturnType<typeof listRecentProjects>>,
-    /** 当前活跃研究（浇口 / 水路 / 工艺编辑的目标）。 */
+    /** 当前活跃方案（浇口 / 水路 / 工艺编辑的目标）。 */
     activeStudyId: null as string | null,
     /** 模具网络校验问题清单（校验按钮触发）。 */
     moldIssues: [] as string[],
   }),
   getters: {
-    /** 当前活跃研究对象（未选择或不存在时为 null）。 */
+    /** 当前活跃方案对象（未选择或不存在时为 null）。 */
     activeStudy(state): Study | null {
       return state.project?.studies.find((study) => study.id === state.activeStudyId) ?? null;
     },
@@ -125,7 +125,7 @@ export const useProjectStore = defineStore("project", {
         app.setError(error);
       }
     },
-    /** 添加研究：名称校验在本地完成（与 core 的 add_study 规则一致）。 */
+    /** 添加方案：名称校验在本地完成（与 core 的 add_study 规则一致）。 */
     addStudy(name: string): void {
       const app = useAppStore();
       const project = this.project;
@@ -135,11 +135,11 @@ export const useProjectStore = defineStore("project", {
         return;
       }
       if (!trimmed) {
-        app.setError("研究名称不能为空。");
+        app.setError("方案名称不能为空。");
         return;
       }
       if (project.studies.some((study) => study.name === trimmed)) {
-        app.setError(`已存在同名研究：${trimmed}`);
+        app.setError(`已存在同名方案：${trimmed}`);
         return;
       }
       const study: Study = {
@@ -158,25 +158,25 @@ export const useProjectStore = defineStore("project", {
       };
       this.activeStudyId = study.id;
     },
-    /** 切换活跃研究（工程树方案层 / 命令面板的入口）。 */
+    /** 切换活跃方案（工程树方案层 / 命令面板的入口）。 */
     selectStudy(id: string): void {
       if (this.project?.studies.some((study) => study.id === id)) {
         this.activeStudyId = id;
       }
     },
-    /** 活跃研究原地改一格式的公共尾部：不可变字段由调用方改，这里只负责
+    /** 活跃方案原地改一格式的公共尾部：不可变字段由调用方改，这里只负责
      * 触发响应式更新并盖章 updatedMs。 */
     touchActiveStudy(mutate: (study: Study) => void): void {
       const app = useAppStore();
       const study = this.activeStudy;
       if (!this.project || !study) {
-        app.setError("请先选择一个研究。");
+        app.setError("请先选择一个方案。");
         return;
       }
       mutate(study);
       this.project = { ...this.project, updatedMs: Date.now() };
     },
-    /** 添加流道 / 浇口单元到活跃研究。 */
+    /** 添加流道 / 浇口单元到活跃方案。 */
     addRunnerElement(
       kind: RunnerKind,
       diameterMm: number,
@@ -198,7 +198,7 @@ export const useProjectStore = defineStore("project", {
         study.runnerElements = study.runnerElements.filter((element) => element.id !== id);
       });
     },
-    /** 添加冷却水路单元到活跃研究。 */
+    /** 添加冷却水路单元到活跃方案。 */
     addCoolingChannel(
       diameterMm: number,
       start: [number, number, number],
@@ -225,7 +225,7 @@ export const useProjectStore = defineStore("project", {
       const app = useAppStore();
       const study = this.activeStudy;
       if (!study) {
-        app.setError("请先选择一个研究。");
+        app.setError("请先选择一个方案。");
         return;
       }
       try {

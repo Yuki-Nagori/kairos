@@ -82,7 +82,7 @@ export const useViewportStore = defineStore("viewport", {
     setLayerVisible(id: keyof LayerState, visible: boolean): void {
       this.layers = { ...this.layers, [id]: visible };
     },
-    /** 恢复默认全开（切换研究 / 重置视图时调用）。 */
+    /** 恢复默认全开（切换方案 / 重置视图时调用）。 */
     resetLayers(): void {
       this.layers = { ...DEFAULT_VISIBLE };
     },

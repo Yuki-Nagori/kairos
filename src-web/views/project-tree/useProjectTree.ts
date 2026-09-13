@@ -1,4 +1,4 @@
-/** 项目树面板：方案（可点击切换活跃研究）/ 几何 / 求解作业 / 运行时依赖。 */
+/** 项目树面板：方案（可点击切换活跃方案）/ 几何 / 求解作业 / 运行时依赖。 */
 import { computed } from "vue";
 import { useDependenciesStore } from "../../stores/dependencies";
 import { useGeometryStore } from "../../stores/geometry";
@@ -48,7 +48,7 @@ export function useProjectTree() {
   /** 是否已打开工程：方案层与新建入口只在有工程时渲染。 */
   const hasProject = computed(() => project.project !== null);
 
-  /** 点击方案 → 切换活跃研究（工程视图的方案选择）。 */
+  /** 点击方案 → 切换活跃方案（工程视图的方案选择）。 */
   function selectStudy(id: string): void {
     project.selectStudy(id);
   }

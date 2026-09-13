@@ -30,7 +30,7 @@ export function useStudySummary() {
 
   const study = computed(() => project.activeStudy);
 
-  /** 材料：活跃研究登记的材料在库中的信息。 */
+  /** 材料：活跃方案登记的材料在库中的信息。 */
   const materialRows = computed<SummaryRow[] | null>(() => {
     const materialId = study.value?.materialId;
     if (materialId == null) {
@@ -49,7 +49,7 @@ export function useStudySummary() {
     ];
   });
 
-  /** 工艺：活跃研究的成型工艺参数速览。 */
+  /** 工艺：活跃方案的成型工艺参数速览。 */
   const processRows = computed<SummaryRow[] | null>(() => {
     const process = study.value?.process ?? null;
     if (process === null) {
@@ -65,7 +65,7 @@ export function useStudySummary() {
     ];
   });
 
-  /** 最新作业（不区分研究的最近一笔）：状态与实时物理时间。 */
+  /** 最新作业（不区分方案的最近一笔）：状态与实时物理时间。 */
   const jobRows = computed<SummaryRow[] | null>(() => {
     const job = jobsStore.jobs.at(-1);
     if (job === undefined) {

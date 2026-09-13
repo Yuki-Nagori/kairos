@@ -16,7 +16,7 @@ interface GenerateCaseInput {
   process: ProcessSettings;
   stage: AnalysisStage;
   cores: number;
-  /** 研究的模具网络：浇口单元决定 case 的 inlet patch。 */
+  /** 方案的模具网络：浇口单元决定 case 的 inlet patch。 */
   runnerElements: RunnerElement[];
 }
 

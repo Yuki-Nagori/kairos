@@ -65,7 +65,7 @@ describe("case 入口口径回显", () => {
     setActivePinia(createPinia());
   });
 
-  it("记录后按研究取有效面积；跨研究或未记录时为空", () => {
+  it("记录后按方案取有效面积；跨方案或未记录时为空", () => {
     const process = useProcessStore();
     expect(process.effectiveInletAreaM2("s-1")).toBeUndefined();
     process.recordCaseInlet("s-1", caseOutcome());

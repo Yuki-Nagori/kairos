@@ -39,13 +39,13 @@ export const usePipelineStore = defineStore("pipeline", {
         return;
       }
       if (material === null) {
-        app.setError("请先在研究上登记材料。");
+        app.setError("请先在方案上登记材料。");
         return;
       }
       const activeStudy = study;
       const process = activeStudy?.process ?? null;
       if (activeStudy === null || process === null) {
-        app.setError("请先设置工艺并应用到研究。");
+        app.setError("请先设置工艺并应用到方案。");
         return;
       }
 

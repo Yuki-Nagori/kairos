@@ -1,4 +1,4 @@
-/** 材料库状态：内置参考牌号 + 用户自定义材料的导入/导出/复制与研究登记。 */
+/** 材料库状态：内置参考牌号 + 用户自定义材料的导入/导出/复制与方案登记。 */
 import { defineStore } from "pinia";
 import {
   deleteCustomMaterial,
@@ -91,14 +91,14 @@ export const useMaterialsStore = defineStore("materials", {
       };
       await this.upsertMaterial(copy);
     },
-    /** 把材料登记到活跃研究（活跃研究归属 project store）。 */
+    /** 把材料登记到活跃方案（活跃方案归属 project store）。 */
     assignMaterial(materialId: string): void {
       const app = useAppStore();
       const projectStore = useProjectStore();
       const project = projectStore.project;
       const activeStudyId = projectStore.activeStudyId;
       if (!project || !activeStudyId) {
-        app.setError("请先创建或选择一个研究。");
+        app.setError("请先创建或选择一个方案。");
         return;
       }
       const exists = [...this.materials.builtin, ...this.materials.custom].some(

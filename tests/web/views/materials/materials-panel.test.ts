@@ -74,7 +74,7 @@ function projectFixture(studies: Study[]): Project {
 function studyFixture(): Study {
   return {
     id: "study-1",
-    name: "填充研究",
+    name: "填充方案",
     createdMs: 1,
     runnerElements: [],
     coolingChannels: [],
@@ -295,7 +295,7 @@ describe("MaterialsPanel", () => {
     expect(useAppStore().error?.message).toBe("磁盘只读");
   });
 
-  it("用于当前研究：无活跃研究时报错，有则登记到研究", async () => {
+  it("用于当前方案：无活跃方案时报错，有则登记到方案", async () => {
     const materials = useMaterialsStore();
     materials.materials = { builtin: [materialFixture()], custom: [] };
     const project = useProjectStore();
@@ -303,13 +303,13 @@ describe("MaterialsPanel", () => {
     const wrapper = mount(MaterialsPanel, { global: { plugins: [pinia] } });
 
     await listButtons(wrapper)[0]?.trigger("click");
-    await findButton(wrapper, "用于当前研究").trigger("click");
-    expect(app.error?.message).toBe("请先创建或选择一个研究。");
+    await findButton(wrapper, "用于当前方案").trigger("click");
+    expect(app.error?.message).toBe("请先创建或选择一个方案。");
 
     project.project = projectFixture([studyFixture()]);
     project.activeStudyId = "study-1";
     app.error = null; // 上一步的报错不会被成功路径清除，这里显式复位。
-    await findButton(wrapper, "用于当前研究").trigger("click");
+    await findButton(wrapper, "用于当前方案").trigger("click");
     expect(app.error).toBeNull();
     expect(project.project?.studies[0]?.materialId).toBe("mat-pp");
   });
@@ -359,7 +359,7 @@ describe("MaterialsPanel", () => {
 
     app.beginBusy("正在导入材料…");
     await nextTick();
-    for (const label of ["导入 JSON", "导出自定义", "复制为自定义", "用于当前研究", "删除"]) {
+    for (const label of ["导入 JSON", "导出自定义", "复制为自定义", "用于当前方案", "删除"]) {
       expect(findButton(wrapper, label).attributes("disabled")).toBeDefined();
     }
   });

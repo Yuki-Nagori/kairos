@@ -290,7 +290,7 @@ describe("materials store", () => {
       const materials = useMaterialsStore();
 
       materials.assignMaterial("builtin-pp");
-      expect(app.error?.message).toContain("请先创建或选择一个研究");
+      expect(app.error?.message).toContain("请先创建或选择一个方案");
 
       const project = useProjectStore();
       project.project = makeProject([
@@ -305,7 +305,7 @@ describe("materials store", () => {
         },
       ]);
       materials.assignMaterial("builtin-pp");
-      expect(app.error?.message).toContain("请先创建或选择一个研究");
+      expect(app.error?.message).toContain("请先创建或选择一个方案");
     });
 
     it("reports unknown material ids", () => {

@@ -265,7 +265,7 @@ fn run_project(action: ProjectAction, json: bool) -> kairos_core::error::Result<
             if json {
                 emit_json(&doc);
             } else {
-                println!("工程 {} 校验通过（{} 个研究）", path, doc.studies.len());
+                println!("工程 {} 校验通过（{} 个方案）", path, doc.studies.len());
             }
             Ok(())
         }

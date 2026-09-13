@@ -71,7 +71,7 @@ pub fn probe_moldingfoam() -> Result<EnvironmentCheck> {
 }
 
 /// 由已导入几何生成求解 case（polyMesh + 场 + 字典）。
-/// `runner_elements` 来自研究的模具网络：其中的浇口单元决定 inlet patch
+/// `runner_elements` 来自方案的模具网络：其中的浇口单元决定 inlet patch
 /// （不传则回退 z 分带启发式）。
 // IPC 命令保持平铺入参（前端载荷稳定）：参数个数超 clippy 默认阈值属预期。
 #[allow(clippy::too_many_arguments)]
