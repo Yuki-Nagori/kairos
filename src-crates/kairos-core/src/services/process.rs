@@ -36,11 +36,9 @@ const MACHINE_FLOW_LIMIT_CM3_S: f64 = 500.0;
 /// 浇口表观剪切速率上限（1/s）：常见聚合物建议不超过 5×10⁴。
 const GATE_SHEAR_LIMIT_S: f64 = 5.0e4;
 
-/// 浇口名义速度窗口（m/s，SI）：Q/A_in。1~10 m/s 是常见工艺区间，
-/// 超过 5 m/s 需谨慎（粗网格 / 大流量易失稳），超过 20 m/s 视为不可行
-/// （所需注塑压力多半超机台，且可压缩两相求解器在局部 Mach 接近 1 时失稳）。
-const GATE_VELOCITY_CAUTION_M_S: f64 = 5.0;
-/// 浇口速度不可行线（m/s）。
+/// 浇口名义速度警戒线（m/s，SI）：Q/A_in 超过即指示浇口面积 / 流量错配
+/// （正常 SI 工艺下浇口速度 ≤ 数 m/s）。与求解器 `fillVelocityWarn` 的缺省一致
+/// ——该阈值已随单位制改 SI 重标定（旧值 5 在 mm-as-m 口径下标定，会误报）。
 const GATE_VELOCITY_LIMIT_M_S: f64 = 20.0;
 
 /// 填充工况量级（由件体积、注射时间与浇口流通面积估算）。
@@ -101,15 +99,10 @@ pub fn fill_load_hints(
         ));
     }
     if let Some(velocity) = load.inlet_velocity_m_s
-        && velocity > GATE_VELOCITY_CAUTION_M_S
+        && velocity > GATE_VELOCITY_LIMIT_M_S
     {
-        let judgement = if velocity > GATE_VELOCITY_LIMIT_M_S {
-            "超过 20 m/s 视为工况不可行（所需注塑压力多半超机台，且求解器在浇口局部 Mach 接近 1 时失稳）"
-        } else {
-            "处于需谨慎区间（5~20 m/s），粗网格或大流量下易失稳"
-        };
         hints.push(format!(
-            "浇口名义速度 Q/A_in = {velocity:.1} m/s，{judgement}；请核对浇口面积与注射时间。",
+            "浇口名义速度 Q/A_in = {velocity:.1} m/s，超过 {GATE_VELOCITY_LIMIT_M_S:.0} m/s 警戒线（与求解器 fillVelocityWarn 同口径）——多半是浇口面积与流量错配：请核对浇口尺寸、注射时间，以及网格是否真的表达了该浇口（浇口面被放大成宽带时名义速度会被拉低）。",
         ));
     }
     if let Some(shear_rate) = load.gate_shear_rate_s
@@ -245,16 +238,25 @@ mod tests {
         assert_eq!(big_gate.len(), 1, "{big_gate:?}");
         assert!(big_gate[0].contains("880 cm³/s"), "{}", big_gate[0]);
         assert!(big_gate[0].contains("≥ 1.8 s"), "{}", big_gate[0]);
-        // 小浇口（1e-4 m² → U≈8.8 m/s，谨慎区间）→ 流量 + 速度两条
+        // 小浇口（1e-4 m² → U≈8.8 m/s）：SI 重标定后不报警（旧 5 m/s 阈值会误报）
         let small_gate = fill_load_hints(880_000.0, &settings, Some(1e-4));
-        assert_eq!(small_gate.len(), 2, "{small_gate:?}");
-        assert!(small_gate[1].contains("浇口名义速度"), "{}", small_gate[1]);
-        assert!(small_gate[1].contains("5~20 m/s"), "{}", small_gate[1]);
-        // 极细浇口（1e-6 m² → U≈880 m/s）→ 速度判为不可行
-        let tiny_gate = fill_load_hints(880_000.0, &settings, Some(1e-6));
+        assert_eq!(small_gate.len(), 1, "{small_gate:?}");
         assert!(
-            tiny_gate.iter().any(|hint| hint.contains("不可行")),
-            "{tiny_gate:?}"
+            !small_gate.iter().any(|h| h.contains("浇口名义速度")),
+            "{small_gate:?}"
+        );
+        // 警戒线两侧：按同一流量反解面积，使 U 恰在 20 m/s 上下（A = Q/U）
+        let q_m3_s = 880_000.0 / 1000.0 / 1e6 / settings.injection_time_s;
+        let just_under = fill_load_hints(880_000.0, &settings, Some(q_m3_s / 19.5));
+        assert!(
+            !just_under.iter().any(|h| h.contains("浇口名义速度")),
+            "{just_under:?}"
+        );
+        // 刚过警戒线 → 报错配
+        let just_over = fill_load_hints(880_000.0, &settings, Some(q_m3_s / 20.5));
+        assert!(
+            just_over.iter().any(|h| h.contains("浇口名义速度")),
+            "{just_over:?}"
         );
         // 极细且流量中等（1e-5 m² → γ̇≈2e5 1/s）→ 出现剪切速率提示
         let sheared = fill_load_hints(880_000.0, &settings, Some(1e-5));
