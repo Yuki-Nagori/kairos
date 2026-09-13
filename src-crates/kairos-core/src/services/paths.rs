@@ -5,15 +5,18 @@
 //! - **存储**（工程文件、DTO）里的相对路径统一用 `/`：`Path` 在 Windows 上 join 出 `\`，
 //!   直接写进工程文件后换到 Unix 会被当成普通字符而不是分隔符，因此跨机器落盘前
 //!   一律经 [`to_storage`] 归一（Windows 能同时识别 `/`，读取侧无需区分平台）；
-//! - **文件名 / 目录名清洗**先取 `Path::file_name`（丢弃任何目录成分，只保留最后一段），
-//!   再替换保留字符，空名回退默认值——避免手写 `split('/')` 之类的解析；
-//!   唯一的分隔符处理是 [`normalized`]（把平台不认识的那一种换成 `MAIN_SEPARATOR`），
+//! - **名字 ≠ 路径**：用户输入的「工程名 / 文件名」是**单个路径段**，不做路径解析
+//!   （[`path_segment`] 直接把保留字符换成下划线）——同一段文本当路径解析会在
+//!   Windows 上变味（`x:y` 被当成盘符 + 名字、`C:\a` 被拆开），而 Unix 不会；
+//! - **真路径取最后一段**用 [`file_name_of`]（`Path::file_name`，输入是某个平台
+//!   产出的真实文件路径）；
+//! - 唯一的分隔符处理是 [`normalized`]（把平台不认识的那一种换成 `MAIN_SEPARATOR`），
 //!   其余全部交给 `std::path`。
 //!
 //! 上层（workspace / 命令层）只调这里的函数，平台差异（分隔符、盘符、保留字符）
 //! 全部收敛在本文件。
 
-use std::path::{Component, MAIN_SEPARATOR, MAIN_SEPARATOR_STR, Path, PathBuf};
+use std::path::{Component, MAIN_SEPARATOR_STR, Path, PathBuf};
 
 use crate::error::{KairosError, Result};
 
@@ -78,8 +81,9 @@ fn drive_letter(component: &str) -> Option<char> {
 /// 而外部字符串（对话框、手工编辑的工程文件、跨平台文本）可能带另一种写法。
 /// 归一之后所有解析都交给 `std::path`，本函数不带任何路径语义。
 fn normalized(name: &str) -> String {
-    let foreign = if MAIN_SEPARATOR == '/' { '\\' } else { '/' };
-    name.trim().replace(foreign, MAIN_SEPARATOR_STR)
+    // 两种分隔符都换成主分隔符：native 换成自己是幂等操作，因此不需要按平台分叉
+    // （分叉会让另一边的分支在本地永远覆盖不到）。
+    name.trim().replace(['/', '\\'], MAIN_SEPARATOR_STR)
 }
 
 /// 把若干段拼成路径（库函数 `join`，不手写分隔符）。
@@ -141,26 +145,42 @@ pub fn validate_relative(relative: &str) -> Result<()> {
     Ok(())
 }
 
-/// 取出「纯文件名」：丢弃任何目录成分（`Path::file_name` 语义），
-/// 然后做保留字符替换；结果为空时回退 `fallback`。
-pub fn sanitize_file_name(name: &str, fallback: &str) -> String {
-    Path::new(&normalized(name))
+/// 单个路径段清洗（**用户输入的名字**，如工程名 / 文件名 / 报告名）：
+/// 把保留字符（含分隔符与盘符冒号）换成下划线，空名回退 `fallback`。
+///
+/// 故意**不**做路径解析：同一段文本当路径解析在 Windows 与 Unix 上结果不同
+/// （`x:y` 在 Windows 是「盘符 x + 名字 y」，Unix 只是普通字符），而名字本来
+/// 就没有目录语义。
+pub fn path_segment(name: &str, fallback: &str) -> String {
+    let cleaned = replace_reserved(name);
+    if cleaned.trim().trim_matches('.').trim().is_empty() {
+        fallback.to_string()
+    } else {
+        cleaned.trim().trim_matches('.').trim().to_string()
+    }
+}
+
+/// 真实文件路径 → 最后一段文件名（`Path::file_name`，适合来自文件对话框 / 工作区的路径），
+/// 再对该段做保留字符清洗；取不到文件名时回退 `fallback`。
+pub fn file_name_of(path: &str, fallback: &str) -> String {
+    Path::new(&normalized(path))
         .file_name()
-        .map(|file| file.to_string_lossy().to_string())
-        .map(|file| replace_reserved(&file))
+        .map(|file| replace_reserved(&file.to_string_lossy()))
         .filter(|file| !file.trim().trim_matches('.').trim().is_empty())
         .unwrap_or_else(|| fallback.to_string())
 }
 
-/// 文件名主干（`Path::file_stem`）：`mold.kairos` → `mold`，`a.b.stl` → `a.b`。
-/// 主干为空（纯扩展名 / 空白）时回退 `fallback`。
+/// 名字主干（`Path::file_stem`）：`mold.kairos` → `mold`，`a.b.stl` → `a.b`。
+/// 先按 [`path_segment`] 清洗成单个路径段再做主干提取——清洗后已无分隔符 / 冒号，
+/// `Path` 的语义在各平台一致。主干为空（纯扩展名 / 空白）时回退 `fallback`。
 pub fn file_stem(name: &str, fallback: &str) -> String {
-    Path::new(&normalized(name))
+    let segment = path_segment(name, fallback);
+    // `path_segment` 已保证是「非空且非纯点」的单个路径段，`file_stem` 必有值；
+    // 兜底返回该段本身（不留不可达的闭包分支）。
+    Path::new(&segment)
         .file_stem()
-        .map(|stem| stem.to_string_lossy().trim().to_string())
-        // 隐藏名（`.kairos` 这类只有扩展形态）不算有效主干 → 回退
-        .filter(|stem| !stem.is_empty() && !stem.starts_with('.'))
-        .unwrap_or_else(|| fallback.to_string())
+        .map(|stem| stem.to_string_lossy().to_string())
+        .unwrap_or(segment)
 }
 
 /// 替换保留字符为下划线（只处理字符集，不解析路径结构）。
@@ -181,6 +201,8 @@ fn replace_reserved(name: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::path::MAIN_SEPARATOR;
+
     use super::*;
 
     /// 盘符路径 → WSL `/mnt` 形态：两种分隔符写法都认，无盘符返回 None。
@@ -266,28 +288,35 @@ mod tests {
         );
     }
 
-    /// 文件名清洗走 `Path::file_name`：目录成分先被丢掉，再做保留字符替换。
+    /// 名字（单个路径段）：保留字符一律替换，**不做路径解析**——`x:y` 在 Windows
+    /// 也不能被当成盘符（否则同一输入在两平台结果不同）。
     #[test]
-    fn sanitize_file_name_drops_directories_and_reserved_chars() {
-        assert_eq!(sanitize_file_name("part.stl", "geometry.stl"), "part.stl");
+    fn path_segment_replaces_reserved_without_parsing() {
+        assert_eq!(path_segment("part.stl", "geometry.stl"), "part.stl");
+        assert_eq!(path_segment("支架分析", "kairos"), "支架分析");
+        assert_eq!(path_segment("x:y", "kairos"), "x_y");
+        assert_eq!(path_segment("a/b", "kairos"), "a_b");
+        assert_eq!(path_segment(r"C:\models", "kairos"), "C__models");
+        assert_eq!(path_segment("a b?c*d", "kairos"), "a b_c_d");
+        assert_eq!(path_segment("   ", "geometry.stl"), "geometry.stl");
+        assert_eq!(path_segment(".", "geometry.stl"), "geometry.stl");
+        assert_eq!(path_segment("..", "geometry.stl"), "geometry.stl");
+    }
+
+    /// 真路径取末段：目录成分被 `Path::file_name` 丢弃，末段再做保留字符替换。
+    #[test]
+    fn file_name_of_takes_last_component_then_cleans() {
+        assert_eq!(file_name_of("/models/part.stl", "geometry.stl"), "part.stl");
+        assert_eq!(file_name_of("models/part.stl", "geometry.stl"), "part.stl");
+        // 两种分隔符写法都归一到平台主分隔符后再取末段
         assert_eq!(
-            sanitize_file_name("/models/part.stl", "geometry.stl"),
+            file_name_of(r"C:\models\part.stl", "geometry.stl"),
             "part.stl"
         );
-        assert_eq!(
-            sanitize_file_name("C:\\models\\part.stl", "geometry.stl"),
-            "part.stl"
-        );
-        // 分隔符归一后按库语义取最后一段，两种分隔符在任意平台都一致
-        assert_eq!(sanitize_file_name("a/b:c?.stl", "geometry.stl"), "b_c_.stl");
-        assert_eq!(
-            sanitize_file_name("d:/models/part.stl", "geometry.stl"),
-            "part.stl"
-        );
-        // 空 / 纯空白 / 纯点 → 回退
-        assert_eq!(sanitize_file_name("   ", "geometry.stl"), "geometry.stl");
-        assert_eq!(sanitize_file_name(".", "geometry.stl"), "geometry.stl");
-        assert_eq!(sanitize_file_name("..", "geometry.stl"), "geometry.stl");
+        assert_eq!(file_name_of("a/b:c?.stl", "geometry.stl"), "b_c_.stl");
+        assert_eq!(file_name_of("/models/", "geometry.stl"), "models");
+        assert_eq!(file_name_of("", "geometry.stl"), "geometry.stl");
+        assert_eq!(file_name_of("/", "geometry.stl"), "geometry.stl");
     }
 
     /// 主干取 `Path::file_stem`（多扩展名只去掉最后一段；`kairos` 不需要手工 strip）。
@@ -297,7 +326,9 @@ mod tests {
         assert_eq!(file_stem("mold", "project"), "mold");
         assert_eq!(file_stem("a.b.stl", "project"), "a.b");
         assert_eq!(file_stem(" 支架分析.kairos ", "project"), "支架分析");
-        assert_eq!(file_stem(".kairos", "project"), "project");
+        // 首尾的点先被 path_segment 去掉（`.kairos` → `kairos`），只剩扩展形态时回退
+        assert_eq!(file_stem(".kairos", "project"), "kairos");
+        assert_eq!(file_stem("...", "project"), "project");
         assert_eq!(file_stem("   ", "project"), "project");
     }
 }

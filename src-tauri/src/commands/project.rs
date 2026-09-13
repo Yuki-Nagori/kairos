@@ -199,7 +199,7 @@ pub fn save_report_to_workspace(
     fs::create_dir_all(&dir).map_err(|e| KairosError::io(format!("创建报告目录失败：{e}")))?;
     // 文件名清洗与扩展名都走库：主干取 `Path::file_stem`，扩展名用 `with_extension`
     let stem = paths::file_stem(&file_name, "report");
-    let safe = paths::sanitize_file_name(&stem, "report");
+    let safe = paths::path_segment(&stem, "report");
     let path = dir.join(safe).with_extension("html");
     fs::write(&path, content).map_err(|e| KairosError::io(format!("写入报告失败：{e}")))?;
     Ok(path.to_string_lossy().to_string())

@@ -78,7 +78,7 @@ pub fn project_file_path(documents_dir: &Path, project_name: &str, file_name: &s
 
 /// 目录 / 文件名清洗：保留字符替换为下划线，空名回退默认目录名。
 fn sanitize_component(name: &str) -> String {
-    paths::sanitize_file_name(name, DEFAULT_ROOT_DIR_NAME)
+    paths::path_segment(name, DEFAULT_ROOT_DIR_NAME)
 }
 
 /// `<root>/geometry`。
@@ -114,7 +114,7 @@ pub fn resolve(root: &Path, relative: &str) -> Result<PathBuf> {
 /// 归档文件名：优先保留来源文件名；同名已被占用时加 `<id>-` 前缀避免覆盖。
 /// `taken` 为工作区内已存在的文件名集合（小写归一比较，兼容大小写不敏感文件系统）。
 pub fn archive_file_name(source_name: &str, id: &str, taken: &[String]) -> String {
-    let sanitized = paths::sanitize_file_name(source_name, DEFAULT_ARCHIVE_NAME);
+    let sanitized = paths::file_name_of(source_name, DEFAULT_ARCHIVE_NAME);
     let lower = sanitized.to_lowercase();
     if !taken.iter().any(|name| name.to_lowercase() == lower) {
         return sanitized;
@@ -190,7 +190,7 @@ mod tests {
         );
         assert_eq!(
             project_file_path(documents, "a/b", "x:y"),
-            PathBuf::from("/home/u/Documents/kairos/b/x_y.kairos")
+            PathBuf::from("/home/u/Documents/kairos/a_b/x_y.kairos")
         );
         assert_eq!(
             project_file_path(documents, "  ", "  "),
