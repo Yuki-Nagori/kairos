@@ -32,13 +32,26 @@ pub fn is_release_updatable(dep: &RuntimeDependency) -> bool {
         .unwrap_or(false)
 }
 
-/// release 资产名是否匹配宿主架构（moldingFoam bundle 按 linux64 / linuxArm64
-/// 分包；匹配对大小写不敏感）。无法识别的架构一律不匹配。
+/// release 资产名是否匹配目标架构。
+///
+/// bundle 跑在虚拟机里，一律取 Linux 包；命名形如
+/// `moldingFoam-<version>-<arch>.tar.xz`（旧版为 `moldingFoam-openfoam14-<arch>…`），
+/// 架构标记可能是 `linuxArm64` / `arm64` / `aarch64` / `linux64` / `x86_64` / `amd64`。
+/// 因此两条都要判：**先排除 mac/win 资产**（只写「arm64」会把同一 release 的
+/// macOS 包也匹配上），再按架构别名匹配。无法识别的架构一律不匹配（不猜）。
 pub fn bundle_asset_matches_arch(asset_name: &str, arch: &str) -> bool {
     let lower = asset_name.to_lowercase();
+    if ["macos", "darwin", "windows", "win64", "win32"]
+        .iter()
+        .any(|token| lower.contains(token))
+    {
+        return false;
+    }
+    let arm = ["arm64", "aarch64"];
+    let x86 = ["x86_64", "x86-64", "amd64", "linux64", "x64"];
     match arch {
-        "aarch64" => lower.contains("arm64"),
-        "x86_64" => lower.contains("linux64"),
+        "aarch64" => arm.iter().any(|token| lower.contains(token)),
+        "x86_64" => x86.iter().any(|token| lower.contains(token)),
         _ => false,
     }
 }
@@ -158,6 +171,41 @@ mod tests {
             "moldingFoam-openfoam14-linux64GccDPInt32Opt-20260909.tar.xz",
             "riscv64"
         ));
+    }
+
+    #[test]
+    fn bundle_asset_matches_versioned_naming() {
+        // 新版命名 moldingFoam-<version>-<arch>.tar.xz：架构标记的几种写法都要认
+        for name in [
+            "moldingFoam-v0.2.4-linuxArm64.tar.xz",
+            "moldingFoam-v0.2.4-arm64.tar.xz",
+            "moldingFoam-v0.2.4-aarch64.tar.xz",
+        ] {
+            assert!(bundle_asset_matches_arch(name, "aarch64"), "{name}");
+            assert!(!bundle_asset_matches_arch(name, "x86_64"), "{name}");
+        }
+        for name in [
+            "moldingFoam-v0.2.4-linux64.tar.xz",
+            "moldingFoam-v0.2.4-x86_64.tar.xz",
+            "moldingFoam-v0.2.4-amd64.tar.xz",
+        ] {
+            assert!(bundle_asset_matches_arch(name, "x86_64"), "{name}");
+            assert!(!bundle_asset_matches_arch(name, "aarch64"), "{name}");
+        }
+    }
+
+    #[test]
+    fn bundle_asset_rejects_non_linux_archives() {
+        // 同一 release 里的 mac/win 资产不能因为「arm64」被误选中
+        for name in [
+            "moldingFoam-v0.2.4-macosArm64.tar.xz",
+            "moldingFoam-v0.2.4-darwin-arm64.tar.gz",
+            "moldingFoam-v0.2.4-windows64.zip",
+            "moldingFoam-v0.2.4-win64-x86_64.zip",
+        ] {
+            assert!(!bundle_asset_matches_arch(name, "aarch64"), "{name}");
+            assert!(!bundle_asset_matches_arch(name, "x86_64"), "{name}");
+        }
     }
 
     #[test]

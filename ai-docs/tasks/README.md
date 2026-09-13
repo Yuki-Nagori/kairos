@@ -73,6 +73,7 @@
 | T68 | [T68-study-creation-entry-done.md](T68-study-creation-entry-done.md)             | 方案创建入口（新建工程自带方案 + ＋ 新建方案） |
 | T70 | [T70-latex-a11y-flatten-done.md](T70-latex-a11y-flatten-done.md)                 | 材料公式刷屏可访问性树（LaTeX 单图像暴露）     |
 | T71 | [T71-card-collapse-a11y-done.md](T71-card-collapse-a11y-done.md)                 | 面板折叠入口可访问性（标题栏按按钮暴露）       |
+| T73 | [T73-download-version-display.md](T73-download-version-display.md)               | 下载版本可辨识（上游资产改名 + 架构匹配加固）  |
 
 > T26/T27 落地后的增量打磨（系统窗口按钮、原生应用菜单、主题注入统一、
 > 品牌图标、emoji 清理、启动窗口位置）见 `ai-docs/timeline.md` 对应条目，
@@ -96,7 +97,6 @@
 | T67 | [T67-coolant-channel-landing.md](T67-coolant-channel-landing.md)               | 冷却水路落地（模壁 1D 通道 BC）   | T07/T66  |
 | T69 | [T69-terminology-unification.md](T69-terminology-unification.md)               | 术语统一：「方案 / 研究」混用收口 | T68      |
 | T72 | [T72-inlet-portal-area.md](T72-inlet-portal-area.md)                           | 浇口入口面口径与有效面积回显      | T61/T62  |
-| T73 | [T73-download-version-display.md](T73-download-version-display.md)             | 下载面板显示 release 版本号       | T27/T54  |
 | T74 | [T74-gate-velocity-si-recalibration.md](T74-gate-velocity-si-recalibration.md) | 浇口速度阈值按 SI 重标定（5→20）  | T62/T66  |
 
 > T29 优先级最高：样例方盒与真实 STL（46.7 万面）两条链路都已在 bundle v0.2.1
