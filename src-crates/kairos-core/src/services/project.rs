@@ -26,10 +26,19 @@ pub fn new_id(prefix: &str) -> String {
     )
 }
 
-/// 创建项目：名称去空白、非空。
+/// 新工程的默认方案名。
+pub const DEFAULT_STUDY_NAME: &str = "方案 1";
+
+/// 创建项目：名称去空白、非空；新工程自带一个默认方案。
+///
+/// 方案是材料 / 工艺 / 浇注系统 / 求解任务的承载单元，没有方案的空工程在界面上
+/// 走不到任何分析步骤，因此创建即给一个（旧文件里没有方案时由前端补默认选中）。
 pub fn create(name: &str, now: u64) -> Result<Project> {
     let name = name.trim();
-    let project = Project::new(new_id("proj"), name.to_string(), now);
+    let mut project = Project::new(new_id("proj"), name.to_string(), now);
+    project
+        .add_study(new_id("study"), DEFAULT_STUDY_NAME, now)
+        .map_err(KairosError::internal)?;
     validate(&project)?;
     Ok(project)
 }
@@ -171,6 +180,14 @@ mod tests {
     fn create_rejects_blank_name() {
         assert!(create("   ", 1000).is_err());
         assert_eq!(create(" A ", 1000).unwrap().name, "A");
+    }
+
+    #[test]
+    fn create_seeds_default_study() {
+        let project = create("演示项目", 1000).unwrap();
+        assert_eq!(project.studies.len(), 1);
+        assert_eq!(project.studies[0].name, DEFAULT_STUDY_NAME);
+        assert_eq!(project.studies[0].created_ms, 1000);
     }
 
     #[test]

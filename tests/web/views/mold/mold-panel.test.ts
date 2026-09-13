@@ -80,7 +80,7 @@ describe("MoldPanel", () => {
   it("未选研究：表单整体禁用并给出引导文案", () => {
     const wrapper = mount(MoldPanel, { global: { plugins: [pinia] } });
     const text = wrapper.text();
-    expect(wrapper.text().match(/请先在上方项目栏选择或创建一个研究。/g)).toHaveLength(2);
+    expect(wrapper.text().match(/请先在左侧工程面板新建或选择方案。/g)).toHaveLength(2);
     expect(text).not.toContain("尚无单元。");
     // 15 个数值输入（流道 7 + 水路 8）与类型下拉全部禁用。
     for (const input of wrapper.findAll("input")) {

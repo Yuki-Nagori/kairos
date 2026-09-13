@@ -58,6 +58,7 @@ export const useProjectStore = defineStore("project", {
       await app.withBusy("正在创建项目…", async () => {
         this.project = await createProject(name);
         this.projectPath = null;
+        this.syncActiveStudy();
       });
     },
     /** 弹出文件对话框选择并打开工程。 */
@@ -73,7 +74,16 @@ export const useProjectStore = defineStore("project", {
       await app.withBusy("正在打开项目…", async () => {
         this.project = await loadProjectFile(path);
         this.projectPath = path;
+        this.syncActiveStudy();
       });
+    },
+    /** 装载工程后的活跃方案兜底：原选中项不在新工程里就落到首个方案。
+     * 活跃方案是材料 / 工艺 / 浇注系统的编辑目标，缺了它整条工作流无处落笔。 */
+    syncActiveStudy(): void {
+      const studies = this.project?.studies ?? [];
+      if (!studies.some((study) => study.id === this.activeStudyId)) {
+        this.activeStudyId = studies[0]?.id ?? null;
+      }
     },
     /** 保存工程：已有路径直接保存，否则走另存为。 */
     async saveProject(): Promise<void> {

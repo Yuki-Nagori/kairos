@@ -45,10 +45,18 @@ export function useProjectTree() {
   /** 头部徽标：当前项目名（未打开时给占位）。 */
   const projectName = computed(() => project.project?.name ?? "未打开项目");
 
+  /** 是否已打开工程：方案层与新建入口只在有工程时渲染。 */
+  const hasProject = computed(() => project.project !== null);
+
   /** 点击方案 → 切换活跃研究（工程视图的方案选择）。 */
   function selectStudy(id: string): void {
     project.selectStudy(id);
   }
 
-  return { studies, groups, projectName, selectStudy };
+  /** 新建方案：默认名「方案 N」（N = 已有方案数 + 1），建好即为活跃方案。 */
+  function createStudy(): void {
+    project.addStudy(`方案 ${studies.value.length + 1}`);
+  }
+
+  return { studies, groups, projectName, hasProject, selectStudy, createStudy };
 }

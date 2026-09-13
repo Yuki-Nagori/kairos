@@ -33,43 +33,44 @@
 
 ## 增量阶段已实现（B1/B2/B3/D0 分支补全；验收状态另见完成度清单）
 
-| ID  | 文件                                                                             | 任务                                          |
-| --- | -------------------------------------------------------------------------------- | --------------------------------------------- |
-| T22 | [T22-gmsh-evaluation-done.md](T22-gmsh-evaluation-done.md)                       | Gmsh 网格引擎评估与解析原型                   |
-| T23 | [T23-time-animation-done.md](T23-time-animation-done.md)                         | 体素→表面场映射与时间步动画通道               |
-| T26 | [T26-cae-workbench-ui-done.md](T26-cae-workbench-ui-done.md)                     | Moldflow 风格工作台 UI + 主题                 |
-| T27 | [T27-component-download-done.md](T27-component-download-done.md)                 | 应用内组件下载                                |
-| T24 | [T24-pinn-research-done.md](T24-pinn-research-done.md)                           | PINN 熔融前沿预测研究 spike                   |
-| T25 | [T25-workflow-api-study-done.md](T25-workflow-api-study-done.md)                 | 第三方工作流 API 分层概念研究                 |
-| T28 | [T28-repo-structure-done.md](T28-repo-structure-done.md)                         | 仓库结构优化（state/WGSL/面板）               |
-| T30 | [T30-gmsh-integration-done.md](T30-gmsh-integration-done.md)                     | Gmsh 网格引擎正式集成                         |
-| T31 | [T31-derived-fields-done.md](T31-derived-fields-done.md)                         | 派生结果算子（基础实现）                      |
-| T32 | [T32-headless-cli-done.md](T32-headless-cli-done.md)                             | 无头 CLI 与批处理入口                         |
-| T34 | [T34-openfoam14-fork-entry-done.md](T34-openfoam14-fork-entry-done.md)           | OpenFOAM-14 求解入口收口                      |
-| T35 | [T35-vm-adapter-done.md](T35-vm-adapter-done.md)                                 | 虚拟机适配层                                  |
-| T36 | [T36-contract-case-and-vm-exec-done.md](T36-contract-case-and-vm-exec-done.md)   | case 契约与 VM 执行链路                       |
-| T39 | [T39-postprocess-renderer-done.md](T39-postprocess-renderer-done.md)             | 后处理渲染后端决策与 WebGPU POC               |
-| T37 | [T37-vue3-migration-done.md](T37-vue3-migration-done.md)                         | Vue 3 迁移                                    |
-| T38 | [T38-frontend-architecture-done.md](T38-frontend-architecture-done.md)           | 前端架构重构                                  |
-| T40 | [T40-iges-import-done.md](T40-iges-import-done.md)                               | IGES 导入（106/63 镶嵌子集）                  |
-| T41 | [T41-dual-domain-mesh-done.md](T41-dual-domain-mesh-done.md)                     | 双域网格（表面 + 杆系耦合）                   |
-| T42 | [T42-midplane-mesh-done.md](T42-midplane-mesh-done.md)                           | 中面网格（1D/2.5D 快速路线）                  |
-| T43 | [T43-voxel-graded-refinement-done.md](T43-voxel-graded-refinement-done.md)       | 局部加密 / 边界层（体素分级）                 |
-| T44 | [T44-derive-pipeline-done.md](T44-derive-pipeline-done.md)                       | 派生算子管线补全（线性/差值）                 |
-| T45 | [T45-viewport-picking-done.md](T45-viewport-picking-done.md)                     | 视口空间拾取与探针场关联                      |
-| T46 | [T46-probe-time-series-done.md](T46-probe-time-series-done.md)                   | 探针时间曲线与时间轴联动                      |
-| T47 | [T47-full-clipping-done.md](T47-full-clipping-done.md)                           | 视口完整剖切（三轴平面）                      |
-| T49 | [T49-multi-viewport-done.md](T49-multi-viewport-done.md)                         | 多视口联动（布局/相机/时间轴）                |
-| T50 | [T50-volume-rendering-poc-done.md](T50-volume-rendering-poc-done.md)             | 三维体渲染 POC（重采样+光线步进）             |
-| T61 | [T61-gate-geometry-landing-done.md](T61-gate-geometry-landing-done.md)           | 浇口几何落地（模具网络 → case inlet）         |
-| T62 | [T62-fill-load-validation-done.md](T62-fill-load-validation-done.md)             | 工艺参数合理性校验（填充工况量级）            |
-| T63 | [T63-thin-feature-hint-done.md](T63-thin-feature-hint-done.md)                   | 网格最小特征提示（体素尺寸 vs 壁厚）          |
-| T64 | [T64-warpage-field-consumption-done.md](T64-warpage-field-consumption-done.md)   | 翘曲结果场消费（位移场口径）                  |
-| T66 | [T66-case-si-and-vent-alignment-done.md](T66-case-si-and-vent-alignment-done.md) | case 单位制与排气边界对齐（SI + moldingVent） |
-| T51 | [T51-result-binary-chain-done.md](T51-result-binary-chain-done.md)               | 大结果二进制通道 + 有界缓存                   |
-| T52 | [T52-report-content-done.md](T52-report-content-done.md)                         | 分析报告内容增强（几何/探针表）               |
-| T53 | [T53-report-template-done.md](T53-report-template-done.md)                       | 模板化自定义报告                              |
-| T54 | [T54-vm-deploy-version-hint-done.md](T54-vm-deploy-version-hint-done.md)         | 求解环境"更新未部署"提醒                      |
+| ID  | 文件                                                                             | 任务                                           |
+| --- | -------------------------------------------------------------------------------- | ---------------------------------------------- |
+| T22 | [T22-gmsh-evaluation-done.md](T22-gmsh-evaluation-done.md)                       | Gmsh 网格引擎评估与解析原型                    |
+| T23 | [T23-time-animation-done.md](T23-time-animation-done.md)                         | 体素→表面场映射与时间步动画通道                |
+| T26 | [T26-cae-workbench-ui-done.md](T26-cae-workbench-ui-done.md)                     | Moldflow 风格工作台 UI + 主题                  |
+| T27 | [T27-component-download-done.md](T27-component-download-done.md)                 | 应用内组件下载                                 |
+| T24 | [T24-pinn-research-done.md](T24-pinn-research-done.md)                           | PINN 熔融前沿预测研究 spike                    |
+| T25 | [T25-workflow-api-study-done.md](T25-workflow-api-study-done.md)                 | 第三方工作流 API 分层概念研究                  |
+| T28 | [T28-repo-structure-done.md](T28-repo-structure-done.md)                         | 仓库结构优化（state/WGSL/面板）                |
+| T30 | [T30-gmsh-integration-done.md](T30-gmsh-integration-done.md)                     | Gmsh 网格引擎正式集成                          |
+| T31 | [T31-derived-fields-done.md](T31-derived-fields-done.md)                         | 派生结果算子（基础实现）                       |
+| T32 | [T32-headless-cli-done.md](T32-headless-cli-done.md)                             | 无头 CLI 与批处理入口                          |
+| T34 | [T34-openfoam14-fork-entry-done.md](T34-openfoam14-fork-entry-done.md)           | OpenFOAM-14 求解入口收口                       |
+| T35 | [T35-vm-adapter-done.md](T35-vm-adapter-done.md)                                 | 虚拟机适配层                                   |
+| T36 | [T36-contract-case-and-vm-exec-done.md](T36-contract-case-and-vm-exec-done.md)   | case 契约与 VM 执行链路                        |
+| T39 | [T39-postprocess-renderer-done.md](T39-postprocess-renderer-done.md)             | 后处理渲染后端决策与 WebGPU POC                |
+| T37 | [T37-vue3-migration-done.md](T37-vue3-migration-done.md)                         | Vue 3 迁移                                     |
+| T38 | [T38-frontend-architecture-done.md](T38-frontend-architecture-done.md)           | 前端架构重构                                   |
+| T40 | [T40-iges-import-done.md](T40-iges-import-done.md)                               | IGES 导入（106/63 镶嵌子集）                   |
+| T41 | [T41-dual-domain-mesh-done.md](T41-dual-domain-mesh-done.md)                     | 双域网格（表面 + 杆系耦合）                    |
+| T42 | [T42-midplane-mesh-done.md](T42-midplane-mesh-done.md)                           | 中面网格（1D/2.5D 快速路线）                   |
+| T43 | [T43-voxel-graded-refinement-done.md](T43-voxel-graded-refinement-done.md)       | 局部加密 / 边界层（体素分级）                  |
+| T44 | [T44-derive-pipeline-done.md](T44-derive-pipeline-done.md)                       | 派生算子管线补全（线性/差值）                  |
+| T45 | [T45-viewport-picking-done.md](T45-viewport-picking-done.md)                     | 视口空间拾取与探针场关联                       |
+| T46 | [T46-probe-time-series-done.md](T46-probe-time-series-done.md)                   | 探针时间曲线与时间轴联动                       |
+| T47 | [T47-full-clipping-done.md](T47-full-clipping-done.md)                           | 视口完整剖切（三轴平面）                       |
+| T49 | [T49-multi-viewport-done.md](T49-multi-viewport-done.md)                         | 多视口联动（布局/相机/时间轴）                 |
+| T50 | [T50-volume-rendering-poc-done.md](T50-volume-rendering-poc-done.md)             | 三维体渲染 POC（重采样+光线步进）              |
+| T61 | [T61-gate-geometry-landing-done.md](T61-gate-geometry-landing-done.md)           | 浇口几何落地（模具网络 → case inlet）          |
+| T62 | [T62-fill-load-validation-done.md](T62-fill-load-validation-done.md)             | 工艺参数合理性校验（填充工况量级）             |
+| T63 | [T63-thin-feature-hint-done.md](T63-thin-feature-hint-done.md)                   | 网格最小特征提示（体素尺寸 vs 壁厚）           |
+| T64 | [T64-warpage-field-consumption-done.md](T64-warpage-field-consumption-done.md)   | 翘曲结果场消费（位移场口径）                   |
+| T66 | [T66-case-si-and-vent-alignment-done.md](T66-case-si-and-vent-alignment-done.md) | case 单位制与排气边界对齐（SI + moldingVent）  |
+| T51 | [T51-result-binary-chain-done.md](T51-result-binary-chain-done.md)               | 大结果二进制通道 + 有界缓存                    |
+| T52 | [T52-report-content-done.md](T52-report-content-done.md)                         | 分析报告内容增强（几何/探针表）                |
+| T53 | [T53-report-template-done.md](T53-report-template-done.md)                       | 模板化自定义报告                               |
+| T54 | [T54-vm-deploy-version-hint-done.md](T54-vm-deploy-version-hint-done.md)         | 求解环境"更新未部署"提醒                       |
+| T68 | [T68-study-creation-entry-done.md](T68-study-creation-entry-done.md)             | 方案创建入口（新建工程自带方案 + ＋ 新建方案） |
 
 > T26/T27 落地后的增量打磨（系统窗口按钮、原生应用菜单、主题注入统一、
 > 品牌图标、emoji 清理、启动窗口位置）见 `ai-docs/timeline.md` 对应条目，
@@ -91,6 +92,7 @@
 | T60 | [T60-import-log-and-pptx.md](T60-import-log-and-pptx.md)             | 导入日志流 + PPT 报告（低优先）   | T52      |
 | T65 | [T65-warpage-deformation-view.md](T65-warpage-deformation-view.md)   | 翘曲变形可视化（视口位移显示）    | T64      |
 | T67 | [T67-coolant-channel-landing.md](T67-coolant-channel-landing.md)     | 冷却水路落地（模壁 1D 通道 BC）   | T07/T66  |
+| T69 | [T69-terminology-unification.md](T69-terminology-unification.md)     | 术语统一：「方案 / 研究」混用收口 | T68      |
 
 > T29 优先级最高：样例方盒与真实 STL（46.7 万面）两条链路都已在 bundle v0.2.1
 > 上复跑——样例全程 exit 0 且结果可读；真实件导入/网格/case 通过，求解在固定

@@ -85,9 +85,7 @@ const {
     </div>
 
     <div class="space-y-1">
-      <p v-if="study === null" class="text-xs text-zinc-500">
-        请先在上方项目栏选择或创建一个研究。
-      </p>
+      <p v-if="study === null" class="text-xs text-zinc-500">请先在左侧工程面板新建或选择方案。</p>
       <template v-else>
         <div
           v-for="element in study.runnerElements"
@@ -161,9 +159,7 @@ const {
     </div>
 
     <div class="space-y-1">
-      <p v-if="study === null" class="text-xs text-zinc-500">
-        请先在上方项目栏选择或创建一个研究。
-      </p>
+      <p v-if="study === null" class="text-xs text-zinc-500">请先在左侧工程面板新建或选择方案。</p>
       <template v-else>
         <div
           v-for="channel in study.coolingChannels"

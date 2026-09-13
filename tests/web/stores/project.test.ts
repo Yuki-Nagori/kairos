@@ -167,6 +167,17 @@ describe("project store", () => {
       expect(app.busy).toBeNull();
     });
 
+    it("newProject activates the default study it comes with", async () => {
+      const study = makeStudy({ id: "study-9", name: "方案 1" });
+      vi.mocked(createProject).mockResolvedValue(makeProject({ studies: [study] }));
+
+      const project = useProjectStore();
+      await project.newProject("新项目");
+
+      expect(project.activeStudyId).toBe("study-9");
+      expect(project.activeStudy?.name).toBe("方案 1");
+    });
+
     it("opens the project picked by the dialog", async () => {
       vi.mocked(pickOpenProjectPath).mockResolvedValue("/p/demo.kairos");
       vi.mocked(loadProjectFile).mockResolvedValue(makeProject({ name: "demo" }));
@@ -202,6 +213,17 @@ describe("project store", () => {
       expect(app.error?.message).toBe("文件损坏");
       expect(project.project).toBeNull();
       expect(app.busy).toBeNull();
+    });
+
+    it("opens a project onto its first study", async () => {
+      vi.mocked(loadProjectFile).mockResolvedValue(
+        makeProject({ name: "demo", studies: [makeStudy({ id: "study-3" })] }),
+      );
+
+      const project = useProjectStore();
+      await project.openProjectAtPath("/p/demo.kairos");
+
+      expect(project.activeStudyId).toBe("study-3");
     });
 
     it("saveProject is a no-op without an open project", async () => {
@@ -373,6 +395,39 @@ describe("project store", () => {
       } finally {
         vi.useRealTimers();
       }
+    });
+  });
+
+  describe("syncActiveStudy", () => {
+    it("活跃方案失效时落到首个方案", () => {
+      const project = useProjectStore();
+      project.project = makeProject({ studies: [makeStudy({ id: "study-7" })] });
+      project.activeStudyId = "study-old";
+
+      project.syncActiveStudy();
+
+      expect(project.activeStudyId).toBe("study-7");
+    });
+
+    it("活跃方案仍存在时保持选择", () => {
+      const { project } = primeActiveStudy();
+
+      project.syncActiveStudy();
+
+      expect(project.activeStudyId).toBe("study-1");
+    });
+
+    it("无方案工程与未打开工程都清空选择", () => {
+      const project = useProjectStore();
+      project.project = makeProject({ studies: [] });
+      project.activeStudyId = "study-1";
+      project.syncActiveStudy();
+      expect(project.activeStudyId).toBeNull();
+
+      project.project = null;
+      project.activeStudyId = "study-1";
+      project.syncActiveStudy();
+      expect(project.activeStudyId).toBeNull();
     });
   });
 

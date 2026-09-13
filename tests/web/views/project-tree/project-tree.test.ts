@@ -3,11 +3,19 @@ import { mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import type { Pinia } from "pinia";
 import ProjectTree from "../../../../src-web/views/project-tree/ProjectTree.vue";
+import { useProjectTree } from "../../../../src-web/views/project-tree/useProjectTree";
+import { useAppStore } from "../../../../src-web/stores/app";
 import { useDependenciesStore } from "../../../../src-web/stores/dependencies";
 import { useGeometryStore } from "../../../../src-web/stores/geometry";
 import { useJobsStore } from "../../../../src-web/stores/jobs";
 import { useProjectStore } from "../../../../src-web/stores/project";
-import type { DependencyStatus, GeometrySummary, Job, Project } from "../../../../src-web/types";
+import type {
+  DependencyStatus,
+  GeometrySummary,
+  Job,
+  Project,
+  Study,
+} from "../../../../src-web/types";
 
 function geometryFixture(overrides: Partial<GeometrySummary> = {}): GeometrySummary {
   return {
@@ -70,6 +78,19 @@ function projectFixture(overrides: Partial<Project> = {}): Project {
   };
 }
 
+function studyFixture(overrides: Partial<Study> = {}): Study {
+  return {
+    id: "study-1",
+    name: "方案 A",
+    createdMs: 1,
+    runnerElements: [],
+    coolingChannels: [],
+    process: null,
+    materialId: null,
+    ...overrides,
+  };
+}
+
 describe("ProjectTree", () => {
   let pinia: Pinia;
 
@@ -84,6 +105,9 @@ describe("ProjectTree", () => {
     expect(text).toContain("工程");
     // 头部徽标：未打开项目时给占位名
     expect(text).toContain("未打开项目");
+    // 方案层与新建入口都要求先有工程。
+    expect(text).not.toContain("方案");
+    expect(wrapper.find('button[title="新建方案"]').exists()).toBe(false);
     // 空分组不渲染标题。
     expect(text).not.toContain("几何");
     expect(text).not.toContain("求解作业");
@@ -117,35 +141,16 @@ describe("ProjectTree", () => {
     expect(text).toContain("Python: 就绪");
   });
 
-  it("方案层渲染并可点击切换活跃研究（Moldflow 工程视图交互）", async () => {
+  it("方案层渲染并可点击切换活跃研究", async () => {
     const project = useProjectStore();
     project.project = projectFixture({
-      studies: [
-        {
-          id: "study-1",
-          name: "方案 A",
-          createdMs: 1,
-          runnerElements: [],
-          coolingChannels: [],
-          process: null,
-          materialId: null,
-        },
-        {
-          id: "study-2",
-          name: "方案 B",
-          createdMs: 2,
-          runnerElements: [],
-          coolingChannels: [],
-          process: null,
-          materialId: null,
-        },
-      ],
+      studies: [studyFixture(), studyFixture({ id: "study-2", name: "方案 B", createdMs: 2 })],
     });
     project.activeStudyId = "study-1";
 
     const wrapper = mount(ProjectTree, { global: { plugins: [pinia] } });
     expect(wrapper.text()).toContain("方案");
-    const buttons = wrapper.findAll("button");
+    const buttons = wrapper.findAll('button[title^="切换到方案"]');
     expect(buttons).toHaveLength(2);
     // 活跃方案高亮
     expect(buttons[0]!.classes()).toContain("bg-emerald-900/40");
@@ -155,5 +160,43 @@ describe("ProjectTree", () => {
     expect(project.activeStudyId).toBe("study-2");
     await wrapper.vm.$nextTick();
     expect(buttons[1]!.classes()).toContain("bg-emerald-900/40");
+  });
+
+  it("＋ 新建方案：按序号补名并立即成为活跃方案", async () => {
+    const project = useProjectStore();
+    project.project = projectFixture({ studies: [studyFixture({ id: "study-1" })] });
+    project.activeStudyId = "study-1";
+
+    const wrapper = mount(ProjectTree, { global: { plugins: [pinia] } });
+    await wrapper.find('button[title="新建方案"]').trigger("click");
+
+    expect(project.project?.studies.map((study) => study.name)).toEqual(["方案 A", "方案 2"]);
+    expect(project.activeStudyId).toBe(project.project?.studies[1]?.id);
+    // 新方案行渲染为活跃态。
+    const buttons = wrapper.findAll('button[title^="切换到方案"]');
+    expect(buttons).toHaveLength(2);
+    expect(buttons[1]!.classes()).toContain("bg-emerald-900/40");
+  });
+
+  it("无方案的旧工程给出空态提示，入口仍可用", async () => {
+    const project = useProjectStore();
+    project.project = projectFixture({ studies: [] });
+
+    const wrapper = mount(ProjectTree, { global: { plugins: [pinia] } });
+    expect(wrapper.text()).toContain("尚无方案——点「＋」新建。");
+
+    await wrapper.find('button[title="新建方案"]').trigger("click");
+    expect(project.project?.studies.map((study) => study.name)).toEqual(["方案 1"]);
+  });
+
+  it("未打开工程时方案层为空列表，新建动作被 store 拒绝", () => {
+    const tree = useProjectTree();
+
+    expect(tree.hasProject.value).toBe(false);
+    expect(tree.studies.value).toEqual([]);
+
+    tree.createStudy();
+
+    expect(useAppStore().error?.message).toBe("请先新建或打开项目。");
   });
 });
