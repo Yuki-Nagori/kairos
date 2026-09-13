@@ -37,9 +37,24 @@ describe("Card", () => {
     expect(remounted.text()).toContain("▸");
   });
 
+  it("可折叠卡片的标题栏按按钮暴露，回车与空格都能切换", async () => {
+    const wrapper = mount(Card, { props: { title: "流程引导", collapsible: true } });
+    const header = wrapper.find("[role='button']");
+    expect(header.attributes("tabindex")).toBe("0");
+    expect(header.attributes("aria-expanded")).toBe("true");
+
+    await header.trigger("keydown.enter");
+    expect(header.attributes("aria-expanded")).toBe("false");
+    expect(localStorage.getItem("kairos:panel:流程引导")).toBe("true");
+
+    await header.trigger("keydown.space");
+    expect(header.attributes("aria-expanded")).toBe("true");
+  });
+
   it("不可折叠卡片没有箭头，点击标题不写存储", async () => {
     const wrapper = mount(Card, { props: { title: "静态卡片" } });
     expect(wrapper.text()).not.toContain("▾");
+    expect(wrapper.find("[role='button']").exists()).toBe(false);
     await wrapper.find("h2").trigger("click");
     expect(localStorage.getItem("kairos-panel:静态卡片")).toBeNull();
   });

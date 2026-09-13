@@ -28,7 +28,7 @@ const {
 </script>
 
 <template>
-  <Card title="模具网络（流道 · 浇口 · 冷却）">
+  <Card title="模具网络（流道 · 浇口 · 冷却）" collapsible>
     <p class="text-[11px] font-semibold tracking-wide text-zinc-400">
       流道 / 浇口（起点 xyz → 终点 xyz，mm）
     </p>

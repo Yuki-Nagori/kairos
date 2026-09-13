@@ -10,7 +10,7 @@ const { app, vm, deps, rows, downloadsDir, pendingDeployText, openDownloadsDir }
 </script>
 
 <template>
-  <Card title="运行时依赖" status-hint="尚未探测。点击「重新探测」检查求解环境。">
+  <Card title="运行时依赖" status-hint="尚未探测。点击「重新探测」检查求解环境。" collapsible>
     <!-- 求解环境「已下载新版本但 VM 未部署」提醒 -->
     <p
       v-if="pendingDeployText"
