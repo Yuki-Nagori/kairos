@@ -9,10 +9,12 @@
   脱离会话执行（日志与退出码落 case 内文件、客户端轮询增量回读，求解不再随 ssh 会话被回收）、
   `multipass exec` 加 600 秒等待上限（卡死不再让作业永远「运行中」）、作业自动启停虚拟机
   （含「multipass exec 会隐式拉起停止实例」的租约修正）；待 GUI 完整跑一次作业复测；b) 视口截图与 XY
-  图表探针（本会话图片栅格不可交付、输入通道被系统拒绝）；c) 真实件 4 进程死锁：上游 046 已定位根因（边界 patch 循环内归约 → 各 rank 归约次数不等）
-  并修复 + 加回归用例（`parallelMassBudget` + 并行超时门禁），但**尚未发版**——
-  Kairos 侧等新版 bundle 到手后复测 np=4；当前 v0.2.5 真实件仍用 1–2 进程
-  （[moldingFoam#7](https://github.com/Yuki-Nagori/moldingFoam/issues/7)）。详见 [e2e-solve-report.md](../reviews/e2e-solve-report.md)
+  c) 4 进程并行：**上游已发布 v1.0.0（含 046 修复）**，Kairos 侧复测通过——用 CLI 生成的 4 进程
+  case（`--cores 4`）走我们的完整链路（transfer 送 case → `setsid` 脱离会话 → `mpirun -np 4 foamRun`）：
+  退出码 **0**、**1389 步到 endTime 2 s**、无 `FOAM FATAL`，V/P 切换 0.9624 @ t = 1.0419 s、
+  质量预算残差 −7.2e-07 kg。上游另在真实件上复测 np4 → 5069 步到 endTime、1/2/4 进程结果一致。
+  **剩余**：本地真实件目录已不完整（workspace 现存为 np=2 小件），拿到真实件后补一次本地 np4
+  端到端（含结果回传与结果面板读场）。
 - 依赖：T09、T10、T11（已完成的求解集成代码）、T34（求解入口收口）
 - 优先级：**P1**
 
