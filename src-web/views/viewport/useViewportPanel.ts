@@ -382,11 +382,19 @@ export function useViewportPanel() {
   async function loadMesh(): Promise<void> {
     const first = geometry.geometries[0];
     if (first === undefined) {
+      // 点按钮没有任何动静是最糟的反馈：明确说清缺什么、去哪补
+      emptyText.value = "尚未导入几何：请先在几何面板导入 STL / STEP / IGES 或样例立方体。";
+      emptyError.value = true;
       return;
     }
-    // 渲染网格经 geometry store（错误进全局管道）；无数据（失败）则跳过上传。
+    // 渲染网格经 geometry store（错误进全局错误通道）；无数据（失败）时这里也要说清楚。
+    emptyText.value = "正在读取网格…";
+    emptyError.value = false;
     const data = await geometry.fetchRenderMesh(first.geometryId);
     if (data === undefined) {
+      emptyText.value =
+        "读取渲染网格失败：请先在几何面板生成体积网格，并确认工程已保存到工作区（散装工程没有网格落盘路径）。";
+      emptyError.value = true;
       return;
     }
     sharedMesh = {
@@ -399,6 +407,8 @@ export function useViewportPanel() {
     }
     if (slots[0]?.loaded === true) {
       registerSnapshot("viewport", slots[0]!.el!);
+      emptyText.value = "";
+      emptyError.value = false;
     }
     viewport.setMeshLoaded(meshLoaded.value);
   }

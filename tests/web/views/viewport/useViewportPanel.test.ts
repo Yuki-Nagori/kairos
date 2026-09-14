@@ -836,3 +836,34 @@ describe("useViewportPanel：变形显示", () => {
     panel.unmount();
   });
 });
+
+describe("载入网格的可见反馈", () => {
+  it("没有几何时说明缺什么，而不是静默什么都不做", async () => {
+    primeStudy();
+    const { panel } = mountPanel();
+    panel.attachCanvas(0, canvas());
+    await flushPromises();
+    const { useGeometryStore } = await import("../../../../src-web/stores/geometry");
+    useGeometryStore().geometries = [];
+    await panel.loadMesh();
+    expect(panel.emptyText).toContain("尚未导入几何");
+    expect(panel.emptyError).toBe(true);
+  });
+
+  it("渲染网格读取失败时给出可操作的下一步", async () => {
+    primeStudy();
+    const { panel } = mountPanel();
+    panel.attachCanvas(0, canvas());
+    await flushPromises();
+    const { useGeometryStore } = await import("../../../../src-web/stores/geometry");
+    const geometry = useGeometryStore();
+    // 上一个用例清空了几何（store 在同一文件内共享），这里补一个再测读取失败
+    geometry.geometries = [
+      { geometryId: "geo-2", name: "件", size: [10, 10, 10], suggestedUnit: "mm" },
+    ] as never;
+    vi.spyOn(geometry, "fetchRenderMesh").mockResolvedValue(undefined);
+    await panel.loadMesh();
+    expect(panel.emptyText).toContain("读取渲染网格失败");
+    expect(panel.emptyError).toBe(true);
+  });
+});
