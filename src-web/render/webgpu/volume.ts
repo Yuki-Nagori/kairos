@@ -3,7 +3,7 @@
  * （四面体场 → 规则网格）；固定步数 + 前向合成 alpha 混色。
  * POC 边界：无交互式迁移函数编辑、无光照、步数固定、相机仅旋转缩放。 */
 
-import type { Vec3 } from "../math";
+import { type Vec3, cross, normalize, sub } from "../math";
 import {
   VOLUME_FRAGMENT_SHADER,
   VOLUME_UNIFORM_FLOATS,
@@ -235,17 +235,4 @@ function maxValue(values: Float32Array): number {
 
 function align16(size: number): number {
   return Math.ceil(size / 16) * 16;
-}
-
-function normalize(v: Vec3): Vec3 {
-  const length = Math.hypot(v[0], v[1], v[2]) || 1;
-  return [v[0] / length, v[1] / length, v[2] / length];
-}
-
-function cross(a: Vec3, b: Vec3): Vec3 {
-  return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
-}
-
-function sub(a: Vec3, b: Vec3): Vec3 {
-  return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 }
