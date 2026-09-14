@@ -860,6 +860,11 @@ const VM_LOG_POLL_MS: u64 = 1000;
 /// VM 内求解脚本：加载求解环境 → 进 case → 分步求解。
 ///
 /// 路径按 shell 字面量转义（case 目录可能含空格 / 引号），与原生分支共用同一口径。
+///
+/// 只在 VM 执行通道（macOS 的 multipass / Windows 的 WSL）被调用：原生 Linux
+/// 直接本机执行，Linux 目标下此函数无人使用，若不按调用点的 cfg 收窄，
+/// `-D warnings` 会把它判成死代码（CI 在 ubuntu 上就是这样挂的）。
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 fn vm_solve_script(vm_case: &str, cores: u32) -> String {
     format!(
         "{} && cd '{}' && {}",
