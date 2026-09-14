@@ -4,6 +4,7 @@ pub mod deformation;
 pub mod dependencies;
 pub mod derive;
 pub mod digest;
+pub mod doe;
 pub mod dualdomain;
 pub mod fill_preview;
 pub mod gate_location;
