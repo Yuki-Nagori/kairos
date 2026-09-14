@@ -365,6 +365,59 @@ pub fn native_env_tag(env_root: &Path) -> PathBuf {
     env_root.join(RELEASE_TAG_FILE)
 }
 
+/// VM 内版本标记路径（`~/moldingfoam-env/.kairos-release-tag`）。
+///
+/// `ENV_ROOT` 是 **shell 相对形态**（`~` 开头），拼进命令时**不能加引号**：单引号
+/// 会阻止波浪号展开，`cat '~/…'` 在 guest 里找不到文件。
+pub fn vm_env_tag_path() -> String {
+    format!("{ENV_ROOT}/{RELEASE_TAG_FILE}")
+}
+
+/// 版本标记读取命令输出里的哨兵：哨兵之后到行尾是本轮读到的标记值。
+///
+/// multipass 在隐式拉起实例时会把转圈动画写进 **stdout**（同一行内用 `\x08` 重绘），
+/// 哨兵让标记值与这类噪声可分辨（同 `STREAM_MARK` 的用法）。
+pub const ENV_TAG_MARK: &str = "KAIROS-TAG:";
+
+/// 读取 VM 内版本标记的命令：标记值带哨兵输出，文件缺失时哨兵后为空。
+pub fn vm_env_tag_read_command() -> String {
+    format!(
+        "printf '{ENV_TAG_MARK}%s\\n' \"$(cat {} 2>/dev/null)\"",
+        vm_env_tag_path()
+    )
+}
+
+/// 写入 VM 内版本标记的命令（标记值来自下载清单，走单引号字面量转义）。
+pub fn vm_env_tag_write_command(tag: &str) -> String {
+    format!(
+        "printf '%s' '{}' > {}",
+        bash_single_quote(tag),
+        vm_env_tag_path()
+    )
+}
+
+/// 解析版本标记读取命令的 stdout：取最后一个哨兵之后、行尾之前的内容。
+/// 哨兵缺失（输出被截断 / 命令异常）→ None，按「未部署」处理，不拿噪声当版本。
+pub fn parse_env_tag_reply(stdout: &str) -> Option<String> {
+    let (_, tail) = stdout.rsplit_once(ENV_TAG_MARK)?;
+    let tag = clean_terminal_line(tail.lines().next().unwrap_or_default());
+    if tag.is_empty() { None } else { Some(tag) }
+}
+
+/// 已部署版本视图：VM 可达（Running）时以 VM 内标记为准——读到什么就是什么，
+/// 标记缺失即「未部署」（环境树可能被手工删掉）；VM 不可达（停机 / 启动中 /
+/// 状态未知）时回落本机记录。
+///
+/// 「部署过」是持久事实：作业跑完与应用退出都会关掉虚拟机（省内存），若把停机
+/// 当作「未部署」，用户每次都要重新搬一遍 120MB 的环境树。
+pub fn resolve_deployed_tag(
+    vm_reachable: bool,
+    vm_tag: Option<String>,
+    last_deployed: Option<String>,
+) -> Option<String> {
+    if vm_reachable { vm_tag } else { last_deployed }
+}
+
 /// 原生求解脚本首段：加载本机解压好的求解环境。
 /// 路径用单引号包裹并转义（应用数据目录可能含空格或引号）。
 pub fn native_env_source_command(env_root: &Path) -> String {
@@ -585,6 +638,61 @@ mod tests {
         );
         // 与 VM 内的相对布局同源（ENV_BASHRC 单点维护）
         assert!(native_env_bashrc(root).ends_with(ENV_BASHRC));
+    }
+
+    /// VM 内版本标记的读写命令：路径与 VM 布局同源（波浪号保持不加引号，
+    /// 展开交给 guest 的 shell），读取带哨兵，写入把标记值按单引号字面量转义。
+    #[test]
+    fn vm_env_tag_commands_carry_sentinel_and_quote_tag() {
+        assert_eq!(vm_env_tag_path(), "~/moldingfoam-env/.kairos-release-tag");
+        let read = vm_env_tag_read_command();
+        assert!(read.contains(ENV_TAG_MARK));
+        assert!(read.contains("cat ~/moldingfoam-env/.kairos-release-tag 2>/dev/null"));
+        assert!(!read.contains("'~"), "波浪号被引号裹住就不会展开：{read}");
+        assert_eq!(
+            vm_env_tag_write_command("v0.2.0"),
+            "printf '%s' 'v0.2.0' > ~/moldingfoam-env/.kairos-release-tag"
+        );
+        // 标记值来自下载清单：单引号必须转义，否则命令被提前截断
+        assert!(vm_env_tag_write_command("a'b").contains("'a'\\''b'"));
+    }
+
+    /// 解析版本标记回读：哨兵之后才是标记值，噪声（拉起实例的转圈动画）与截断
+    /// 输出都不算版本；哨兵后为空（标记文件缺失）→ 未部署。
+    #[test]
+    fn parse_env_tag_reply_ignores_noise_and_missing_marker() {
+        let noisy = "Starting kairos  /-\u{8}\\\u{8}\u{1b}[2K\u{1b}[0A\u{1b}[0EKAIROS-TAG:v0.2.0\n";
+        assert_eq!(parse_env_tag_reply(noisy), Some("v0.2.0".to_string()));
+        assert_eq!(
+            parse_env_tag_reply("KAIROS-TAG:\n"),
+            None,
+            "标记文件缺失 → 值空 → 未部署"
+        );
+        assert_eq!(
+            parse_env_tag_reply("Starting kairos\n"),
+            None,
+            "哨兵缺失（输出截断）→ 未部署，不把噪声当版本"
+        );
+    }
+
+    /// 已部署版本视图：VM 可达时以 VM 内标记为准（含「标记没了」= 未部署），
+    /// 不可达时才回落本机记录——停机不该把已部署退回未部署。
+    #[test]
+    fn resolve_deployed_tag_falls_back_to_record_only_when_vm_unreachable() {
+        let vm = || Some("v1.0.0".to_string());
+        let record = || Some("v0.9.0".to_string());
+        assert_eq!(resolve_deployed_tag(true, vm(), record()), vm());
+        assert_eq!(
+            resolve_deployed_tag(true, None, record()),
+            None,
+            "VM 可达但标记缺失 = 环境树没了，不能拿旧记录充数"
+        );
+        assert_eq!(
+            resolve_deployed_tag(false, None, record()),
+            record(),
+            "VM 停机时回落到上次部署记录"
+        );
+        assert_eq!(resolve_deployed_tag(false, None, None), None);
     }
 
     /// 路径含空格 / 单引号时仍能安全拼进 bash：全部走单引号字面量转义。

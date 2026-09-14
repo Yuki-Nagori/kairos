@@ -86,6 +86,11 @@ export function useJobsPanel() {
 
   // 环境探测行：探测经 jobs store（错误进全局管道），完成后整体替换样式。
   void jobsStore.probeMoldingfoam();
+  // 已部署版本按需补读：横幅读的是 vm store 的快照，而快照可能是别的面板在虚拟机
+  // 停机时读的（「未部署」横幅会一直挂着）。只在还没有读数时补一次，不覆盖已有读数。
+  if (vm.deployedReleaseTag === null) {
+    void vm.refreshDeployedReleaseTag();
+  }
   const envHint = computed(() => jobsStore.envCheck?.hint ?? "正在探测求解环境…");
   const envClass = computed(() => {
     const check = jobsStore.envCheck;

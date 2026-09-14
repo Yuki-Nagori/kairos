@@ -19,6 +19,20 @@ vi.mock("../../../../src-web/api/jobs", () => ({
   cancelJob: vi.fn(),
   listJobs: vi.fn(),
 }));
+// 面板挂载时按需读一次已部署版本（横幅的比对源）；不桩掉就会去碰真实 IPC。
+vi.mock("../../../../src-web/api/vm", () => ({
+  nativeEnvStatus: vi.fn(),
+  nativeDeployBundle: vi.fn(),
+  getVmStatus: vi.fn(),
+  getDeployedReleaseTag: vi.fn(async () => null),
+  installVm: vi.fn(),
+  startVm: vi.fn(),
+  vmShellStart: vi.fn(),
+  vmShellSend: vi.fn(),
+  vmShellStop: vi.fn(),
+  stopVm: vi.fn(),
+  deployVmBundle: vi.fn(),
+}));
 // happy-dom 无 Tauri 运行时：jobs store 构造 Channel 需要桩。
 vi.mock("@tauri-apps/api/core", () => ({
   Channel: class {

@@ -14,7 +14,7 @@ use kairos_core::services::vm as vm_logic;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 use tauri::ipc::Channel;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 
 /// 应用内 Shell 子进程句柄（同一时刻至多一个会话；新会话顶替旧会话）。
 pub struct VmShellState(Arc<Mutex<Option<Child>>>);
@@ -354,19 +354,45 @@ fn download_to_file(url: &str, dest: &Path, progress: &Channel<String>) -> Resul
     Ok(())
 }
 
-/// 解析 VM 内标记文件内容为已部署版本标签：空白 / 缺失 → None。
-pub fn parse_deployed_tag(stdout: &str) -> Option<String> {
-    let trimmed = stdout.trim();
-    if trimmed.is_empty() {
-        None
-    } else {
-        Some(trimmed.to_string())
-    }
+/// 本机部署记录文件名：VM 内版本标记的本机副本（见 `write_deployed_record`）。
+const DEPLOYED_RECORD_FILE: &str = "vm-deployed-tag";
+
+/// 本机部署记录的存放目录（应用数据目录，与下载清单同层）。
+fn deployed_record_dir(app: &AppHandle) -> Result<PathBuf> {
+    app.path()
+        .app_data_dir()
+        .map_err(|e| KairosError::io(format!("无法定位应用数据目录：{e}")))
+}
+
+/// 读本机部署记录：文件缺失 / 空白 → None（未部署过）。
+fn read_deployed_record(dir: &Path) -> Option<String> {
+    let content = std::fs::read_to_string(dir.join(DEPLOYED_RECORD_FILE)).ok()?;
+    let tag = content.trim();
+    (!tag.is_empty()).then(|| tag.to_string())
+}
+
+/// 写本机部署记录（原子替换：半截文件会被当成另一个版本标签）。
+/// `tag = None` 表示 VM 内已确认没有环境树，记录一并清掉。
+fn write_deployed_record(dir: &Path, tag: Option<&str>) -> Result<()> {
+    let path = dir.join(DEPLOYED_RECORD_FILE);
+    let Some(tag) = tag else {
+        let _ = std::fs::remove_file(&path);
+        return Ok(());
+    };
+    std::fs::create_dir_all(dir).map_err(|e| KairosError::io(format!("创建数据目录失败：{e}")))?;
+    let tmp = path.with_extension("tmp");
+    std::fs::write(&tmp, tag).map_err(|e| KairosError::io(format!("写入部署记录失败：{e}")))?;
+    std::fs::rename(&tmp, &path).map_err(|e| KairosError::io(format!("替换部署记录失败：{e}")))?;
+    Ok(())
 }
 
 /// 读取 VM 内已部署的求解环境版本标记（「更新未部署」提醒的比对源）。
-/// 非 multipass 平台无部署概念、VM 未启动 / multipass 缺失均返回
-/// null——提示只在真正可比对的环境中出现。
+///
+/// VM 可达（Running）时以 VM 内标记为准并同步刷新本机记录；VM 停机 / 启动中 /
+/// 状态未知时**不启动实例**，回落本机记录——multipass 的 exec 对停止实例会隐式
+/// 拉起，为读一个标记把十几 GB 的虚拟机拉起来不值得，而「部署过」是持久事实，
+/// 不该因为虚拟机停机（作业跑完与应用退出都会关）就退回「未部署」。
+/// 非 multipass 平台无部署概念，恒 null。
 #[tauri::command]
 pub async fn vm_deployed_release_tag(app: AppHandle) -> Result<Option<String>> {
     // 原生（Linux）：环境就在本机，标记文件直接读盘。
@@ -384,14 +410,13 @@ pub async fn vm_deployed_release_tag(app: AppHandle) -> Result<Option<String>> {
     if provider()? != VmProviderKind::Multipass {
         return Ok(None);
     }
-    let _ = app;
-    // multipass 的 exec 对停止实例会**隐式拉起**：只读版本标记不该顺带启动一台
-    // 十几 GB 的虚拟机，实例没在跑就直接按「版本未知」处理。
+    let dir = deployed_record_dir(&app)?;
+    // 实例状态探测不启动实例：停止 / 启动中 / 状态未知一律走本机记录。
     if !matches!(
         probe_instance_state(VmProviderKind::Multipass),
         Ok(VmState::Running)
     ) {
-        return Ok(None);
+        return Ok(read_deployed_record(&dir));
     }
     tauri::async_runtime::spawn_blocking(move || {
         let output = platform_command("multipass")
@@ -401,15 +426,19 @@ pub async fn vm_deployed_release_tag(app: AppHandle) -> Result<Option<String>> {
                 "--",
                 "bash",
                 "-lc",
-                "cat ~/moldingfoam-env/.kairos-release-tag 2>/dev/null || true",
+                &vm_logic::vm_env_tag_read_command(),
             ])
             .output()
             .map_err(|e| KairosError::io(format!("读取版本标记失败：{e}")))?;
+        // 探测到 Running 之后实例又停了（竞态）：按不可达处理，回落本机记录。
         if !output.status.success() {
-            // VM 未启动等场景：视为版本未知（null），不作为错误打断 UI
-            return Ok(None);
+            return Ok(read_deployed_record(&dir));
         }
-        Ok(parse_deployed_tag(&String::from_utf8_lossy(&output.stdout)))
+        let tag = vm_logic::parse_env_tag_reply(&String::from_utf8_lossy(&output.stdout));
+        // VM 可达时它是唯一事实来源：读到什么记什么（标记没了 → 记录一并清掉）。
+        // 记录只是停机期间的存档，写失败不改变本次读数。
+        let _ = write_deployed_record(&dir, tag.as_deref());
+        Ok(tag)
     })
     .await
     .map_err(|e| KairosError::internal(format!("读取部署版本失败：{e}")))?
@@ -536,14 +565,17 @@ pub async fn vm_deploy_bundle(app: AppHandle, progress: Channel<String>) -> Resu
                     "--",
                     "bash",
                     "-lc",
-                    &format!(
-                        "printf '%s' '{tag}' > ~/moldingfoam-env/.kairos-release-tag"
-                    ),
+                    &vm_logic::vm_env_tag_write_command(tag),
                 ])
                 .status()
                 .map_err(|e| KairosError::io(format!("写入版本标记失败：{e}")))?;
             if !marker.success() {
                 return Err(KairosError::io("版本标记写入失败，请重试部署。"));
+            }
+            // 本机记录同步落盘：虚拟机停机期间靠它记住「已部署」（见命令层读取策略）。
+            // 记录写不进去不影响本次部署结果，但要在日志里留痕。
+            if let Err(error) = write_deployed_record(&deployed_record_dir(&app)?, Some(tag)) {
+                let _ = progress.send(format!("── 本机部署记录未写入（不影响本次部署）：{}", error.message()));
             }
         }
         // 求解器运行时依赖：foamRun 链接 libmpi.so.40，VM 内必须
@@ -864,14 +896,54 @@ pub fn cleanup_on_exit(shell: &VmShellState) {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_deployed_tag;
+    use super::{read_deployed_record, write_deployed_record};
+    use std::path::PathBuf;
 
+    fn scratch_dir() -> PathBuf {
+        std::env::temp_dir().join(format!("kairos-deployed-tag-{}", std::process::id()))
+    }
+
+    /// 本机部署记录：未写 → 未部署；写入后读回同一标签；清空（None）后回到未部署。
     #[test]
-    fn parse_deployed_tag_trims_and_handles_empty() {
-        assert_eq!(parse_deployed_tag("v0.2.0\n"), Some("v0.2.0".into()));
-        assert_eq!(parse_deployed_tag("  v0.2.0  "), Some("v0.2.0".into()));
-        // 标记文件缺失（cat 失败被 || true 吞掉）→ 空输出 → 未部署
-        assert_eq!(parse_deployed_tag(""), None);
-        assert_eq!(parse_deployed_tag("\n  \n"), None);
+    fn deployed_record_round_trips_and_clears() {
+        let dir = scratch_dir();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(read_deployed_record(&dir), None, "没有记录 = 未部署");
+        write_deployed_record(&dir, Some("v1.0.0")).expect("写记录");
+        assert_eq!(read_deployed_record(&dir), Some("v1.0.0".to_string()));
+        // 覆盖写：换版本时记录跟着走
+        write_deployed_record(&dir, Some("v1.1.0")).expect("覆盖写记录");
+        assert_eq!(read_deployed_record(&dir), Some("v1.1.0".to_string()));
+        // None = VM 内已确认没有环境 → 记录清掉，不能留旧标签充数
+        write_deployed_record(&dir, None).expect("清记录");
+        assert_eq!(read_deployed_record(&dir), None);
+        // 清空后再清一次：幂等（文件不存在不是错误）
+        write_deployed_record(&dir, None).expect("重复清记录");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// 记录文件内容两端空白不算版本标签（写坏的文件不能变成「某个版本」）。
+    #[test]
+    fn deployed_record_treats_blank_file_as_missing() {
+        let dir = scratch_dir().join("blank");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("建目录");
+        std::fs::write(dir.join("vm-deployed-tag"), "  \n").expect("写空白记录");
+        assert_eq!(read_deployed_record(&dir), None);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// 原子替换的临时文件与正式文件同级、写完即被 rename 掉（不留半截文件）。
+    #[test]
+    fn deployed_record_writes_beside_the_target() {
+        let dir = scratch_dir().join("shape");
+        let _ = std::fs::remove_dir_all(&dir);
+        write_deployed_record(&dir, Some("v9.9.9")).expect("写记录");
+        assert!(dir.join("vm-deployed-tag").exists());
+        assert!(
+            !dir.join("vm-deployed-tag.tmp").exists(),
+            "临时文件必须已被 rename 掉"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
