@@ -34,42 +34,30 @@ impl MidplaneParams {
 }
 
 /// 由表面网格与杆系生成中面网格，返回网格与统计报告。
-pub fn generate(
-    mesh: &TriangleMesh,
-    runners: &[RunnerElement],
-    params: &MidplaneParams,
-) -> Result<(MidplaneMesh, MidplaneReport)> {
-    params.validate()?;
-    let (min, max) = mesh.bounding_box();
-    let diagonal = mesh.diagonal();
-    if mesh.triangles.is_empty() || diagonal <= 0.0 || !diagonal.is_finite() {
-        return Err(KairosError::validation(
-            "几何为空或包围盒退化，无法生成中面网格。",
-        ));
-    }
+/// 配对结果：顶点序号 → （中面节点序号, 配对厚度）；未配对为 None。
+type Pairing = Vec<Option<(usize, f64)>>;
 
-    let (nodes, triangles) = weld_surface(mesh);
-    if triangles.is_empty() {
-        return Err(KairosError::validation(
-            "焊接后没有有效三角形，无法生成中面网格。",
-        ));
-    }
-
-    // 每顶点沿相邻面内法向的多射线配对：取最近命中，中点为中面节点。
-    let grid = TriangleGrid::new(&nodes, &triangles, min, max);
+/// 顶点沿相邻面内法向配对对面：返回（中面节点, 配对表, 未配对顶点数）。
+///
+/// 每个顶点可能属于多个面，取最近命中（`first_hit` 只返回距离，方向由面法向给出）。
+fn pair_mid_nodes(
+    nodes: &[Point],
+    triangles: &[[usize; 3]],
+    grid: &TriangleGrid,
+    diagonal: f64,
+) -> (Vec<Point>, Pairing, usize) {
     let mut mid_nodes: Vec<Point> = Vec::with_capacity(nodes.len());
-    // 顶点序号 → (中面节点序号, 配对厚度)；未配对为 None。
     let mut pairing: Vec<Option<(usize, f64)>> = Vec::with_capacity(nodes.len());
     let mut unpaired_vertices = 0usize;
     for (vertex, position) in nodes.iter().enumerate() {
         let mut best: Option<(Point, f64)> = None;
-        for indices in &triangles {
+        for indices in triangles {
             if indices.contains(&vertex) {
                 let (a, b, c) = (nodes[indices[0]], nodes[indices[1]], nodes[indices[2]]);
                 // 退化面已在焊接阶段剔除；法向求不出时命中记为无（and_then 内跳过）。
                 let hit = normalized_normal(&a, &b, &c).and_then(|normal| {
                     let inward = [-normal[0], -normal[1], -normal[2]];
-                    grid.first_hit(&nodes, &triangles, *position, inward, diagonal)
+                    grid.first_hit(nodes, triangles, *position, inward, diagonal)
                         .map(|distance| (normal, distance))
                 });
                 if let Some((normal, distance)) = hit
@@ -94,6 +82,80 @@ pub fn generate(
             }
         }
     }
+    (mid_nodes, pairing, unpaired_vertices)
+}
+
+/// 杆系耦合：梁端点捕捉最近中面节点，捕捉失败的端点成为自由节点（重合的自由端复用）。
+///
+/// 返回（梁单元, 耦合记录, 自由节点）；自由端节点由调用方并入节点数组，
+/// 索引按「中面节点 + 自由节点」连续编号。
+fn couple_beams(
+    mid_nodes: &[Point],
+    runners: &[RunnerElement],
+    snap_tolerance: f64,
+) -> (Vec<ShellBeam>, Vec<BeamCoupling>, Vec<Point>) {
+    let mut couplings: Vec<BeamCoupling> = Vec::new();
+    let mut beams: Vec<ShellBeam> = Vec::with_capacity(runners.len());
+    let mut free_nodes: Vec<Point> = Vec::new();
+    for (index, runner) in runners.iter().enumerate() {
+        let mut endpoints = [0usize; 2];
+        for (slot, point) in [(0usize, runner.start), (1usize, runner.end)] {
+            if let Some((node, distance)) = nearest_node(mid_nodes, point)
+                && distance <= snap_tolerance
+            {
+                endpoints[slot] = node;
+                couplings.push(BeamCoupling {
+                    beam: index,
+                    endpoint: slot,
+                    node,
+                    distance,
+                });
+                continue;
+            }
+            // 自由端索引接在中面节点之后（最后统一并入节点数组）。
+            match free_nodes.iter().position(|candidate| candidate == &point) {
+                Some(free_index) => endpoints[slot] = mid_nodes.len() + free_index,
+                None => {
+                    endpoints[slot] = mid_nodes.len() + free_nodes.len();
+                    free_nodes.push(point);
+                }
+            }
+        }
+        beams.push(ShellBeam {
+            nodes: endpoints,
+            diameter: runner.diameter_mm,
+            kind: runner.kind,
+        });
+    }
+    (beams, couplings, free_nodes)
+}
+
+pub fn generate(
+    mesh: &TriangleMesh,
+    runners: &[RunnerElement],
+    params: &MidplaneParams,
+) -> Result<(MidplaneMesh, MidplaneReport)> {
+    params.validate()?;
+    let (min, max) = mesh.bounding_box();
+    let diagonal = mesh.diagonal();
+    if mesh.triangles.is_empty() || diagonal <= 0.0 || !diagonal.is_finite() {
+        return Err(KairosError::validation(
+            "几何为空或包围盒退化，无法生成中面网格。",
+        ));
+    }
+
+    let (nodes, triangles) = weld_surface(mesh);
+    if triangles.is_empty() {
+        return Err(KairosError::validation(
+            "焊接后没有有效三角形，无法生成中面网格。",
+        ));
+    }
+
+    // 每顶点沿相邻面内法向的多射线配对：取最近命中，中点为中面节点。
+    let grid = TriangleGrid::new(&nodes, &triangles, min, max);
+    // 顶点配对 + 单元继承 + 杆系耦合：三段各自独立，细节见各自函数。
+    let (mut mid_nodes, pairing, unpaired_vertices) =
+        pair_mid_nodes(&nodes, &triangles, &grid, diagonal);
 
     // 单元继承表面连接；任一顶点未配对即丢弃。
     let mut elements = Vec::with_capacity(triangles.len());
@@ -122,42 +184,8 @@ pub fn generate(
         ));
     }
 
-    // 杆系耦合：梁端点捕捉最近中面节点；失败端成为自由节点（完全重合的
-    // 自由端按位置复用，如两条流道的共享结点）。
     let snap_tolerance = params.snap_tolerance.unwrap_or(diagonal * 1e-3);
-    let mut couplings = Vec::new();
-    let mut beams = Vec::with_capacity(runners.len());
-    let mut free_nodes: Vec<Point> = Vec::new();
-    for (index, runner) in runners.iter().enumerate() {
-        let mut endpoints = [0usize; 2];
-        for (slot, point) in [(0usize, runner.start), (1usize, runner.end)] {
-            if let Some((node, distance)) = nearest_node(&mid_nodes, point)
-                && distance <= snap_tolerance
-            {
-                endpoints[slot] = node;
-                couplings.push(BeamCoupling {
-                    beam: index,
-                    endpoint: slot,
-                    node,
-                    distance,
-                });
-                continue;
-            }
-            // 自由端索引接在中面节点之后（最后统一并入节点数组）。
-            match free_nodes.iter().position(|candidate| candidate == &point) {
-                Some(free_index) => endpoints[slot] = mid_nodes.len() + free_index,
-                None => {
-                    endpoints[slot] = mid_nodes.len() + free_nodes.len();
-                    free_nodes.push(point);
-                }
-            }
-        }
-        beams.push(ShellBeam {
-            nodes: endpoints,
-            diameter: runner.diameter_mm,
-            kind: runner.kind,
-        });
-    }
+    let (beams, couplings, free_nodes) = couple_beams(&mid_nodes, runners, snap_tolerance);
 
     // 自由端节点并入节点数组（梁端点索引按「中面节点 + 自由节点」连续编号）。
     mid_nodes.extend(free_nodes);

@@ -260,13 +260,95 @@ fn orient_faces(faces: &mut [([i64; 3], [i64; 3], [i64; 3])]) -> usize {
 }
 
 /// 自交检测：AABB 预筛后的三角形对相交计数（共享顶点的相邻对不计）。
-fn count_self_intersections(mesh: &TriangleMesh) -> usize {
-    #[derive(Clone, Copy)]
-    struct Box3 {
-        min: [f64; 3],
-        max: [f64; 3],
-    }
+/// 三角形包围盒（自交检测的粗筛用）。
+#[derive(Clone, Copy)]
+struct Box3 {
+    min: [f64; 3],
+    max: [f64; 3],
+}
 
+/// 两个包围盒是否相交（逐轴区间重叠）。
+fn overlaps(a: &Box3, b: &Box3) -> bool {
+    (0..3).all(|axis| a.min[axis] <= b.max[axis] && b.min[axis] <= a.max[axis])
+}
+
+/// 三角形 - 三角形相交（Möller 区间法简化版）。
+fn triangles_intersect(
+    p0: &[f64; 3],
+    p1: &[f64; 3],
+    p2: &[f64; 3],
+    q0: &[f64; 3],
+    q1: &[f64; 3],
+    q2: &[f64; 3],
+) -> bool {
+    fn sub(a: &[f64; 3], b: &[f64; 3]) -> [f64; 3] {
+        [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
+    }
+    fn cross(a: &[f64; 3], b: &[f64; 3]) -> [f64; 3] {
+        [
+            a[1] * b[2] - a[2] * b[1],
+            a[2] * b[0] - a[0] * b[2],
+            a[0] * b[1] - a[1] * b[0],
+        ]
+    }
+    fn dot(a: &[f64; 3], b: &[f64; 3]) -> f64 {
+        a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+    }
+    // P 三顶点相对 Q 平面的带符号距离。
+    let q_normal = cross(&sub(q1, q0), &sub(q2, q0));
+    let distances = [
+        dot(&q_normal, &sub(p0, q0)),
+        dot(&q_normal, &sub(p1, q0)),
+        dot(&q_normal, &sub(p2, q0)),
+    ];
+    if distances.iter().all(|d| *d > 0.0) || distances.iter().all(|d| *d < 0.0) {
+        return false;
+    }
+    let p_normal = cross(&sub(p1, p0), &sub(p2, p0));
+    let p_distances = [
+        dot(&p_normal, &sub(q0, p0)),
+        dot(&p_normal, &sub(q1, p0)),
+        dot(&p_normal, &sub(q2, p0)),
+    ];
+    if p_distances.iter().all(|d| *d > 0.0) || p_distances.iter().all(|d| *d < 0.0) {
+        return false;
+    }
+    // 两三角形分别与相交线构成区间；区间在共享直线上投影重叠即相交。
+    let direction = cross(&p_normal, &q_normal);
+    fn interval(
+        triangle: &[[f64; 3]; 3],
+        distances: &[f64; 3],
+        direction: &[f64; 3],
+    ) -> (f64, f64) {
+        let projection = |vertex: &[f64; 3]| dot(direction, vertex);
+        let mut low = f64::INFINITY;
+        let mut high = f64::NEG_INFINITY;
+        for (index, vertex) in triangle.iter().enumerate() {
+            // 只取跨平面边的端点投影，得到与相交线的交点区间。
+            let other = (index + 1) % 3;
+            let d0 = distances[index];
+            let d1 = distances[other];
+            if (d0 > 0.0) != (d1 > 0.0) || d0 == 0.0 {
+                let t = d0 / (d0 - d1);
+                let point = projection(&[
+                    vertex[0] + (triangle[other][0] - vertex[0]) * t,
+                    vertex[1] + (triangle[other][1] - vertex[1]) * t,
+                    vertex[2] + (triangle[other][2] - vertex[2]) * t,
+                ]);
+                low = low.min(point);
+                high = high.max(point);
+            }
+        }
+        (low, high)
+    }
+    let p_triangle = [*p0, *p1, *p2];
+    let q_triangle = [*q0, *q1, *q2];
+    let (pa, pb) = interval(&p_triangle, &distances, &direction);
+    let (qa, qb) = interval(&q_triangle, &p_distances, &direction);
+    pa <= qb && qa <= pb
+}
+
+fn count_self_intersections(mesh: &TriangleMesh) -> usize {
     let boxes: Vec<(Box3, [[f64; 3]; 3])> = mesh
         .triangles
         .iter()
@@ -283,92 +365,12 @@ fn count_self_intersections(mesh: &TriangleMesh) -> usize {
         })
         .collect();
 
-    fn overlap(a: &Box3, b: &Box3) -> bool {
-        (0..3).all(|axis| a.min[axis] <= b.max[axis] && b.min[axis] <= a.max[axis])
-    }
-
-    /// 三角形 - 三角形相交（Möller 区间法简化版）。
-    fn triangles_intersect(
-        p0: &[f64; 3],
-        p1: &[f64; 3],
-        p2: &[f64; 3],
-        q0: &[f64; 3],
-        q1: &[f64; 3],
-        q2: &[f64; 3],
-    ) -> bool {
-        fn sub(a: &[f64; 3], b: &[f64; 3]) -> [f64; 3] {
-            [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
-        }
-        fn cross(a: &[f64; 3], b: &[f64; 3]) -> [f64; 3] {
-            [
-                a[1] * b[2] - a[2] * b[1],
-                a[2] * b[0] - a[0] * b[2],
-                a[0] * b[1] - a[1] * b[0],
-            ]
-        }
-        fn dot(a: &[f64; 3], b: &[f64; 3]) -> f64 {
-            a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
-        }
-        // P 三顶点相对 Q 平面的带符号距离。
-        let q_normal = cross(&sub(q1, q0), &sub(q2, q0));
-        let distances = [
-            dot(&q_normal, &sub(p0, q0)),
-            dot(&q_normal, &sub(p1, q0)),
-            dot(&q_normal, &sub(p2, q0)),
-        ];
-        if distances.iter().all(|d| *d > 0.0) || distances.iter().all(|d| *d < 0.0) {
-            return false;
-        }
-        let p_normal = cross(&sub(p1, p0), &sub(p2, p0));
-        let p_distances = [
-            dot(&p_normal, &sub(q0, p0)),
-            dot(&p_normal, &sub(q1, p0)),
-            dot(&p_normal, &sub(q2, p0)),
-        ];
-        if p_distances.iter().all(|d| *d > 0.0) || p_distances.iter().all(|d| *d < 0.0) {
-            return false;
-        }
-        // 两三角形分别与相交线构成区间；区间在共享直线上投影重叠即相交。
-        let direction = cross(&p_normal, &q_normal);
-        fn interval(
-            triangle: &[[f64; 3]; 3],
-            distances: &[f64; 3],
-            direction: &[f64; 3],
-        ) -> (f64, f64) {
-            let projection = |vertex: &[f64; 3]| dot(direction, vertex);
-            let mut low = f64::INFINITY;
-            let mut high = f64::NEG_INFINITY;
-            for (index, vertex) in triangle.iter().enumerate() {
-                // 只取跨平面边的端点投影，得到与相交线的交点区间。
-                let other = (index + 1) % 3;
-                let d0 = distances[index];
-                let d1 = distances[other];
-                if (d0 > 0.0) != (d1 > 0.0) || d0 == 0.0 {
-                    let t = d0 / (d0 - d1);
-                    let point = projection(&[
-                        vertex[0] + (triangle[other][0] - vertex[0]) * t,
-                        vertex[1] + (triangle[other][1] - vertex[1]) * t,
-                        vertex[2] + (triangle[other][2] - vertex[2]) * t,
-                    ]);
-                    low = low.min(point);
-                    high = high.max(point);
-                }
-            }
-            (low, high)
-        }
-        let p_triangle = [*p0, *p1, *p2];
-        let q_triangle = [*q0, *q1, *q2];
-        let (pa, pb) = interval(&p_triangle, &distances, &direction);
-        let (qa, qb) = interval(&q_triangle, &p_distances, &direction);
-        pa <= qb && qa <= pb
-    }
-
     let mut count = 0usize;
     for i in 0..boxes.len() {
         for j in (i + 1)..boxes.len() {
             let (box_a, tri_a) = &boxes[i];
             let (box_b, tri_b) = &boxes[j];
-            if !overlap(box_a, box_b) {
+            if !overlaps(box_a, box_b) {
                 continue;
             }
             let shared = tri_a

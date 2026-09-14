@@ -330,109 +330,15 @@ pub fn write_poly_mesh(
     fs::create_dir_all(&poly)
         .map_err(|e| KairosError::io(format!("创建 polyMesh 目录失败：{e}")))?;
 
-    // 收集所有面：键 = 排序节点三元组；值 = (owner, 有序顶点, neighbour: Option)
-    let mut faces: Vec<[usize; 3]> = Vec::new();
-    let mut face_index: HashMap<[usize; 3], usize> = HashMap::new();
-    let mut owner: Vec<usize> = Vec::new();
-    let mut neighbour: Vec<Option<usize>> = Vec::new();
-
-    for (cell, tet) in mesh.tets.iter().enumerate() {
-        for face in [
-            [tet[0], tet[1], tet[2]],
-            [tet[0], tet[1], tet[3]],
-            [tet[0], tet[2], tet[3]],
-            [tet[1], tet[2], tet[3]],
-        ] {
-            let mut key = face;
-            key.sort_unstable();
-            match face_index.get(&key) {
-                Some(&existing) => {
-                    neighbour[existing] = Some(cell);
-                }
-                None => {
-                    face_index.insert(key, faces.len());
-                    faces.push(face);
-                    owner.push(cell);
-                    neighbour.push(None);
-                }
-            }
-        }
-    }
-
-    // 面法向按 owner 外法向定向（点积判定，反向则交换后两点）。
-    let mut face_lines = Vec::with_capacity(faces.len());
-    let mut face_centres: Vec<[f64; 3]> = Vec::with_capacity(faces.len());
-    let mut face_areas: Vec<f64> = Vec::with_capacity(faces.len());
-    let mut face_normal_z: Vec<f64> = Vec::with_capacity(faces.len());
-    for (index, face) in faces.iter().enumerate() {
-        let (p0, p1, p2) = (
-            mesh.nodes[face[0]],
-            mesh.nodes[face[1]],
-            mesh.nodes[face[2]],
-        );
-        let owner_cell = mesh.tets[owner[index]];
-        let owner_centre = [
-            (mesh.nodes[owner_cell[0]][0]
-                + mesh.nodes[owner_cell[1]][0]
-                + mesh.nodes[owner_cell[2]][0]
-                + mesh.nodes[owner_cell[3]][0])
-                / 4.0,
-            (mesh.nodes[owner_cell[0]][1]
-                + mesh.nodes[owner_cell[1]][1]
-                + mesh.nodes[owner_cell[2]][1]
-                + mesh.nodes[owner_cell[3]][1])
-                / 4.0,
-            (mesh.nodes[owner_cell[0]][2]
-                + mesh.nodes[owner_cell[1]][2]
-                + mesh.nodes[owner_cell[2]][2]
-                + mesh.nodes[owner_cell[3]][2])
-                / 4.0,
-        ];
-        let face_centre = [
-            (p0[0] + p1[0] + p2[0]) / 3.0,
-            (p0[1] + p1[1] + p2[1]) / 3.0,
-            (p0[2] + p1[2] + p2[2]) / 3.0,
-        ];
-        let normal = [
-            (p1[1] - p0[1]) * (p2[2] - p0[2]) - (p1[2] - p0[2]) * (p2[1] - p0[1]),
-            (p1[2] - p0[2]) * (p2[0] - p0[0]) - (p1[0] - p0[0]) * (p2[2] - p0[2]),
-            (p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0]),
-        ];
-        let to_owner = [
-            owner_centre[0] - face_centre[0],
-            owner_centre[1] - face_centre[1],
-            owner_centre[2] - face_centre[2],
-        ];
-        let outward =
-            normal[0] * to_owner[0] + normal[1] * to_owner[1] + normal[2] * to_owner[2] < 0.0;
-        // 定向下标后按最小节点开头循环（OpenFOAM 的 upper-triangular 约定，
-        // 循环不改变绕向）：违反该约定 checkMesh 报 "Faces not in upper
-        // triangular order"。
-        let mut ordered_face = if outward {
-            [face[0], face[1], face[2]]
-        } else {
-            [face[0], face[2], face[1]]
-        };
-        if ordered_face[1] < ordered_face[0] && ordered_face[1] < ordered_face[2] {
-            ordered_face.rotate_left(1);
-        } else if ordered_face[2] < ordered_face[0] {
-            ordered_face.rotate_right(1);
-        }
-        // |cross| = 2 × 面积；法向符号已由 outward 定向，朝下时取负 z 分量。
-        let length = (normal[0].powi(2) + normal[1].powi(2) + normal[2].powi(2)).sqrt();
-        let unit_z = if length > 0.0 {
-            (if outward { normal[2] } else { -normal[2] }) / length
-        } else {
-            0.0
-        };
-        face_centres.push(face_centre);
-        face_areas.push(length / 2.0);
-        face_normal_z.push(unit_z);
-        face_lines.push(format!(
-            "3({} {} {})",
-            ordered_face[0], ordered_face[1], ordered_face[2]
-        ));
-    }
+    let FaceTable {
+        faces,
+        owner,
+        neighbour,
+        centres: face_centres,
+        areas: face_areas,
+        normal_z: face_normal_z,
+        lines: face_lines,
+    } = collect_faces(mesh)?;
 
     // 输出顺序：内部面 → inlet → vent → walls。三个数组必须**逐项对齐**——
     // faces/owner/neighbour 是并行列表，任何单独重排都会让 owner 与面错位，
@@ -650,6 +556,149 @@ pub fn write_case_files(
 }
 
 /// 生成完整 case：polyMesh + 场 + 字典。
+/// 面表：这些数组必须**逐项对齐**（faces/owner/neighbour 是并行列表，
+/// 任何单独重排都会让 owner 与面错位，单元体积随即出现负值）。
+struct FaceTable {
+    faces: Vec<[usize; 3]>,
+    owner: Vec<usize>,
+    neighbour: Vec<Option<usize>>,
+    centres: Vec<[f64; 3]>,
+    areas: Vec<f64>,
+    normal_z: Vec<f64>,
+    lines: Vec<String>,
+}
+
+/// 从四面体网格收集所有面：内部面与边界面分类所需的原始数据（含几何与 lexicographic 行）。
+/// 每个面的几何与 lexicographic 行：外法向定向、中心、面积、z 分量与 `3(i j k)` 行。
+///
+/// 单独成函数是因为这段是本文件里最容易出错的部分——定向、下标轮转（OpenFOAM 的
+/// upper-triangular 约定）与面积符号三处必须同时对。
+fn describe_faces(
+    mesh: &VolumeMesh,
+    faces: &[[usize; 3]],
+    owner: &[usize],
+) -> (Vec<String>, Vec<[f64; 3]>, Vec<f64>, Vec<f64>) {
+    // 面法向按 owner 外法向定向（点积判定，反向则交换后两点）。
+    let mut face_lines = Vec::with_capacity(faces.len());
+    let mut face_centres: Vec<[f64; 3]> = Vec::with_capacity(faces.len());
+    let mut face_areas: Vec<f64> = Vec::with_capacity(faces.len());
+    let mut face_normal_z: Vec<f64> = Vec::with_capacity(faces.len());
+    for (index, face) in faces.iter().enumerate() {
+        let (p0, p1, p2) = (
+            mesh.nodes[face[0]],
+            mesh.nodes[face[1]],
+            mesh.nodes[face[2]],
+        );
+        let owner_cell = mesh.tets[owner[index]];
+        let owner_centre = [
+            (mesh.nodes[owner_cell[0]][0]
+                + mesh.nodes[owner_cell[1]][0]
+                + mesh.nodes[owner_cell[2]][0]
+                + mesh.nodes[owner_cell[3]][0])
+                / 4.0,
+            (mesh.nodes[owner_cell[0]][1]
+                + mesh.nodes[owner_cell[1]][1]
+                + mesh.nodes[owner_cell[2]][1]
+                + mesh.nodes[owner_cell[3]][1])
+                / 4.0,
+            (mesh.nodes[owner_cell[0]][2]
+                + mesh.nodes[owner_cell[1]][2]
+                + mesh.nodes[owner_cell[2]][2]
+                + mesh.nodes[owner_cell[3]][2])
+                / 4.0,
+        ];
+        let face_centre = [
+            (p0[0] + p1[0] + p2[0]) / 3.0,
+            (p0[1] + p1[1] + p2[1]) / 3.0,
+            (p0[2] + p1[2] + p2[2]) / 3.0,
+        ];
+        let normal = [
+            (p1[1] - p0[1]) * (p2[2] - p0[2]) - (p1[2] - p0[2]) * (p2[1] - p0[1]),
+            (p1[2] - p0[2]) * (p2[0] - p0[0]) - (p1[0] - p0[0]) * (p2[2] - p0[2]),
+            (p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0]),
+        ];
+        let to_owner = [
+            owner_centre[0] - face_centre[0],
+            owner_centre[1] - face_centre[1],
+            owner_centre[2] - face_centre[2],
+        ];
+        let outward =
+            normal[0] * to_owner[0] + normal[1] * to_owner[1] + normal[2] * to_owner[2] < 0.0;
+        // 定向下标后按最小节点开头循环（OpenFOAM 的 upper-triangular 约定，
+        // 循环不改变绕向）：违反该约定 checkMesh 报 "Faces not in upper
+        // triangular order"。
+        let mut ordered_face = if outward {
+            [face[0], face[1], face[2]]
+        } else {
+            [face[0], face[2], face[1]]
+        };
+        if ordered_face[1] < ordered_face[0] && ordered_face[1] < ordered_face[2] {
+            ordered_face.rotate_left(1);
+        } else if ordered_face[2] < ordered_face[0] {
+            ordered_face.rotate_right(1);
+        }
+        // |cross| = 2 × 面积；法向符号已由 outward 定向，朝下时取负 z 分量。
+        let length = (normal[0].powi(2) + normal[1].powi(2) + normal[2].powi(2)).sqrt();
+        let unit_z = if length > 0.0 {
+            (if outward { normal[2] } else { -normal[2] }) / length
+        } else {
+            0.0
+        };
+        face_centres.push(face_centre);
+        face_areas.push(length / 2.0);
+        face_normal_z.push(unit_z);
+        face_lines.push(format!(
+            "3({} {} {})",
+            ordered_face[0], ordered_face[1], ordered_face[2]
+        ));
+    }
+
+    (face_lines, face_centres, face_areas, face_normal_z)
+}
+
+fn collect_faces(mesh: &VolumeMesh) -> Result<FaceTable> {
+    // 收集所有面：键 = 排序节点三元组；值 = (owner, 有序顶点, neighbour: Option)
+    let mut faces: Vec<[usize; 3]> = Vec::new();
+    let mut face_index: HashMap<[usize; 3], usize> = HashMap::new();
+    let mut owner: Vec<usize> = Vec::new();
+    let mut neighbour: Vec<Option<usize>> = Vec::new();
+
+    for (cell, tet) in mesh.tets.iter().enumerate() {
+        for face in [
+            [tet[0], tet[1], tet[2]],
+            [tet[0], tet[1], tet[3]],
+            [tet[0], tet[2], tet[3]],
+            [tet[1], tet[2], tet[3]],
+        ] {
+            let mut key = face;
+            key.sort_unstable();
+            match face_index.get(&key) {
+                Some(&existing) => {
+                    neighbour[existing] = Some(cell);
+                }
+                None => {
+                    face_index.insert(key, faces.len());
+                    faces.push(face);
+                    owner.push(cell);
+                    neighbour.push(None);
+                }
+            }
+        }
+    }
+
+    let (face_lines, face_centres, face_areas, face_normal_z) =
+        describe_faces(mesh, &faces, &owner);
+    Ok(FaceTable {
+        faces,
+        owner,
+        neighbour,
+        centres: face_centres,
+        areas: face_areas,
+        normal_z: face_normal_z,
+        lines: face_lines,
+    })
+}
+
 pub fn generate_case(case_dir: &Path, inputs: &CaseInputs<'_>) -> Result<CaseReport> {
     let report = write_poly_mesh(case_dir, inputs.mesh, inputs.gates)?;
     // 微发泡近似说明进告警（CLI JSON 与工艺面板都会展示）
