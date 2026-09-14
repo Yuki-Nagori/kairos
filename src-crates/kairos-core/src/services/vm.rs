@@ -402,6 +402,19 @@ pub const SOLVE_EXIT_NAME: &str = ".kairos-solve.exit";
 /// 流式回读命令输出里的分隔哨兵：哨兵之前的字节是日志，之后是退出码。
 pub const STREAM_MARK: &str = "##KAIROS-STATUS##";
 
+/// 求解脚本：加载求解环境 → 进 VM 内 case 目录 → 分步求解。
+///
+/// 路径按 shell 字面量转义（case 目录可能含空格 / 引号），与原生分支共用同一口径。
+/// 桌面端作业线程与脚本化集成测试都用它，避免各写一份「source + cd + solve」。
+pub fn solve_script(vm_case: &str, cores: u32) -> String {
+    format!(
+        "{} && cd '{}' && {}",
+        env_source_command(),
+        bash_single_quote(vm_case),
+        crate::services::moldingfoam::solve_command(cores)
+    )
+}
+
 /// 脱离会话的求解启动命令：`setsid` 起独立会话（不再是 ssh 会话的子进程），
 /// 输出重定向到 case 内的日志文件，退出码写进退出码文件。
 ///
@@ -412,8 +425,11 @@ pub fn detached_launch_command(vm_case: &str, script: &str) -> String {
     let dir = format!("'{}'", bash_single_quote(vm_case));
     let log = format!("{dir}/{SOLVE_LOG_NAME}");
     let exit = format!("{dir}/{SOLVE_EXIT_NAME}");
+    // 脚本必须整体落在单引号里（`bash_single_quote` 只做**引号内**的转义）：少了
+    // 外层引号时，脚本里自带的 `cd '<case>'` 会把引号配平打乱，`bash -lc` 直接
+    // 「unexpected EOF while looking for matching `''」——求解根本没启动。
     format!(
-        "rm -f {log} {exit}; (setsid bash -lc {} >> {log} 2>&1 < /dev/null; echo $? > {exit}) &",
+        "rm -f {log} {exit}; (setsid bash -lc '{}' >> {log} 2>&1 < /dev/null; echo $? > {exit}) &",
         bash_single_quote(script)
     )
 }
@@ -1251,6 +1267,18 @@ mod tests {
         );
     }
 
+    /// 求解脚本：环境 source 在最前（它决定 OpenFOAM 的 PATH / LD_LIBRARY_PATH），
+    /// 随后进 VM 内 case 目录，最后是求解命令（分步求解的编排在 moldingfoam 服务）。
+    #[test]
+    fn solve_script_sources_env_then_enters_case() {
+        let script = solve_script("/home/ubuntu/study-1", 4);
+        assert!(script.starts_with(&format!("{} && cd ", env_source_command())));
+        assert!(script.contains("cd '/home/ubuntu/study-1'"));
+        assert!(script.ends_with(&crate::services::moldingfoam::solve_command(4)));
+        // case 路径含单引号时不能把命令截断
+        assert!(solve_script("/home/ubuntu/o'brien", 4).contains("'/home/ubuntu/o'\\''brien'"));
+    }
+
     #[test]
     fn detached_launch_uses_setsid_and_case_side_markers() {
         let command = detached_launch_command(
@@ -1262,10 +1290,56 @@ mod tests {
         assert!(command.contains("'/home/ubuntu/study-1'/kairos-solve.log"));
         assert!(command.contains("'/home/ubuntu/study-1'/.kairos-solve.exit"));
         assert!(command.contains("echo $? > "));
-        // 脚本作为单个 shell 字面量传入，单引号被转义
-        assert!(command.contains("'\\''/home/ubuntu/study-1'\\''"));
+        // 脚本整体落在单引号里、内部引号按 '\'' 转义（少外层引号就是引号失衡）
+        assert!(command.contains("bash -lc 'cd '\\''/home/ubuntu/study-1'\\'' && foamRun'"));
         // 启动命令自身后台化：客户端拿到返回即结束，不等求解
         assert!(command.ends_with(") &"));
+    }
+
+    /// 生成的 shell 命令必须能被 shell 解析：引号失衡这类问题只会表现为命令报
+    /// 「unexpected EOF while looking for matching `''」，而「字符串包含某个片段」的
+    /// 断言抓不住（`detached_launch_command` 少写外层引号的写法就这样被锁死过一次）。
+    /// 含单引号的路径一并覆盖——转义口径对不对，只有交给 shell 解析才算验证过。
+    #[test]
+    #[cfg(unix)]
+    fn generated_shell_commands_parse_with_bash() {
+        let quoted_case = "/home/ubuntu/o'brien";
+        let commands = [
+            solve_script("/home/ubuntu/study-1", 4),
+            solve_script(quoted_case, 2),
+            detached_launch_command(
+                "/home/ubuntu/study-1",
+                &solve_script("/home/ubuntu/study-1", 4),
+            ),
+            detached_launch_command(quoted_case, &solve_script(quoted_case, 2)),
+            detached_read_command("/home/ubuntu/study-1", 0),
+            vm_case_extract_from_archive_command("/home/ubuntu/study-1"),
+            vm_case_extract_from_archive_command(quoted_case),
+            vm_results_pack_command(
+                "/home/ubuntu/study-1",
+                &["0.5".to_string(), "1".to_string()],
+            ),
+            vm_results_list_command(quoted_case),
+            vm_env_tag_read_command(),
+            vm_env_tag_write_command("v1.0.0"),
+            vm_env_tag_write_command("a'b"),
+            env_deploy_command(),
+            apt_mirror_command(),
+            openmpi_install_command(),
+        ];
+        for command in commands {
+            let parsed = std::process::Command::new("bash")
+                .args(["-n", "-c", &command])
+                .output()
+                .expect("bash 不可用");
+            // 诊断信息先绑定再断言：assert 的消息参数只在失败时求值，直接写进去
+            // 会变成「永远未覆盖」的假落点（覆盖率门槛会如实报出来）。
+            let stderr = String::from_utf8_lossy(&parsed.stderr).into_owned();
+            assert!(
+                parsed.status.success(),
+                "生成的命令无法被 shell 解析：\n{command}\n{stderr}"
+            );
+        }
     }
 
     #[test]

@@ -17,12 +17,10 @@ use kairos_core::services::jobs::SchedulerLimits;
 use kairos_core::services::moldingfoam;
 use kairos_core::services::paths;
 use kairos_core::services::project::new_id;
-// 结果回传只在 macOS（multipass）通道用得上；VM 路径 macOS 与 Windows 都用
-#[cfg(target_os = "macos")]
-use kairos_core::services::results;
 // VM 通道（macOS/Windows 的 env source）与原生环境（Linux 的 source 行）都用它，
 // 因此导入**不带 cfg**——只在 cfg 块里引用会让 Linux 构建找不到符号。
 use kairos_core::services::vm as vm_logic;
+use kairos_core::services::vm_run;
 // 命令层与作业层共用的宿主命令构造（core 的参数表 + GUI 进程的 PATH 修补）。
 use super::vm::host_command;
 use tauri::State;
@@ -282,55 +280,31 @@ fn copy_case_into_vm(case_dir: &str, vm_shell: Option<&str>) -> Result<Option<St
     let Some("multipass") = vm_shell else {
         return Ok(None);
     };
-    let parent = Path::new(case_dir).parent().unwrap_or(Path::new("."));
-    let name = Path::new(case_dir)
-        .file_name()
-        .map(|n| n.to_string_lossy().to_string())
-        .unwrap_or_else(|| "case".into());
     let archive = host_transfer_path();
-    // 归档不带 macOS 私有元数据：bsdtar 默认把扩展属性写成 pax 扩展头并额外打包
-    // `._*` 影子文件（macOS 给每个新文件挂 com.apple.provenance），guest 侧的
-    // GNU tar 会为每个带属性的成员打一行警告，case 目录里也白白多出一层 `._*`。
-    // 两个开关各管一半：COPYFILE_DISABLE 去影子文件、--no-xattrs 去 xattr 扩展头。
-    let packed = run_host(
-        Command::new("tar")
-            .env("COPYFILE_DISABLE", "1")
-            .arg("--no-xattrs")
-            .arg("-C")
-            .arg(parent)
-            .arg("-czf")
-            .arg(&archive)
-            .arg(&name),
-        "case 打包",
-    );
-    if let Err(e) = packed {
-        remove_quietly(&archive);
-        return Err(e);
-    }
-    let transferred = run_host(
-        &mut host_command(&vm_logic::transfer_args(
-            &archive.to_string_lossy(),
-            &vm_logic::vm_transfer_endpoint(&vm_logic::vm_archive_path()),
-        )),
-        "case 传输进虚拟机",
-    );
-    if transferred.is_err() {
-        remove_quietly(&archive);
-        return transferred.map(|_| None);
-    }
+    // 步骤编排在 core（services::vm_run，与集成测试同一段代码）：打包 → transfer → 解压。
+    // 本函数只负责「用哪个 runner」与中转文件的清理。
+    let staged = vm_run::stage_case(&HostRunnerImpl, &archive, case_dir);
     remove_quietly(&archive);
-    // 解压命令由 core 构造：归档条目自带叶子名前缀，解压目标必须是 case 根
-    // （解到 case 目录本身会多套一层同名目录）；重跑前先删同名目录，
-    // 否则残留的上一次时间目录会被回传逻辑当作本次结果。
-    let vm_case = vm_logic::vm_case_dir(case_dir);
-    run_host(
-        &mut host_command(&vm_logic::bash_script_args(
-            VmProviderKind::Multipass,
-            &vm_logic::vm_case_extract_from_archive_command(&vm_case),
-        )),
-        "case 解压进虚拟机",
-    )?;
-    Ok(Some(vm_case))
+    staged.map(Some)
+}
+
+/// 宿主命令执行者：补 GUI 进程缺失的 PATH，退出码判成败（口径在 core 的 `judge`）。
+#[cfg(target_os = "macos")]
+struct HostRunnerImpl;
+
+#[cfg(target_os = "macos")]
+impl vm_run::HostRunner for HostRunnerImpl {
+    fn run(&self, command: &vm_run::HostCommand, what: &str) -> Result<()> {
+        let mut process = host_command(&command.args);
+        process.envs(command.env.iter().cloned());
+        run_host(&mut process, what)
+    }
+
+    fn capture(&self, command: &vm_run::HostCommand, what: &str) -> Result<String> {
+        let mut process = host_command(&command.args);
+        process.envs(command.env.iter().cloned());
+        capture_host(&mut process, what)
+    }
 }
 
 /// 宿主侧归档中转文件：`<临时目录>/kairos-<作业随机串>.tgz`。
@@ -342,45 +316,65 @@ fn host_transfer_path() -> std::path::PathBuf {
     ))
 }
 
-/// 跑一条宿主侧命令并等它结束（统一走超时保护）。
+/// 跑一条宿主侧命令并等它结束（统一走超时保护）：stdout 丢弃，只关心成败。
 ///
-/// 成败只看**退出码**：stderr 是诊断通道而不是失败信号——宿主是 macOS 的 bsdtar，
-/// 解压侧是多有 GNU tar 的 Linux，tar 会为 pax 扩展头关键字打「Ignoring unknown
-/// extended header keyword」之类的警告而退出码仍为 0；把「stderr 非空」当失败会让
-/// 解压明明是成功的作业被判失败。stderr 与等待并行抽干：先等后读会在输出超过管道
-/// 缓冲时互锁（子进程阻塞在写、父进程等退出）。
+/// 成败口径在 core（`vm_run::judge`）：**只看退出码**——stderr 是诊断通道而不是失败
+/// 信号（tar 会为 pax 扩展头关键字打警告而退出码仍为 0，把「stderr 非空」当失败会把
+/// 成功的解压报成失败）。stderr 与等待并行抽干：先等后读会在输出超过管道缓冲时互锁。
 #[cfg(target_os = "macos")]
 fn run_host(command: &mut Command, what: &str) -> Result<()> {
+    spawn_host(command, what, false).map(|_| ())
+}
+
+/// 跑一条宿主侧命令并取回 stdout（成败口径同上）：日志回读要用 stdout。
+#[cfg(target_os = "macos")]
+fn capture_host(command: &mut Command, what: &str) -> Result<String> {
+    let (stdout, _) = spawn_host(command, what, true)?;
+    Ok(String::from_utf8_lossy(&stdout).into_owned())
+}
+
+/// 宿主命令的统一执行：stdout 可选捕获、stderr 并行抽干、超时保护、
+/// 退出码交给 core 的判定（失败时 stderr 首行非空内容作原因，否则用超时措辞兜底）。
+#[cfg(target_os = "macos")]
+fn spawn_host(
+    command: &mut Command,
+    what: &str,
+    capture_stdout: bool,
+) -> Result<(Vec<u8>, String)> {
     let mut child = command
         .stdin(Stdio::null())
-        .stdout(Stdio::null())
+        .stdout(if capture_stdout {
+            Stdio::piped()
+        } else {
+            Stdio::null()
+        })
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|e| KairosError::io(format!("{what}启动失败：{e}")))?;
     let stderr = child.stderr.take();
-    let drain = thread::spawn(move || {
+    let stderr_drain = thread::spawn(move || {
         let mut text = String::new();
         if let Some(pipe) = stderr {
             let _ = BufReader::new(pipe).read_to_string(&mut text);
         }
         text
     });
+    // stdout 也要并行抽干：管道写满会卡住子进程，而父进程正在等它退出。
+    let stdout_drain = child.stdout.take().map(|pipe| {
+        thread::spawn(move || {
+            let mut buffer = Vec::new();
+            let _ = BufReader::new(pipe).read_to_end(&mut buffer);
+            buffer
+        })
+    });
     let outcome = wait_exec(&mut child, what);
-    let stderr_text = drain.join().unwrap_or_default();
+    let stderr_text = stderr_drain.join().unwrap_or_default();
+    let stdout = stdout_drain
+        .map(|handle| handle.join().unwrap_or_default())
+        .unwrap_or_default();
     match outcome {
-        Ok(()) => Ok(()),
-        Err(error) => {
-            // 失败时才拿 stderr 当原因：multipass 的失败说明（实例没在运行、远端路径
-            // 不存在等）都写在 stderr，静默丢弃会让作业日志只剩一句「失败」。
-            let reason = stderr_text
-                .lines()
-                .map(str::trim)
-                .find(|line| !line.is_empty());
-            match reason {
-                Some(reason) => Err(KairosError::io(format!("{what}失败：{reason}"))),
-                None => Err(error),
-            }
-        }
+        Ok(()) => Ok((stdout, stderr_text)),
+        Err(error) => Err(vm_run::failure(what, &stderr_text, error.message())),
     }
 }
 
@@ -424,55 +418,17 @@ fn copy_case_into_vm(_case_dir: &str, _vm_shell: Option<&str>) -> Result<Option<
 }
 
 /// 把 VM 内求解产生的时间目录回传宿主 case 目录：结果写在 VM 原生文件系统，
-/// 宿主侧 results 服务只认宿主目录。时间目录名由 core 的
-/// `results::time_dir_names` 筛查（与结果扫描同一套判定）。
+/// 宿主侧 results 服务只认宿主目录。四步编排在 core（services::vm_run），
+/// 与集成测试同一段代码；这里只提供 runner 与中转文件。
 #[cfg(target_os = "macos")]
 fn copy_results_from_vm(case_dir: &str, vm_case: Option<&str>) -> Result<()> {
     let Some(vm_case) = vm_case else {
         return Ok(());
     };
-    let listing = host_command(&vm_logic::bash_script_args(
-        VmProviderKind::Multipass,
-        &vm_logic::vm_results_list_command(vm_case),
-    ))
-    .output()
-    .map_err(|e| KairosError::io(format!("multipass 启动失败：{e}")))?;
-    let names = results::time_dir_names(&String::from_utf8_lossy(&listing.stdout));
-    if !listing.status.success() || names.is_empty() {
-        return Err(KairosError::io(
-            "虚拟机内没有可回传的结果时间目录（求解未产生输出）。",
-        ));
-    }
-    let mut pack = host_command(&vm_logic::bash_script_args(
-        VmProviderKind::Multipass,
-        &vm_logic::vm_results_pack_command(vm_case, &names),
-    ))
-    .stdin(Stdio::null())
-    .stdout(Stdio::null())
-    .stderr(Stdio::null())
-    .spawn()
-    .map_err(|e| KairosError::io(format!("multipass 启动失败：{e}")))?;
-    wait_exec(&mut pack, "求解结果打包")?;
-    // 落盘传输 + 宿主解压：与复制进 VM 同一口径，不走 stdout 管道。
     let archive = host_transfer_path();
-    run_host(
-        &mut host_command(&vm_logic::transfer_args(
-            &vm_logic::vm_transfer_endpoint(&vm_logic::vm_archive_path()),
-            &archive.to_string_lossy(),
-        )),
-        "求解结果传输回宿主",
-    )?;
-    let unpack = run_host(
-        Command::new("tar")
-            .arg("-xzf")
-            .arg(&archive)
-            .arg("-C")
-            .arg(case_dir),
-        "求解结果解压到宿主",
-    );
+    let copied = vm_run::copy_results(&HostRunnerImpl, &archive, case_dir, vm_case);
     remove_quietly(&archive);
-    unpack?;
-    Ok(())
+    copied.map(|_| ())
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -530,7 +486,13 @@ fn native_solve_script(
         .map(|command| format!("{command}; "))
         .unwrap_or_default();
     let path_export = managed_path
-        .map(|prefix| format!("export PATH='{prefix}:$PATH'; "))
+        // 前缀来自应用数据目录（用户可自定路径）：按 shell 字面量转义，别把引号漏进去。
+        .map(|prefix| {
+            format!(
+                "export PATH='{}:$PATH'; ",
+                vm_logic::bash_single_quote(prefix)
+            )
+        })
         .unwrap_or_default();
     format!("{source}{path_export}cd '{case_dir}' && {solve}")
 }
@@ -549,7 +511,7 @@ fn spawn_run_script(run: NativeRun<'_>) -> Result<Child> {
     // VM 执行通道只在 macOS（multipass）与 Windows（WSL）存在；原生平台直接本机执行。
     #[cfg(any(target_os = "macos", target_os = "windows"))]
     if let Some(vm_provider) = job_vm_provider(vm_shell) {
-        let inner = vm_solve_script(
+        let inner = vm_logic::solve_script(
             &script_case_dir(std::env::consts::OS, case_dir, vm_case),
             cores,
         );
@@ -743,7 +705,7 @@ fn run_job_detached(
     case_dir: String,
     context: RunContext,
 ) {
-    let script = vm_solve_script(vm_case, cores);
+    let script = vm_logic::solve_script(vm_case, cores);
     let launch = vm_logic::detached_launch_command(vm_case, &script);
     let launched = host_command(&vm_logic::bash_script_args(
         VmProviderKind::Multipass,
@@ -799,7 +761,9 @@ fn run_job_detached(
 }
 
 /// 回读一段增量日志：转发到作业日志通道、更新进度，并报告「有求解器错误标记 /
-/// 最新偏移 / 退出码（None = 仍在求解）」。一轮只扫一次日志行。
+/// 最新偏移 / 退出码（None = 仍在求解）」。一轮只扫一次日志行——
+/// 读命令、哨兵解析与错误标记判定都在 core（`vm_run::poll_log_once`），本函数只做
+/// 作业状态与通道的副作用。
 #[cfg(target_os = "macos")]
 fn stream_vm_log(
     inner: &Arc<Mutex<Inner>>,
@@ -807,24 +771,8 @@ fn stream_vm_log(
     vm_case: &str,
     offset: u64,
 ) -> Result<(bool, u64, Option<i32>)> {
-    let command = vm_logic::detached_read_command(vm_case, offset);
-    let child = host_command(&vm_logic::bash_script_args(
-        VmProviderKind::Multipass,
-        &command,
-    ))
-    .stdin(Stdio::null())
-    .stdout(Stdio::piped())
-    .stderr(Stdio::null())
-    .spawn()
-    .map_err(|e| KairosError::io(format!("日志回读失败：{e}")))?;
-    let output = child
-        .wait_with_output()
-        .map_err(|e| KairosError::io(format!("日志回读失败：{e}")))?;
-    let (chunk, new_offset, code) =
-        vm_logic::parse_read_output(&String::from_utf8_lossy(&output.stdout), offset);
-    let mut aborted = false;
-    for line in chunk.lines() {
-        aborted |= moldingfoam::is_abort_line(line);
+    let poll = vm_run::poll_log_once(&HostRunnerImpl, vm_case, offset)?;
+    for line in &poll.lines {
         let forward = {
             let mut guard = inner
                 .lock()
@@ -835,32 +783,15 @@ fn stream_vm_log(
             guard.channels.get(job_id).cloned()
         };
         if let Some(channel) = forward {
-            let _ = channel.send(line.to_string());
+            let _ = channel.send(line.clone());
         }
     }
-    Ok((aborted, new_offset, code))
+    Ok((poll.aborted, poll.offset, poll.exit_code))
 }
 
 /// 日志回读轮询间隔（毫秒）：作业日志要「看着在动」，也不能把 VM 打满。
 #[cfg(target_os = "macos")]
 const VM_LOG_POLL_MS: u64 = 1000;
-
-/// VM 内求解脚本：加载求解环境 → 进 case → 分步求解。
-///
-/// 路径按 shell 字面量转义（case 目录可能含空格 / 引号），与原生分支共用同一口径。
-///
-/// 只在 VM 执行通道（macOS 的 multipass / Windows 的 WSL）被调用：原生 Linux
-/// 直接本机执行，Linux 目标下此函数无人使用，若不按调用点的 cfg 收窄，
-/// `-D warnings` 会把它判成死代码（CI 在 ubuntu 上就是这样挂的）。
-#[cfg(any(target_os = "macos", target_os = "windows"))]
-fn vm_solve_script(vm_case: &str, cores: u32) -> String {
-    format!(
-        "{} && cd '{}' && {}",
-        vm_logic::env_source_command(),
-        vm_logic::bash_single_quote(vm_case),
-        moldingfoam::solve_command(cores)
-    )
-}
 
 /// 求解结束后的统一收尾：回传结果 → 判定成败 → 写回状态 → 提升下一个 → 空闲关实例。
 ///

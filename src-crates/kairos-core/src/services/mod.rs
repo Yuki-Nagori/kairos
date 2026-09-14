@@ -32,6 +32,7 @@ pub mod system;
 pub mod thickness;
 pub mod vec3;
 pub mod vm;
+pub mod vm_run;
 pub mod volume_field;
 pub mod workspace;
 

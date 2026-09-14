@@ -15,16 +15,19 @@
 
 ## Rust（cargo test --workspace）
 
-| 位置                                                                      | 内容                                              | 跑法                                         |
-| ------------------------------------------------------------------------- | ------------------------------------------------- | -------------------------------------------- |
-| `src-crates/kairos-core/src/**`（`#[cfg(test)] mod tests` / `gap_tests`） | 领域单元测试（Rust 惯例：与源码同文件，无法外移） | `cargo test -p kairos-core --lib`            |
-| `src-tauri/src/commands/**`                                               | 适配层单元测试（下载清单 / GPU）                  | `cargo test -p kairos --lib`                 |
-| `tests/rust/contract/main.rs`                                             | DTO 契约测试（serde 形态锁定）                    | `cargo test -p kairos-tests --test contract` |
+| 位置                                                                      | 内容                                                                                                                      | 跑法                                                               |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `src-crates/kairos-core/src/**`（`#[cfg(test)] mod tests` / `gap_tests`） | 领域单元测试（Rust 惯例：与源码同文件，无法外移）                                                                         | `cargo test -p kairos-core --lib`                                  |
+| `src-tauri/src/commands/**`                                               | 适配层单元测试（下载清单 / GPU）                                                                                          | `cargo test -p kairos --lib`                                       |
+| `tests/rust/contract/main.rs`                                             | DTO 契约测试（serde 形态锁定）                                                                                            | `cargo test -p kairos-tests --test contract`                       |
+| `tests/rust/e2e/main.rs`                                                  | 全流程集成测试：L1 无条件（几何 → 网格 → case → 结果扫描）；L2 真机 VM（case → 求解 → 回传 → 读场，需 `KAIROS_E2E_VM=1`） | `cargo test -p kairos-tests --test e2e`（L2 加 `KAIROS_E2E_VM=1`） |
 
 - 覆盖率门槛（kairos-core 行 100%）：`bun run coverage:rust`（cargo-llvm-cov，统计口径 = lib 单元测试）；非 rustup 管理的 rustc（如 Homebrew）由 `scripts/coverage-rust.mts` 自动定位 LLVM 工具。
 - 新增 Rust 集成测试：在 `tests/rust/<分类>/main.rs` 落文件（根包的 `[[test]]` 目标自动发现），并在上方表格登记。
 
 ## 原则
+
+- 接缝靠集成层守：单元测试盯不住「命令怎么拼、分步怎么排、成败怎么判」，全流程链路按 [T96](../ai-docs/tasks/T96-full-flow-e2e.md) 的分层跑（L1 进 CI，L2 真机）；shell 命令的**语法**用 `bash -n` 做契约用例（引号失衡只会在真机上报错）。
 
 - 前端测试与源码分离（本目录）；Rust 单元测试与源码同文件（语言惯例），集成测试归集于此；
 - 测试不写业务逻辑——被测逻辑一律住 `kairos-core`；
