@@ -99,12 +99,35 @@ pub fn check_mold_network(runners: &[RunnerElement], channels: &[CoolingChannel]
         }
     }
 
+    // 3. 截面匹配：浇口直径不应大于它所在的流道直径
+    //    （反了说明参数填错：熔体先收缩进浇口再放大，填充会先在流道处失速）
+    for gate in runners.iter().filter(|item| item.kind == RunnerKind::Gate) {
+        let attached = runners.iter().find(|other| {
+            other.kind == RunnerKind::Runner
+                && ([other.start, other.end].contains(&gate.start)
+                    || [other.start, other.end].contains(&gate.end))
+        });
+        if let Some(channel) = attached
+            && gate.diameter_mm > channel.diameter_mm + WELD_TOLERANCE
+        {
+            issues.push(format!(
+                "浇口「{}」直径 {:.2} mm 大于所在流道「{}」的 {:.2} mm：截面先收缩再放大，填充会先在这里失速。",
+                gate.id, gate.diameter_mm, channel.id, channel.diameter_mm
+            ));
+        }
+    }
+
     issues
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 问题清单里是否出现某个关键词（放在测试模块里，避免断言内联闭包被算作未覆盖）。
+    fn has(issues: &[String], needle: &str) -> bool {
+        issues.iter().any(|issue| issue.contains(needle))
+    }
 
     fn runner(id: &str, start: [f64; 3], end: [f64; 3]) -> RunnerElement {
         RunnerElement {
@@ -204,5 +227,29 @@ mod tests {
         let issues = check_mold_network(&[], &fixed);
         assert!(!issues.iter().any(|issue| issue.contains("质量流量")));
         assert!(!issues.iter().any(|issue| issue.contains("介质比热")));
+    }
+
+    #[test]
+    fn gate_wider_than_its_runner_is_reported() {
+        // 浇口截面大于所在流道：参数填错的典型形态，必须给出提示
+        let mut wide = gate("g1", [0., 0., 0.], [0., 0., 5.]);
+        wide.diameter_mm = 8.0; // 流道 6.0 mm
+        let channel = runner("r1", [0., 0., 0.], [0., 0., -10.]);
+        let issues = check_mold_network(&[channel.clone(), wide.clone()], &[]);
+        assert!(has(&issues, "大于所在流道"), "{issues:?}");
+        // 浇口从另一端接上流道（端点匹配走 gate.end 分支）
+        let mut tail = gate("g2", [0., 0., -3.], [0., 0., -10.]);
+        tail.diameter_mm = 8.0;
+        let issues = check_mold_network(&[channel.clone(), tail], &[]);
+        assert!(has(&issues, "大于所在流道"), "{issues:?}");
+        // 截面不超限与孤立浇口：都不应误报截面问题
+        let mut narrow = wide;
+        narrow.diameter_mm = 4.0;
+        let issues = check_mold_network(&[channel.clone(), narrow], &[]);
+        assert!(!has(&issues, "大于所在流道"), "{issues:?}");
+        let mut lonely = gate("g3", [50., 0., 0.], [50., 0., 5.]);
+        lonely.diameter_mm = 9.0;
+        let issues = check_mold_network(&[channel, lonely], &[]);
+        assert!(!has(&issues, "大于所在流道"), "{issues:?}");
     }
 }
