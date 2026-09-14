@@ -93,7 +93,10 @@ WebGL2 / WebGPU 双后端、剖切、体积光线步进）、`utils/field-binary
 
 ## 执行顺序（按收益 / 风险分批，每批独立提交 + 证据）
 
-- **P1-a 供应链完整性**：`sha2` 校验下载资产（安全项，独立可测）。
+- **P1-a 供应链完整性**（2026-09-14 已完成主体）：`sha2` 已接入——下载完成后计算归档摘要并写入
+  `manifest.json`（`ManifestEntry.sha256`，`serde(default)` 兼容旧清单），core 侧 `services/digest.rs`
+  带四条单测。**剩余**：①上游 release 未发布校验值（`gh release view` 确认只发归档），需向上游提
+  「发布 SHA256SUMS」；②摘要目前只在清单里，依赖面板尚未展示（前端 DTO 改动需同步 fixtures，单独一批做）。
 - **P1-b 材料 CSV 导入引 `csv`**：带对拍（同一批样例文件新旧实现逐字段一致）+ 新增引号 / 字段内逗号 /
   BOM / CRLF 用例；错误文案保持中文口径。
 - **P2-a `@vueuse/core` 收编**：防抖、点击外部、storage 网关三块，逐个替换 + 既有测试全绿。

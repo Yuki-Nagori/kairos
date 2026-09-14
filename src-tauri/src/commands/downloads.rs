@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use kairos_core::error::{KairosError, Result};
+use kairos_core::services::digest;
 use serde::Serialize;
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager};
@@ -203,6 +204,10 @@ pub async fn download_file(
         }
         file.flush()?;
         drop(file);
+        // 完整性摘要：上游 release 只发归档、不发校验值，因此摘要是**记录**而非
+        // 比对——落进清单后可跨会话核对同一文件是否被替换，也为将来上游发布
+        // SHA256SUMS 留出比对点。失败即视为下载失败（读到一半的归档不可用）。
+        let sha256 = digest::sha256_file(&dest)?;
         // 压缩包自动解压到组件子目录（downloads/<组件 id>/）。
         let extract_dir = extract_if_archive(&dir, &component_id, &dest, &file_name)?;
         let saved = SavedDownload {
@@ -212,7 +217,7 @@ pub async fn download_file(
             extract_dir: extract_dir.map(|p| p.to_string_lossy().to_string()),
             release_tag,
         };
-        register_in_manifest(&dir, &component_id, &saved)?;
+        register_in_manifest(&dir, &component_id, &saved, &sha256)?;
         // 新版本登记成功后才删旧归档：下载失败不破坏已可用版本。
         if let Some(old) = previous
             && old.file_name != saved.file_name
@@ -238,6 +243,9 @@ pub struct ManifestEntry {
     /// release 流组件的来源版本标签；旧版清单无此字段，读为 None。
     #[serde(default)]
     pub release_tag: Option<String>,
+    /// 归档 SHA-256（小写十六进制）；旧版清单无此字段，读为 None。
+    #[serde(default)]
+    pub sha256: Option<String>,
 }
 
 fn manifest_path(dir: &Path) -> PathBuf {
@@ -252,7 +260,12 @@ fn read_manifest(dir: &Path) -> DownloadManifest {
 }
 
 /// 成功下载后把条目写进清单（读改写，原子替换）。
-fn register_in_manifest(dir: &Path, component_id: &str, saved: &SavedDownload) -> Result<()> {
+fn register_in_manifest(
+    dir: &Path,
+    component_id: &str,
+    saved: &SavedDownload,
+    sha256: &str,
+) -> Result<()> {
     let mut manifest = read_manifest(dir);
     manifest.insert(
         component_id.to_string(),
@@ -262,6 +275,7 @@ fn register_in_manifest(dir: &Path, component_id: &str, saved: &SavedDownload) -
             downloaded_at_ms: now_ms(),
             extract_dir: saved.extract_dir.clone(),
             release_tag: saved.release_tag.clone(),
+            sha256: Some(sha256.to_string()),
         },
     );
     let json = serde_json::to_string_pretty(&manifest)
@@ -484,6 +498,9 @@ pub fn open_downloads_dir(app: AppHandle) -> Result<String> {
 mod tests {
     use super::*;
 
+    /// 清单测试用的固定摘要：真实值由下载流程算出，这里只验证落盘与读回。
+    const TEST_DIGEST: &str = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
+
     #[test]
     fn manifest_roundtrip_and_upsert() {
         let dir = std::env::temp_dir().join(format!("kairos-manifest-test-{}", std::process::id()));
@@ -498,8 +515,8 @@ mod tests {
             extract_dir: None,
             release_tag: Some("v0.1.1".into()),
         };
-        register_in_manifest(&dir, "gmsh", &saved).unwrap();
-        register_in_manifest(&dir, "moldingfoam", &saved).unwrap();
+        register_in_manifest(&dir, "gmsh", &saved, TEST_DIGEST).unwrap();
+        register_in_manifest(&dir, "moldingfoam", &saved, TEST_DIGEST).unwrap();
 
         let manifest = read_manifest(&dir);
         assert_eq!(manifest.len(), 2);
@@ -509,7 +526,7 @@ mod tests {
         assert_eq!(manifest["gmsh"].release_tag.as_deref(), Some("v0.1.1"));
 
         // 同组件重复下载：upsert 不产生重复条目
-        register_in_manifest(&dir, "gmsh", &saved).unwrap();
+        register_in_manifest(&dir, "gmsh", &saved, TEST_DIGEST).unwrap();
         assert_eq!(read_manifest(&dir).len(), 2);
 
         fs::remove_dir_all(&dir).unwrap();
