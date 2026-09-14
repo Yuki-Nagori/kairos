@@ -96,6 +96,54 @@ pub fn batch_dir(root: &Path, batch: &str) -> PathBuf {
     root.join("doe").join(batch)
 }
 
+/// 可用的因子名（与 `ProcessSettings` 字段一一对应）——未知因子名**必须报错**：
+/// 静默忽略会让整批运行的参数完全一样，而汇总表看起来「跑过了」。
+pub const FACTOR_NAMES: [&str; 9] = [
+    "熔体温度",
+    "模具温度",
+    "顶出温度",
+    "注射时间",
+    "V/P 切换",
+    "保压压力",
+    "保压时间",
+    "冷却时间",
+    "介质温度",
+];
+
+/// 把一次运行的参数应用到工艺设置上（其余字段沿用基准值）。
+pub fn apply_factors(
+    base: &crate::models::process::ProcessSettings,
+    run: &DoeRun,
+) -> Result<crate::models::process::ProcessSettings> {
+    let mut settings = base.clone();
+    for (name, value) in &run.parameters {
+        if !value.is_finite() {
+            return Err(KairosError::validation(format!(
+                "因子「{name}」的水平不是有限数（{value}）。"
+            )));
+        }
+        match name.as_str() {
+            "熔体温度" => settings.melt_temp_c = *value,
+            "模具温度" => settings.mold_temp_c = *value,
+            "顶出温度" => settings.ejection_temp_c = *value,
+            "注射时间" => settings.injection_time_s = *value,
+            "V/P 切换" => settings.vp_switch_volume_percent = *value,
+            // 保压是曲线：单值因子落成「从 0 起恒定」的曲线（DOE 调的是保压压力水平）
+            "保压压力" => settings.packing_pressure_mpa_curve = vec![(0.0, *value)],
+            "保压时间" => settings.packing_time_s = *value,
+            "冷却时间" => settings.cooling_time_s = *value,
+            "介质温度" => settings.coolant_temp_c = *value,
+            other => {
+                return Err(KairosError::validation(format!(
+                    "未知因子「{other}」，可用：{}。",
+                    FACTOR_NAMES.join(" / ")
+                )));
+            }
+        }
+    }
+    Ok(settings)
+}
+
 /// 标记运行成功：指标与耗时一起写入（指标缺失允许，缺失即空单元格）。
 pub fn mark_done(run: &mut DoeRun, metrics: BTreeMap<String, f64>, elapsed_s: f64) {
     run.status = DoeStatus::Done;
@@ -314,6 +362,49 @@ mod tests {
             metrics,
             elapsed_s: Some(12.5),
         }
+    }
+
+    #[test]
+    fn factors_map_onto_process_settings_and_reject_unknown_names() {
+        use crate::models::process::ProcessSettings;
+        let base = ProcessSettings {
+            melt_temp_c: 230.0,
+            mold_temp_c: 40.0,
+            ejection_temp_c: 90.0,
+            injection_time_s: 1.5,
+            vp_switch_volume_percent: 96.0,
+            packing_pressure_mpa_curve: vec![(0.0, 50.0), (8.0, 40.0)],
+            packing_time_s: 8.0,
+            cooling_time_s: 15.0,
+            coolant_temp_c: 25.0,
+        };
+        let mut run = DoeRun {
+            index: 1,
+            parameters: BTreeMap::new(),
+            status: DoeStatus::Pending,
+            metrics: BTreeMap::new(),
+            elapsed_s: None,
+        };
+        run.parameters.insert("熔体温度".to_string(), 210.0);
+        run.parameters.insert("保压压力".to_string(), 60.0);
+        let settings = apply_factors(&base, &run).unwrap();
+        assert_eq!(settings.melt_temp_c, 210.0);
+        assert_eq!(settings.packing_pressure_mpa_curve, vec![(0.0, 60.0)]);
+        // 未涉及的字段沿用基准（不能因为一次运行就把其他参数清空）
+        assert_eq!(settings.mold_temp_c, 40.0);
+        assert_eq!(settings.cooling_time_s, 15.0);
+
+        // 未知因子名必须报错：静默忽略会让整批参数一样，而汇总表看起来「跑过了」
+        let mut bad = run.clone();
+        bad.parameters.insert("熔体黏度".to_string(), 1.0);
+        let error = apply_factors(&base, &bad).unwrap_err();
+        assert!(error.message().contains("未知因子"), "{}", error.message());
+        assert!(error.message().contains("熔体温度"), "{}", error.message());
+
+        // 非有限水平也拒绝（NaN 会被写进 case 字典）
+        let mut nan = run;
+        nan.parameters.insert("熔体温度".to_string(), f64::NAN);
+        assert!(apply_factors(&base, &nan).is_err());
     }
 
     #[test]
