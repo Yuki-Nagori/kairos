@@ -227,6 +227,8 @@ pub fn save_report_pptx_to_workspace(
         .map(|slide| kairos_core::services::report_pptx::ReportSlide {
             title: slide.title,
             bullets: slide.bullets,
+            // 快照图片的接线（前端 dataURL → 字节）在下一批；先留空避免半成品载荷
+            images: Vec::new(),
         })
         .collect();
     let bytes = kairos_core::services::report_pptx::build_report_deck(&title, &deck_slides)?;
