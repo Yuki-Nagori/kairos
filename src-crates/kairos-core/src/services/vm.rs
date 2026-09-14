@@ -220,7 +220,7 @@ pub fn shell_args(provider: VmProviderKind) -> Vec<String> {
 pub const VM_CASE_ROOT: &str = "/home/ubuntu";
 
 /// case 目录在 VM 内的暂存路径。multipass 的 sshfs 挂载权限映射不可用，
-/// 作业执行前用 tar 管道把 case 复制进 VM 原生文件系统，两侧同名。
+/// 作业执行前把 case 归档传进 VM 原生文件系统，两侧同名。
 pub fn vm_case_dir(case_dir: &str) -> String {
     let name = std::path::Path::new(case_dir)
         .file_name()
@@ -229,16 +229,49 @@ pub fn vm_case_dir(case_dir: &str) -> String {
     format!("{VM_CASE_ROOT}/{name}")
 }
 
-/// VM 内 case 归档的解压命令（stdin 收 tar 流）：清掉同名目录后解到 case 根。
+/// VM 侧的归档中转文件名（传输用，解压后即删）。
+pub const VM_ARCHIVE_NAME: &str = ".kairos-transfer.tgz";
+
+/// VM 内 case 归档的中转路径：传进去 / 打包出来的归档都落在这里。
+pub fn vm_archive_path() -> String {
+    format!("{VM_CASE_ROOT}/{VM_ARCHIVE_NAME}")
+}
+
+/// VM 内 case 归档的解压命令：清掉同名目录后解到 case 根，最后删掉归档。
 ///
-/// 归档由宿主按「父目录 + 叶子名」打包（`tar -C <父> -czf - <叶子>`），条目自带
+/// 归档由宿主按「父目录 + 叶子名」打包（`tar -C <父> -czf <归档> <叶子>`），条目自带
 /// 叶子名前缀；解到 case 目录本身会多套一层同名目录，求解脚本 `cd ~/<叶子>`
 /// 就找不到 `system/controlDict`。先删同名目录是为了重跑时不带上次的时间目录。
-pub fn vm_case_extract_command(vm_case: &str) -> String {
+pub fn vm_case_extract_from_archive_command(vm_case: &str) -> String {
+    let archive = vm_archive_path();
     format!(
-        "rm -rf '{}' && tar -xzf - -C {VM_CASE_ROOT}",
+        "rm -rf '{}' && tar -xzf '{archive}' -C {VM_CASE_ROOT} && rm -f '{archive}'",
         bash_single_quote(vm_case)
     )
+}
+
+/// VM 内结果归档的打包命令：把给定时间目录打包到中转路径（供传输回宿主）。
+/// 时间目录名来自 `results::time_dir_names`（宿主侧扫描同一套判定）。
+pub fn vm_results_pack_command(vm_case: &str, time_dirs: &[String]) -> String {
+    let archive = vm_archive_path();
+    format!(
+        "cd '{}' && tar -czf '{archive}' {}",
+        bash_single_quote(vm_case),
+        time_dirs.join(" ")
+    )
+}
+
+/// 宿主 → VM（或反向）的文件传输命令参数：`multipass transfer <源> <目标>`。
+///
+/// 复制 case 与回传结果都不走 stdin/stdout 管道：multipass 的管道通道在远端命令
+/// 结束后偶发不回退（CLI 进程自旋），改成落盘传输 + 独立的解压/打包命令，
+/// 每一步都是「命令跑完即返回」。
+pub fn transfer_args(source: &str, target: &str) -> Vec<String> {
+    vec![
+        "transfer".to_string(),
+        source.to_string(),
+        target.to_string(),
+    ]
 }
 
 /// VM 内求解环境的部署根目录（vm_deploy_bundle 解压 bundle 的目标）。
@@ -869,17 +902,42 @@ mod tests {
 
     #[test]
     fn vm_case_extract_targets_the_case_root_not_the_case() {
-        // 归档条目自带叶子名前缀（宿主 tar -C <父> -czf - <叶子>）：
+        // 归档条目自带叶子名前缀（宿主 tar -C <父> -czf <归档> <叶子>）：
         // 解压目标必须是 case 根，解到 case 目录会多套一层同名目录。
         assert_eq!(
-            vm_case_extract_command("/home/ubuntu/study-1"),
-            "rm -rf '/home/ubuntu/study-1' && tar -xzf - -C /home/ubuntu"
+            vm_case_extract_from_archive_command("/home/ubuntu/study-1"),
+            "rm -rf '/home/ubuntu/study-1' && tar -xzf '/home/ubuntu/.kairos-transfer.tgz' -C /home/ubuntu && rm -f '/home/ubuntu/.kairos-transfer.tgz'"
         );
         // 单引号路径按 shell 字面量转义
         assert_eq!(
-            vm_case_extract_command("/home/ubuntu/it's"),
-            "rm -rf '/home/ubuntu/it'\\''s' && tar -xzf - -C /home/ubuntu"
+            vm_case_extract_from_archive_command("/home/ubuntu/it's"),
+            "rm -rf '/home/ubuntu/it'\\''s' && tar -xzf '/home/ubuntu/.kairos-transfer.tgz' -C /home/ubuntu && rm -f '/home/ubuntu/.kairos-transfer.tgz'"
         );
+    }
+
+    #[test]
+    fn results_pack_lists_time_dirs_under_the_case() {
+        // 打包在 VM 内的 case 目录下执行，时间目录名原样列出（宿主侧同一套判定）
+        assert_eq!(
+            vm_results_pack_command(
+                "/home/ubuntu/study-1",
+                &["0.5".to_string(), "1".to_string(), "1.5".to_string()]
+            ),
+            "cd '/home/ubuntu/study-1' && tar -czf '/home/ubuntu/.kairos-transfer.tgz' 0.5 1 1.5"
+        );
+    }
+
+    #[test]
+    fn transfer_moves_files_by_path_not_by_pipe() {
+        assert_eq!(
+            transfer_args("/tmp/case.tgz", "kairos:/home/ubuntu/.kairos-transfer.tgz"),
+            vec![
+                "transfer",
+                "/tmp/case.tgz",
+                "kairos:/home/ubuntu/.kairos-transfer.tgz"
+            ]
+        );
+        assert_eq!(vm_archive_path(), "/home/ubuntu/.kairos-transfer.tgz");
     }
 
     #[test]

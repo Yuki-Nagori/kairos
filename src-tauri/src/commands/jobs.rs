@@ -267,63 +267,117 @@ fn stop_vm_when_idle(inner: &Arc<Mutex<Inner>>) {
     }
 }
 
-/// 把 case 目录复制进 VM 原生文件系统（tar 管道，macOS multipass 通道专用；
-/// multipass mount 的 sshfs 权限映射不可用）。返回 VM 内路径：求解进程必须在
-/// 虚拟机里 cd 到它，宿主绝对路径在 VM 内并不存在。大 case 可能耗时数分钟，
-/// 只允许在作业线程调用——同步命令线程（主线程）绝不进入本函数。
+/// 把 case 目录复制进 VM 原生文件系统（macOS multipass 通道专用；multipass mount
+/// 的 sshfs 权限映射不可用）。返回 VM 内路径：求解进程必须在虚拟机里 cd 到它，
+/// 宿主绝对路径在 VM 内并不存在。大 case 可能耗时数分钟，只允许在作业线程调用
+/// ——同步命令线程（主线程）绝不进入本函数。
+///
+/// 复制走「宿主打包 → `multipass transfer` 落盘 → 远端解压」三步，不用
+/// stdin/stdout 管道：管道通道在远端命令结束后偶发不回退（CLI 进程自旋），
+/// 每一步命令都必须是「跑完即返回」。
 #[cfg(target_os = "macos")]
 fn copy_case_into_vm(case_dir: &str, vm_shell: Option<&str>) -> Result<Option<String>> {
     let Some("multipass") = vm_shell else {
         return Ok(None);
     };
-    let parent = Path::new(case_dir)
-        .parent()
-        .unwrap_or(Path::new("."))
-        .to_path_buf();
+    let parent = Path::new(case_dir).parent().unwrap_or(Path::new("."));
     let name = Path::new(case_dir)
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| "case".into());
-    let vm_case = vm_logic::vm_case_dir(case_dir);
-    let mut tar_cmd = Command::new("tar");
-    tar_cmd
-        .arg("-C")
-        .arg(&parent)
-        .arg("-czf")
-        .arg("-")
-        .arg(&name);
-    let mut tar_child = tar_cmd
-        .stdout(Stdio::piped())
-        .spawn()
-        .map_err(|e| KairosError::io(format!("tar 启动失败：{e}")))?;
-    let tar_stdout = tar_child
-        .stdout
-        .take()
-        .ok_or_else(|| KairosError::io("tar stdout 管道不可用。"))?;
-    // 环境树由 vm_deploy_bundle 预先解压在 ~/moldingfoam-env。
+    let archive = host_transfer_path();
+    let packed = run_host(
+        Command::new("tar")
+            .arg("-C")
+            .arg(parent)
+            .arg("-czf")
+            .arg(&archive)
+            .arg(&name),
+        "case 打包",
+    );
+    if let Err(e) = packed {
+        remove_quietly(&archive);
+        return Err(e);
+    }
+    let transferred = run_host(
+        Command::new("multipass").args(vm_logic::transfer_args(
+            &archive.to_string_lossy(),
+            &vm_transfer_endpoint(),
+        )),
+        "case 传输进虚拟机",
+    );
+    if transferred.is_err() {
+        remove_quietly(&archive);
+        return transferred.map(|_| None);
+    }
+    remove_quietly(&archive);
     // 解压命令由 core 构造：归档条目自带叶子名前缀，解压目标必须是 case 根
     // （解到 case 目录本身会多套一层同名目录）；重跑前先删同名目录，
     // 否则残留的上一次时间目录会被回传逻辑当作本次结果。
-    let mut mp = Command::new("multipass");
-    mp.args([
-        "exec",
-        "kairos",
-        "--",
-        "bash",
-        "-lc",
-        &vm_logic::vm_case_extract_command(&vm_case),
-    ])
-    .stdin(tar_stdout);
-    let mut mp_child = mp
-        .spawn()
-        .map_err(|e| KairosError::io(format!("multipass 启动失败：{e}")))?;
-    let result = wait_exec(&mut mp_child, "case 目录复制进虚拟机");
-    if result.is_err() {
-        let _ = tar_child.kill();
-    }
-    let _ = tar_child.wait();
-    result?;
+    let vm_case = vm_logic::vm_case_dir(case_dir);
+    run_host(
+        Command::new("multipass").args([
+            "exec",
+            "kairos",
+            "--",
+            "bash",
+            "-lc",
+            &vm_logic::vm_case_extract_from_archive_command(&vm_case),
+        ]),
+        "case 解压进虚拟机",
+    )?;
     Ok(Some(vm_case))
+}
+
+/// 宿主侧归档中转文件：`<临时目录>/kairos-<作业随机串>.tgz`。
+#[cfg(target_os = "macos")]
+fn host_transfer_path() -> std::path::PathBuf {
+    std::env::temp_dir().join(format!(
+        "kairos-{}.tgz",
+        kairos_core::services::project::new_id("transfer").replace(':', "-")
+    ))
+}
+
+/// `multipass transfer` 的 VM 侧端点（源 / 目标同构）：`<实例名>:<VM 内中转路径>`。
+#[cfg(target_os = "macos")]
+fn vm_transfer_endpoint() -> String {
+    format!(
+        "{}:{}",
+        kairos_core::services::vm::INSTANCE_NAME,
+        vm_logic::vm_archive_path()
+    )
+}
+
+/// 跑一条宿主侧命令并等它结束（统一走超时保护），失败即返回 io 错误。
+///
+/// stderr 收进管道并把首行带进错误信息：multipass 的失败原因（实例没在运行、
+/// 远端路径不存在等）都写在 stderr，静默丢弃会让作业日志只剩一句「失败」。
+#[cfg(target_os = "macos")]
+fn run_host(command: &mut Command, what: &str) -> Result<()> {
+    let mut child = command
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| KairosError::io(format!("{what}启动失败：{e}")))?;
+    let mut stderr = child.stderr.take();
+    wait_exec(&mut child, what)?;
+    let mut reason = String::new();
+    if let Some(pipe) = stderr.as_mut() {
+        let _ = BufReader::new(pipe).read_line(&mut reason);
+    }
+    let reason = reason.trim();
+    if reason.is_empty() {
+        Ok(())
+    } else {
+        Err(KairosError::io(format!("{what}失败：{reason}")))
+    }
+}
+
+/// 删宿主侧中转文件：失败不改变作业结果（临时目录由系统清理）。
+#[cfg(target_os = "macos")]
+fn remove_quietly(path: &Path) {
+    let _ = std::fs::remove_file(path);
 }
 
 /// VM 侧命令的等待上限（秒）：multipass 的 stdin 管道通道偶发不回退——远端命令
@@ -392,26 +446,33 @@ fn copy_results_from_vm(case_dir: &str, vm_case: Option<&str>) -> Result<()> {
             "--",
             "bash",
             "-lc",
-            &format!("cd '{safe_vm_case}' && tar -czf - {}", names.join(" ")),
+            &vm_logic::vm_results_pack_command(vm_case, &names),
         ])
-        .stdout(Stdio::piped())
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
         .map_err(|e| KairosError::io(format!("multipass 启动失败：{e}")))?;
-    let pack_stdout = pack
-        .stdout
-        .take()
-        .ok_or_else(|| KairosError::io("multipass stdout 管道不可用。"))?;
-    let unpack = Command::new("tar")
-        .args(["-xzf", "-", "-C", case_dir])
-        .stdin(pack_stdout)
-        .status()
-        .map_err(|e| KairosError::io(format!("tar 启动失败：{e}")))?;
-    let pack_result = wait_exec(&mut pack, "求解结果回传宿主");
-    if !unpack.success() {
-        return Err(KairosError::io("求解结果回传宿主失败。"));
-    }
-    pack_result?;
+    wait_exec(&mut pack, "求解结果打包")?;
+    // 落盘传输 + 宿主解压：与复制进 VM 同一口径，不走 stdout 管道。
+    let archive = host_transfer_path();
+    run_host(
+        Command::new("multipass").args(vm_logic::transfer_args(
+            &vm_transfer_endpoint(),
+            &archive.to_string_lossy(),
+        )),
+        "求解结果传输回宿主",
+    )?;
+    let unpack = run_host(
+        Command::new("tar")
+            .arg("-xzf")
+            .arg(&archive)
+            .arg("-C")
+            .arg(case_dir),
+        "求解结果解压到宿主",
+    );
+    remove_quietly(&archive);
+    unpack?;
     Ok(())
 }
 
