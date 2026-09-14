@@ -248,8 +248,10 @@ pub fn symm_tensor_magnitude(components: &[f64; 6]) -> f64 {
 
 /// 对称张量的主方向（特征值绝对值最大者对应的单位特征向量）。
 ///
-/// 用一次 Jacobi 旋转把 3×3 对称矩阵对角化（6 次旋回即可收敛到机器精度），
-/// 再取 |λ| 最大的那一列。退化（全零 / 非有限）返回零向量，不产生 NaN。
+/// 对称特征分解交给 `nalgebra::SymmetricEigen`：自写 Jacobi 旋回要自己管收敛、
+/// 正交性与符号约定，而这类数值细节正是 bug 高发处。退化（全零 / 非有限）返回
+/// 零向量，不产生 NaN；特征向量的整体符号本无物理意义，按「绝对值最大的分量取正」
+/// 固定约定，保证同一场两次读取、不同后端给出一致方向。
 pub fn principal_axis(components: &[f64; 6]) -> [f64; 3] {
     let [xx, xy, xz, yy, yz, zz] = *components;
     if ![xx, xy, xz, yy, yz, zz]
@@ -258,63 +260,16 @@ pub fn principal_axis(components: &[f64; 6]) -> [f64; 3] {
     {
         return [0.0; 3];
     }
-    let mut matrix = [[xx, xy, xz], [xy, yy, yz], [xz, yz, zz]];
-    let mut vectors = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
-    for _ in 0..12 {
-        // 取绝对值最大的非对角元
-        let mut p = 0;
-        let mut q = 1;
-        let mut largest = matrix[0][1].abs();
-        for (i, j) in [(0, 2), (1, 2)] {
-            if matrix[i][j].abs() > largest {
-                largest = matrix[i][j].abs();
-                p = i;
-                q = j;
-            }
-        }
-        if largest < 1e-12 {
-            break;
-        }
-        let theta = 0.5 * (2.0 * matrix[p][q]).atan2(matrix[q][q] - matrix[p][p]);
-        let (sin, cos) = theta.sin_cos();
-        // 旋转矩阵 R(p,q,θ)：A ← Rᵀ A R
-        // 第一步按列混合（A·R）：每一行的第 p/q 列配对旋转。
-        for row in &mut matrix {
-            let (mkp, mkq) = (row[p], row[q]);
-            row[p] = cos * mkp - sin * mkq;
-            row[q] = sin * mkp + cos * mkq;
-        }
-        // 第二步按行混合（Rᵀ·A）：第 p/q 两行逐列配对旋转（p < q，split_at_mut 取两行）。
-        {
-            let (before, after) = matrix.split_at_mut(q);
-            let row_q = &mut after[0];
-            let row_p = &mut before[p];
-            for (value_p, value_q) in row_p.iter_mut().zip(row_q.iter_mut()) {
-                let (old_p, old_q) = (*value_p, *value_q);
-                *value_p = cos * old_p - sin * old_q;
-                *value_q = sin * old_p + cos * old_q;
-            }
-        }
-        for row in &mut vectors {
-            let (vkp, vkq) = (row[p], row[q]);
-            row[p] = cos * vkp - sin * vkq;
-            row[q] = sin * vkp + cos * vkq;
-        }
-    }
+    let matrix = nalgebra::Matrix3::new(xx, xy, xz, xy, yy, yz, xz, yz, zz);
+    let eigen = nalgebra::SymmetricEigen::new(matrix);
     let mut best = 0usize;
     for index in [1, 2] {
-        if matrix[index][index].abs() > matrix[best][best].abs() {
+        if eigen.eigenvalues[index].abs() > eigen.eigenvalues[best].abs() {
             best = index;
         }
     }
-    // 旋转矩阵的列恒为单位向量（正交性），下限只是数值兜底；入口已排除非有限值。
-    let axis = [vectors[0][best], vectors[1][best], vectors[2][best]];
-    let norm = (axis[0] * axis[0] + axis[1] * axis[1] + axis[2] * axis[2])
-        .sqrt()
-        .max(1e-12);
-    let unit = [axis[0] / norm, axis[1] / norm, axis[2] / norm];
-    // 符号规范化：绝对值最大的分量取正——特征向量的整体符号本无物理意义，
-    // 固定约定才能让「同一场两次读取」「不同后端」给出一致的方向。
+    let column = eigen.eigenvectors.column(best);
+    let unit = [column[0], column[1], column[2]];
     let dominant = if unit[1].abs() > unit[0].abs() { 1 } else { 0 };
     let dominant = if unit[2].abs() > unit[dominant].abs() {
         2
