@@ -16,6 +16,7 @@ import type {
   MidplaneReport,
   RepairReport,
 } from "../../types";
+import { fixed, significant } from "../../utils/format";
 
 /** 目标尺寸输入的估算防抖：连续编辑只在停顿后请求一次估算。 */
 const ESTIMATE_DEBOUNCE_MS = 300;
@@ -160,7 +161,7 @@ export function useGeometryPanel() {
 
   function statsText(geometry: GeometrySummary): string {
     return `${geometry.triangleCount} 三角形 · ${geometry.size
-      .map((value) => value.toFixed(2))
+      .map((value) => fixed(value, 2))
       .join(" × ")} ${geometry.suggestedUnit}`;
   }
 
@@ -183,22 +184,22 @@ export function useGeometryPanel() {
     if (!report) {
       return "划分体积网格供求解使用。";
     }
-    return `节点 ${report.nodeCount} · 四面体 ${report.elementCount} · 表面 ${report.surfaceFaceCount} · 体积 ${report.totalVolume.toFixed(3)} · 质量比 min ${report.quality.minEdgeRatio.toFixed(2)} / avg ${report.quality.avgEdgeRatio.toFixed(2)} / max ${report.quality.maxEdgeRatio.toFixed(2)} · 纵横比 avg ${report.aspectAvg.toFixed(2)} / max ${report.aspectMax.toFixed(2)}`;
+    return `节点 ${report.nodeCount} · 四面体 ${report.elementCount} · 表面 ${report.surfaceFaceCount} · 体积 ${significant(report.totalVolume)} · 质量比 min ${fixed(report.quality.minEdgeRatio, 2)} / avg ${fixed(report.quality.avgEdgeRatio, 2)} / max ${fixed(report.quality.maxEdgeRatio, 2)} · 纵横比 avg ${fixed(report.aspectAvg, 2)} / max ${fixed(report.aspectMax, 2)}`;
   }
 
   function dualReportText(report: DualDomainReport | undefined): string {
     if (!report) {
       return "表面厚度配对 + 杆系梁耦合（2.5D 快速分析路线）。";
     }
-    const thickness = report.thicknessMin.toFixed(2);
-    return `三角形 ${report.triangleCount} · 匹配率 ${(report.matchRatio * 100).toFixed(1)}% · 厚度 ${thickness} ~ ${report.thicknessMax.toFixed(2)}（avg ${report.thicknessAvg.toFixed(2)}）· 未配对 ${report.unpairedTriangles} · 梁 ${report.beamCount}（耦合 ${report.couplingCount} / 自由 ${report.uncoupledEndpoints}）`;
+    const thickness = fixed(report.thicknessMin, 2);
+    return `三角形 ${report.triangleCount} · 匹配率 ${fixed(report.matchRatio * 100, 1)}% · 厚度 ${thickness} ~ ${fixed(report.thicknessMax, 2)}（avg ${fixed(report.thicknessAvg, 2)}）· 未配对 ${report.unpairedTriangles} · 梁 ${report.beamCount}（耦合 ${report.couplingCount} / 自由 ${report.uncoupledEndpoints}）`;
   }
 
   function midplaneReportText(report: MidplaneReport | undefined): string {
     if (!report) {
       return "顶点配对中面抽取（1D/2.5D 快速分析路线）。";
     }
-    return `单元 ${report.elementCount} · 节点 ${report.nodeCount} · 厚度 ${report.thicknessMin.toFixed(2)} ~ ${report.thicknessMax.toFixed(2)}（avg ${report.thicknessAvg.toFixed(2)}）· 丢弃 ${report.droppedElements} · 梁 ${report.beamCount}（耦合 ${report.couplingCount}）`;
+    return `单元 ${report.elementCount} · 节点 ${report.nodeCount} · 厚度 ${fixed(report.thicknessMin, 2)} ~ ${fixed(report.thicknessMax, 2)}（avg ${fixed(report.thicknessAvg, 2)}）· 丢弃 ${report.droppedElements} · 梁 ${report.beamCount}（耦合 ${report.couplingCount}）`;
   }
 
   /** 修复报告：只列非零修复项；自交为纯检测项，始终展示计数。 */
