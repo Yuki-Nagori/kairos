@@ -158,7 +158,7 @@ describe("JobsPanel 作业列表与提交", () => {
       makeJob({ id: "job-a", status: "queued" }),
       makeJob({ id: "job-b", status: "running", lastTimeS: 1.5 }),
       makeJob({ id: "job-c", status: "done" }),
-      makeJob({ id: "job-d", status: "failed" }),
+      makeJob({ id: "job-d", status: "failed", message: "求解器报错退出（输出含 FOAM FATAL）" }),
       makeJob({ id: "job-e", status: "cancelled" }),
     ];
     const wrapper = mount(JobsPanel, { global: { plugins: [pinia] } });
@@ -169,6 +169,8 @@ describe("JobsPanel 作业列表与提交", () => {
     expect(wrapper.text()).toContain("失败");
     expect(wrapper.text()).toContain("已取消");
     expect(wrapper.text()).toContain("t = 1.50 s");
+    // 失败原因必须可见：只显示「失败」用户无从下手。
+    expect(wrapper.text()).toContain("求解器报错退出（输出含 FOAM FATAL）");
   });
 
   it("空 case 目录不提交", async () => {

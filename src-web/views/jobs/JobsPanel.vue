@@ -66,6 +66,10 @@ const {
             >
               取消
             </UiButton>
+            <!-- 失败 / 取消原因：只显示「失败」用户无从下手，调度器给的原因必须可见。 -->
+            <span v-if="job.message !== null" class="w-full text-rose-300">
+              {{ job.message }}
+            </span>
           </div>
           <!-- 求解日志尾部（环形缓冲的最后 8 行），运行中与结束后都可查看。 -->
           <pre
