@@ -8,7 +8,7 @@ use clap::{Parser, Subcommand};
 use kairos_core::error::KairosError;
 use kairos_core::models::process::ProcessSettings;
 use kairos_core::models::solver::AnalysisStage;
-use kairos_core::services::{self, geometry, meshing, moldingfoam, project, results};
+use kairos_core::services::{self, doe, geometry, meshing, moldingfoam, project, results};
 use serde::Serialize;
 
 #[derive(Parser)]
@@ -52,6 +52,30 @@ enum Commands {
     Pipeline {
         #[command(subcommand)]
         action: PipelineAction,
+    },
+    /// 试验设计：参数矩阵与批次汇总表（求解执行循环属下一批）
+    Doe {
+        #[command(subcommand)]
+        action: DoeAction,
+    },
+}
+
+#[derive(Subcommand)]
+enum DoeAction {
+    /// 生成参数矩阵并落盘汇总表骨架（所有运行为 pending）
+    Matrix {
+        /// 因子，形如 `熔体温度=200,210,220`（可重复；正交表 L9 要求每因子 3 水平）
+        #[arg(long = "factor", required = true)]
+        factors: Vec<String>,
+        /// 编排方式：orthogonal（L9）或 full（全因子）
+        #[arg(long, default_value = "orthogonal")]
+        plan: String,
+        /// 输出目录：汇总表落 `<dir>/doe/<批次名>/`；不填只打印
+        #[arg(long)]
+        out_dir: Option<String>,
+        /// 批次名（缺省 = 因子名以短横连接）
+        #[arg(long)]
+        batch: Option<String>,
     },
 }
 
@@ -216,6 +240,7 @@ fn run(command: Commands, json: bool) -> kairos_core::error::Result<()> {
         Commands::Mesh { action } => run_mesh(action, json),
         Commands::Solve { action } => run_solve(action, json),
         Commands::Results { action } => run_results(action, json),
+        Commands::Doe { action } => run_doe(action, json),
         Commands::Pipeline { action } => match action {
             PipelineAction::Run {
                 sample_box,
@@ -312,6 +337,92 @@ fn run_mesh(action: MeshAction, json: bool) -> kairos_core::error::Result<()> {
             Ok(())
         }
     }
+}
+
+fn run_doe(action: DoeAction, json: bool) -> kairos_core::error::Result<()> {
+    match action {
+        DoeAction::Matrix {
+            factors,
+            plan,
+            out_dir,
+            batch,
+        } => {
+            let parsed = parse_doe_factors(&factors)?;
+            let plan = match plan.as_str() {
+                "orthogonal" => doe::DoePlan::OrthogonalL9,
+                "full" => doe::DoePlan::FullFactorial,
+                other => {
+                    return Err(KairosError::validation(format!(
+                        "未知的编排方式「{other}」，可用：orthogonal / full。"
+                    )));
+                }
+            };
+            let runs = doe::build_matrix(plan, &parsed)?;
+            let batch_name = batch.unwrap_or_else(|| {
+                parsed
+                    .iter()
+                    .map(|factor| factor.name.clone())
+                    .collect::<Vec<_>>()
+                    .join("-")
+            });
+            if let Some(dir) = out_dir {
+                let target = doe::batch_dir(Path::new(&dir), &batch_name);
+                std::fs::create_dir_all(&target)
+                    .map_err(|e| KairosError::io(format!("创建批次目录失败：{e}")))?;
+                std::fs::write(target.join("summary.csv"), doe::summary_csv(&runs))
+                    .map_err(|e| KairosError::io(format!("写入汇总表失败：{e}")))?;
+                std::fs::write(target.join("summary.json"), doe::summary_json(&runs))
+                    .map_err(|e| KairosError::io(format!("写入汇总表失败：{e}")))?;
+                println!(
+                    "批次「{batch_name}」已写入 {}（{} 次运行）",
+                    target.display(),
+                    runs.len()
+                );
+            }
+            if json {
+                print!("{}", doe::summary_json(&runs));
+            } else {
+                print!("{}", doe::summary_csv(&runs));
+            }
+            Ok(())
+        }
+    }
+}
+
+/// 解析 DOE 因子参数：`名称=值1,值2,…`（空列表或坏数字明确报错）。
+fn parse_doe_factors(specs: &[String]) -> kairos_core::error::Result<Vec<doe::DoeFactor>> {
+    let mut factors = Vec::with_capacity(specs.len());
+    for spec in specs {
+        let (name, values) = spec.split_once('=').ok_or_else(|| {
+            KairosError::validation(format!(
+                "因子「{spec}」缺少 `=`，应形如 熔体温度=200,210,220。"
+            ))
+        })?;
+        let name = name.trim();
+        if name.is_empty() {
+            return Err(KairosError::validation("因子名不能为空。"));
+        }
+        let parsed = values
+            .split(',')
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(|value| {
+                value.parse::<f64>().map_err(|e| {
+                    KairosError::validation(format!("因子「{name}」的水平「{value}」不是数字：{e}"))
+                })
+            })
+            .collect::<kairos_core::error::Result<Vec<f64>>>()?;
+        if parsed.is_empty() {
+            return Err(KairosError::validation(format!(
+                "因子「{name}」没有水平取值（形如 {name}=1,2,3）。"
+            )));
+        }
+        factors.push(doe::DoeFactor {
+            name: name.to_string(),
+            values: parsed,
+        });
+    }
+    Ok(factors)
 }
 
 fn run_solve(action: SolveAction, json: bool) -> kairos_core::error::Result<()> {
