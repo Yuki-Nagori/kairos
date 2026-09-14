@@ -200,3 +200,41 @@ pub fn save_report_to_workspace(
     fs::write(&path, content).map_err(|e| KairosError::io(format!("写入报告失败：{e}")))?;
     Ok(path.to_string_lossy().to_string())
 }
+
+/// 报告导出页面的载荷（与前端 `ReportSlide` 镜像）。
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReportSlidePayload {
+    pub title: String,
+    pub bullets: Vec<String>,
+}
+
+/// 把报告写成 PPTX 落进工作区 `reports/`（返回写入路径）；散装工程明确报错。
+///
+/// 生成在 core（`services::report_pptx`），命令层只做落盘与文件名清洗——
+/// 与 HTML 报告同一口径，重复导出互不覆盖（扩展名不同）。
+#[tauri::command]
+pub fn save_report_pptx_to_workspace(
+    project_path: String,
+    file_name: String,
+    title: String,
+    slides: Vec<ReportSlidePayload>,
+) -> Result<String> {
+    let root = workspace::workspace_root(std::path::Path::new(&project_path))
+        .ok_or_else(|| KairosError::validation("当前工程不在工作区目录中，报告将作为文件下载。"))?;
+    let deck_slides: Vec<kairos_core::services::report_pptx::ReportSlide> = slides
+        .into_iter()
+        .map(|slide| kairos_core::services::report_pptx::ReportSlide {
+            title: slide.title,
+            bullets: slide.bullets,
+        })
+        .collect();
+    let bytes = kairos_core::services::report_pptx::build_report_deck(&title, &deck_slides)?;
+    let dir = workspace::reports_dir(&root);
+    fs::create_dir_all(&dir).map_err(|e| KairosError::io(format!("创建报告目录失败：{e}")))?;
+    let stem = paths::file_stem(&file_name, "report");
+    let safe = paths::path_segment(&stem, "report");
+    let path = dir.join(safe).with_extension("pptx");
+    fs::write(&path, bytes).map_err(|e| KairosError::io(format!("写入报告失败：{e}")))?;
+    Ok(path.to_string_lossy().to_string())
+}

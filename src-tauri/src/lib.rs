@@ -190,6 +190,7 @@ pub fn run() {
             commands::project::workspace_root_of,
             commands::project::archive_workspace_geometry,
             commands::project::save_report_to_workspace,
+            commands::project::save_report_pptx_to_workspace,
             commands::material::list_builtin_materials,
             commands::material::list_custom_materials,
             commands::material::import_custom_materials,
