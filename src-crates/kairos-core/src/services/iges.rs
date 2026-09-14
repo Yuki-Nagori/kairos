@@ -5,6 +5,7 @@
 //! G 节自定义分隔符不解析（按标准 `,` `;` 处理）；NURBS 等 B-rep
 //! 几何不在支持范围，请在 CAD 中以镶嵌 / 网格形式导出。
 
+use crate::services::vec3;
 use std::collections::HashMap;
 
 use crate::error::{KairosError, Result};
@@ -284,7 +285,7 @@ fn endpoints_coincide(points: &[Point]) -> bool {
         .map(|value| value.abs())
         .fold(0.0, f64::max);
     let tolerance = scale * RELATIVE_TOLERANCE + 1e-24;
-    distance_sq(*first, *last) <= tolerance * tolerance
+    vec3::distance_sq(*first, *last) <= tolerance * tolerance
 }
 
 /// 实体 63（Compact Plane Subfigure）：IP、点数 N、N 个 (x, y)。
@@ -395,13 +396,6 @@ fn fan_triangulate(points: &[Point], triangles: &mut Vec<Triangle>) {
             normal: [0.0, 0.0, 0.0],
         });
     }
-}
-
-fn distance_sq(a: Point, b: Point) -> f64 {
-    let dx = a[0] - b[0];
-    let dy = a[1] - b[1];
-    let dz = a[2] - b[2];
-    dx * dx + dy * dy + dz * dz
 }
 
 #[cfg(test)]

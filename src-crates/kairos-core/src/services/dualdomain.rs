@@ -6,6 +6,7 @@
 //! 杆系：梁端点先按捕捉容差吸附最近表面节点成耦合，吸附失败则
 //! 按焊接容差去重后自成为自由节点（未耦合端点在报告中计数）。
 
+use crate::services::vec3;
 use std::collections::HashMap;
 
 use crate::error::{KairosError, Result};
@@ -225,18 +226,11 @@ pub(crate) fn normalized_normal(a: &Point, b: &Point, c: &Point) -> Option<Point
     (length > 1e-12).then(|| n.map(|value| value / length))
 }
 
-fn distance_sq(a: Point, b: Point) -> f64 {
-    let dx = a[0] - b[0];
-    let dy = a[1] - b[1];
-    let dz = a[2] - b[2];
-    dx * dx + dy * dy + dz * dz
-}
-
 /// 最近节点线性搜索（杆系数量级小，表面节点一次扫描可接受）。
 pub(crate) fn nearest_node(nodes: &[Point], point: Point) -> Option<(usize, f64)> {
     let mut best: Option<(usize, f64)> = None;
     for (index, candidate) in nodes.iter().enumerate() {
-        let distance = distance_sq(*candidate, point);
+        let distance = vec3::distance_sq(*candidate, point);
         if best.is_none_or(|(_, current)| distance < current) {
             best = Some((index, distance));
         }
