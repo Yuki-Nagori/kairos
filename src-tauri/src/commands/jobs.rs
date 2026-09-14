@@ -2,7 +2,7 @@
 //! core（services::jobs）负责状态机与并发策略的纯逻辑；本模块负责进程副作用与进度回传。
 
 use std::collections::HashMap;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Read};
 #[cfg(target_os = "macos")]
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
@@ -286,8 +286,14 @@ fn copy_case_into_vm(case_dir: &str, vm_shell: Option<&str>) -> Result<Option<St
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| "case".into());
     let archive = host_transfer_path();
+    // 归档不带 macOS 私有元数据：bsdtar 默认把扩展属性写成 pax 扩展头并额外打包
+    // `._*` 影子文件（macOS 给每个新文件挂 com.apple.provenance），guest 侧的
+    // GNU tar 会为每个带属性的成员打一行警告，case 目录里也白白多出一层 `._*`。
+    // 两个开关各管一半：COPYFILE_DISABLE 去影子文件、--no-xattrs 去 xattr 扩展头。
     let packed = run_host(
         Command::new("tar")
+            .env("COPYFILE_DISABLE", "1")
+            .arg("--no-xattrs")
             .arg("-C")
             .arg(parent)
             .arg("-czf")
@@ -348,10 +354,13 @@ fn vm_transfer_endpoint() -> String {
     )
 }
 
-/// 跑一条宿主侧命令并等它结束（统一走超时保护），失败即返回 io 错误。
+/// 跑一条宿主侧命令并等它结束（统一走超时保护）。
 ///
-/// stderr 收进管道并把首行带进错误信息：multipass 的失败原因（实例没在运行、
-/// 远端路径不存在等）都写在 stderr，静默丢弃会让作业日志只剩一句「失败」。
+/// 成败只看**退出码**：stderr 是诊断通道而不是失败信号——宿主是 macOS 的 bsdtar，
+/// 解压侧是多有 GNU tar 的 Linux，tar 会为 pax 扩展头关键字打「Ignoring unknown
+/// extended header keyword」之类的警告而退出码仍为 0；把「stderr 非空」当失败会让
+/// 解压明明是成功的作业被判失败。stderr 与等待并行抽干：先等后读会在输出超过管道
+/// 缓冲时互锁（子进程阻塞在写、父进程等退出）。
 #[cfg(target_os = "macos")]
 fn run_host(command: &mut Command, what: &str) -> Result<()> {
     let mut child = command
@@ -360,17 +369,30 @@ fn run_host(command: &mut Command, what: &str) -> Result<()> {
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|e| KairosError::io(format!("{what}启动失败：{e}")))?;
-    let mut stderr = child.stderr.take();
-    wait_exec(&mut child, what)?;
-    let mut reason = String::new();
-    if let Some(pipe) = stderr.as_mut() {
-        let _ = BufReader::new(pipe).read_line(&mut reason);
-    }
-    let reason = reason.trim();
-    if reason.is_empty() {
-        Ok(())
-    } else {
-        Err(KairosError::io(format!("{what}失败：{reason}")))
+    let stderr = child.stderr.take();
+    let drain = thread::spawn(move || {
+        let mut text = String::new();
+        if let Some(pipe) = stderr {
+            let _ = BufReader::new(pipe).read_to_string(&mut text);
+        }
+        text
+    });
+    let outcome = wait_exec(&mut child, what);
+    let stderr_text = drain.join().unwrap_or_default();
+    match outcome {
+        Ok(()) => Ok(()),
+        Err(error) => {
+            // 失败时才拿 stderr 当原因：multipass 的失败说明（实例没在运行、远端路径
+            // 不存在等）都写在 stderr，静默丢弃会让作业日志只剩一句「失败」。
+            let reason = stderr_text
+                .lines()
+                .map(str::trim)
+                .find(|line| !line.is_empty());
+            match reason {
+                Some(reason) => Err(KairosError::io(format!("{what}失败：{reason}"))),
+                None => Err(error),
+            }
+        }
     }
 }
 
@@ -986,6 +1008,36 @@ pub fn list_jobs(scheduler: State<'_, JobScheduler>) -> Result<Vec<Job>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 宿主命令的成败只看退出码：tar 会为 pax 扩展头关键字打警告、multipass 也会在
+    /// 正常时输出进度提示，退出码都是 0——按「stderr 非空」判失败会把成功的解压
+    /// 报成「case 解压进虚拟机失败」，作业根本跑不起来。
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn host_command_exit_code_decides_not_stderr() {
+        let warned_but_ok = run_host(
+            Command::new("sh").arg("-c").arg(
+                "echo \"tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr'\" >&2; exit 0",
+            ),
+            "case 解压进虚拟机",
+        );
+        assert!(
+            warned_but_ok.is_ok(),
+            "退出码 0 的命令不该因 stderr 有警告而判失败"
+        );
+
+        let failed = run_host(
+            Command::new("sh")
+                .arg("-c")
+                .arg("echo 'transfer failed: instance is stopped' >&2; exit 3"),
+            "case 传输进虚拟机",
+        );
+        assert_eq!(
+            failed.expect_err("非零退出码必须判失败").message(),
+            "case 传输进虚拟机失败：transfer failed: instance is stopped",
+            "失败原因取 stderr 首行非空内容"
+        );
+    }
 
     /// 原生求解脚本：环境 source 在最前，随后 PATH 导出、cd、求解命令。
     #[test]
