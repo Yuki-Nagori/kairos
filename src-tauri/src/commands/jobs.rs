@@ -489,10 +489,9 @@ fn spawn_run_script(run: NativeRun<'_>) -> Result<Child> {
     // VM 执行通道只在 macOS（multipass）与 Windows（WSL）存在；原生平台直接本机执行。
     #[cfg(any(target_os = "macos", target_os = "windows"))]
     if let Some(shell) = vm_shell {
-        let inner = format!(
-            "{} && cd '{}' && {solve}",
-            vm_logic::env_source_command(),
-            script_case_dir(std::env::consts::OS, case_dir, vm_case)
+        let inner = vm_solve_script(
+            &script_case_dir(std::env::consts::OS, case_dir, vm_case),
+            cores,
         );
         let mut command = Command::new(shell);
         #[cfg(target_os = "macos")]
@@ -699,12 +698,7 @@ fn run_job_detached(
     case_dir: String,
     context: RunContext,
 ) {
-    let script = format!(
-        "{} && cd '{}' && {}",
-        vm_logic::env_source_command(),
-        vm_logic::bash_single_quote(vm_case),
-        moldingfoam::solve_command(cores)
-    );
+    let script = vm_solve_script(vm_case, cores);
     let launch = vm_logic::detached_launch_command(vm_case, &script);
     let launched = super::vm::platform_command("multipass")
         .args(["exec", "kairos", "--", "bash", "-lc", &launch])
@@ -721,20 +715,25 @@ fn run_job_detached(
     let mut solver_aborted = false;
     let mut offset = 0u64;
     let mut exit_code: Option<i32> = None;
+    let mut read_failed = false;
     while exit_code.is_none() {
         match stream_vm_log(&inner, &job_id, vm_case, offset) {
-            Ok((chunk, new_offset, code)) => {
+            Ok((aborted, new_offset, code)) => {
+                solver_aborted |= aborted;
                 offset = new_offset;
-                for line in chunk.lines() {
-                    if moldingfoam::is_abort_line(line) {
-                        solver_aborted = true;
-                    }
-                }
                 exit_code = code;
             }
-            Err(message) => {
-                // 回读失败不是求解失败：下一轮重试；求解结束（退出码出现）由后续轮次收口。
-                let _ = message;
+            // 回读失败不是求解失败：多数是瞬时的通道抖动，重试即可；求解是否结束
+            // 由后续轮次读到的退出码收口。首次失败提示一行，避免刷屏。
+            Err(e) => {
+                if !read_failed {
+                    read_failed = true;
+                    send_job_line(
+                        &inner,
+                        &job_id,
+                        &format!("── 日志回读失败（重试中）：{}", e.message()),
+                    );
+                }
             }
         }
         if exit_code.is_none() {
@@ -752,14 +751,15 @@ fn run_job_detached(
     );
 }
 
-/// 回读一段增量日志并按行转发到作业日志通道，同时更新进度。
+/// 回读一段增量日志：转发到作业日志通道、更新进度，并报告「有求解器错误标记 /
+/// 最新偏移 / 退出码（None = 仍在求解）」。一轮只扫一次日志行。
 #[cfg(target_os = "macos")]
 fn stream_vm_log(
     inner: &Arc<Mutex<Inner>>,
     job_id: &str,
     vm_case: &str,
     offset: u64,
-) -> Result<(String, u64, Option<i32>)> {
+) -> Result<(bool, u64, Option<i32>)> {
     let command = vm_logic::detached_read_command(vm_case, offset);
     let child = super::vm::platform_command("multipass")
         .args(["exec", "kairos", "--", "bash", "-lc", &command])
@@ -773,7 +773,9 @@ fn stream_vm_log(
         .map_err(|e| KairosError::io(format!("日志回读失败：{e}")))?;
     let (chunk, new_offset, code) =
         vm_logic::parse_read_output(&String::from_utf8_lossy(&output.stdout), offset);
+    let mut aborted = false;
     for line in chunk.lines() {
+        aborted |= moldingfoam::is_abort_line(line);
         let forward = {
             let mut guard = inner
                 .lock()
@@ -787,12 +789,26 @@ fn stream_vm_log(
             let _ = channel.send(line.to_string());
         }
     }
-    Ok((chunk, new_offset, code))
+    Ok((aborted, new_offset, code))
 }
 
 /// 日志回读轮询间隔（毫秒）：作业日志要「看着在动」，也不能把 VM 打满。
 #[cfg(target_os = "macos")]
 const VM_LOG_POLL_MS: u64 = 1000;
+
+/// VM 内求解脚本：加载求解环境 → 进 case → 分步求解。
+///
+/// 路径按 shell 字面量转义（case 目录可能含空格 / 引号），与原生分支共用同一口径。
+fn vm_solve_script(vm_case: &str, cores: u32) -> String {
+    format!(
+        "{} && cd '{}' && {}",
+        vm_logic::env_source_command(),
+        vm_logic::bash_single_quote(vm_case),
+        moldingfoam::solve_command(cores)
+    )
+}
+
+/// 求解结束后的统一收尾：回传结果 → 判定成败 → 写回状态 → 提升下一个 → 空闲关实例。
 ///
 /// 求解产出写在 VM 原生文件系统里，回传宿主后 results 服务才读得到；求解失败时
 /// 也走一遍回传（已写出的部分时间目录对排查有用），但只有成功路径把回传失败当作
