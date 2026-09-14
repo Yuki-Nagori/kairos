@@ -5,6 +5,7 @@
 //! 失败运行显式标记、批次继续——静默丢弃失败点会让结论建立在缺失样本上。
 
 use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
 
 use crate::error::{KairosError, Result};
 
@@ -75,6 +76,37 @@ impl DoeStatus {
             _ => String::new(),
         }
     }
+}
+
+/// 本次运行在 `cases/<方案 id>/` 下的目录名：`run-001`（三位补零，按序可读可排序）。
+pub fn run_dir_name(index: usize) -> String {
+    format!("run-{index:03}")
+}
+
+/// 单次运行的 case 目录：`<工作区>/cases/<方案 id>/run-XXX`。
+///
+/// 每次运行独立目录是硬要求：共用目录会让上一次的时间目录被当成这一次的结果
+/// （求解与回传都按目录扫描，混在一起无法区分）。
+pub fn run_case_dir(root: &Path, study_id: &str, index: usize) -> PathBuf {
+    crate::services::workspace::cases_dir(root, study_id).join(run_dir_name(index))
+}
+
+/// 批次汇总目录：`<工作区>/doe/<批次名>`。
+pub fn batch_dir(root: &Path, batch: &str) -> PathBuf {
+    root.join("doe").join(batch)
+}
+
+/// 标记运行成功：指标与耗时一起写入（指标缺失允许，缺失即空单元格）。
+pub fn mark_done(run: &mut DoeRun, metrics: BTreeMap<String, f64>, elapsed_s: f64) {
+    run.status = DoeStatus::Done;
+    run.metrics = metrics;
+    run.elapsed_s = Some(elapsed_s);
+}
+
+/// 标记运行失败：原因必填——静默丢弃失败点会让结论建立在缺失样本上。
+pub fn mark_failed(run: &mut DoeRun, reason: &str, elapsed_s: Option<f64>) {
+    run.status = DoeStatus::Failed(reason.to_string());
+    run.elapsed_s = elapsed_s;
 }
 
 /// 生成参数矩阵：每行一次运行，参数按因子名索引。
@@ -282,6 +314,38 @@ mod tests {
             metrics,
             elapsed_s: Some(12.5),
         }
+    }
+
+    #[test]
+    fn run_layout_and_status_transitions() {
+        use std::path::Path;
+        assert_eq!(run_dir_name(1), "run-001");
+        assert_eq!(run_dir_name(12), "run-012");
+        assert_eq!(
+            run_case_dir(Path::new("/w"), "study-1", 7),
+            PathBuf::from("/w/cases/study-1/run-007")
+        );
+        assert_eq!(
+            batch_dir(Path::new("/w"), "L9-温度压力"),
+            PathBuf::from("/w/doe/L9-温度压力")
+        );
+
+        let mut matrix = build_matrix(DoePlan::OrthogonalL9, &[three_level("温度")]).unwrap();
+        let mut metrics = BTreeMap::new();
+        metrics.insert("填充时间".to_string(), 1.04);
+        mark_done(&mut matrix[0], metrics, 42.5);
+        assert_eq!(matrix[0].status, DoeStatus::Done);
+        assert_eq!(matrix[0].elapsed_s, Some(42.5));
+
+        mark_failed(&mut matrix[1], "参数超出量程", Some(3.0));
+        assert_eq!(
+            matrix[1].status,
+            DoeStatus::Failed("参数超出量程".to_string())
+        );
+        // 失败行不继承上一次的指标（否则汇总表会把别人的指标算在失败点上）
+        assert!(matrix[1].metrics.is_empty());
+        mark_failed(&mut matrix[2], "未启动", None);
+        assert_eq!(matrix[2].elapsed_s, None);
     }
 
     #[test]
