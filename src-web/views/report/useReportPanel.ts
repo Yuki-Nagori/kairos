@@ -7,6 +7,7 @@ import { useProjectStore } from "../../stores/project";
 import { useResultsStore } from "../../stores/results";
 import { buildReportHtml, type ReportOptions } from "../../utils/report";
 import { minMax } from "../../utils/stats";
+import { fixed, significant } from "../../utils/format";
 import { getSnapshotDataUrl } from "../../render/snapshot";
 import { saveReportToWorkspace } from "../../api/project";
 import { useAppStore } from "../../stores/app";
@@ -77,7 +78,7 @@ export function useReportPanel() {
     let fieldStats: string | null = null;
     if (loadedField !== null && loadedField.values.length > 0) {
       const { min, max } = minMax(loadedField.values);
-      fieldStats = `${loadedField.field} @ ${loadedField.timeDir}s：${loadedField.values.length} 个值，min ${min.toFixed(3)} / max ${max.toFixed(3)}${loadedField.complete ? "" : "（不完整）"}`;
+      fieldStats = `${loadedField.field} @ ${loadedField.timeDir}s：${loadedField.values.length} 个值，min ${significant(min)} / max ${significant(max)}${loadedField.complete ? "" : "（不完整）"}`;
     }
 
     // 几何摘要：首个已导入几何的规模与健康度；体积网格报告存在时附质量行。
@@ -94,7 +95,7 @@ export function useReportPanel() {
         ["三角形数", String(geometrySummary.triangleCount)],
         [
           "尺寸",
-          `${geometrySummary.size.map((value) => value.toFixed(2)).join(" × ")} ${geometrySummary.suggestedUnit}`,
+          `${geometrySummary.size.map((value) => fixed(value, 2)).join(" × ")} ${geometrySummary.suggestedUnit}`,
         ],
         [
           "网格健康",
@@ -108,11 +109,11 @@ export function useReportPanel() {
     if (meshReport !== undefined) {
       geometryRows.push([
         "体积网格",
-        `${meshReport.engine} · 节点 ${meshReport.nodeCount} · 四面体 ${meshReport.elementCount} · 体积 ${meshReport.totalVolume.toFixed(3)}`,
+        `${meshReport.engine} · 节点 ${meshReport.nodeCount} · 四面体 ${meshReport.elementCount} · 体积 ${significant(meshReport.totalVolume)}`,
       ]);
       geometryRows.push([
         "网格质量",
-        `最长边/最短边 max ${meshReport.quality.maxEdgeRatio.toFixed(2)} · 纵横比 avg ${meshReport.aspectAvg.toFixed(2)} / max ${meshReport.aspectMax.toFixed(2)}`,
+        `最长边/最短边 max ${fixed(meshReport.quality.maxEdgeRatio, 2)} · 纵横比 avg ${fixed(meshReport.aspectAvg, 2)} / max ${fixed(meshReport.aspectMax, 2)}`,
       ]);
     }
 
@@ -120,7 +121,7 @@ export function useReportPanel() {
     const probeRows: Array<[string, string]> = loadedField
       ? results.probes.map((probe) => [
           `#${probe.id} · 节点 ${probe.nodeIndex}`,
-          loadedField.values[probe.nodeIndex]?.toFixed(4) ?? "越界",
+          fixed(loadedField.values[probe.nodeIndex] ?? Number.NaN, 4, "越界"),
         ])
       : [];
 
@@ -128,7 +129,7 @@ export function useReportPanel() {
     const timeSeriesTables = results.probeTimeSeries.map((series) => ({
       probeLabel: `#${series.probeId} · 节点 ${series.nodeIndex}`,
       samples: series.samples.map(
-        (sample) => [sample.timeS.toFixed(3), sample.value.toFixed(4)] as [string, string],
+        (sample) => [significant(sample.timeS), fixed(sample.value, 4)] as [string, string],
       ),
     }));
 
