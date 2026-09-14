@@ -268,6 +268,7 @@ mod tests {
             diameter_mm: 5.0,
             start,
             end,
+            medium: None,
         }
     }
 

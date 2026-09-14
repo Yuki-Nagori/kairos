@@ -356,7 +356,12 @@ export interface RunnerElement {
   diameterMm: number;
   start: [number, number, number];
   end: [number, number, number];
+  /** 介质；缺省 / null = 熔体（Rust 侧为 `Option` + serde default，旧工程文件无此字段）。 */
+  medium?: RunnerMedium | null;
 }
+
+/** 对应 `kairos-core::models::runners::RunnerMedium`。 */
+export type RunnerMedium = "melt" | "gas";
 
 /** 对应 `kairos-core::models::runners::CoolingChannel`。 */
 export interface CoolingChannel {

@@ -113,6 +113,7 @@ mod tests {
             diameter_mm: 6.0,
             start,
             end,
+            medium: None,
         }
     }
 
@@ -123,6 +124,7 @@ mod tests {
             diameter_mm: 1.5,
             start,
             end,
+            medium: None,
         }
     }
 

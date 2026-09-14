@@ -197,6 +197,7 @@ mod tests {
                 diameter_mm: 6.0,
                 start: [0.0, 0.0, 0.0],
                 end: [0.0, 0.0, 1.0],
+                medium: None,
             });
         project.upsert_geometry(
             crate::models::project::GeometryRef {
@@ -226,6 +227,26 @@ mod tests {
     #[test]
     fn ids_are_unique() {
         assert_ne!(new_id("x"), new_id("x"));
+    }
+
+    #[test]
+    fn gas_runner_medium_survives_the_roundtrip() {
+        // 注气通道的数据位：介质标记必须随工程文件往返保真（气体辅助注塑的第一步，
+        // 气体相定义与入口边界属上游能力就绪后的第二步）。
+        let mut project = sample();
+        project.studies[0].runner_elements[0].medium =
+            Some(crate::models::runners::RunnerMedium::Gas);
+        let parsed = parse(&serialize(&project).unwrap()).unwrap();
+        assert_eq!(
+            parsed.studies[0].runner_elements[0].medium,
+            Some(crate::models::runners::RunnerMedium::Gas)
+        );
+        // 旧工程文件没有该字段：解析为 None（＝熔体），不报错
+        let json = serialize(&sample())
+            .unwrap()
+            .replace(", \"medium\": null", "");
+        let parsed = parse(&json).unwrap();
+        assert_eq!(parsed.studies[0].runner_elements[0].medium, None);
     }
 
     #[test]

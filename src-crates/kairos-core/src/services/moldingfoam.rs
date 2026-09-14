@@ -1446,6 +1446,7 @@ mod tests {
                 diameter_mm: 6.0,
                 start: [0.0, 0.0, 5.0],
                 end: [0.0, 0.0, 0.0],
+                medium: None,
             },
             RunnerElement {
                 id: "g-1".into(),
@@ -1453,6 +1454,7 @@ mod tests {
                 diameter_mm: 1.5,
                 start: [0.0, 0.0, 0.0],
                 end: [10.0, 20.0, 0.0],
+                medium: None,
             },
             RunnerElement {
                 id: "g-2".into(),
@@ -1460,6 +1462,7 @@ mod tests {
                 diameter_mm: 0.2,
                 start: [0.0, 0.0, 0.0],
                 end: [1.0, 2.0, 3.0],
+                medium: None,
             },
         ];
         let portals = gate_portals(&runners);

@@ -522,6 +522,7 @@ fn runner_check_flags_nan_coordinates() {
         diameter_mm: 5.0,
         start: [f64::NAN, 0.0, 0.0],
         end: [1.0, 0.0, 0.0],
+        medium: None,
     };
     let issues = runners_service::check_mold_network(&[runner], &[]);
     assert!(issues.iter().any(|issue| issue.contains("非法数值")));

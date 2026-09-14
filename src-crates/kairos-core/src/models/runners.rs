@@ -10,6 +10,17 @@ pub enum RunnerKind {
     Runner,
 }
 
+/// 单元输送的介质：熔体（默认）或气体（气体辅助注塑的注气通道）。
+///
+/// 只在数据位层面标注介质——气体相定义、入口边界与气芯追踪属上游能力就绪后的
+/// 第二步；这里先让「哪一段是气道」在工程文件里可表达、可往返。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RunnerMedium {
+    Melt,
+    Gas,
+}
+
 /// 流道 / 浇口单元：起点、终点与圆形截面直径（mm）。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -19,6 +30,9 @@ pub struct RunnerElement {
     pub diameter_mm: f64,
     pub start: [f64; 3],
     pub end: [f64; 3],
+    /// 介质；缺省即熔体（旧工程文件无此字段，读为 None = 熔体）。
+    #[serde(default)]
+    pub medium: Option<RunnerMedium>,
 }
 
 /// 冷却水路单元：圆形水道 + 入口介质参数（模壁 1D 通道 BC 的口径）。
