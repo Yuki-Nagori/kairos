@@ -157,114 +157,119 @@ const CSV_HEADER: [&str; 21] = [
 
 /// 解析 CSV 批量导入内容（表头 + 数据行），逐行校验并生成材料 id。
 pub fn parse_custom_csv(content: &str) -> Result<Vec<Material>> {
-    use crate::services::project::new_id;
-
     let mut lines = content.lines().filter(|line| !line.trim().is_empty());
     let header = lines
         .next()
         .ok_or_else(|| KairosError::validation("CSV 缺少表头行。"))?;
-    let columns: Vec<&str> = header.split(',').map(str::trim).collect();
-    if columns != CSV_HEADER {
+    if header.split(',').map(str::trim).collect::<Vec<_>>() != CSV_HEADER {
         return Err(KairosError::validation(
             "CSV 表头与约定列序不一致，请使用导入面板提供的模板列名。",
         ));
     }
-
-    let mut materials = Vec::new();
-    for (offset, line) in lines.enumerate() {
-        let row_no = offset + 2;
-        let row: Vec<&str> = line.split(',').map(str::trim).collect();
-        if row.len() != CSV_HEADER.len() {
-            return Err(KairosError::validation(format!(
-                "CSV 第 {row_no} 行的列数与表头不一致。"
-            )));
-        }
-        let number = |column: usize, label: &str| -> Result<f64> {
-            row[column].parse::<f64>().map_err(|e| {
-                KairosError::validation(format!("第 {row_no} 行 {label} 不是数字：{e}"))
-            })
-        };
-        let table = |column: usize, label: &str| -> Result<PropertyTable> {
-            let mut pairs = Vec::new();
-            for pair in row[column].split(';').filter(|p| !p.trim().is_empty()) {
-                let (temperature, value) = pair.split_once(':').ok_or_else(|| {
-                    KairosError::validation(format!(
-                        "第 {row_no} 行 {label} 的「{pair}」缺少冒号分隔。"
-                    ))
-                })?;
-                let point = (
-                    temperature.trim().parse::<f64>().map_err(|e| {
-                        KairosError::validation(format!("第 {row_no} 行 {label} 温度不是数字：{e}"))
-                    })?,
-                    value.trim().parse::<f64>().map_err(|e| {
-                        KairosError::validation(format!("第 {row_no} 行 {label} 值不是数字：{e}"))
-                    })?,
-                );
-                pairs.push(point);
-            }
-            Ok(pairs)
-        };
-        let filler = if row[20].is_empty() {
-            None
-        } else {
-            let parts: Vec<&str> = row[20].splitn(4, ':').collect();
-            if parts.len() != 4 {
-                return Err(KairosError::validation(format!(
-                    "第 {row_no} 行 filler 应为「类型:质量分数:长径比:备注」。"
-                )));
-            }
-            let weight_fraction = parts[1].trim().parse::<f64>().map_err(|e| {
-                KairosError::validation(format!("第 {row_no} 行 填料质量分数不是数字：{e}"))
-            })?;
-            let aspect_ratio = parts[2].trim().parse::<f64>().map_err(|e| {
-                KairosError::validation(format!("第 {row_no} 行 填料长径比不是数字：{e}"))
-            })?;
-            Some(crate::models::material::FillerGroup {
-                kind: parts[0].trim().to_string(),
-                weight_fraction,
-                aspect_ratio,
-                note: parts[3].trim().to_string(),
-            })
-        };
-
-        let material = Material {
-            id: new_id("mat"),
-            name: row[0].to_string(),
-            manufacturer: row[1].to_string(),
-            family: row[2].to_string(),
-            rheology: crate::models::material::CrossWlf {
-                n: number(3, "n")?,
-                tau_star: number(4, "tauStar")?,
-                d1: number(5, "d1")?,
-                d2: number(6, "d2")?,
-                d3: number(7, "d3")?,
-                a1: number(8, "a1")?,
-                a2: number(9, "a2")?,
-            },
-            pvt: crate::models::material::Tait {
-                b1m: number(10, "b1m")?,
-                b1s: number(11, "b1s")?,
-                b2m: number(12, "b2m")?,
-                b2s: number(13, "b2s")?,
-                b3: number(14, "b3")?,
-                b4m: number(15, "b4m")?,
-                b4s: number(16, "b4s")?,
-                b5: number(17, "b5")?,
-            },
-            specific_heat: table(18, "specificHeat")?,
-            conductivity: table(19, "conductivity")?,
-            mechanics: None,
-            filler,
-            blowing: None,
-            data_note: "CSV 批量导入".to_string(),
-        };
-        validate(&material)?;
-        materials.push(material);
-    }
+    let materials = lines
+        .enumerate()
+        .map(|(offset, line)| parse_csv_row(line, offset + 2))
+        .collect::<Result<Vec<Material>>>()?;
     if materials.is_empty() {
         return Err(KairosError::validation("CSV 中没有数据行。"));
     }
     Ok(materials)
+}
+
+/// 解析一行材料数据（`row_no` 是面向用户的行号，含表头行，用于错误定位）。
+fn parse_csv_row(line: &str, row_no: usize) -> Result<Material> {
+    let row: Vec<&str> = line.split(',').map(str::trim).collect();
+    if row.len() != CSV_HEADER.len() {
+        return Err(KairosError::validation(format!(
+            "CSV 第 {row_no} 行的列数与表头不一致。"
+        )));
+    }
+    let number = |column: usize, label: &str| -> Result<f64> {
+        row[column]
+            .parse::<f64>()
+            .map_err(|e| KairosError::validation(format!("第 {row_no} 行 {label} 不是数字：{e}")))
+    };
+    let table = |column: usize, label: &str| -> Result<PropertyTable> {
+        let mut pairs = Vec::new();
+        for pair in row[column].split(';').filter(|p| !p.trim().is_empty()) {
+            let (temperature, value) = pair.split_once(':').ok_or_else(|| {
+                KairosError::validation(format!(
+                    "第 {row_no} 行 {label} 的「{pair}」缺少冒号分隔。"
+                ))
+            })?;
+            let point = (
+                temperature.trim().parse::<f64>().map_err(|e| {
+                    KairosError::validation(format!("第 {row_no} 行 {label} 温度不是数字：{e}"))
+                })?,
+                value.trim().parse::<f64>().map_err(|e| {
+                    KairosError::validation(format!("第 {row_no} 行 {label} 值不是数字：{e}"))
+                })?,
+            );
+            pairs.push(point);
+        }
+        Ok(pairs)
+    };
+    let material = Material {
+        id: crate::services::project::new_id("mat"),
+        name: row[0].to_string(),
+        manufacturer: row[1].to_string(),
+        family: row[2].to_string(),
+        rheology: crate::models::material::CrossWlf {
+            n: number(3, "n")?,
+            tau_star: number(4, "tauStar")?,
+            d1: number(5, "d1")?,
+            d2: number(6, "d2")?,
+            d3: number(7, "d3")?,
+            a1: number(8, "a1")?,
+            a2: number(9, "a2")?,
+        },
+        pvt: crate::models::material::Tait {
+            b1m: number(10, "b1m")?,
+            b1s: number(11, "b1s")?,
+            b2m: number(12, "b2m")?,
+            b2s: number(13, "b2s")?,
+            b3: number(14, "b3")?,
+            b4m: number(15, "b4m")?,
+            b4s: number(16, "b4s")?,
+            b5: number(17, "b5")?,
+        },
+        specific_heat: table(18, "specificHeat")?,
+        conductivity: table(19, "conductivity")?,
+        mechanics: None,
+        filler: parse_csv_filler(row[20], row_no)?,
+        blowing: None,
+        data_note: "CSV 批量导入".to_string(),
+    };
+    validate(&material)?;
+    Ok(material)
+}
+
+/// 填料列（第 21 列）：空 = 无填料；否则为「类型:质量分数:长径比:备注」。
+fn parse_csv_filler(
+    cell: &str,
+    row_no: usize,
+) -> Result<Option<crate::models::material::FillerGroup>> {
+    if cell.is_empty() {
+        return Ok(None);
+    }
+    let parts: Vec<&str> = cell.splitn(4, ':').collect();
+    if parts.len() != 4 {
+        return Err(KairosError::validation(format!(
+            "第 {row_no} 行 filler 应为「类型:质量分数:长径比:备注」。"
+        )));
+    }
+    let aspect_ratio = parts[2]
+        .trim()
+        .parse::<f64>()
+        .map_err(|e| KairosError::validation(format!("第 {row_no} 行 填料长径比不是数字：{e}")))?;
+    Ok(Some(crate::models::material::FillerGroup {
+        kind: parts[0].trim().to_string(),
+        weight_fraction: parts[1].trim().parse::<f64>().map_err(|e| {
+            KairosError::validation(format!("第 {row_no} 行 填料质量分数不是数字：{e}"))
+        })?,
+        aspect_ratio,
+        note: parts[3].trim().to_string(),
+    }))
 }
 
 /// 序列化自定义材料集（写入用户材料库文件）。
