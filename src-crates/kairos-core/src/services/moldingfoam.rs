@@ -687,6 +687,56 @@ pub fn parse_time_line(line: &str) -> Option<f64> {
         .and_then(|value| value.parse::<f64>().ok())
 }
 
+/// 汇总指标名（DOE 汇总表的列，与日志里的来源一一对应）。
+pub const METRIC_FILL_TIME_S: &str = "填充时间";
+pub const METRIC_VP_FILLED_FRACTION: &str = "V/P 切换填充率";
+pub const METRIC_VP_PRESSURE_PA: &str = "V/P 切换压力";
+pub const METRIC_MASS_RESIDUAL_KG: &str = "质量预算残差";
+
+/// 从求解日志提取汇总指标（DOE 批次汇总表的指标列）。
+///
+/// 只认求解器自己打印的结构化行，缺行就缺指标——不猜、不用相邻行近似。
+/// 同一指标出现多行时取**最后一行**（重跑或分阶段输出时以最终结论为准）。
+pub fn parse_metrics(log: &str) -> std::collections::BTreeMap<String, f64> {
+    let mut metrics = std::collections::BTreeMap::new();
+    for line in log.lines() {
+        if let Some((fraction, pressure, time)) = parse_vp_switch_line(line) {
+            metrics.insert(METRIC_VP_FILLED_FRACTION.to_string(), fraction);
+            metrics.insert(METRIC_VP_PRESSURE_PA.to_string(), pressure);
+            metrics.insert(METRIC_FILL_TIME_S.to_string(), time);
+        }
+        if let Some(residual) = parse_mass_residual_line(line) {
+            metrics.insert(METRIC_MASS_RESIDUAL_KG.to_string(), residual);
+        }
+    }
+    metrics
+}
+
+/// 解析 `moldingFoam: V/P switch: filled fraction = X, p_gate = Y Pa (…), at t = Z s`。
+fn parse_vp_switch_line(line: &str) -> Option<(f64, f64, f64)> {
+    let rest = line.trim().strip_prefix("moldingFoam: V/P switch:")?;
+    let fraction = number_after(rest, "filled fraction =")?;
+    let pressure = number_after(rest, "p_gate =")?;
+    let time = number_after(rest, "at t =")?;
+    Some((fraction, pressure, time))
+}
+
+/// 解析 `moldingFoam: mass budget: … residual = X kg`。
+fn parse_mass_residual_line(line: &str) -> Option<f64> {
+    let rest = line.trim().strip_prefix("moldingFoam: mass budget:")?;
+    number_after(rest, "residual =")
+}
+
+/// 取「关键字之后的第一个数」：容忍值后面的单位（`Pa` / `kg` / `s`）与括号内容。
+fn number_after(text: &str, key: &str) -> Option<f64> {
+    let tail = text.split_once(key)?.1;
+    tail.split_whitespace()
+        .next()?
+        .trim_end_matches(',')
+        .parse::<f64>()
+        .ok()
+}
+
 fn write(path: &Path, content: &str) -> Result<()> {
     fs::create_dir_all(path.parent().unwrap_or_else(|| Path::new(".")))
         .map_err(|e| KairosError::io(format!("创建目录失败：{e}")))?;
@@ -1229,6 +1279,35 @@ mod tests {
         assert_eq!(
             command,
             "decomposePar -force && mpirun -np 6 foamRun -parallel; reconstructPar"
+        );
+    }
+
+    #[test]
+    fn metrics_are_extracted_from_structured_log_lines() {
+        // 取自真实运行日志（v1.0.0、np4、78,125 四面体件）
+        let log = "Time = 1\n\
+moldingFoam: V/P switch: filled fraction = 0.9624034, p_gate = 3562782 Pa (switchFraction = 0.96, switchPressure = 6e+07 Pa), at t = 1.04185 s\n\
+moldingFoam: mass budget: m = 0.0008065806 kg, accumulated boundary flux = -0.0008061876 kg, residual = 3.929569e-07 kg\n\
+End\n";
+        let metrics = parse_metrics(log);
+        assert_eq!(metrics[METRIC_VP_FILLED_FRACTION], 0.9624034);
+        assert_eq!(metrics[METRIC_VP_PRESSURE_PA], 3562782.0);
+        assert_eq!(metrics[METRIC_FILL_TIME_S], 1.04185);
+        assert_eq!(metrics[METRIC_MASS_RESIDUAL_KG], 3.929569e-07);
+    }
+
+    #[test]
+    fn metrics_take_the_last_occurrence_and_tolerate_missing_lines() {
+        let repeated = "moldingFoam: V/P switch: filled fraction = 0.5, p_gate = 1 Pa, at t = 1 s\n\
+moldingFoam: V/P switch: filled fraction = 0.96, p_gate = 2 Pa, at t = 2 s";
+        assert_eq!(parse_metrics(repeated)[METRIC_VP_FILLED_FRACTION], 0.96);
+        // 缺行 → 缺指标（不猜、不填零）
+        assert!(parse_metrics("Time = 0\nEnd").is_empty());
+        // 结构对但数字坏 → 该指标缺失，不 panic
+        assert!(parse_metrics("moldingFoam: mass budget: residual = 不是数字 kg").is_empty());
+        assert!(
+            parse_metrics("moldingFoam: V/P switch: filled fraction = , p_gate = 1 Pa, at t = 1 s")
+                .is_empty()
         );
     }
 
