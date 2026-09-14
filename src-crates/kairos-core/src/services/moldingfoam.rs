@@ -712,6 +712,36 @@ pub fn parse_metrics(log: &str) -> std::collections::BTreeMap<String, f64> {
     metrics
 }
 
+/// 从求解日志里挑出**最能说明失败原因**的一行。
+///
+/// 取「第一条命中错误特征的行」而不是最后一行：命令链是
+/// `decomposePar && mpirun … ; reconstructPar`，真正出错的是前面那条，
+/// 最后一行往往是被牵连的后续命令（如 `reconstructPar: command not found`），
+/// 按最后一行报原因会把用户引到错误的方向。
+pub fn failure_reason(log: &str) -> String {
+    // 两遍扫描：强特征（求解器 FATAL / 命令缺失）比单纯出现 "error" 字样更能说明问题，
+    // 先找强特征，再退到弱特征，最后才用最后一行兜底。
+    const STRONG: [&str; 3] = ["FOAM FATAL", "not found", "FOAM aborting"];
+    const WEAK: [&str; 3] = ["error", "Error", "failed"];
+    let lines: Vec<&str> = log
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect();
+    for markers in [&STRONG[..], &WEAK[..]] {
+        if let Some(line) = lines
+            .iter()
+            .find(|line| markers.iter().any(|marker| line.contains(marker)))
+        {
+            return (*line).to_string();
+        }
+    }
+    lines
+        .last()
+        .map(|line| (*line).to_string())
+        .unwrap_or_default()
+}
+
 /// 解析 `moldingFoam: V/P switch: filled fraction = X, p_gate = Y Pa (…), at t = Z s`。
 fn parse_vp_switch_line(line: &str) -> Option<(f64, f64, f64)> {
     let rest = line.trim().strip_prefix("moldingFoam: V/P switch:")?;
@@ -1279,6 +1309,22 @@ mod tests {
         assert_eq!(
             command,
             "decomposePar -force && mpirun -np 6 foamRun -parallel; reconstructPar"
+        );
+    }
+
+    #[test]
+    fn failure_reason_prefers_the_first_error_line() {
+        // 真实形态：链式命令里真正出错的是第一条，最后一行是被牵连的后续命令
+        let log = "mkdir: ok\nbash: decomposePar: command not found\n\
+bash: reconstructPar: command not found\n";
+        assert_eq!(failure_reason(log), "bash: decomposePar: command not found");
+        // 无错误特征时回落最后一行（仍比空原因有用）
+        assert_eq!(failure_reason("第一步\n第二步"), "第二步");
+        assert_eq!(failure_reason("   \n\n"), "");
+        // 求解器自己的 FATAL 行优先于普通 error 行
+        assert_eq!(
+            failure_reason("some error\n--> FOAM FATAL ERROR: bad dict"),
+            "--> FOAM FATAL ERROR: bad dict"
         );
     }
 

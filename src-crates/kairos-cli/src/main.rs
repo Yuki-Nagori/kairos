@@ -77,6 +77,39 @@ enum DoeAction {
         #[arg(long)]
         batch: Option<String>,
     },
+    /// 串行执行整个矩阵：每次运行独立 case 目录，逐次提取指标并重写汇总表
+    Run {
+        /// 因子，形如 `熔体温度=200,210,220`（可重复）
+        #[arg(long = "factor", required = true)]
+        factors: Vec<String>,
+        /// 编排方式：orthogonal（L9）或 full（全因子）
+        #[arg(long, default_value = "orthogonal")]
+        plan: String,
+        /// 使用内置样例方盒（10mm）
+        #[arg(long)]
+        sample_box: bool,
+        /// 指定 STL 路径（与 --sample-box 二选一）
+        #[arg(long)]
+        stl: Option<String>,
+        /// 工作区目录：case 落 `<dir>/cases/<方案>/run-XXX/`，汇总表落 `<dir>/doe/<批次>/`
+        #[arg(long, default_value = "workspace")]
+        out_dir: String,
+        /// 并行核数
+        #[arg(long, default_value_t = 4)]
+        cores: u32,
+        /// 体素目标尺寸（mm）
+        #[arg(long, default_value_t = 1.0)]
+        target_size: f64,
+        /// 基准注射时间（s）；被因子「注射时间」覆盖时以因子为准
+        #[arg(long = "injection-time", default_value_t = 1.0)]
+        injection_time_s: f64,
+        /// 批次名（缺省 = 因子名以短横连接）
+        #[arg(long)]
+        batch: Option<String>,
+        /// 实际调用求解器（缺环境时逐次记为失败，批次继续）
+        #[arg(long)]
+        solve: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -341,6 +374,30 @@ fn run_mesh(action: MeshAction, json: bool) -> kairos_core::error::Result<()> {
 
 fn run_doe(action: DoeAction, json: bool) -> kairos_core::error::Result<()> {
     match action {
+        DoeAction::Run {
+            factors,
+            plan,
+            sample_box,
+            stl,
+            out_dir,
+            cores,
+            target_size,
+            injection_time_s,
+            batch,
+            solve,
+        } => run_doe_batch(
+            &factors,
+            &plan,
+            sample_box,
+            stl,
+            &out_dir,
+            cores,
+            target_size,
+            injection_time_s,
+            batch,
+            solve,
+            json,
+        ),
         DoeAction::Matrix {
             factors,
             plan,
@@ -389,6 +446,185 @@ fn run_doe(action: DoeAction, json: bool) -> kairos_core::error::Result<()> {
     }
 }
 
+/// 串行执行整个矩阵：网格与几何只准备一次（每次运行只换工艺参数），
+/// 每次运行独立 case 目录并按「跑完即回填」更新汇总表——中途中断也留下已完成的行。
+#[allow(clippy::too_many_arguments)]
+fn run_doe_batch(
+    factor_specs: &[String],
+    plan: &str,
+    sample_box: bool,
+    stl: Option<String>,
+    out_dir: &str,
+    cores: u32,
+    target_size: f64,
+    injection_time_s: f64,
+    batch: Option<String>,
+    solve: bool,
+    json: bool,
+) -> kairos_core::error::Result<()> {
+    let parsed = parse_doe_factors(factor_specs)?;
+    let plan = match plan {
+        "orthogonal" => doe::DoePlan::OrthogonalL9,
+        "full" => doe::DoePlan::FullFactorial,
+        other => {
+            return Err(KairosError::validation(format!(
+                "未知的编排方式「{other}」，可用：orthogonal / full。"
+            )));
+        }
+    };
+    let mut runs = doe::build_matrix(plan, &parsed)?;
+    let spacing = |run: usize| -> String { format!("[{}]", run) };
+    let batch_name = batch.unwrap_or_else(|| {
+        parsed
+            .iter()
+            .map(|factor| factor.name.clone())
+            .collect::<Vec<_>>()
+            .join("-")
+    });
+    let workspace = Path::new(out_dir);
+    let batch_root = doe::batch_dir(workspace, &batch_name);
+    std::fs::create_dir_all(&batch_root)
+        .map_err(|e| KairosError::io(format!("创建批次目录失败：{e}")))?;
+
+    // 几何与网格准备一次：矩阵只改工艺参数，重复划分网格纯属浪费。
+    let mesh_tri = match (sample_box, stl) {
+        (true, _) => kairos_core::models::geometry::TriangleMesh::sample_box(10.0),
+        (false, Some(path)) => services::geometry::parse_stl_file(Path::new(&path))?,
+        (false, None) => {
+            return Err(KairosError::validation(
+                "必须指定 --sample-box 或 --stl <路径>。".to_string(),
+            ));
+        }
+    };
+    let volume = services::meshing::generate(
+        &mesh_tri,
+        &services::meshing::VolumeMeshParams {
+            refinement: None,
+            target_size,
+        },
+    )?;
+    let material = services::material::builtin_materials()[0].clone();
+    let base_process = default_process_with(injection_time_s);
+
+    let total = runs.len();
+    for index in 0..total {
+        let case_dir = doe::run_case_dir(workspace, DOE_STUDY_ID, index + 1);
+        let settings = doe::apply_factors(&base_process, &runs[index])?;
+        let started = std::time::Instant::now();
+        let prepared = moldingfoam::generate_case(
+            &case_dir,
+            &moldingfoam::CaseInputs {
+                mesh: &volume,
+                material: &material,
+                process: &settings,
+                stage: &AnalysisStage::Fill,
+                cores: cores as usize,
+                gates: &[],
+                channels: &[],
+            },
+        );
+        match prepared {
+            Err(error) => {
+                // case 生成失败也要落表（参数不合法往往就卡在这一步）
+                let message = error.message().to_string();
+                let elapsed = Some(started.elapsed().as_secs_f64());
+                doe::mark_failed(&mut runs[index], &message, elapsed);
+            }
+            Ok(_) if !solve => {}
+            Ok(_) => {
+                let case_text = case_dir.to_string_lossy().to_string();
+                let outcome = run_solver(&case_text, cores);
+                let elapsed = started.elapsed().as_secs_f64();
+                match outcome {
+                    Ok(()) => {
+                        let log = std::fs::read_to_string(case_dir.join("log.foamRun"))
+                            .unwrap_or_default();
+                        let metrics = moldingfoam::parse_metrics(&log);
+                        doe::mark_done(&mut runs[index], metrics, elapsed);
+                    }
+                    Err(error) => {
+                        let message = error.message().to_string();
+                        doe::mark_failed(&mut runs[index], &message, Some(elapsed));
+                    }
+                }
+            }
+        }
+        let status = match &runs[index].status {
+            doe::DoeStatus::Pending => "pending".to_string(),
+            doe::DoeStatus::Done => "done".to_string(),
+            doe::DoeStatus::Failed(reason) => format!("failed（{reason}）"),
+        };
+        if !json {
+            println!(
+                "{} 运行 {}/{}：{} → {}",
+                spacing(index + 1),
+                index + 1,
+                total,
+                runs[index]
+                    .parameters
+                    .iter()
+                    .map(|(name, value)| format!("{name}={value}"))
+                    .collect::<Vec<_>>()
+                    .join(" "),
+                status
+            );
+        }
+        // 每次运行后立刻重写汇总表：中断时已完成的行不丢
+        std::fs::write(batch_root.join("summary.csv"), doe::summary_csv(&runs))
+            .map_err(|e| KairosError::io(format!("写入汇总表失败：{e}")))?;
+        std::fs::write(batch_root.join("summary.json"), doe::summary_json(&runs))
+            .map_err(|e| KairosError::io(format!("写入汇总表失败：{e}")))?;
+    }
+
+    if json {
+        print!("{}", doe::summary_json(&runs));
+    } else {
+        println!(
+            "批次「{batch_name}」完成：{} 次运行，汇总表在 {}",
+            runs.len(),
+            batch_root.display()
+        );
+        print!("{}", doe::summary_csv(&runs));
+    }
+    Ok(())
+}
+
+/// DOE 批次的方案 id（case 目录 `<工作区>/cases/<方案 id>/run-XXX/`）。
+const DOE_STUDY_ID: &str = "doe";
+
+/// 跑一次求解并把完整输出留到 `log.foamRun`（DOE 逐次读它取指标）。
+fn run_solver(case_dir: &str, cores: u32) -> kairos_core::error::Result<()> {
+    let dir = Path::new(case_dir);
+    if !dir.join("system/controlDict").exists() {
+        return Err(KairosError::not_found(
+            "case 目录缺少 system/controlDict，请先生成 case。",
+        ));
+    }
+    let safe_dir = case_dir.replace('\'', "'\\''");
+    let solve = kairos_core::services::moldingfoam::solve_command(cores);
+    // 重定向必须**分组**：`A && B; C > log` 里 `>` 只绑定 C，前面命令的报错根本进不了
+    // 日志（曾因此把 decomposePar 的错报成 reconstructPar 的错）。
+    let status = Command::new("bash")
+        .arg("-lc")
+        .arg(format!("cd '{safe_dir}' && ( {solve} ) > log.foamRun 2>&1"))
+        .status()
+        .map_err(|e| KairosError::io(format!("求解器启动失败（本机需 OpenFOAM 11+）：{e}")))?;
+    // 退出码可能被 `; reconstructPar` 掩盖（求解失败但重建成功 → 退出码 0），
+    // 因此日志里的错误标记优先于退出码——与桌面端的失败判定同一口径。
+    let log = std::fs::read_to_string(dir.join("log.foamRun")).unwrap_or_default();
+    let masked = log.contains("not found") || log.contains("FOAM FATAL");
+    if !status.success() || masked {
+        // 失败原因交给 core 判读（优先第一条错误行，见 moldingfoam::failure_reason）
+        let reason = moldingfoam::failure_reason(&log);
+        return Err(KairosError::solver(if reason.is_empty() {
+            "求解失败（日志为空）".to_string()
+        } else {
+            format!("求解失败：{reason}")
+        }));
+    }
+    Ok(())
+}
+
 /// 解析 DOE 因子参数：`名称=值1,值2,…`（空列表或坏数字明确报错）。
 fn parse_doe_factors(specs: &[String]) -> kairos_core::error::Result<Vec<doe::DoeFactor>> {
     let mut factors = Vec::with_capacity(specs.len());
@@ -428,35 +664,13 @@ fn parse_doe_factors(specs: &[String]) -> kairos_core::error::Result<Vec<doe::Do
 fn run_solve(action: SolveAction, json: bool) -> kairos_core::error::Result<()> {
     match action {
         SolveAction::Submit { case_dir, cores } => {
-            let dir = Path::new(&case_dir);
-            if !dir.join("system/controlDict").exists() {
-                return Err(KairosError::not_found(
-                    "case 目录缺少 system/controlDict，请先生成 case。",
-                ));
-            }
-            let safe_dir = case_dir.replace('\'', "'\\''");
-            // 求解输出落 log.foamRun：管道后接 tail 会让退出码被 tail 覆盖，
-            // 求解失败反被报成成功，故先判码再截取尾部日志。
-            let solve = kairos_core::services::moldingfoam::solve_command(cores);
-            let status = Command::new("bash")
-                .arg("-lc")
-                .arg(format!(
-                    "cd '{safe_dir}' && {solve} > log.foamRun 2>&1; status=$?; tail -20 log.foamRun; exit $status"
-                ))
-                .status()
-                .map_err(|e| {
-                    KairosError::io(format!("求解器启动失败（本机需 OpenFOAM 11+）：{e}"))
-                })?;
-            if !status.success() {
-                return Err(KairosError::io("求解失败，详见上方求解器输出。"));
-            }
             if json {
-                emit_json(
-                    &serde_json::json!({ "caseDir": case_dir, "cores": cores, "status": "done" }),
-                );
-            } else {
-                println!("求解完成：{case_dir}");
+                run_solver(&case_dir, cores)?;
+                emit_json(&serde_json::json!({ "caseDir": case_dir, "ok": true }));
+                return Ok(());
             }
+            run_solver(&case_dir, cores)?;
+            println!("求解完成：{case_dir}");
             Ok(())
         }
     }
