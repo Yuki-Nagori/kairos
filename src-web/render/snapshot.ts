@@ -7,6 +7,10 @@ export function registerSnapshot(id: string, canvas: HTMLCanvasElement): void {
 }
 
 /** 导出 PNG data URL；画布不存在或为空返回 null。 */
+export function unregisterSnapshot(id: string): void {
+  snapshots.delete(id);
+}
+
 export function getSnapshotDataUrl(id: string): string | null {
   const canvas = snapshots.get(id);
   if (canvas === undefined || canvas.width === 0 || canvas.height === 0) {

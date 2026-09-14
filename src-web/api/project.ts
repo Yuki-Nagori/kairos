@@ -104,6 +104,8 @@ export function saveReportToWorkspace(
 export interface ReportSlidePayload {
   title: string;
   bullets: string[];
+  /** 快照 dataURL（PNG / JPEG），尺寸由导出侧从字节读取。 */
+  images?: string[];
 }
 
 /** 报告导出为 PPTX（core 生成、命令层落盘到工作区 reports/，返回写入路径）。 */

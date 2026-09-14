@@ -207,6 +207,9 @@ pub fn save_report_to_workspace(
 pub struct ReportSlidePayload {
     pub title: String,
     pub bullets: Vec<String>,
+    /// 快照 dataURL（可选；缺省为空，旧调用方不受影响）。
+    #[serde(default)]
+    pub images: Vec<String>,
 }
 
 /// 把报告写成 PPTX 落进工作区 `reports/`（返回写入路径）；散装工程明确报错。
@@ -224,13 +227,19 @@ pub fn save_report_pptx_to_workspace(
         .ok_or_else(|| KairosError::validation("当前工程不在工作区目录中，报告将作为文件下载。"))?;
     let deck_slides: Vec<kairos_core::services::report_pptx::ReportSlide> = slides
         .into_iter()
-        .map(|slide| kairos_core::services::report_pptx::ReportSlide {
-            title: slide.title,
-            bullets: slide.bullets,
-            // 快照图片的接线（前端 dataURL → 字节）在下一批；先留空避免半成品载荷
-            images: Vec::new(),
+        .map(|slide| {
+            let images = slide
+                .images
+                .iter()
+                .map(|data_url| kairos_core::services::report_pptx::image_from_data_url(data_url))
+                .collect::<Result<Vec<_>>>()?;
+            Ok(kairos_core::services::report_pptx::ReportSlide {
+                title: slide.title,
+                bullets: slide.bullets,
+                images,
+            })
         })
-        .collect();
+        .collect::<Result<Vec<_>>>()?;
     let bytes = kairos_core::services::report_pptx::build_report_deck(&title, &deck_slides)?;
     let dir = workspace::reports_dir(&root);
     fs::create_dir_all(&dir).map_err(|e| KairosError::io(format!("创建报告目录失败：{e}")))?;

@@ -475,10 +475,13 @@ describe("导出 PPTX", () => {
     const panel = useReportPanel();
     await panel.exportPptx();
     const slides = saveReportPptxMock.mock.calls.at(-1)?.[3] ?? [];
-    expect(slides.map((slide: { title: string }) => slide.title)).toEqual([
-      "工况参数",
-      "网格与结果",
-    ]);
+    const titles = slides.map((slide: { title: string }) => slide.title);
+    expect(titles).toContain("工况参数");
+    expect(titles).toContain("网格与结果");
+    // 已注册快照时补一页「快照」：图片以 dataURL 交给命令层（尺寸由导出侧从字节读）
+    const snapshotSlide = slides.find((slide: { title: string }) => slide.title === "快照");
+    expect(snapshotSlide?.images?.length).toBeGreaterThan(0);
+    expect(snapshotSlide?.images?.[0]).toMatch(/^data:image\//);
     expect(slides[1].bullets.join(" ")).toContain("已加载场：T @ 1");
     expect(slides[0].bullets.join(" ")).toContain("熔体温度：230 °C");
     expect(slides[0].bullets.join(" ")).toContain("注射 / 保压 / 冷却：1.5 / 8 / 15 s");
@@ -541,6 +544,25 @@ describe("导出 PPTX", () => {
     await panel.exportPptx();
     expect(saveReportPptxMock).not.toHaveBeenCalled();
     expect(panel.status.value).toContain("请先创建项目与方案");
+  });
+
+  it("未注册快照时不补「快照」页", async () => {
+    const { unregisterSnapshot } = await import("../../../../src-web/render/snapshot");
+    unregisterSnapshot("viewport");
+    unregisterSnapshot("xy-chart");
+    const project = useProjectStore();
+    project.project = projectFixture([studyFixture()]);
+    project.activeStudyId = "study-1";
+    project.projectPath = "/home/u/Documents/kairos/p/p.kairos";
+    saveReportPptxMock.mockClear();
+    saveReportPptxMock.mockResolvedValue("/home/u/Documents/kairos/p/reports/报告.pptx");
+
+    const { useReportPanel } = await import("../../../../src-web/views/report/useReportPanel");
+    const panel = useReportPanel();
+    await panel.exportPptx();
+
+    const slides = saveReportPptxMock.mock.calls.at(-1)?.[3] ?? [];
+    expect(slides.some((slide: { title: string }) => slide.title === "快照")).toBe(false);
   });
 
   it("无项目、方案或工程路径时给出提示且不调用命令", async () => {

@@ -208,6 +208,26 @@ export function useReportPanel() {
         ],
       });
     }
+    // 快照：与 HTML 报告同一来源（视口 / XY 曲线），有一张就补一页「快照」
+    const snapshots: string[] = [];
+    const viewport = getSnapshotDataUrl("viewport");
+    if (viewport !== null) {
+      snapshots.push(viewport);
+    }
+    const chart = getSnapshotDataUrl("xy-chart");
+    if (chart !== null) {
+      snapshots.push(chart);
+    }
+    const labels: string[] = [];
+    if (viewport !== null) {
+      labels.push("视口");
+    }
+    if (chart !== null) {
+      labels.push("XY 曲线");
+    }
+    if (labels.length > 0) {
+      slides.push({ title: "快照", bullets: labels, images: snapshots });
+    }
     try {
       const path = await saveReportPptxToWorkspace(
         project.projectPath,
