@@ -37,6 +37,9 @@ Kairos：注塑成型 CAE 仿真软件，对标行业领先的同类产品（自
 - **提交前门禁**：仓库根 `bun run verify`（typecheck + clippy -D warnings + format + test + 覆盖率门槛 + knip，前端与 Rust 全量），通过才算完成。
 - **时间线**：每完成一个任务，在 [ai-docs/timeline.md](ai-docs/timeline.md) 末尾追加一行（时间 + 阶段 + 内容），**一行对应一个 commit**，随该任务的提交一并入库。
 - **文档图表**：md 里的架构图 / 流程图 / 时序图优先用 mermaid 代码块（GitHub 与主流编辑器原生渲染），不用 ASCII 字符画；目录树保持纯文本代码块。新写图表后须经渲染校验（如 mermaid.ink）再入库。
+- **覆盖率写法**：不要用 `#[allow]` / `ignore` 掩盖「假未覆盖」；隐藏落点（内联闭包、`map_err` 闭包、`?` 落点、偏态分支、**跨平台语义差异**）要改写成无隐藏落点的写法，同一语义的错误映射只写一处（详见 [ai-docs/ARCHITECTURE.md](ai-docs/ARCHITECTURE.md) §6）。
+- **引入依赖**：必须同时给许可（permissive）、性能（旧实现留在基准里同台对照）、包体（同口径构建）三项对照；自写成本更低就不引。换实现前先跑基线，别拿记忆里的数比。
+- **批次性改动**：收编 / 合并清单每条**动手前先核实存在性**；不要用重复出现的片段当锚点，机械替换要逐处断言原文并回读确认；迁移类改动分批提交。
 - **里程碑评审**：每个里程碑结束强制执行 [T21 整体评审与优化](ai-docs/tasks/T21-milestone-review.md)（架构 / 性能 / 质量 / 文档 / 安全八项清单），发现按「立即修 / 回流任务 / 接受并记录」闭环，未通过不得开启下一里程碑。
 
 详细理由与代码模板见 [ai-docs/ARCHITECTURE.md](ai-docs/ARCHITECTURE.md)。
