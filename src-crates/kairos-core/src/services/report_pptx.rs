@@ -23,6 +23,80 @@ pub struct ReportSlide {
     pub images: Vec<ReportImage>,
 }
 
+/// 从 dataURL 还原快照：解 base64、按魔数读尺寸、认扩展名。
+///
+/// 尺寸不信前端给的数字，直接从字节读（PNG 的 IHDR 是权威且必然存在）——
+/// 前端只说「这是哪张图」，排版参数由导出侧决定。
+pub fn image_from_data_url(data_url: &str) -> Result<ReportImage> {
+    let (header, payload) = data_url
+        .split_once(',')
+        .ok_or_else(|| KairosError::validation("快照不是 dataURL 形态（缺少逗号分隔的头部）。"))?;
+    let format = if header.contains("image/png") {
+        "PNG"
+    } else if header.contains("image/jpeg") {
+        "JPEG"
+    } else {
+        return Err(KairosError::validation(
+            "仅支持 PNG / JPEG 快照，其它格式请先在界面上改为导出图片。",
+        ));
+    };
+    if !header.contains("base64") {
+        return Err(KairosError::validation("快照编码不是 base64。"));
+    }
+    let bytes = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, payload)
+        .map_err(|e| KairosError::validation(format!("快照解码失败：{e}")))?;
+    let (width_px, height_px) = match format {
+        "PNG" => png_dimensions(&bytes),
+        _ => jpeg_dimensions(&bytes),
+    }
+    .ok_or_else(|| KairosError::validation(format!("快照尺寸无法读取（{format} 头部不完整）。")))?;
+    Ok(ReportImage {
+        bytes,
+        width_px,
+        height_px,
+        format: format.to_string(),
+    })
+}
+
+/// PNG 尺寸：IHDR 在固定偏移（签名 8 字节 + 长度 4 + 类型 4 之后，宽高各 4 字节大端）。
+fn png_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
+    const PNG_SIGNATURE: [u8; 8] = [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A];
+    if bytes.len() < 24 || bytes[..8] != PNG_SIGNATURE || &bytes[12..16] != b"IHDR" {
+        return None;
+    }
+    // 长度已在上方校验，这里按索引直取：不用 `?` 转换，避免覆盖率把错误落点算成未执行
+    let width = u32::from_be_bytes([bytes[16], bytes[17], bytes[18], bytes[19]]);
+    let height = u32::from_be_bytes([bytes[20], bytes[21], bytes[22], bytes[23]]);
+    (width > 0 && height > 0).then_some((width, height))
+}
+
+/// JPEG 尺寸：扫描 SOFn 段（FFC0–FFCF，跳过 FF C4 / C8 / CC 这几个非 SOF 标记）。
+fn jpeg_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
+    if bytes.len() < 4 || bytes[0] != 0xFF || bytes[1] != 0xD8 {
+        return None;
+    }
+    let mut offset = 2usize;
+    while offset + 9 < bytes.len() {
+        if bytes[offset] != 0xFF {
+            offset += 1;
+            continue;
+        }
+        let marker = bytes[offset + 1];
+        let is_sof = (0xC0..=0xCF).contains(&marker) && !matches!(marker, 0xC4 | 0xC8 | 0xCC);
+        if is_sof {
+            let height = u16::from_be_bytes([bytes[offset + 5], bytes[offset + 6]]);
+            let width = u16::from_be_bytes([bytes[offset + 7], bytes[offset + 8]]);
+            return (width > 0 && height > 0).then_some((width as u32, height as u32));
+        }
+        let length = u16::from_be_bytes([bytes[offset + 2], bytes[offset + 3]]) as usize;
+        if length < 2 {
+            return None;
+        }
+        offset += 2 + length;
+    }
+    None
+}
+
 /// 幻灯片可用区（EMU）：10 × 7.5 英寸版面留出标题与边距后的插图区。
 const SLIDE_WIDTH_EMU: u64 = 10 * 914_400;
 const MAX_IMAGE_WIDTH_EMU: u64 = 7 * 914_400;
@@ -174,6 +248,71 @@ mod tests {
             !slide.contains("11430000"),
             "插图未按可用区缩放（仍是原始尺寸）"
         );
+    }
+
+    #[test]
+    fn data_url_decodes_png_and_reads_its_size() {
+        use base64::Engine as _;
+        let payload = base64::engine::general_purpose::STANDARD.encode(PIXEL_PNG);
+        let image = image_from_data_url(&format!("data:image/png;base64,{payload}")).unwrap();
+        assert_eq!((image.width_px, image.height_px), (1, 1));
+        assert_eq!(image.format, "PNG");
+        assert_eq!(image.bytes, PIXEL_PNG);
+    }
+
+    #[test]
+    fn data_url_decodes_jpeg_and_reads_its_size() {
+        // 走公共入口（不只测内部的 JPEG 扫描器）：JPEG 快照同样能进 deck
+        use base64::Engine as _;
+        let jpeg: [u8; 21] = [
+            0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x04, 0x00, 0x00, 0xFF, 0xC0, 0x00, 0x0B, 0x08, 0x00,
+            0x02, 0x00, 0x03, 0x01, 0x00, 0x11, 0x00,
+        ];
+        let payload = base64::engine::general_purpose::STANDARD.encode(jpeg);
+        let image = image_from_data_url(&format!("data:image/jpeg;base64,{payload}")).unwrap();
+        assert_eq!(image.format, "JPEG");
+        assert_eq!((image.width_px, image.height_px), (3, 2));
+        // PNG 头部不完整 → 报错而不是当作 0×0
+        assert!(png_dimensions(&PIXEL_PNG[..10]).is_none());
+        assert!(png_dimensions(&[0u8; 32]).is_none());
+    }
+
+    #[test]
+    fn data_url_rejects_unsupported_or_malformed_input() {
+        // 非 dataURL 形态
+        assert!(image_from_data_url("data:image/png;base64").is_err());
+        // 不支持的图片格式
+        assert!(image_from_data_url("data:image/webp;base64,AAAA").is_err());
+        // 声明 base64 却不是
+        assert!(image_from_data_url("data:image/png,AAAA").is_err());
+        // base64 内容非法
+        assert!(image_from_data_url("data:image/png;base64,不是base64").is_err());
+        // 头部像 PNG 但字节不是（尺寸读不出来）
+        assert!(image_from_data_url("data:image/png;base64,QUJD").is_err());
+    }
+
+    #[test]
+    fn jpeg_dimensions_reads_sof_and_skips_other_markers() {
+        // 最小 JPEG 头部：SOI + 一个非 SOF 段（FF E0，长度 4）+ SOF0（高 2、宽 3）
+        let jpeg = [
+            0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x04, 0x00, 0x00, 0xFF, 0xC0, 0x00, 0x0B, 0x08, 0x00,
+            0x02, 0x00, 0x03, 0x01, 0x00, 0x11, 0x00,
+        ];
+        assert_eq!(jpeg_dimensions(&jpeg), Some((3, 2)));
+        // 非标记字节（高位不足 0xFF）会被跳过：在 SOI 与 SOF 之间塞一个 0x00
+        let mut with_filler = jpeg.to_vec();
+        with_filler.insert(2, 0x00);
+        assert_eq!(jpeg_dimensions(&with_filler), Some((3, 2)));
+        // 长度字段为 0 → 无法推进，返回 None 而不是死循环
+        let broken = [
+            0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ];
+        assert_eq!(jpeg_dimensions(&broken), None);
+        // 非 JPEG
+        assert_eq!(jpeg_dimensions(&[0x00, 0x01, 0x02]), None);
+        // 走完全部标记都没有 SOF（例如只有 APP0）→ 返回 None
+        let no_sof = [0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x04, 0x00, 0x00];
+        assert_eq!(jpeg_dimensions(&no_sof), None);
     }
 
     #[test]
