@@ -11,6 +11,7 @@ use std::thread;
 
 use kairos_core::error::{KairosError, Result};
 use kairos_core::models::jobs::Job;
+use kairos_core::models::vm::{VmProviderKind, VmState};
 use kairos_core::services::jobs as job_logic;
 use kairos_core::services::jobs::SchedulerLimits;
 use kairos_core::services::moldingfoam;
@@ -24,6 +25,10 @@ use kairos_core::services::results;
 use kairos_core::services::vm as vm_logic;
 use tauri::State;
 use tauri::ipc::Channel;
+
+/// 虚拟机就绪轮询：次数 × 间隔（约 2 分钟，够 `multipass start` 后 sshd 起来）。
+const VM_READY_ATTEMPTS: usize = 60;
+const VM_READY_INTERVAL_S: u64 = 2;
 
 struct Inner {
     jobs: Vec<Job>,
@@ -138,6 +143,130 @@ fn now_ms() -> u64 {
         .as_millis() as u64
 }
 
+/// 往作业日志通道写一行（VM 生命周期提示走同一通道，用户能在作业日志里看到）。
+fn send_job_line(inner: &Arc<Mutex<Inner>>, job_id: &str, line: &str) {
+    let channel = {
+        let guard = inner
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        guard.channels.get(job_id).cloned()
+    };
+    if let Some(channel) = channel {
+        let _ = channel.send(line.to_string());
+    }
+}
+
+/// 作业所在平台对应的虚拟机 provider（原生平台为 None，无需虚拟机）。
+fn job_vm_provider(vm_shell: Option<&str>) -> Option<VmProviderKind> {
+    let provider = vm_logic::provider_for(std::env::consts::OS)?;
+    vm_shell
+        .map(|_| provider)
+        .filter(|p| *p != VmProviderKind::Native)
+}
+
+/// 作业需要虚拟机时确保它可执行：停着就拉起，拉起后轮询到 guest 能跑命令为止。
+///
+/// 只有作业主动拉起的实例才登记「自动拉起」标记——空闲收尾时据此决定是否关闭，
+/// 用户自己启动的实例不动。WSL 的实例随首次执行自启（无独立启动命令），
+/// 轮询本身就会把它拉起来。
+fn ensure_vm_ready(inner: &Arc<Mutex<Inner>>, job_id: &str, vm_shell: Option<&str>) -> Result<()> {
+    let Some(provider) = job_vm_provider(vm_shell) else {
+        return Ok(());
+    };
+    let probe = vm_logic::ready_probe_args(provider)
+        .ok_or_else(|| KairosError::internal("缺少虚拟机就绪探测命令。"))?;
+    // 探测命令本身（multipass exec）对停止实例会**隐式拉起**，所以先取实例状态：
+    // 「作业拉起的实例」这一租约登记必须发生在任何会启动实例的命令之前，
+    // 否则收尾时看不到标记、实例会一直开着。
+    let stopped = matches!(
+        super::vm::probe_instance_state(provider),
+        Ok(VmState::Stopped)
+    );
+    if !stopped && probe_ready(&probe) {
+        return Ok(());
+    }
+    if stopped {
+        send_job_line(inner, job_id, "── 启动虚拟机（作业需要，跑完自动关闭）──");
+    }
+    super::vm_lease::mark_auto_started();
+    // 停止的实例显式拉起；已在启动中的（Starting / 状态未知）靠后续探测自己就绪。
+    let start = if stopped {
+        vm_logic::start_args(provider)
+    } else {
+        None
+    };
+    if let Some(start) = start {
+        let status = super::vm::platform_command(&start[0])
+            .args(&start[1..])
+            .status()
+            .map_err(|e| KairosError::io(format!("虚拟机启动命令失败：{e}")))?;
+        if !status.success() {
+            return Err(KairosError::io("虚拟机启动失败，请到虚拟机面板查看状态。"));
+        }
+    }
+    // 启动命令返回时 guest 可能还没起完 sshd：轮询到可执行，最多约 2 分钟。
+    for _ in 0..VM_READY_ATTEMPTS {
+        if probe_ready(&probe) {
+            return Ok(());
+        }
+        thread::sleep(std::time::Duration::from_secs(VM_READY_INTERVAL_S));
+    }
+    Err(KairosError::io(
+        "虚拟机启动后仍不可执行命令（超时），请检查虚拟机状态后重试。",
+    ))
+}
+
+/// 跑一次就绪探测（命令能成功返回即就绪）。
+fn probe_ready(args: &[String]) -> bool {
+    super::vm::platform_command(&args[0])
+        .args(&args[1..])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
+}
+
+/// 收尾：队列空闲且实例是作业自动拉起、又没有 Shell 占用时关闭虚拟机（省内存）。
+fn stop_vm_when_idle(inner: &Arc<Mutex<Inner>>) {
+    let active = {
+        let guard = inner
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        guard
+            .jobs
+            .iter()
+            .filter(|job| {
+                job.status == kairos_core::models::jobs::JobStatus::Queued
+                    || job.status == kairos_core::models::jobs::JobStatus::Running
+            })
+            .count()
+    };
+    if !vm_logic::should_stop_when_idle(
+        super::vm_lease::auto_started(),
+        active,
+        super::vm_lease::shell_open(),
+    ) {
+        return;
+    }
+    let Some(provider) = vm_logic::provider_for(std::env::consts::OS) else {
+        return;
+    };
+    let args = vm_logic::stop_args(provider);
+    let stopped = super::vm::platform_command(&args[0])
+        .args(&args[1..])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false);
+    if stopped {
+        super::vm_lease::clear_auto_started();
+    }
+}
+
 /// 把 case 目录复制进 VM 原生文件系统（tar 管道，macOS multipass 通道专用；
 /// multipass mount 的 sshfs 权限映射不可用）。返回 VM 内路径：求解进程必须在
 /// 虚拟机里 cd 到它，宿主绝对路径在 VM 内并不存在。大 case 可能耗时数分钟，
@@ -185,14 +314,44 @@ fn copy_case_into_vm(case_dir: &str, vm_shell: Option<&str>) -> Result<Option<St
         &vm_logic::vm_case_extract_command(&vm_case),
     ])
     .stdin(tar_stdout);
-    let status = mp
-        .status()
+    let mut mp_child = mp
+        .spawn()
         .map_err(|e| KairosError::io(format!("multipass 启动失败：{e}")))?;
-    let _ = tar_child.wait();
-    if !status.success() {
-        return Err(KairosError::io("case 目录复制进虚拟机失败。"));
+    let result = wait_exec(&mut mp_child, "case 目录复制进虚拟机");
+    if result.is_err() {
+        let _ = tar_child.kill();
     }
+    let _ = tar_child.wait();
+    result?;
     Ok(Some(vm_case))
+}
+
+/// VM 侧命令的等待上限（秒）：multipass 的 stdin 管道通道偶发不回退——远端命令
+/// 早已结束、CLI 进程仍在自旋，没有上限时作业会永远停在「运行中」。
+#[cfg(target_os = "macos")]
+const VM_EXEC_TIMEOUT_S: u64 = 600;
+
+/// 等子进程结束：超时杀掉并报错，避免作业线程被卡死的 CLI 拖着。
+#[cfg(target_os = "macos")]
+fn wait_exec(child: &mut Child, what: &str) -> Result<()> {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(VM_EXEC_TIMEOUT_S);
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) if status.success() => return Ok(()),
+            Ok(Some(_)) => return Err(KairosError::io(format!("{what}失败。"))),
+            Ok(None) if std::time::Instant::now() < deadline => {
+                thread::sleep(std::time::Duration::from_millis(200));
+            }
+            Ok(None) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(KairosError::io(format!(
+                    "{what}超时（{VM_EXEC_TIMEOUT_S} 秒无响应），已中止。"
+                )));
+            }
+            Err(e) => return Err(KairosError::io(format!("{what}等待失败：{e}"))),
+        }
+    }
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -248,10 +407,11 @@ fn copy_results_from_vm(case_dir: &str, vm_case: Option<&str>) -> Result<()> {
         .stdin(pack_stdout)
         .status()
         .map_err(|e| KairosError::io(format!("tar 启动失败：{e}")))?;
-    let _ = pack.wait();
+    let pack_result = wait_exec(&mut pack, "求解结果回传宿主");
     if !unpack.success() {
         return Err(KairosError::io("求解结果回传宿主失败。"));
     }
+    pack_result?;
     Ok(())
 }
 
@@ -418,8 +578,29 @@ impl JobScheduler {
             };
             let inner = self.arc();
             thread::spawn(move || {
-                let staged =
-                    copy_case_into_vm(&case_dir, context.vm_shell.as_deref()).and_then(|vm_case| {
+                // VM 通道（macOS/multipass）：求解脱离会话执行 + 日志轮询回读，
+                // 不做「客户端守着求解进程」的流式管道（会话一回收求解就没了）。
+                #[cfg(target_os = "macos")]
+                if context.vm_shell.as_deref() == Some("multipass") {
+                    let staged = ensure_vm_ready(&inner, &job_id, context.vm_shell.as_deref())
+                        .and_then(|()| copy_case_into_vm(&case_dir, context.vm_shell.as_deref()));
+                    match staged {
+                        Ok(Some(vm_case)) => {
+                            run_job_detached(inner, job_id, &vm_case, cores, case_dir, context)
+                        }
+                        Ok(None) => fail_and_promote(
+                            inner,
+                            job_id,
+                            "虚拟机通道缺少 case 暂存路径。",
+                            context,
+                        ),
+                        Err(e) => fail_and_promote(inner, job_id, e.message(), context),
+                    }
+                    return;
+                }
+                let staged = ensure_vm_ready(&inner, &job_id, context.vm_shell.as_deref())
+                    .and_then(|()| copy_case_into_vm(&case_dir, context.vm_shell.as_deref()))
+                    .and_then(|vm_case| {
                         spawn_run_script(NativeRun {
                             case_dir: &case_dir,
                             vm_case: vm_case.as_deref(),
@@ -456,6 +637,7 @@ fn fail_and_promote(inner: Arc<Mutex<Inner>>, job_id: String, message: &str, con
     };
     scheduler.set_native_env(context.native_env.clone());
     scheduler.promote_and_spawn(now);
+    stop_vm_when_idle(&inner);
 }
 
 /// 单作业运行主体：流式回传日志与进度，收尾后写回状态并提升下一个排队作业。
@@ -491,10 +673,140 @@ fn run_job_body(
         }
     }
     let exit_ok = child.wait().map(|status| status.success()).unwrap_or(false);
-    // 结果写在 VM 原生文件系统里，回传宿主后 results 服务才读得到；求解失败时
-    // 也走一遍回传——已写出的部分时间目录对排查有用——但只有成功路径把回传
-    // 失败当作作业失败，避免用回传问题覆盖求解本身的失败原因。
-    // 判定收敛在 core（求解器错误标记优先于退出码，见 job_logic::job_failure）。
+    finish_job(
+        inner,
+        job_id,
+        solver_aborted,
+        exit_ok,
+        case_dir,
+        vm_case,
+        context,
+    );
+}
+
+/// VM 通道（macOS / multipass）的求解：脱离会话执行 + 日志流式回读。
+///
+/// 直接 `multipass exec … foamRun` 的求解进程是该 ssh 会话的子进程：客户端一退出、
+/// systemd-logind 回收会话，求解就在跑到一半时无声消失。这里改为 `setsid` 独立会话
+/// 启动（见 core 的 `detached_launch_command`），日志与退出码落在 case 内，客户端
+/// 只负责轮询增量日志与退出码——求解不再依赖会话存活，进度与失败判定都有据可依。
+#[cfg(target_os = "macos")]
+fn run_job_detached(
+    inner: Arc<Mutex<Inner>>,
+    job_id: String,
+    vm_case: &str,
+    cores: u32,
+    case_dir: String,
+    context: RunContext,
+) {
+    let script = format!(
+        "{} && cd '{}' && {}",
+        vm_logic::env_source_command(),
+        vm_logic::bash_single_quote(vm_case),
+        moldingfoam::solve_command(cores)
+    );
+    let launch = vm_logic::detached_launch_command(vm_case, &script);
+    let launched = super::vm::platform_command("multipass")
+        .args(["exec", "kairos", "--", "bash", "-lc", &launch])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|e| KairosError::io(format!("VM 求解启动失败：{e}")))
+        .and_then(|mut child| wait_exec(&mut child, "VM 求解启动"));
+    if let Err(e) = launched {
+        fail_and_promote(inner, job_id, e.message(), context);
+        return;
+    }
+    let mut solver_aborted = false;
+    let mut offset = 0u64;
+    let mut exit_code: Option<i32> = None;
+    while exit_code.is_none() {
+        match stream_vm_log(&inner, &job_id, vm_case, offset) {
+            Ok((chunk, new_offset, code)) => {
+                offset = new_offset;
+                for line in chunk.lines() {
+                    if moldingfoam::is_abort_line(line) {
+                        solver_aborted = true;
+                    }
+                }
+                exit_code = code;
+            }
+            Err(message) => {
+                // 回读失败不是求解失败：下一轮重试；求解结束（退出码出现）由后续轮次收口。
+                let _ = message;
+            }
+        }
+        if exit_code.is_none() {
+            thread::sleep(std::time::Duration::from_millis(VM_LOG_POLL_MS));
+        }
+    }
+    finish_job(
+        inner,
+        job_id,
+        solver_aborted,
+        exit_code == Some(0),
+        case_dir,
+        Some(vm_case.to_string()),
+        context,
+    );
+}
+
+/// 回读一段增量日志并按行转发到作业日志通道，同时更新进度。
+#[cfg(target_os = "macos")]
+fn stream_vm_log(
+    inner: &Arc<Mutex<Inner>>,
+    job_id: &str,
+    vm_case: &str,
+    offset: u64,
+) -> Result<(String, u64, Option<i32>)> {
+    let command = vm_logic::detached_read_command(vm_case, offset);
+    let child = super::vm::platform_command("multipass")
+        .args(["exec", "kairos", "--", "bash", "-lc", &command])
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|e| KairosError::io(format!("日志回读失败：{e}")))?;
+    let output = child
+        .wait_with_output()
+        .map_err(|e| KairosError::io(format!("日志回读失败：{e}")))?;
+    let (chunk, new_offset, code) =
+        vm_logic::parse_read_output(&String::from_utf8_lossy(&output.stdout), offset);
+    for line in chunk.lines() {
+        let forward = {
+            let mut guard = inner
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            if let Some(time_s) = moldingfoam::parse_time_line(line) {
+                let _ = job_logic::update_progress(&mut guard.jobs, job_id, time_s);
+            }
+            guard.channels.get(job_id).cloned()
+        };
+        if let Some(channel) = forward {
+            let _ = channel.send(line.to_string());
+        }
+    }
+    Ok((chunk, new_offset, code))
+}
+
+/// 日志回读轮询间隔（毫秒）：作业日志要「看着在动」，也不能把 VM 打满。
+#[cfg(target_os = "macos")]
+const VM_LOG_POLL_MS: u64 = 1000;
+///
+/// 求解产出写在 VM 原生文件系统里，回传宿主后 results 服务才读得到；求解失败时
+/// 也走一遍回传（已写出的部分时间目录对排查有用），但只有成功路径把回传失败当作
+/// 作业失败，避免用回传问题覆盖求解本身的失败原因。判定收敛在 core
+/// （求解器错误标记优先于退出码，见 job_logic::job_failure）。
+fn finish_job(
+    inner: Arc<Mutex<Inner>>,
+    job_id: String,
+    solver_aborted: bool,
+    exit_ok: bool,
+    case_dir: String,
+    vm_case: Option<String>,
+    context: RunContext,
+) {
     let copy_back = copy_results_from_vm(&case_dir, vm_case.as_deref());
     let copy_back_error = copy_back.err().map(|error| error.message().to_string());
     let failure = job_logic::job_failure(solver_aborted, exit_ok, copy_back_error);
@@ -522,6 +834,8 @@ fn run_job_body(
     };
     scheduler.set_native_env(context.native_env.clone());
     scheduler.promote_and_spawn(now);
+    // 收尾在提升之后：队列里还有活儿时这次调用会跳过，由最后一个作业关闭实例。
+    stop_vm_when_idle(&inner);
 }
 
 /// 提交求解作业：入队并按预算立即尝试启动。progress 通道回传日志行与 __TIME__ 进度标记。

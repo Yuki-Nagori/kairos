@@ -106,17 +106,17 @@
 
 ## 待开工 / 待验收任务
 
-| ID  | 文件                                                                                         | 任务                                            | 依赖 / 状态                                                                                             |
-| --- | -------------------------------------------------------------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| T29 | [T29-real-solve-e2e.md](T29-real-solve-e2e.md)                                               | 真实求解端到端验证（OpenFOAM 环境）             | v0.2.5 轮三条链路已跑通；剩最小连通性复跑 + 视口截图核验（真实件 4 进程并行待上游 issue #7）            |
-| T33 | [T33-updater-hardening.md](T33-updater-hardening.md)                                         | 发布加固：CSP 已加固 + updater / 签名待密钥证书 | CSP 零行为变化加固已落地；`style-src 'unsafe-inline'` 移除需真机回归，updater 与三平台签名需密钥 / 证书 |
-| T48 | [T48-renderer-bench-realdevice.md](T48-renderer-bench-realdevice.md)                         | 渲染后端三端真机验收与 FPS 回填                 | 等三端真机（macOS/Windows/Linux WebView）                                                               |
-| T60 | [T60-import-log-and-pptx.md](T60-import-log-and-pptx.md)                                     | 导入日志流 + PPT 报告导出（低优先 / 可选拆分）  | 低优先；PPTX 需要新依赖决策，可先做导入日志                                                             |
-| T82 | [T82-dualdomain-midplane-solve-consumption.md](T82-dualdomain-midplane-solve-consumption.md) | 双域 / 中面网格的求解消费                       | 求解侧消费（双域/中面），依赖上游降维能力                                                               |
-| T83 | [T83-multi-cavity-runner-fill.md](T83-multi-cavity-runner-fill.md)                           | 多型腔与流道系统参与填充                        | 流道体进网格 + 多腔分配，依赖 T29 闭环                                                                  |
-| T89 | [T89-gaim-integration.md](T89-gaim-integration.md)                                           | 气体辅助注塑（GAIM）集成                        | 等上游三相 / 气芯场                                                                                     |
-| T92 | [T92-doe-orchestration.md](T92-doe-orchestration.md)                                         | DOE / 正交试验编排                              | 等 T29 求解闭环稳定                                                                                     |
-| T93 | [T93-process-optimization.md](T93-process-optimization.md)                                   | 工艺参数自动寻优                                | 等 T92 汇总表                                                                                           |
+| ID  | 文件                                                                                         | 任务                                            | 依赖 / 状态                                                                                                                  |
+| --- | -------------------------------------------------------------------------------------------- | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| T29 | [T29-real-solve-e2e.md](T29-real-solve-e2e.md)                                               | 真实求解端到端验证（OpenFOAM 环境）             | v0.2.5 轮三条链路已跑通；剩最小连通性复跑 + 视口截图核验（真实件 4 进程并行：上游 046 已修、**未发版**，等新版 bundle 复测） |
+| T33 | [T33-updater-hardening.md](T33-updater-hardening.md)                                         | 发布加固：CSP 已加固 + updater / 签名待密钥证书 | CSP 零行为变化加固已落地；`style-src 'unsafe-inline'` 移除需真机回归，updater 与三平台签名需密钥 / 证书                      |
+| T48 | [T48-renderer-bench-realdevice.md](T48-renderer-bench-realdevice.md)                         | 渲染后端三端真机验收与 FPS 回填                 | 等三端真机（macOS/Windows/Linux WebView）                                                                                    |
+| T60 | [T60-import-log-and-pptx.md](T60-import-log-and-pptx.md)                                     | 导入日志流 + PPT 报告导出（低优先 / 可选拆分）  | 低优先；PPTX 需要新依赖决策，可先做导入日志                                                                                  |
+| T82 | [T82-dualdomain-midplane-solve-consumption.md](T82-dualdomain-midplane-solve-consumption.md) | 双域 / 中面网格的求解消费                       | 求解侧消费（双域/中面），依赖上游降维能力                                                                                    |
+| T83 | [T83-multi-cavity-runner-fill.md](T83-multi-cavity-runner-fill.md)                           | 多型腔与流道系统参与填充                        | 流道体进网格 + 多腔分配，依赖 T29 闭环                                                                                       |
+| T89 | [T89-gaim-integration.md](T89-gaim-integration.md)                                           | 气体辅助注塑（GAIM）集成                        | 等上游三相 / 气芯场                                                                                                          |
+| T92 | [T92-doe-orchestration.md](T92-doe-orchestration.md)                                         | DOE / 正交试验编排                              | 等 T29 求解闭环稳定                                                                                                          |
+| T93 | [T93-process-optimization.md](T93-process-optimization.md)                                   | 工艺参数自动寻优                                | 等 T92 汇总表                                                                                                                |
 
 ## 2026-09-13 收口批次（本轮完成）
 

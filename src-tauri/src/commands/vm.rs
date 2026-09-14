@@ -42,7 +42,7 @@ fn provider() -> Result<VmProviderKind> {
 /// 构造受管命令（macOS）：GUI 进程只继承精简 PATH，必须补上
 /// Homebrew（/opt/homebrew/bin）与官方 pkg（/usr/local/bin）的常见安装位置。
 #[cfg(target_os = "macos")]
-fn platform_command(bin: &str) -> Command {
+pub(crate) fn platform_command(bin: &str) -> Command {
     let mut command = Command::new(bin);
     let path = std::env::var("PATH").unwrap_or_default();
     if !path.starts_with("/opt/homebrew/bin:") {
@@ -53,7 +53,7 @@ fn platform_command(bin: &str) -> Command {
 
 /// 构造受管命令（Windows / Linux）：无需 PATH 修补。
 #[cfg(not(target_os = "macos"))]
-fn platform_command(bin: &str) -> Command {
+pub(crate) fn platform_command(bin: &str) -> Command {
     Command::new(bin)
 }
 
@@ -161,7 +161,7 @@ fn detect_memory_gib() -> Option<u32> {
 }
 
 /// 从探测输出解析实例状态；命令失败 / 超时视为实例不存在。
-fn probe_instance_state(provider: VmProviderKind) -> Result<VmState> {
+pub(crate) fn probe_instance_state(provider: VmProviderKind) -> Result<VmState> {
     let Some(output) = run_bytes(&vm_logic::instance_info_args(provider))? else {
         return Ok(VmState::Missing); // 超时视为不存在，交给创建流程兜底
     };
@@ -385,6 +385,14 @@ pub async fn vm_deployed_release_tag(app: AppHandle) -> Result<Option<String>> {
         return Ok(None);
     }
     let _ = app;
+    // multipass 的 exec 对停止实例会**隐式拉起**：只读版本标记不该顺带启动一台
+    // 十几 GB 的虚拟机，实例没在跑就直接按「版本未知」处理。
+    if !matches!(
+        probe_instance_state(VmProviderKind::Multipass),
+        Ok(VmState::Running)
+    ) {
+        return Ok(None);
+    }
     tauri::async_runtime::spawn_blocking(move || {
         let output = platform_command("multipass")
             .args([
@@ -687,7 +695,11 @@ pub async fn vm_shell_start(state: State<'_, VmShellState>, log: Channel<String>
         let mut guard = inner
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        shell_start_blocking(&provider, &mut guard, &log)
+        let started = shell_start_blocking(&provider, &mut guard, &log);
+        if started.is_ok() {
+            super::vm_lease::set_shell_open(true);
+        }
+        started
     })
     .await
     .map_err(|e| KairosError::internal(format!("Shell 任务失败：{e}")))?
@@ -766,11 +778,7 @@ pub fn vm_shell_send(state: State<'_, VmShellState>, line: String) -> Result<()>
 /// 结束 Shell 会话（杀死子进程并回收）。
 #[tauri::command]
 pub fn vm_shell_stop(state: State<'_, VmShellState>) -> Result<()> {
-    let mut guard = state.lock();
-    if let Some(mut child) = guard.take() {
-        let _ = child.kill();
-        let _ = child.wait();
-    }
+    kill_session(&state);
     Ok(())
 }
 
@@ -780,6 +788,7 @@ fn kill_session(state: &VmShellState) {
         let _ = child.kill();
         let _ = child.wait();
     }
+    super::vm_lease::set_shell_open(false);
 }
 
 /// 给交互 Shell 包一层 PTY：multipass exec / bash 在非 TTY 管道下是批处理
@@ -812,6 +821,7 @@ fn wrap_pty(args: Vec<String>) -> Vec<String> {
 #[tauri::command]
 pub async fn vm_stop(shell: State<'_, VmShellState>) -> Result<String> {
     kill_session(&shell);
+    super::vm_lease::clear_auto_started();
     let provider = provider()?;
     if provider == VmProviderKind::Native {
         return Ok("Linux 原生环境无需停止虚拟机。".into());
@@ -835,6 +845,7 @@ pub async fn vm_stop(shell: State<'_, VmShellState>) -> Result<String> {
 /// 停止命令——故意不 wait，进程在应用退出后由系统回收。
 pub fn cleanup_on_exit(shell: &VmShellState) {
     kill_session(shell);
+    super::vm_lease::clear_auto_started();
     let Ok(provider) = provider() else {
         return;
     };

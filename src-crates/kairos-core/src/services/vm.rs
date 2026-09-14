@@ -164,6 +164,38 @@ pub fn start_args(provider: VmProviderKind) -> Option<Vec<String>> {
     }
 }
 
+/// 虚拟机可执行命令的探测：能跑通一条 `true` 即视为就绪。
+///
+/// 启动（`multipass start`）返回时 guest 往往还没起完 sshd，直接投作业会失败；
+/// 作业前先按本探测轮询，直到可执行。WSL 无独立启动步骤（首次执行自启）。
+pub fn ready_probe_args(provider: VmProviderKind) -> Option<Vec<String>> {
+    match provider {
+        VmProviderKind::Multipass => Some(vec![
+            "multipass".into(),
+            "exec".into(),
+            INSTANCE_NAME.into(),
+            "--".into(),
+            "true".into(),
+        ]),
+        VmProviderKind::Wsl => Some(vec![
+            "wsl".into(),
+            "-d".into(),
+            WSL_DISTRO.into(),
+            "--".into(),
+            "true".into(),
+        ]),
+        VmProviderKind::Native => None,
+    }
+}
+
+/// 作业跑完、队列空闲时是否关闭虚拟机（省内存）。纯策略，便于穷举测试。
+///
+/// 只在「虚拟机是为作业自动拉起的」且「没有排队 / 运行中的作业」且「没有交互 Shell
+/// 会话」时关闭：用户自己启动的实例、正在用 Shell 的实例都不动。
+pub fn should_stop_when_idle(auto_started: bool, active_jobs: usize, shell_open: bool) -> bool {
+    auto_started && active_jobs == 0 && !shell_open
+}
+
 /// 应用内 Shell：multipass 走 exec bash（管道友好，规避非 TTY 限制）；
 /// wsl 本身就是管道友好的 Linux 进程桥。
 pub fn shell_args(provider: VmProviderKind) -> Vec<String> {
@@ -227,6 +259,61 @@ pub fn env_source_command() -> String {
 /// 环境就绪探测命令：部署后确认 bashrc 存在（bundle 结构校验）。
 pub fn env_probe_command() -> String {
     format!("test -f {ENV_ROOT}/{ENV_BASHRC}")
+}
+
+/// 求解会话写在 case 目录里的三个文件：标准输出日志、退出码、以及流式回读
+/// 分隔哨兵。求解进程脱离会话后，客户端只靠这三个文件就能回传进度与结果。
+pub const SOLVE_LOG_NAME: &str = "kairos-solve.log";
+/// 退出码文件：内容为求解脚本的退出码（写完即代表求解结束）。
+pub const SOLVE_EXIT_NAME: &str = ".kairos-solve.exit";
+/// 流式回读命令输出里的分隔哨兵：哨兵之前的字节是日志，之后是退出码。
+pub const STREAM_MARK: &str = "##KAIROS-STATUS##";
+
+/// 脱离会话的求解启动命令：`setsid` 起独立会话（不再是 ssh 会话的子进程），
+/// 输出重定向到 case 内的日志文件，退出码写进退出码文件。
+///
+/// 这样求解不再依赖 ssh 会话存活——multipass 的 exec 客户端一退出，systemd-logind
+/// 就会回收该会话的进程，求解会在跑到一半时无声消失；`setsid` 让求解脱离会话，
+/// 客户端只负责「启动」，日志与退出码落盘供后续回读。
+pub fn detached_launch_command(vm_case: &str, script: &str) -> String {
+    let dir = format!("'{}'", bash_single_quote(vm_case));
+    let log = format!("{dir}/{SOLVE_LOG_NAME}");
+    let exit = format!("{dir}/{SOLVE_EXIT_NAME}");
+    format!(
+        "rm -f {log} {exit}; (setsid bash -lc {} >> {log} 2>&1 < /dev/null; echo $? > {exit}) &",
+        bash_single_quote(script)
+    )
+}
+
+/// 流式回读命令：从 `offset` 字节起输出日志，随后打印哨兵与退出码。
+///
+/// 退出码文件尚未出现时输出 `-`（仍在求解）。调用方按返回值推进 offset，
+/// 因此每次只回传新增字节，长作业不会重复搬运整份日志。
+pub fn detached_read_command(vm_case: &str, offset: u64) -> String {
+    let dir = format!("'{}'", bash_single_quote(vm_case));
+    let log = format!("{dir}/{SOLVE_LOG_NAME}");
+    let exit = format!("{dir}/{SOLVE_EXIT_NAME}");
+    format!(
+        "tail -c +{} {log} 2>/dev/null; printf '\n{STREAM_MARK}\n'; cat {exit} 2>/dev/null || printf -- '-'",
+        offset.saturating_add(1)
+    )
+}
+
+/// 解析流式回读输出：返回（本次新增的日志片段, 最新偏移量, 退出码）。
+///
+/// 退出码为 `None` 表示求解仍在进行；哨兵缺失（输出被截断）时按「无新增」处理，
+/// 下一轮从头续读，不把残缺输出当成求解结束。
+pub fn parse_read_output(stdout: &str, offset: u64) -> (String, u64, Option<i32>) {
+    let Some((chunk, status)) = stdout.rsplit_once(STREAM_MARK) else {
+        return (String::new(), offset, None);
+    };
+    let new_offset = offset + chunk.len() as u64;
+    let code = status
+        .trim()
+        .parse::<i32>()
+        .ok()
+        .filter(|_| status.trim() != "-");
+    (chunk.to_string(), new_offset, code)
 }
 
 /// 原生（Linux）求解环境的目录名：应用数据目录下的 `moldingfoam-env`。
@@ -793,6 +880,79 @@ mod tests {
             vm_case_extract_command("/home/ubuntu/it's"),
             "rm -rf '/home/ubuntu/it'\\''s' && tar -xzf - -C /home/ubuntu"
         );
+    }
+
+    #[test]
+    fn detached_launch_uses_setsid_and_case_side_markers() {
+        let command = detached_launch_command(
+            "/home/ubuntu/study-1",
+            "cd '/home/ubuntu/study-1' && foamRun",
+        );
+        // 求解必须在独立会话里跑（脱离 ssh 会话），日志与退出码写在 case 内
+        assert!(command.contains("setsid bash -lc "));
+        assert!(command.contains("'/home/ubuntu/study-1'/kairos-solve.log"));
+        assert!(command.contains("'/home/ubuntu/study-1'/.kairos-solve.exit"));
+        assert!(command.contains("echo $? > "));
+        // 脚本作为单个 shell 字面量传入，单引号被转义
+        assert!(command.contains("'\\''/home/ubuntu/study-1'\\''"));
+        // 启动命令自身后台化：客户端拿到返回即结束，不等求解
+        assert!(command.ends_with(") &"));
+    }
+
+    #[test]
+    fn detached_read_streams_from_offset_and_reports_status() {
+        let command = detached_read_command("/home/ubuntu/study-1", 0);
+        assert!(command.contains("tail -c +1 "));
+        assert!(command.contains(STREAM_MARK));
+        assert!(command.contains("|| printf -- '-'"));
+        // offset 之后的字节从 offset+1 开始读（tail 的计数是 1 基）
+        assert!(detached_read_command("/home/ubuntu/study-1", 4096).contains("tail -c +4097 "));
+    }
+
+    #[test]
+    fn read_output_splits_log_from_exit_code() {
+        // 仍在求解：退出码位是 `-`
+        let (chunk, offset, code) = parse_read_output("Time = 0.1\n##KAIROS-STATUS##\n-", 0);
+        assert_eq!(chunk, "Time = 0.1\n");
+        assert_eq!(offset, 11);
+        assert_eq!(code, None);
+        // 求解结束：退出码可解析
+        let (_, _, code) = parse_read_output("\n##KAIROS-STATUS##\n0", 10);
+        assert_eq!(code, Some(0));
+        let (_, _, code) = parse_read_output("\n##KAIROS-STATUS##\n137", 10);
+        assert_eq!(code, Some(137));
+        // 输出被截断（没有哨兵）：不推进偏移、不当成结束
+        let (chunk, offset, code) = parse_read_output("Time = 0.2", 10);
+        assert!(chunk.is_empty());
+        assert_eq!(offset, 10);
+        assert_eq!(code, None);
+    }
+
+    #[test]
+    fn ready_probe_covers_vm_providers_only() {
+        // multipass：exec 一条 true（启动返回时 guest 可能还没起完 sshd）
+        assert_eq!(
+            ready_probe_args(VmProviderKind::Multipass).unwrap(),
+            vec!["multipass", "exec", "kairos", "--", "true"]
+        );
+        // WSL：distro 内执行（首次执行自启）
+        assert_eq!(
+            ready_probe_args(VmProviderKind::Wsl).unwrap(),
+            vec!["wsl", "-d", "Ubuntu-24.04", "--", "true"]
+        );
+        assert_eq!(ready_probe_args(VmProviderKind::Native), None);
+    }
+
+    #[test]
+    fn stop_when_idle_only_for_auto_started_leased_vm() {
+        // 自动拉起 + 无作业 + 无 Shell → 关闭
+        assert!(should_stop_when_idle(true, 0, false));
+        // 还有作业（排队 / 运行中）
+        assert!(!should_stop_when_idle(true, 1, false));
+        // 用户正在用 Shell
+        assert!(!should_stop_when_idle(true, 0, true));
+        // 不是我们拉起的（用户手动启动 / 原生环境）→ 不动
+        assert!(!should_stop_when_idle(false, 0, false));
     }
 
     #[test]

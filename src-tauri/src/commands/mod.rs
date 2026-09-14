@@ -14,3 +14,4 @@ pub mod results;
 pub mod solver;
 pub mod system;
 pub mod vm;
+pub mod vm_lease;

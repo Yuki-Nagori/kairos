@@ -5,10 +5,14 @@
   endTime（V/P 切换 1.0802 s、保压 59.3 MPa），入口面已修为全部水平；③小 case GUI 复跑：
   材料/工艺（默认值一键应用）/结果扫描/视口 T 场色标（353–506 K）均核验通过，非场对象已被
   过滤；④修复「提交后永不启动」的调度器缺陷后，桌面端作业能完成 VM 复制与 `foamRun` 启动。
-  剩余：a) **GUI 作业进程中途消失且状态不收敛**（同 case 手动重跑可跑满 endTime，属桌面端
-  作业生命周期问题，下一步把 spawn 命令行与子进程退出码写进作业日志）；b) 视口截图与 XY
-  图表探针（本会话图片栅格不可交付、输入通道被系统拒绝）；c) 真实件 4 进程死锁待上游修
-  （moldingFoam#7）。详见 [e2e-solve-report.md](../reviews/e2e-solve-report.md)
+  剩余：a) **GUI 作业端到端复测**：作业生命周期问题已按根因修三轮——求解改为 `setsid`
+  脱离会话执行（日志与退出码落 case 内文件、客户端轮询增量回读，求解不再随 ssh 会话被回收）、
+  `multipass exec` 加 600 秒等待上限（卡死不再让作业永远「运行中」）、作业自动启停虚拟机
+  （含「multipass exec 会隐式拉起停止实例」的租约修正）；待 GUI 完整跑一次作业复测；b) 视口截图与 XY
+  图表探针（本会话图片栅格不可交付、输入通道被系统拒绝）；c) 真实件 4 进程死锁：上游 046 已定位根因（边界 patch 循环内归约 → 各 rank 归约次数不等）
+  并修复 + 加回归用例（`parallelMassBudget` + 并行超时门禁），但**尚未发版**——
+  Kairos 侧等新版 bundle 到手后复测 np=4；当前 v0.2.5 真实件仍用 1–2 进程
+  （[moldingFoam#7](https://github.com/Yuki-Nagori/moldingFoam/issues/7)）。详见 [e2e-solve-report.md](../reviews/e2e-solve-report.md)
 - 依赖：T09、T10、T11（已完成的求解集成代码）、T34（求解入口收口）
 - 优先级：**P1**
 
