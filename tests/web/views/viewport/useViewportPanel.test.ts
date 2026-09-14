@@ -37,6 +37,7 @@ const { createMock, backends, capabilityMock, baseCreate } = vi.hoisted(() => {
       setClipPlane: vi.fn(),
       uploadOverlay: vi.fn(),
       setMeshVisible: vi.fn(),
+      renderError: vi.fn(() => null),
       setOverlayVisible: vi.fn(),
       getCamera: vi.fn(() => ({
         eye: [0, 0, 5],
@@ -864,6 +865,33 @@ describe("载入网格的可见反馈", () => {
     vi.spyOn(geometry, "fetchRenderMesh").mockResolvedValue(undefined);
     await panel.loadMesh();
     expect(panel.emptyText).toContain("读取渲染网格失败");
+    expect(panel.emptyError).toBe(true);
+  });
+});
+
+describe("渲染失败的可见原因", () => {
+  it("渲染器报告失败时把原因写进视口空态，而不是留一片静默空白", async () => {
+    primeStudy();
+    const { panel } = mountPanel();
+    panel.attachCanvas(0, canvas());
+    await flushPromises();
+    // 载入前置：几何 + 网格数据（store 在同一文件内共享，需自带夹具）
+    const { useGeometryStore } = await import("../../../../src-web/stores/geometry");
+    const geometry = useGeometryStore();
+    geometry.geometries = [
+      { geometryId: "geo-3", name: "件", size: [10, 10, 10], suggestedUnit: "mm" },
+    ] as never;
+    vi.spyOn(geometry, "fetchRenderMesh").mockResolvedValue({
+      positions: [0, 0, 0, 1, 0, 0, 0, 1, 0],
+      indices: [0, 1, 2],
+      faceCells: [0],
+    } as never);
+    // 后端能创建但首帧绘制失败（如画布以 0 尺寸建纹理被 WebGPU 判校验错误）
+    backends.at(-1)!.renderError.mockReturnValue("canvas size is zero");
+    await panel.loadMesh();
+    await flushPromises();
+    expect(panel.emptyText).toContain("视口渲染失败");
+    expect(panel.emptyText).toContain("canvas size is zero");
     expect(panel.emptyError).toBe(true);
   });
 });

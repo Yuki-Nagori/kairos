@@ -18,6 +18,8 @@ export interface ViewportBackend {
     layer: { positions: Float32Array; color: [number, number, number] },
   ): void;
   setMeshVisible(visible: boolean): void;
+  /** 最近一次绘制失败的原因（可选实现）；供面板把静默空白变成可见原因。 */
+  renderError?(): string | null;
   setOverlayVisible(id: string, visible: boolean): void;
   getCamera(): {
     eye: Vec3;

@@ -410,6 +410,13 @@ export function useViewportPanel() {
       emptyText.value = "";
       emptyError.value = false;
     }
+    // 绘制失败此前是静默的（画布空白 + FPS 停在 —）：把渲染器记录的原因显示出来，
+    // 用户才知道是环境/尺寸问题还是数据问题。
+    const renderFailure = slots[0]?.renderer?.renderError?.() ?? null;
+    if (renderFailure !== null) {
+      emptyText.value = `视口渲染失败：${renderFailure}`;
+      emptyError.value = true;
+    }
     viewport.setMeshLoaded(meshLoaded.value);
   }
 
