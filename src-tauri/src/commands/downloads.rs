@@ -101,6 +101,9 @@ pub struct ReleaseInfo {
 struct ReleaseAsset {
     name: String,
     browser_download_url: String,
+    /// GitHub 为 release 资产计算的摘要（形如 `sha256:<hex>`）；老资产可能没有。
+    #[serde(default)]
+    digest: Option<String>,
 }
 
 /// 查询 moldingFoam 仓库的最新 release（tag + 资产清单）。
@@ -124,9 +127,13 @@ pub fn query_latest_release() -> Result<ReleaseInfo> {
 /// `releases/latest` 形态的 URL 在下载时动态解析为具体资产：资产名含日期，
 /// 固定文件名的 latest/download 直链会随下个版本失效。按宿主架构挑资产，
 /// 找不到匹配时明确报错而不是猜。其余 URL 原样返回（无版本标签）。
-fn resolve_release_asset(url: &str) -> Result<(String, Option<String>)> {
+fn resolve_release_asset(url: &str) -> Result<ResolvedAsset> {
     if !url.ends_with("/releases/latest") {
-        return Ok((url.to_string(), None));
+        return Ok(ResolvedAsset {
+            url: url.to_string(),
+            release_tag: None,
+            digest: None,
+        });
     }
     let release = query_latest_release()?;
     let asset = release
@@ -144,7 +151,18 @@ fn resolve_release_asset(url: &str) -> Result<(String, Option<String>)> {
                 std::env::consts::ARCH
             ))
         })?;
-    Ok((asset.browser_download_url.clone(), Some(release.tag_name)))
+    Ok(ResolvedAsset {
+        url: asset.browser_download_url.clone(),
+        release_tag: Some(release.tag_name),
+        digest: asset.digest.clone(),
+    })
+}
+
+/// 解析后的下载目标：URL + 版本标签 + 官方摘要（静态直链没有后两者）。
+struct ResolvedAsset {
+    url: String,
+    release_tag: Option<String>,
+    digest: Option<String>,
 }
 
 /// 下载文件到受管目录：流式写盘并按百分比回传进度（Channel<u64>）；
@@ -161,7 +179,8 @@ pub async fn download_file(
     tauri::async_runtime::spawn_blocking(move || {
         // /releases/latest 的资产解析要走 GitHub API（阻塞网络 IO），
         // 与下载一并放进阻塞线程，避免占住 async runtime worker。
-        let (url, release_tag) = resolve_release_asset(&url)?;
+        let asset = resolve_release_asset(&url)?;
+        let (url, release_tag) = (asset.url, asset.release_tag);
         let file_name = derive_file_name(&component_id, &url);
         let dir = downloads_dir(&app)?;
         fs::create_dir_all(&dir)?;
@@ -208,6 +227,20 @@ pub async fn download_file(
         // 比对——落进清单后可跨会话核对同一文件是否被替换，也为将来上游发布
         // SHA256SUMS 留出比对点。失败即视为下载失败（读到一半的归档不可用）。
         let sha256 = digest::sha256_file(&dest)?;
+        // 官方摘要（GitHub 为每个 release 资产计算）存在时逐字节比对：不一致说明
+        // 传输被篡改或损坏，删掉文件并报错，绝不留一个「看起来下载成功」的坏包。
+        let expected = asset
+            .digest
+            .as_deref()
+            .and_then(digest::parse_sha256_digest);
+        if let Some(expected) = expected
+            && expected != sha256
+        {
+            let _ = fs::remove_file(&dest);
+            return Err(KairosError::io(format!(
+                "下载校验失败：文件摘要 {sha256} 与官方公布的 {expected} 不一致，已删除。"
+            )));
+        }
         // 压缩包自动解压到组件子目录（downloads/<组件 id>/）。
         let extract_dir = extract_if_archive(&dir, &component_id, &dest, &file_name)?;
         let saved = SavedDownload {

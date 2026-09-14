@@ -32,6 +32,16 @@ pub fn sha256_file(path: &Path) -> Result<String> {
     Ok(format!("{:x}", hasher.finalize()))
 }
 
+/// 解析 GitHub release 资产的 `digest` 字段（形如 `sha256:<hex>`）。
+///
+/// 只认 sha256：其它算法（未来可能出现的）返回 None，调用方按「没有可比对的官方值」
+/// 处理，而不是拿不同算法硬比。
+pub fn parse_sha256_digest(field: &str) -> Option<String> {
+    let hex = field.trim().strip_prefix("sha256:")?.trim();
+    let looks_like_hex = hex.len() == 64 && hex.chars().all(|c| c.is_ascii_hexdigit());
+    looks_like_hex.then(|| hex.to_ascii_lowercase())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -57,6 +67,21 @@ mod tests {
         );
         let _ = std::fs::remove_file(empty);
         let _ = std::fs::remove_file(abc);
+    }
+
+    #[test]
+    fn digest_field_is_parsed_only_when_usable() {
+        let upper = "ECBD8B09A20879BF7B7866EE0E7C039B3D8276D9163A7769C9CB6C34C8525BC1";
+        let lower = upper.to_ascii_lowercase();
+        assert_eq!(
+            parse_sha256_digest(&format!("sha256:{upper}")).as_deref(),
+            Some(lower.as_str())
+        );
+        // 非 sha256 算法 / 空 / 位数不足 / 非十六进制：一律视为没有可比对的官方值
+        assert!(parse_sha256_digest("sha512:abcdef").is_none());
+        assert!(parse_sha256_digest("").is_none());
+        assert!(parse_sha256_digest("sha256:abc").is_none());
+        assert!(parse_sha256_digest("sha256:zzzz").is_none());
     }
 
     #[test]
