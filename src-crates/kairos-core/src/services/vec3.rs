@@ -45,6 +45,19 @@ pub fn normalized(vector: [f64; 3]) -> [f64; 3] {
     }
 }
 
+/// 单位化，并在长度不足时返回 `None`。
+///
+/// `epsilon` 由调用方给出：几何里「零长度」的判定阈值各不相同（网格边长、
+/// 浇口尺度、模型单位），公共模块只提供判据，不替调用方定口径。
+pub fn unit_or_none(vector: [f64; 3], epsilon: f64) -> Option<[f64; 3]> {
+    let length = dot(vector, vector).sqrt();
+    if length.is_finite() && length > epsilon {
+        Some([vector[0] / length, vector[1] / length, vector[2] / length])
+    } else {
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -57,6 +70,17 @@ mod tests {
         assert_eq!(cross([1.0, 0.0, 0.0], [0.0, 1.0, 0.0]), [0.0, 0.0, 1.0]);
         assert_eq!(distance([0.0, 0.0, 0.0], [3.0, 4.0, 0.0]), 5.0);
         assert_eq!(distance_sq([0.0, 0.0, 0.0], [3.0, 4.0, 0.0]), 25.0);
+    }
+
+    #[test]
+    fn unit_or_none_honors_the_callers_threshold() {
+        let unit = unit_or_none([0.0, 0.0, 4.0], 1e-12).expect("非退化向量应单位化");
+        assert!((unit[2] - 1.0).abs() < 1e-12);
+        // 阈值由调用方给：同一个向量在不同阈值下结果不同
+        assert!(unit_or_none([1e-9, 0.0, 0.0], 1e-12).is_some());
+        assert!(unit_or_none([1e-9, 0.0, 0.0], 1e-6).is_none());
+        assert!(unit_or_none([0.0, 0.0, 0.0], 1e-12).is_none());
+        assert!(unit_or_none([f64::NAN, 0.0, 0.0], 1e-12).is_none());
     }
 
     #[test]

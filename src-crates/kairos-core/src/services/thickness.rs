@@ -6,6 +6,7 @@
 
 use crate::models::geometry::TriangleMesh;
 use crate::services::dualdomain::{TriangleGrid, weld_surface};
+use crate::services::vec3;
 
 /// 抽样上限：面数很大时按等距抽样，保证探测耗时可控（真实件 46.7 万面）。
 pub const MAX_THICKNESS_SAMPLES: usize = 4000;
@@ -154,16 +155,12 @@ fn bounds(nodes: &[[f64; 3]]) -> ([f64; 3], [f64; 3]) {
     )
 }
 
+/// 三角形单位法向；退化（零面积）返回 `None`，由调用方按自己的口径兜底。
+///
+/// 退化判据由共享件给出（`vec3::unit_or_none`，阈值作参数），这里保留薄包装是为了
+/// 让调用点读起来仍是「求三角形法向」，而不是「叉积再单位化」。
 fn unit_normal(a: &[f64; 3], b: &[f64; 3], c: &[f64; 3]) -> Option<[f64; 3]> {
-    let u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
-    let v = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
-    let cross = [
-        u[1] * v[2] - u[2] * v[1],
-        u[2] * v[0] - u[0] * v[2],
-        u[0] * v[1] - u[1] * v[0],
-    ];
-    let length = (cross[0] * cross[0] + cross[1] * cross[1] + cross[2] * cross[2]).sqrt();
-    (length > 0.0).then(|| [cross[0] / length, cross[1] / length, cross[2] / length])
+    vec3::unit_or_none(vec3::cross(vec3::sub(*b, *a), vec3::sub(*c, *a)), 0.0)
 }
 
 #[cfg(test)]
