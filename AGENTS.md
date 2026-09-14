@@ -4,15 +4,18 @@ Kairos：注塑成型 CAE 仿真软件，对标行业领先的同类产品（自
 
 ## 文档路由
 
-| 需要了解                                                          | 去处                                                     |
-| ----------------------------------------------------------------- | -------------------------------------------------------- |
-| 分层规则、IPC/错误契约、长任务与进度回传模式、新增领域模块 recipe | [ai-docs/ARCHITECTURE.md](ai-docs/ARCHITECTURE.md)       |
-| Web 前端职责边界、composable/store 约定、反模式清单               | [ai-docs/web-conventions.md](ai-docs/web-conventions.md) |
-| 图标设计语言、双轨分类与强制参数                                  | [ai-docs/icon-design.md](ai-docs/icon-design.md)         |
-| 项目推进到哪了、每个阶段的时间与决策                              | [ai-docs/timeline.md](ai-docs/timeline.md)               |
-| 未来路线图、任务拆解（做新功能前必读）                            | [ai-docs/tasks/README.md](ai-docs/tasks/README.md)       |
-| 测试地图：全部测试的位置、分类与跑法                              | [tests/README.md](tests/README.md)                       |
-| 面向人的项目简介、环境要求、快速开始、常用命令                    | [README.md](README.md)                                   |
+| 需要了解                                                          | 去处                                                       |
+| ----------------------------------------------------------------- | ---------------------------------------------------------- |
+| 分层规则、IPC/错误契约、长任务与进度回传模式、新增领域模块 recipe | [ai-docs/ARCHITECTURE.md](ai-docs/ARCHITECTURE.md)         |
+| Web 前端职责边界、composable/store 约定、反模式清单               | [ai-docs/web-conventions.md](ai-docs/web-conventions.md)   |
+| 图标设计语言、双轨分类与强制参数                                  | [ai-docs/icon-design.md](ai-docs/icon-design.md)           |
+| 项目推进到哪了、每个阶段的时间与决策                              | [ai-docs/timeline.md](ai-docs/timeline.md)                 |
+| 未来路线图、任务拆解（做新功能前必读）                            | [ai-docs/tasks/README.md](ai-docs/tasks/README.md)         |
+| 去哪找评审 / 复现报告 / 上游往来                                  | [ai-docs/reviews/README.md](ai-docs/reviews/README.md)     |
+| 预研与可行性（DOE、多物理场、特殊工艺）                           | [ai-docs/research/README.md](ai-docs/research/README.md)   |
+| 已定型的架构决策（GPL 隔离、运行时分发、Gmsh 选型）               | [ai-docs/decisions/README.md](ai-docs/decisions/README.md) |
+| 测试地图：全部测试的位置、分类与跑法                              | [tests/README.md](tests/README.md)                         |
+| 面向人的项目简介、环境要求、快速开始、常用命令                    | [README.md](README.md)                                     |
 
 ## 不可违反的约定（速查）
 

@@ -48,7 +48,7 @@
    `Duplicate entry … in runtime selection table`）一律跟进到根因，不因"不影响
    当前功能"而接受——2026-09-12 实测证明该警告是 bundle 打包缺陷（同一求解模块
    两份 `.so` 同时加载）的表征，退出期堆破坏的根因即在此
-   （见 [B2 评审](reviews/B2-solver-review.md) 第 8 项）。
+   （见 [B2 评审](../reviews/B2-solver-review.md) 第 8 项）。
 
 ## 处理规则
 
