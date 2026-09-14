@@ -5,6 +5,7 @@
 //! 覆盖 = 可从浇口到达（图连通）；到达序归一化后作为云图场（0 = 浇口）。
 //! 这是覆盖与先后顺序的估计，不含粘性/传热/冻层物理，不代表真实前沿。
 
+use crate::services::vec3;
 use std::cmp::Reverse;
 use std::collections::{BinaryHeap, HashMap};
 
@@ -27,13 +28,6 @@ fn centroid(mesh: &VolumeMesh, tet: &[usize; 4]) -> [f64; 3] {
     centre
 }
 
-fn distance(left: [f64; 3], right: [f64; 3]) -> f64 {
-    let dx = left[0] - right[0];
-    let dy = left[1] - right[1];
-    let dz = left[2] - right[2];
-    (dx * dx + dy * dy + dz * dz).sqrt()
-}
-
 /// 单元邻接表：共享面（无向）即相邻，边权为形心距离。
 fn adjacency(centroids: &[[f64; 3]], tets: &[[usize; 4]]) -> Vec<Vec<(usize, f64)>> {
     // 面（排序后的三节点元组）→ 首个拥有它的单元。
@@ -50,7 +44,7 @@ fn adjacency(centroids: &[[f64; 3]], tets: &[[usize; 4]]) -> Vec<Vec<(usize, f64
             face.sort_unstable();
             match owners.get(&face) {
                 Some(&owner) => {
-                    let weight = distance(centroids[owner], centroids[cell]);
+                    let weight = vec3::distance(centroids[owner], centroids[cell]);
                     adjacency[owner].push((cell, weight));
                     adjacency[cell].push((owner, weight));
                 }
@@ -73,7 +67,7 @@ fn gate_cells(centroids: &[[f64; 3]], gates: &[[f64; 3]]) -> Vec<usize> {
         .map(|gate| {
             let mut best = (f64::INFINITY, 0usize);
             for (cell, centre) in centroids.iter().enumerate() {
-                let d = distance(*centre, *gate);
+                let d = vec3::distance(*centre, *gate);
                 if d < best.0 {
                     best = (d, cell);
                 }
@@ -95,7 +89,7 @@ fn cell_scale(mesh: &VolumeMesh) -> f64 {
                 }
                 (lo, hi)
             });
-    let diagonal = distance(min, max).max(1e-9);
+    let diagonal = vec3::distance(min, max).max(1e-9);
     diagonal / (mesh.tets.len() as f64).cbrt().max(1.0)
 }
 
@@ -160,7 +154,7 @@ pub fn preview(mesh: &VolumeMesh, gates: &[[f64; 3]]) -> Result<FillPreviewRepor
         .iter()
         .enumerate()
         .filter(|(index, cell)| {
-            distance(centroids[**cell], gates[*index]) > GATE_OFF_PART_FACTOR * scale
+            vec3::distance(centroids[**cell], gates[*index]) > GATE_OFF_PART_FACTOR * scale
         })
         .map(|(index, _)| index + 1)
         .collect();

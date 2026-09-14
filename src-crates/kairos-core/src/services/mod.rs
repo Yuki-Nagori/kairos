@@ -27,6 +27,7 @@ pub mod runners;
 pub mod step;
 pub mod system;
 pub mod thickness;
+pub mod vec3;
 pub mod vm;
 pub mod volume_field;
 pub mod workspace;

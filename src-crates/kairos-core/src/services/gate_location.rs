@@ -9,6 +9,7 @@
 use crate::error::{KairosError, Result};
 use crate::models::analysis::{GateCandidate, GateLocationReport};
 use crate::models::mesh::VolumeMesh;
+use crate::services::vec3;
 
 /// 候选上限：评分成本 ≈ 候选数 × 单元数，超出预算的网格按等距抽样取候选。
 const MAX_CANDIDATES: usize = 400;
@@ -60,16 +61,16 @@ fn cell_geometry(mesh: &VolumeMesh, tet: &[usize; 4]) -> CellGeometry {
     ];
     // 最短高 = 3V / 最大面面积 = det / (2 · A_max)：薄壁单元的厚度代理。
     let det = {
-        let ab = sub(p[1], p[0]);
-        let ac = sub(p[2], p[0]);
-        let ad = sub(p[3], p[0]);
-        dot(cross(ab, ac), ad).abs()
+        let ab = vec3::sub(p[1], p[0]);
+        let ac = vec3::sub(p[2], p[0]);
+        let ad = vec3::sub(p[3], p[0]);
+        vec3::dot(vec3::cross(ab, ac), ad).abs()
     };
     let max_area = [(0, 1, 2), (0, 1, 3), (0, 2, 3), (1, 2, 3)]
         .iter()
         .map(|(a, b, c)| {
-            let cross = cross(sub(p[*b], p[*a]), sub(p[*c], p[*a]));
-            0.5 * dot(cross, cross).sqrt()
+            let cross = vec3::cross(vec3::sub(p[*b], p[*a]), vec3::sub(p[*c], p[*a]));
+            0.5 * vec3::dot(cross, cross).sqrt()
         })
         .fold(0.0f64, f64::max);
     let thickness = if max_area > 0.0 {
@@ -81,8 +82,8 @@ fn cell_geometry(mesh: &VolumeMesh, tet: &[usize; 4]) -> CellGeometry {
         .iter()
         .copied()
         .min_by(|left, right| {
-            let dl = distance_sq(mesh.nodes[*left], centre);
-            let dr = distance_sq(mesh.nodes[*right], centre);
+            let dl = vec3::distance_sq(mesh.nodes[*left], centre);
+            let dr = vec3::distance_sq(mesh.nodes[*right], centre);
             dl.partial_cmp(&dr).unwrap_or(std::cmp::Ordering::Equal)
         })
         .unwrap_or(tet[0]);
@@ -170,7 +171,7 @@ pub fn analyze(mesh: &VolumeMesh, params: &GateLocationParams) -> Result<GateLoc
         let origin = cells[candidate].centre;
         let mut farthest = 0.0f64;
         for (index, cell) in cells.iter().enumerate() {
-            let distance = distance(origin, cell.centre);
+            let distance = vec3::distance(origin, cell.centre);
             farthest = farthest.max(distance);
             if distance < nearest_distance[index] {
                 nearest_distance[index] = distance;
@@ -221,32 +222,6 @@ pub fn analyze(mesh: &VolumeMesh, params: &GateLocationParams) -> Result<GateLoc
         diagonal_mm: diagonal,
         basis: "流动长度均衡 × 壁厚可达性（候选限表面单元；启发式建议，非求解结果）".into(),
     })
-}
-
-fn sub(left: [f64; 3], right: [f64; 3]) -> [f64; 3] {
-    [left[0] - right[0], left[1] - right[1], left[2] - right[2]]
-}
-
-fn cross(left: [f64; 3], right: [f64; 3]) -> [f64; 3] {
-    [
-        left[1] * right[2] - left[2] * right[1],
-        left[2] * right[0] - left[0] * right[2],
-        left[0] * right[1] - left[1] * right[0],
-    ]
-}
-
-fn dot(left: [f64; 3], right: [f64; 3]) -> f64 {
-    left[0] * right[0] + left[1] * right[1] + left[2] * right[2]
-}
-
-fn distance(left: [f64; 3], right: [f64; 3]) -> f64 {
-    let d = sub(left, right);
-    dot(d, d).sqrt()
-}
-
-fn distance_sq(left: [f64; 3], right: [f64; 3]) -> f64 {
-    let d = sub(left, right);
-    dot(d, d)
 }
 
 #[cfg(test)]
