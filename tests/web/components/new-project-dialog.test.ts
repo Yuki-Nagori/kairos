@@ -1,19 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { enableAutoUnmount } from "@vue/test-utils";
-import { mount } from "@vue/test-utils";
+import { enableAutoUnmount, mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import type { Pinia } from "pinia";
 import NewProjectDialog from "../../../src-web/components/menu-bar/NewProjectDialog.vue";
 import { useNewProjectDialog } from "../../../src-web/components/menu-bar/useNewProjectDialog";
 import { useProjectStore } from "../../../src-web/stores/project";
 import { useAppStore } from "../../../src-web/stores/app";
+import { defaultWorkspacePath, projectPath } from "../../../src-web/api/project";
+import { pickWorkspaceDir } from "../../../src-web/api/dialog";
 
 vi.mock("../../../src-web/api/project", () => ({
   createProject: vi.fn(),
-  defaultProjectPath: vi.fn(
-    async (name: string, file: string) => `/home/u/Documents/kairos/${name}/${file}.kairos`,
+  defaultWorkspacePath: vi.fn(async () => "/home/u/Documents/kairos"),
+  projectPath: vi.fn(
+    async (workspace: string, name: string) => `${workspace}/${name}/${name}.kairos`,
   ),
-  workspaceRootOf: vi.fn(async (path: string) => path.split("/").slice(0, -1).join("/")),
+  workspaceRootOf: vi.fn(async (path: string) => path.split("/").slice(0, -2).join("/") || null),
   archiveWorkspaceGeometry: vi.fn(),
   loadWorkspaceGeometry: vi.fn(),
   saveStudyMesh: vi.fn(),
@@ -21,6 +23,11 @@ vi.mock("../../../src-web/api/project", () => ({
   listRecentProjects: vi.fn(async () => []),
   loadProjectFile: vi.fn(),
   saveProjectFile: vi.fn(async () => undefined),
+}));
+vi.mock("../../../src-web/api/dialog", () => ({
+  pickWorkspaceDir: vi.fn(),
+  pickOpenProjectPath: vi.fn(),
+  pickSaveProjectPath: vi.fn(),
 }));
 vi.mock("../../../src-web/api/system", () => ({ getSystemInfo: vi.fn() }));
 vi.mock("../../../src-web/api/materials", () => ({
@@ -40,7 +47,7 @@ function makeProject(name: string) {
   };
 }
 
-/** 输入框顺序：0 = 项目名，1 = 文件名。 */
+/** 输入框顺序：0 = 工作区路径，1 = 项目名。 */
 function dialogInputs(wrapper: ReturnType<typeof mount>) {
   return wrapper.findAll("input");
 }
@@ -63,48 +70,74 @@ describe("NewProjectDialog", () => {
     pinia = createPinia();
     setActivePinia(pinia);
     vi.resetAllMocks();
+    vi.mocked(defaultWorkspacePath).mockResolvedValue("/home/u/Documents/kairos");
+    vi.mocked(projectPath).mockImplementation(
+      async (workspace: string, name: string) => `${workspace}/${name}/${name}.kairos`,
+    );
     useNewProjectDialog().hide();
   });
 
-  it("收起态不渲染；show 后打开且字段清空", async () => {
+  it("show 打开对话框：工作区初值取平台默认根，项目名清空", async () => {
     const wrapper = mount(NewProjectDialog, {
       global: { plugins: [pinia], stubs: { teleport: true } },
     });
     expect(wrapper.find("input").exists()).toBe(false);
 
-    useNewProjectDialog().show();
+    await useNewProjectDialog().show();
     await wrapper.vm.$nextTick();
     const inputs = dialogInputs(wrapper);
     expect(inputs).toHaveLength(2);
-    expect(inputs[0]?.element.value).toBe("");
+    expect(inputs[0]?.element.value).toBe("/home/u/Documents/kairos");
     expect(inputs[1]?.element.value).toBe("");
   });
 
-  it("文件名默认跟随项目名，手动改过之后不再跟随", async () => {
-    const { createProject } = await import("../../../src-web/api/project");
-    vi.mocked(createProject).mockResolvedValue(makeProject("支架") as never);
-    useNewProjectDialog().show();
+  it("取不到默认工作区时保留上次值（IPC 不可用）", async () => {
+    vi.mocked(defaultWorkspacePath).mockRejectedValueOnce(new Error("IPC 不可用"));
+    const { workspace } = useNewProjectDialog();
+    workspace.value = "/Volumes/Work";
 
+    await useNewProjectDialog().show();
+    expect(workspace.value).toBe("/Volumes/Work");
+  });
+
+  it("落点预览随工作区与项目名更新", async () => {
     const wrapper = mount(NewProjectDialog, {
       global: { plugins: [pinia], stubs: { teleport: true } },
     });
-    await dialogInputs(wrapper)[0]?.setValue("支架");
-    expect(dialogInputs(wrapper)[1]?.element.value).toBe("支架");
+    await useNewProjectDialog().show();
+    await wrapper.vm.$nextTick();
+    await dialogInputs(wrapper)[0]?.setValue("/Volumes/Work/kairos/");
+    await dialogInputs(wrapper)[1]?.setValue("控制器支架");
+    expect(wrapper.text()).toContain("/Volumes/Work/kairos/控制器支架/控制器支架.kairos");
+  });
 
-    // 手动改文件名后，再改项目名不再覆盖文件名。
-    await dialogInputs(wrapper)[1]?.setValue("控制器支架-v2");
-    await dialogInputs(wrapper)[0]?.setValue("支架 B");
-    expect(dialogInputs(wrapper)[1]?.element.value).toBe("控制器支架-v2");
+  it("「选择…」用系统目录选择器改工作区；取消保持原值", async () => {
+    const wrapper = mount(NewProjectDialog, {
+      global: { plugins: [pinia], stubs: { teleport: true } },
+    });
+    await useNewProjectDialog().show();
+    await wrapper.vm.$nextTick();
+
+    vi.mocked(pickWorkspaceDir).mockResolvedValueOnce("/Volumes/Work/kairos");
+    await findButton(wrapper, "选择…").trigger("click");
+    await vi.waitFor(() =>
+      expect(dialogInputs(wrapper)[0]?.element.value).toBe("/Volumes/Work/kairos"),
+    );
+
+    vi.mocked(pickWorkspaceDir).mockResolvedValueOnce(null);
+    await findButton(wrapper, "选择…").trigger("click");
+    await wrapper.vm.$nextTick();
+    expect(dialogInputs(wrapper)[0]?.element.value).toBe("/Volumes/Work/kairos");
   });
 
   it("项目名为空时提示且不建项目", async () => {
     const wrapper = mount(NewProjectDialog, {
       global: { plugins: [pinia], stubs: { teleport: true } },
     });
-    useNewProjectDialog().show();
+    await useNewProjectDialog().show();
     await wrapper.vm.$nextTick();
 
-    await dialogInputs(wrapper)[0]?.setValue("   ");
+    await dialogInputs(wrapper)[1]?.setValue("   ");
     await findButton(wrapper, "创建").trigger("click");
     await wrapper.vm.$nextTick();
 
@@ -113,60 +146,53 @@ describe("NewProjectDialog", () => {
     expect(useNewProjectDialog().open.value).toBe(true);
   });
 
-  it("创建成功后收起对话框，路径用项目名与文件名", async () => {
+  it("创建成功后收起对话框：工程文件与项目名同名", async () => {
     const { createProject } = await import("../../../src-web/api/project");
     vi.mocked(createProject).mockResolvedValue(makeProject("控制器支架") as never);
 
-    useNewProjectDialog().show();
     const wrapper = mount(NewProjectDialog, {
       global: { plugins: [pinia], stubs: { teleport: true } },
     });
-    await dialogInputs(wrapper)[0]?.setValue("控制器支架");
-    await dialogInputs(wrapper)[1]?.setValue("v2 试模");
+    await useNewProjectDialog().show();
+    await wrapper.vm.$nextTick();
+    await dialogInputs(wrapper)[0]?.setValue("/Volumes/Work");
+    await dialogInputs(wrapper)[1]?.setValue("控制器支架");
     await findButton(wrapper, "创建").trigger("click");
     await vi.waitFor(() => expect(useNewProjectDialog().open.value).toBe(false));
 
-    expect(createProject).toHaveBeenCalledWith("控制器支架");
+    expect(projectPath).toHaveBeenCalledWith("/Volumes/Work", "控制器支架");
     const project = useProjectStore();
     expect(project.project?.name).toBe("控制器支架");
-    expect(project.projectPath).toBe("/home/u/Documents/kairos/控制器支架/v2 试模.kairos");
+    expect(project.projectPath).toBe("/Volumes/Work/控制器支架/控制器支架.kairos");
   });
 
-  it("文件名为空时落到项目名；创建失败保持打开", async () => {
+  it("创建失败保持打开（错误经全局通道呈现）", async () => {
     const { createProject } = await import("../../../src-web/api/project");
-    vi.mocked(createProject).mockResolvedValue(makeProject("支架") as never);
+    vi.mocked(createProject).mockRejectedValue(new Error("工作区不可写"));
 
-    useNewProjectDialog().show();
     const wrapper = mount(NewProjectDialog, {
       global: { plugins: [pinia], stubs: { teleport: true } },
     });
-    await dialogInputs(wrapper)[0]?.setValue("支架");
-    // 用户清空文件名：落回项目名（字段默认跟随，清空后由提交兜底）。
-    await dialogInputs(wrapper)[1]?.setValue("");
-    await findButton(wrapper, "创建").trigger("click");
-    await vi.waitFor(() => expect(useNewProjectDialog().open.value).toBe(false));
-    expect(useProjectStore().projectPath).toBe("/home/u/Documents/kairos/支架/支架.kairos");
-
-    // 失败：对话框保持打开（错误经全局通道呈现）。
-    useNewProjectDialog().show();
+    await useNewProjectDialog().show();
     await wrapper.vm.$nextTick();
-    vi.mocked(createProject).mockRejectedValueOnce(new Error("磁盘不可写"));
-    await dialogInputs(wrapper)[0]?.setValue("支架二");
+    await dialogInputs(wrapper)[1]?.setValue("支架");
     await findButton(wrapper, "创建").trigger("click");
-    await vi.waitFor(() => expect(useAppStore().error?.message).toBe("磁盘不可写"));
+
+    await vi.waitFor(() => expect(useAppStore().error?.message).toBe("工作区不可写"));
     expect(useNewProjectDialog().open.value).toBe(true);
   });
 
   it("取消 / 点击遮罩关闭", async () => {
-    useNewProjectDialog().show();
     const wrapper = mount(NewProjectDialog, {
       global: { plugins: [pinia], stubs: { teleport: true } },
     });
+    await useNewProjectDialog().show();
+    await wrapper.vm.$nextTick();
 
     await findButton(wrapper, "取消").trigger("click");
     expect(useNewProjectDialog().open.value).toBe(false);
 
-    useNewProjectDialog().show();
+    await useNewProjectDialog().show();
     await wrapper.vm.$nextTick();
     await wrapper.find(".fixed").trigger("click");
     expect(useNewProjectDialog().open.value).toBe(false);

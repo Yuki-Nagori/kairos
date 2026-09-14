@@ -3,9 +3,9 @@ import { defineStore } from "pinia";
 import { getSystemInfo } from "../api/system";
 import {
   createProject,
-  defaultProjectPath,
   listRecentProjects,
   loadProjectFile,
+  projectPath,
   saveProjectFile,
   workspaceRootOf,
 } from "../api/project";
@@ -63,15 +63,15 @@ export const useProjectStore = defineStore("project", {
         app.setError(error);
       }
     },
-    /** 新建空项目（仅内存，保存时才落盘）。 */
     /** 新建项目（仅内存，保存时才落盘）；返回是否创建成功——调用方（新建对话框）
-     *  据此决定是否收起，失败原因已进全局错误通道。 */
-    async newProject(name: string, fileName = ""): Promise<boolean> {
+     *  据此决定是否收起，失败原因已进全局错误通道。
+     *  workspace 为用户选定的工作区根（留空用默认 `<文档目录>/kairos`）。 */
+    async newProject(name: string, workspace = ""): Promise<boolean> {
       const app = useAppStore();
       const created = await app.withBusy("正在创建项目…", async () => {
         const project = await createProject(name);
-        // 工程目录：<文档目录>/kairos/<工程名>/<文件名>.kairos（文件名留空用默认名）。
-        const path = await defaultProjectPath(name, fileName.trim() === "" ? "project" : fileName);
+        // 工程目录：<工作区根>/<工程名>/<工程名>.kairos（文件名与项目名一致）。
+        const path = await projectPath(workspace, name);
         this.project = project;
         this.projectPath = path;
         this.workspaceRoot = await workspaceRootOf(path);

@@ -24,7 +24,7 @@ export function setupGlobalShortcuts(): void {
       void project().openProject();
     } else if (matchesShortcut(event, SHORTCUTS.fileNew)) {
       event.preventDefault();
-      useNewProjectDialog().show();
+      void useNewProjectDialog().show();
     }
   });
 }

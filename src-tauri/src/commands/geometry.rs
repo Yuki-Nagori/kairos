@@ -396,16 +396,14 @@ pub async fn preview_fill(
 /// 用工程文件里的**同一个 id** 登记会话，使方案 / 网格引用天然对齐。
 #[tauri::command]
 pub async fn load_workspace_geometry(
-    app: tauri::AppHandle,
     store: State<'_, GeometryStore>,
     project_path: String,
     geometry_id: String,
     relative_path: String,
 ) -> Result<GeometrySummary> {
-    let documents = super::project::documents_dir(&app)?;
     let store = store.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let root = workspace::workspace_root(Path::new(&project_path), &documents)
+        let root = workspace::workspace_root(Path::new(&project_path))
             .ok_or_else(|| KairosError::validation("当前工程不在工作区目录中。"))?;
         let path = workspace::resolve(&root, &relative_path)?;
         // 与导入同一条分派：格式由扩展名判定（core 统一实现）
@@ -434,7 +432,6 @@ pub async fn load_workspace_geometry(
 /// 保存方案网格到工作区 `mesh/<方案 id>/`（打开工程时可免重算直接载入视口）。
 #[tauri::command]
 pub async fn save_study_mesh(
-    app: tauri::AppHandle,
     store: State<'_, GeometryStore>,
     project_path: String,
     study_id: String,
@@ -442,10 +439,9 @@ pub async fn save_study_mesh(
     target_size: f64,
     refinement: Option<MeshRefinement>,
 ) -> Result<()> {
-    let documents = super::project::documents_dir(&app)?;
     let store = store.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let root = workspace::workspace_root(Path::new(&project_path), &documents)
+        let root = workspace::workspace_root(Path::new(&project_path))
             .ok_or_else(|| KairosError::validation("当前工程不在工作区目录中。"))?;
         let (volume, report) = {
             let sessions = store.lock();
@@ -479,15 +475,13 @@ pub async fn save_study_mesh(
 /// 读回方案网格（打开工程时调用）：登记进会话并返回报告；文件缺失返回 None。
 #[tauri::command]
 pub async fn restore_study_mesh(
-    app: tauri::AppHandle,
     store: State<'_, GeometryStore>,
     project_path: String,
     study_id: String,
 ) -> Result<Option<MeshingReport>> {
-    let documents = super::project::documents_dir(&app)?;
     let store = store.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let root = workspace::workspace_root(Path::new(&project_path), &documents)
+        let root = workspace::workspace_root(Path::new(&project_path))
             .ok_or_else(|| KairosError::validation("当前工程不在工作区目录中。"))?;
         let stored = mesh_store::read(&workspace::mesh_dir(&root, &study_id))?;
         let Some(stored) = stored else {

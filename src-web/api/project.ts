@@ -29,9 +29,14 @@ export function listRecentProjects(): Promise<RecentProject[]> {
   return invokeCommand("list_recent_projects");
 }
 
-/** 新工程的默认路径：`<文档目录>/kairos/<工程名>/<文件名>.kairos`（顺带建目录）。 */
-export function defaultProjectPath(projectName: string, fileName: string): Promise<string> {
-  return invokeCommand("default_project_path", { projectName, fileName });
+/** 默认工作区根：`<文档目录>/kairos`（新建项目对话框初值，不创建目录）。 */
+export function defaultWorkspacePath(): Promise<string> {
+  return invokeCommand("default_workspace_path");
+}
+
+/** 新工程路径：`<工作区根>/<工程名>/<工程名>.kairos`（顺带创建工程目录）。 */
+export function projectPath(workspace: string, projectName: string): Promise<string> {
+  return invokeCommand("project_path", { workspace, projectName });
 }
 
 /** 工程的工作区根（不在工作区目录中时为 null）。 */

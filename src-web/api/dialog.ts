@@ -35,6 +35,12 @@ export async function pickExportJsonPath(defaultName: string): Promise<string | 
   return path ?? null;
 }
 
+/** 选择工作区目录（新建项目的落点），取消返回 null。 */
+export async function pickWorkspaceDir(defaultPath: string): Promise<string | null> {
+  const selection = await open({ directory: true, defaultPath });
+  return typeof selection === "string" ? selection : null;
+}
+
 const GEOMETRY_FILTER = { name: "几何模型", extensions: ["stl", "step", "stp", "igs", "iges"] };
 
 /** 选择要导入的几何模型文件（STL / STEP / IGES），取消返回 null。 */

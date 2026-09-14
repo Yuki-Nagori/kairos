@@ -19,12 +19,12 @@ import type { CoolingChannel, Project, RunnerElement, Study } from "../../../src
 vi.mock("../../../src-web/api/system", () => ({ getSystemInfo: vi.fn() }));
 vi.mock("../../../src-web/api/project", () => ({
   createProject: vi.fn(),
-  defaultProjectPath: vi.fn(
-    async (name: string, file: string) => `/home/u/Documents/kairos/${name}/${file}.kairos`,
+  defaultWorkspacePath: vi.fn(async () => "/home/u/Documents/kairos"),
+  projectPath: vi.fn(
+    async (workspace: string, name: string) => `${workspace}/${name}/${name}.kairos`,
   ),
-  workspaceRootOf: vi.fn(
-    async (path: string) => `/home/u/Documents/kairos/${path.split("/").at(-2)}`,
-  ),
+  // 工作区根 = 工程目录的父级（`<工作区>/<工程名>/<工程名>.kairos` 布局）
+  workspaceRootOf: vi.fn(async (path: string) => path.split("/").slice(0, -2).join("/") || null),
   archiveWorkspaceGeometry: vi.fn(),
   loadWorkspaceGeometry: vi.fn(),
   saveStudyMesh: vi.fn(),
@@ -150,7 +150,7 @@ describe("project store", () => {
   });
 
   describe("project lifecycle", () => {
-    it("newProject 落在「文档/kairos/<工程名>/」并立即落盘", async () => {
+    it("newProject 落在「<工作区>/<工程名>/」并立即落盘", async () => {
       const app = useAppStore();
       const project = useProjectStore();
       project.projectPath = "/old.kairos";
@@ -161,26 +161,28 @@ describe("project store", () => {
       });
       const { saveProjectFile } = await import("../../../src-web/api/project");
 
-      const created = await project.newProject("新项目", "模具 A");
+      const created = await project.newProject("新项目", "/Volumes/Work/kairos");
 
       expect(created).toBe(true);
       expect(project.project?.name).toBe("新项目");
-      // 用户可改文件名；默认名走 project
-      expect(project.projectPath).toBe("/home/u/Documents/kairos/新项目/模具 A.kairos");
-      expect(project.workspaceRoot).toBe("/home/u/Documents/kairos/新项目");
+      // 工程文件与项目名同名；工作区由调用方给定
+      expect(project.projectPath).toBe("/Volumes/Work/kairos/新项目/新项目.kairos");
+      expect(project.workspaceRoot).toBe("/Volumes/Work/kairos");
       expect(saveProjectFile).toHaveBeenCalledWith(
-        "/home/u/Documents/kairos/新项目/模具 A.kairos",
+        "/Volumes/Work/kairos/新项目/新项目.kairos",
         project.project,
       );
       expect(busyDuring).toEqual(["正在创建项目…"]);
       expect(app.busy).toBeNull();
     });
 
-    it("newProject 未填文件名时用默认名 project", async () => {
+    it("newProject 未给工作区时留给后端默认根（工作区留空）", async () => {
       const project = useProjectStore();
       vi.mocked(createProject).mockResolvedValue(makeProject({ name: "新项目" }));
+      const { projectPath: apiProjectPath } = await import("../../../src-web/api/project");
       await project.newProject("新项目");
-      expect(project.projectPath).toBe("/home/u/Documents/kairos/新项目/project.kairos");
+      expect(apiProjectPath).toHaveBeenCalledWith("", "新项目");
+      expect(project.projectPath).toBe("/新项目/新项目.kairos");
     });
 
     it("reports newProject failures and clears busy", async () => {

@@ -46,33 +46,35 @@ pub fn default_root(documents_dir: &Path) -> PathBuf {
     documents_dir.join(DEFAULT_ROOT_DIR_NAME)
 }
 
-/// 工作区根：工程文件位于 `<文档目录>/kairos/<工程目录>/` 之内时返回该目录，
-/// 否则 None（散装工程：直接放在默认根下、放在别处、或只有文件名没有目录）。
-pub fn workspace_root(project_file: &Path, documents_dir: &Path) -> Option<PathBuf> {
-    let root = default_root(documents_dir);
-    let parent = project_file.parent()?;
-    if parent.as_os_str().is_empty() || parent == root {
+/// 工作区根：工程文件位于 `<工作区根>/<工程名>/<同名>.kairos` 布局内时返回 `<工作区根>`，
+/// 否则 None（散装工程：数据留在应用数据目录）。
+///
+/// 布局由创建流程定义（工程目录 + 其下同名工程文件），与工作区落在哪个盘 / 目录无关
+/// ——用户可以把工作区设到任意位置（默认 `<文档目录>/kairos`）。
+pub fn workspace_root(project_file: &Path) -> Option<PathBuf> {
+    let dir = project_file.parent()?;
+    if dir.file_name()? != project_file.file_stem()? {
         return None;
     }
-    if !parent.starts_with(&root) {
+    let root = dir.parent()?;
+    if root.as_os_str().is_empty() {
         return None;
     }
-    Some(parent.to_path_buf())
+    Some(root.to_path_buf())
 }
 
-/// 工程目录：`<文档目录>/kairos/<工程名>`。
+/// 工程目录：`<工作区根>/<工程名>`。
 /// 名称清洗走 [`paths::sanitize_file_name`]：保留字符替换为下划线，名称里的目录成分
 /// 一律丢弃（只取最后一段），空名回退 `kairos`。
-pub fn project_dir(documents_dir: &Path, project_name: &str) -> PathBuf {
-    default_root(documents_dir).join(sanitize_component(project_name))
+pub fn project_dir(root: &Path, project_name: &str) -> PathBuf {
+    root.join(sanitize_component(project_name))
 }
 
-/// 工程文件路径：`<文档目录>/kairos/<工程名>/<文件名>.kairos`。
-/// 用户可能连扩展名一起填——主干由 `Path::file_stem` 取，再补回 `.kairos`。
-pub fn project_file_path(documents_dir: &Path, project_name: &str, file_name: &str) -> PathBuf {
-    let stem = sanitize_component(&paths::file_stem(file_name, DEFAULT_ROOT_DIR_NAME));
-    project_dir(documents_dir, project_name)
-        .join(stem)
+/// 工程文件路径：`<工作区根>/<工程名>/<工程名>.kairos`（文件名与项目名一致）。
+pub fn project_file_path(root: &Path, project_name: &str) -> PathBuf {
+    let name = sanitize_component(project_name);
+    project_dir(root, project_name)
+        .join(name)
         .with_extension(PROJECT_EXTENSION)
 }
 
@@ -137,64 +139,55 @@ mod tests {
     use super::*;
 
     #[test]
-    fn workspace_root_requires_default_root_subdirectory() {
-        let documents = Path::new("/home/u/Documents");
-        // 默认根下的工程目录 → 工作区
+    fn workspace_root_follows_project_dir_layout() {
+        // 工程目录 + 其下同名工程文件 → 工作区根（与工作区放在哪里无关）
         assert_eq!(
-            workspace_root(
-                Path::new("/home/u/Documents/kairos/part/part.kairos"),
-                documents
-            ),
-            Some(PathBuf::from("/home/u/Documents/kairos/part"))
+            workspace_root(Path::new("/data/workspaces/part/part.kairos")),
+            Some(PathBuf::from("/data/workspaces"))
         );
-        // 文件名任意（用户在新建时可改），只看位置
         assert_eq!(
-            workspace_root(
-                Path::new("/home/u/Documents/kairos/part/mold.kairos"),
-                documents
-            ),
-            Some(PathBuf::from("/home/u/Documents/kairos/part"))
+            workspace_root(Path::new(
+                "/home/u/Documents/kairos/控制器支架/控制器支架.kairos"
+            )),
+            Some(PathBuf::from("/home/u/Documents/kairos"))
         );
-        // 直接放在默认根下：不是工程目录（避免把数据写进共享的 kairos/）
+        // 文件名与目录名不一致（散装 / 手工改名）
         assert_eq!(
-            workspace_root(Path::new("/home/u/Documents/kairos/part.kairos"), documents),
+            workspace_root(Path::new("/data/workspaces/part/mold.kairos")),
             None
         );
-        // 默认根之外（散装 / 桌面 / 其它盘）
-        assert_eq!(
-            workspace_root(Path::new("/home/u/Desktop/demo.kairos"), documents),
-            None
-        );
-        assert_eq!(workspace_root(Path::new("demo.kairos"), documents), None);
+        // 直接放在工作区根下：不是工程目录（避免把数据写进共享根）
+        assert_eq!(workspace_root(Path::new("/data/kairos/part.kairos")), None);
+        // 只有文件名（无目录）/ 根目录下的文件 / 相对路径没有可用的根
+        assert_eq!(workspace_root(Path::new("demo.kairos")), None);
+        assert_eq!(workspace_root(Path::new("/demo.kairos")), None);
+        assert_eq!(workspace_root(Path::new("demo/demo.kairos")), None);
     }
 
     #[test]
-    fn project_paths_default_under_documents_kairos() {
-        let documents = Path::new("/home/u/Documents");
+    fn project_paths_are_named_after_the_project() {
+        let root = Path::new("/data/workspaces");
         assert_eq!(
-            default_root(documents),
+            default_root(Path::new("/home/u/Documents")),
             PathBuf::from("/home/u/Documents/kairos")
         );
         assert_eq!(
-            project_dir(documents, "控制器支架"),
-            PathBuf::from("/home/u/Documents/kairos/控制器支架")
+            project_dir(root, "控制器支架"),
+            PathBuf::from("/data/workspaces/控制器支架")
+        );
+        // 文件名与项目名一致（不再单独设置）
+        assert_eq!(
+            project_file_path(root, "控制器支架"),
+            PathBuf::from("/data/workspaces/控制器支架/控制器支架.kairos")
+        );
+        // 非法字符按 path_segment 清理；空名回退 kairos
+        assert_eq!(
+            project_file_path(root, "a/b"),
+            PathBuf::from("/data/workspaces/a_b/a_b.kairos")
         );
         assert_eq!(
-            project_file_path(documents, "控制器支架", "支架分析.kairos"),
-            PathBuf::from("/home/u/Documents/kairos/控制器支架/支架分析.kairos")
-        );
-        // 用户连扩展名一起填 / 填了非法字符 / 留空
-        assert_eq!(
-            project_file_path(documents, "p", "mold.kairos"),
-            PathBuf::from("/home/u/Documents/kairos/p/mold.kairos")
-        );
-        assert_eq!(
-            project_file_path(documents, "a/b", "x:y"),
-            PathBuf::from("/home/u/Documents/kairos/a_b/x_y.kairos")
-        );
-        assert_eq!(
-            project_file_path(documents, "  ", "  "),
-            PathBuf::from("/home/u/Documents/kairos/kairos/kairos.kairos")
+            project_file_path(root, "  "),
+            PathBuf::from("/data/workspaces/kairos/kairos.kairos")
         );
     }
 

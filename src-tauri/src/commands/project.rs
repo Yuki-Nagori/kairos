@@ -84,29 +84,37 @@ pub(crate) fn documents_dir(app: &AppHandle) -> Result<PathBuf> {
         .map_err(|e| KairosError::io(format!("无法定位用户文档目录：{e}")))
 }
 
-/// 新工程的默认路径：`<文档目录>/kairos/<工程名>/<文件名>.kairos`。
-/// 只计算路径并创建目录，不写文件（保存由 save_project_file 完成）。
+/// 默认工作区根：`<文档目录>/kairos`（新建项目对话框的初值；只计算不创建）。
 #[tauri::command]
-pub fn default_project_path(
-    app: AppHandle,
-    project_name: String,
-    file_name: String,
-) -> Result<String> {
-    let dir = workspace::project_dir(&documents_dir(&app)?, &project_name);
-    fs::create_dir_all(&dir).map_err(|e| KairosError::io(format!("创建工程目录失败：{e}")))?;
-    Ok(
-        workspace::project_file_path(&documents_dir(&app)?, &project_name, &file_name)
-            .to_string_lossy()
-            .to_string(),
-    )
+pub fn default_workspace_path(app: AppHandle) -> Result<String> {
+    Ok(workspace::default_root(&documents_dir(&app)?)
+        .to_string_lossy()
+        .to_string())
 }
 
-/// 工程的工作区根：工程位于 `<文档目录>/kairos/<工程目录>/` 内时为该目录，
+/// 新工程路径：`<工作区根>/<工程名>/<工程名>.kairos`（工作区留空时用默认根）。
+/// 只计算路径并创建工程目录，不写文件（保存由 save_project_file 完成）。
+#[tauri::command]
+pub fn project_path(app: AppHandle, workspace: String, project_name: String) -> Result<String> {
+    let trimmed = workspace.trim();
+    let root = if trimmed.is_empty() {
+        workspace::default_root(&documents_dir(&app)?)
+    } else {
+        PathBuf::from(trimmed)
+    };
+    let dir = workspace::project_dir(&root, &project_name);
+    fs::create_dir_all(&dir).map_err(|e| KairosError::io(format!("创建工程目录失败：{e}")))?;
+    Ok(workspace::project_file_path(&root, &project_name)
+        .to_string_lossy()
+        .to_string())
+}
+
+/// 工程的工作区根：工程按 `<工作区根>/<工程名>/<同名>.kairos` 布局存放时为该根，
 /// 否则 None（散装工程，数据留在应用数据目录）。
 #[tauri::command]
-pub fn workspace_root_of(app: AppHandle, project_path: String) -> Result<Option<String>> {
+pub fn workspace_root_of(project_path: String) -> Result<Option<String>> {
     Ok(
-        workspace::workspace_root(std::path::Path::new(&project_path), &documents_dir(&app)?)
+        workspace::workspace_root(std::path::Path::new(&project_path))
             .map(|root| root.to_string_lossy().to_string()),
     )
 }
@@ -114,18 +122,13 @@ pub fn workspace_root_of(app: AppHandle, project_path: String) -> Result<Option<
 /// 把导入的几何归档进工作区 `geometry/`：原样拷贝（保留来源文件名，重名加 id 前缀）。
 #[tauri::command]
 pub fn archive_workspace_geometry(
-    app: AppHandle,
     project_path: String,
     geometry_id: String,
     source_path: String,
 ) -> Result<GeometryRef> {
-    let root =
-        workspace::workspace_root(std::path::Path::new(&project_path), &documents_dir(&app)?)
-            .ok_or_else(|| {
-                KairosError::validation(
-                    "当前工程不在工作区目录中，无法归档几何（请先另存为工程目录）。",
-                )
-            })?;
+    let root = workspace::workspace_root(std::path::Path::new(&project_path)).ok_or_else(|| {
+        KairosError::validation("当前工程不在工作区目录中，无法归档几何（请先另存为工程目录）。")
+    })?;
     let target_dir = workspace::geometry_dir(&root);
     fs::create_dir_all(&target_dir)
         .map_err(|e| KairosError::io(format!("创建几何目录失败：{e}")))?;
@@ -157,12 +160,9 @@ pub fn default_case_dir(
     project_path: Option<String>,
     study_id: String,
 ) -> Result<String> {
-    let root = match (project_path.as_deref(), documents_dir(&app)) {
-        (Some(path), Ok(documents)) => {
-            workspace::workspace_root(std::path::Path::new(path), &documents)
-        }
-        _ => None,
-    };
+    let root = project_path
+        .as_deref()
+        .and_then(|path| workspace::workspace_root(std::path::Path::new(path)));
     match root {
         Some(root) => Ok(workspace::cases_dir(&root, &study_id)
             .to_string_lossy()
@@ -185,16 +185,12 @@ pub fn default_case_dir(
 /// 文件名做安全清洗、扩展名固定 .html，避免覆盖工作区内的其它文件。
 #[tauri::command]
 pub fn save_report_to_workspace(
-    app: AppHandle,
     project_path: String,
     file_name: String,
     content: String,
 ) -> Result<String> {
-    let root =
-        workspace::workspace_root(std::path::Path::new(&project_path), &documents_dir(&app)?)
-            .ok_or_else(|| {
-                KairosError::validation("当前工程不在工作区目录中，报告将作为文件下载。")
-            })?;
+    let root = workspace::workspace_root(std::path::Path::new(&project_path))
+        .ok_or_else(|| KairosError::validation("当前工程不在工作区目录中，报告将作为文件下载。"))?;
     let dir = workspace::reports_dir(&root);
     fs::create_dir_all(&dir).map_err(|e| KairosError::io(format!("创建报告目录失败：{e}")))?;
     // 文件名清洗与扩展名都走库：主干取 `Path::file_stem`，扩展名用 `with_extension`
