@@ -24,3 +24,7 @@ harness = false
 [[bench]]
 name = "principal_axis"
 harness = false
+
+[[bench]]
+name = "kf1_codec"
+harness = false
