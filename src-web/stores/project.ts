@@ -12,6 +12,7 @@ import {
 import { pickOpenProjectPath, pickSaveProjectPath } from "../api/dialog";
 import { checkMoldNetwork } from "../api/mold";
 import type { Project, RunnerKind, Study, GeometryRef } from "../types";
+import { useDebounceFn } from "@vueuse/core";
 import { useAppStore } from "./app";
 import { useMaterialsStore } from "./materials";
 
@@ -21,10 +22,16 @@ let elementSeq = 0;
 /** 方案配置（材料 / 工艺 / 杆系）与几何引用编辑后防抖自动保存：
  *  这些编辑不落盘的话，关掉再打开工程就全丢了。显式保存 / 另存为仍走 writeProject。 */
 const AUTO_SAVE_DELAY_MS = 800;
-let autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
 /** 冷却介质默认口径：水 0.05 kg/s、cp 4180 J/kg/K（面板初值与 core 默认一致）。 */
 export const DEFAULT_COOLANT_MASS_FLOW_KG_S = 0.05;
 export const WATER_SPECIFIC_HEAT = 4180;
+
+/** 自动保存的防抖包装：定时器交给 `useDebounceFn`，不再自己维护 clearTimeout。
+ *  `this` 透传存储实例（不同 store 实例共享同一份防抖状态没有意义，因此延迟
+ *  绑定调用者）。 */
+const autoSaveDebounced = useDebounceFn(function (this: { autoSaveNow: () => Promise<void> }) {
+  return this.autoSaveNow();
+}, AUTO_SAVE_DELAY_MS);
 
 export const useProjectStore = defineStore("project", {
   state: () => ({
@@ -234,13 +241,12 @@ export const useProjectStore = defineStore("project", {
       if (this.project === null || this.projectPath === null) {
         return;
       }
-      if (autoSaveTimer !== null) {
-        clearTimeout(autoSaveTimer);
-      }
-      autoSaveTimer = setTimeout(() => {
-        autoSaveTimer = null;
-        void this.autoSaveNow();
-      }, AUTO_SAVE_DELAY_MS);
+      void this.debouncedAutoSave();
+    },
+    /** 防抖后的自动保存入口（`useDebounceFn` 管定时器，语义与手写一致：
+     *  连续编辑只落盘一次；显式保存仍走 writeProject 立即落盘）。 */
+    debouncedAutoSave(): Promise<void> {
+      return autoSaveDebounced.call(this);
     },
     /** 立即落盘当前工程（自动保存尾部）；失败进全局错误，不打断编辑。 */
     async autoSaveNow(): Promise<void> {
