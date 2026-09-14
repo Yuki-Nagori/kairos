@@ -23,6 +23,8 @@ use kairos_core::services::results;
 // VM 通道（macOS/Windows 的 env source）与原生环境（Linux 的 source 行）都用它，
 // 因此导入**不带 cfg**——只在 cfg 块里引用会让 Linux 构建找不到符号。
 use kairos_core::services::vm as vm_logic;
+// 命令层与作业层共用的宿主命令构造（core 的参数表 + GUI 进程的 PATH 修补）。
+use super::vm::host_command;
 use tauri::State;
 use tauri::ipc::Channel;
 
@@ -306,9 +308,9 @@ fn copy_case_into_vm(case_dir: &str, vm_shell: Option<&str>) -> Result<Option<St
         return Err(e);
     }
     let transferred = run_host(
-        Command::new("multipass").args(vm_logic::transfer_args(
+        &mut host_command(&vm_logic::transfer_args(
             &archive.to_string_lossy(),
-            &vm_transfer_endpoint(),
+            &vm_logic::vm_transfer_endpoint(&vm_logic::vm_archive_path()),
         )),
         "case 传输进虚拟机",
     );
@@ -322,14 +324,10 @@ fn copy_case_into_vm(case_dir: &str, vm_shell: Option<&str>) -> Result<Option<St
     // 否则残留的上一次时间目录会被回传逻辑当作本次结果。
     let vm_case = vm_logic::vm_case_dir(case_dir);
     run_host(
-        Command::new("multipass").args([
-            "exec",
-            "kairos",
-            "--",
-            "bash",
-            "-lc",
+        &mut host_command(&vm_logic::bash_script_args(
+            VmProviderKind::Multipass,
             &vm_logic::vm_case_extract_from_archive_command(&vm_case),
-        ]),
+        )),
         "case 解压进虚拟机",
     )?;
     Ok(Some(vm_case))
@@ -342,16 +340,6 @@ fn host_transfer_path() -> std::path::PathBuf {
         "kairos-{}.tgz",
         kairos_core::services::project::new_id("transfer").replace(':', "-")
     ))
-}
-
-/// `multipass transfer` 的 VM 侧端点（源 / 目标同构）：`<实例名>:<VM 内中转路径>`。
-#[cfg(target_os = "macos")]
-fn vm_transfer_endpoint() -> String {
-    format!(
-        "{}:{}",
-        kairos_core::services::vm::INSTANCE_NAME,
-        vm_logic::vm_archive_path()
-    )
 }
 
 /// 跑一条宿主侧命令并等它结束（统一走超时保护）。
@@ -443,44 +431,33 @@ fn copy_results_from_vm(case_dir: &str, vm_case: Option<&str>) -> Result<()> {
     let Some(vm_case) = vm_case else {
         return Ok(());
     };
-    let safe_vm_case = vm_case.replace('\'', "'\\''");
-    let listing = Command::new("multipass")
-        .args([
-            "exec",
-            "kairos",
-            "--",
-            "bash",
-            "-lc",
-            &format!("cd '{safe_vm_case}' && ls -d [0-9]* 2>/dev/null"),
-        ])
-        .output()
-        .map_err(|e| KairosError::io(format!("multipass 启动失败：{e}")))?;
+    let listing = host_command(&vm_logic::bash_script_args(
+        VmProviderKind::Multipass,
+        &vm_logic::vm_results_list_command(vm_case),
+    ))
+    .output()
+    .map_err(|e| KairosError::io(format!("multipass 启动失败：{e}")))?;
     let names = results::time_dir_names(&String::from_utf8_lossy(&listing.stdout));
     if !listing.status.success() || names.is_empty() {
         return Err(KairosError::io(
             "虚拟机内没有可回传的结果时间目录（求解未产生输出）。",
         ));
     }
-    let mut pack = Command::new("multipass")
-        .args([
-            "exec",
-            "kairos",
-            "--",
-            "bash",
-            "-lc",
-            &vm_logic::vm_results_pack_command(vm_case, &names),
-        ])
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .map_err(|e| KairosError::io(format!("multipass 启动失败：{e}")))?;
+    let mut pack = host_command(&vm_logic::bash_script_args(
+        VmProviderKind::Multipass,
+        &vm_logic::vm_results_pack_command(vm_case, &names),
+    ))
+    .stdin(Stdio::null())
+    .stdout(Stdio::null())
+    .stderr(Stdio::null())
+    .spawn()
+    .map_err(|e| KairosError::io(format!("multipass 启动失败：{e}")))?;
     wait_exec(&mut pack, "求解结果打包")?;
     // 落盘传输 + 宿主解压：与复制进 VM 同一口径，不走 stdout 管道。
     let archive = host_transfer_path();
     run_host(
-        Command::new("multipass").args(vm_logic::transfer_args(
-            &vm_transfer_endpoint(),
+        &mut host_command(&vm_logic::transfer_args(
+            &vm_logic::vm_transfer_endpoint(&vm_logic::vm_archive_path()),
             &archive.to_string_lossy(),
         )),
         "求解结果传输回宿主",
@@ -571,23 +548,12 @@ fn spawn_run_script(run: NativeRun<'_>) -> Result<Child> {
     let solve = moldingfoam::solve_command(cores);
     // VM 执行通道只在 macOS（multipass）与 Windows（WSL）存在；原生平台直接本机执行。
     #[cfg(any(target_os = "macos", target_os = "windows"))]
-    if let Some(shell) = vm_shell {
+    if let Some(vm_provider) = job_vm_provider(vm_shell) {
         let inner = vm_solve_script(
             &script_case_dir(std::env::consts::OS, case_dir, vm_case),
             cores,
         );
-        let mut command = Command::new(shell);
-        #[cfg(target_os = "macos")]
-        command.args(["exec", "kairos", "--", "bash", "-lc", &inner]);
-        #[cfg(target_os = "windows")]
-        command.args([
-            "-d",
-            kairos_core::services::vm::WSL_DISTRO,
-            "bash",
-            "-lc",
-            &inner,
-        ]);
-        return command
+        return host_command(&vm_logic::bash_script_args(vm_provider, &inner))
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
@@ -605,12 +571,8 @@ fn spawn_run_script(run: NativeRun<'_>) -> Result<Child> {
     // case 的 controlDict（solver 键，见 moldingfoam.rs::SOLVER_MODULE）提供；
     // 并行由 mpirun 发起（见 moldingfoam::solve_command）。
     let script = native_solve_script(&safe_dir, env_source.as_deref(), managed_path, &solve);
-    let mut command = Command::new("bash");
-    command
-        .arg("-lc")
-        .arg(&script)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+    let mut command = host_command(&vm_logic::bash_script_args(VmProviderKind::Native, &script));
+    command.stdout(Stdio::piped()).stderr(Stdio::piped());
     // unix 下让 bash 成为独立进程组长：取消时可整组终止，避免孤儿求解进程。
     #[cfg(unix)]
     {
@@ -783,14 +745,16 @@ fn run_job_detached(
 ) {
     let script = vm_solve_script(vm_case, cores);
     let launch = vm_logic::detached_launch_command(vm_case, &script);
-    let launched = super::vm::platform_command("multipass")
-        .args(["exec", "kairos", "--", "bash", "-lc", &launch])
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .map_err(|e| KairosError::io(format!("VM 求解启动失败：{e}")))
-        .and_then(|mut child| wait_exec(&mut child, "VM 求解启动"));
+    let launched = host_command(&vm_logic::bash_script_args(
+        VmProviderKind::Multipass,
+        &launch,
+    ))
+    .stdin(Stdio::null())
+    .stdout(Stdio::null())
+    .stderr(Stdio::null())
+    .spawn()
+    .map_err(|e| KairosError::io(format!("VM 求解启动失败：{e}")))
+    .and_then(|mut child| wait_exec(&mut child, "VM 求解启动"));
     if let Err(e) = launched {
         fail_and_promote(inner, job_id, e.message(), context);
         return;
@@ -844,13 +808,15 @@ fn stream_vm_log(
     offset: u64,
 ) -> Result<(bool, u64, Option<i32>)> {
     let command = vm_logic::detached_read_command(vm_case, offset);
-    let child = super::vm::platform_command("multipass")
-        .args(["exec", "kairos", "--", "bash", "-lc", &command])
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()
-        .map_err(|e| KairosError::io(format!("日志回读失败：{e}")))?;
+    let child = host_command(&vm_logic::bash_script_args(
+        VmProviderKind::Multipass,
+        &command,
+    ))
+    .stdin(Stdio::null())
+    .stdout(Stdio::piped())
+    .stderr(Stdio::null())
+    .spawn()
+    .map_err(|e| KairosError::io(format!("日志回读失败：{e}")))?;
     let output = child
         .wait_with_output()
         .map_err(|e| KairosError::io(format!("日志回读失败：{e}")))?;

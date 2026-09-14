@@ -103,13 +103,16 @@ pub fn image_file_name(arch: &str) -> Option<&'static str> {
     }
 }
 
+/// 国内镜像源主机（云镜像与 apt 源共用；只做加速，不改上游来源）。
+pub const CN_MIRROR_HOST: &str = "mirrors.tuna.tsinghua.edu.cn";
+
 /// 国内镜像源候选（清华 TUNA，实测可达；按序尝试）。
 pub fn image_mirror_urls(arch: &str) -> Vec<String> {
     let Some(name) = image_file_name(arch) else {
         return Vec::new();
     };
     vec![format!(
-        "https://mirrors.tuna.tsinghua.edu.cn/ubuntu-cloud-images/noble/current/{name}"
+        "https://{CN_MIRROR_HOST}/ubuntu-cloud-images/noble/current/{name}"
     )]
 }
 
@@ -216,6 +219,35 @@ pub fn shell_args(provider: VmProviderKind) -> Vec<String> {
     }
 }
 
+/// 目标环境里执行一段 bash 脚本的命令行（脚本由本模块的 `*_command` 系列构造）。
+///
+/// 实例名 / 发行版名 / `bash -lc` 的形状只在这里出现一次：调用点全都要么在 VM 内
+/// （multipass 的 `exec <实例> --`、WSL 的 `wsl -d <发行版>`），要么在本机
+/// （原生 Linux 直接 `bash -lc`），把这段形状抄在调用点就等于把「跑在哪」的知识
+/// 散到各处——改实例名会漏掉一半，而漏掉的那半只在运行时才炸。
+pub fn bash_script_args(provider: VmProviderKind, script: &str) -> Vec<String> {
+    match provider {
+        VmProviderKind::Multipass => vec![
+            "multipass".into(),
+            "exec".into(),
+            INSTANCE_NAME.into(),
+            "--".into(),
+            "bash".into(),
+            "-lc".into(),
+            script.into(),
+        ],
+        VmProviderKind::Wsl => vec![
+            "wsl".into(),
+            "-d".into(),
+            WSL_DISTRO.into(),
+            "bash".into(),
+            "-lc".into(),
+            script.into(),
+        ],
+        VmProviderKind::Native => vec!["bash".into(), "-lc".into(), script.into()],
+    }
+}
+
 /// case 在 VM 内的落脚根目录：每个 case 解压成 `~/<叶子名>`。
 pub const VM_CASE_ROOT: &str = "/home/ubuntu";
 
@@ -261,13 +293,24 @@ pub fn vm_results_pack_command(vm_case: &str, time_dirs: &[String]) -> String {
     )
 }
 
-/// 宿主 → VM（或反向）的文件传输命令参数：`multipass transfer <源> <目标>`。
+/// 回传前的清单命令：列出 case 内的时间目录（`[0-9]*`），供宿主挑选要打包的目录。
+/// 无输出 = 求解没产生结果（调用方按「没有可回传的结果」处理）。
+pub fn vm_results_list_command(vm_case: &str) -> String {
+    format!(
+        "cd '{}' && ls -d [0-9]* 2>/dev/null",
+        bash_single_quote(vm_case)
+    )
+}
+
+/// 宿主 → VM（或反向）的文件传输命令：`multipass transfer <源> <目标>`。
 ///
 /// 复制 case 与回传结果都不走 stdin/stdout 管道：multipass 的管道通道在远端命令
 /// 结束后偶发不回退（CLI 进程自旋），改成落盘传输 + 独立的解压/打包命令，
 /// 每一步都是「命令跑完即返回」。
 pub fn transfer_args(source: &str, target: &str) -> Vec<String> {
     vec![
+        // args[0] 恒为可执行名（与本模块其它 *args 同构），调用点不再拼前缀。
+        "multipass".to_string(),
         "transfer".to_string(),
         source.to_string(),
         target.to_string(),
@@ -284,14 +327,69 @@ pub const ENV_ROOT: &str = "~/moldingfoam-env";
 /// 上游若调整 bundle 布局，改动集中在这里与 ENV_ROOT 两处。
 pub const ENV_BASHRC: &str = "openfoam14/etc/bashrc";
 
-/// 求解脚本首段：加载求解环境（`source ~/moldingfoam-env/openfoam14/etc/bashrc`）。
-pub fn env_source_command() -> String {
-    format!("source {ENV_ROOT}/{ENV_BASHRC}")
+/// 部署进 VM 的 bundle 归档名（传输目标与解压来源都用它）。
+pub const VM_BUNDLE_ARCHIVE: &str = "moldingfoam-bundle.tar.xz";
+
+/// 环境树内的路径（`<环境根>/<相对路径>`）。
+///
+/// `ENV_ROOT` 是 **shell 相对形态**（`~` 开头），拼进命令时不能加引号：单引号会
+/// 阻止波浪号展开，`cat '~/…'` 在 guest 里找不到文件。
+pub fn env_path(relative: &str) -> String {
+    format!("{ENV_ROOT}/{relative}")
 }
 
-/// 环境就绪探测命令：部署后确认 bashrc 存在（bundle 结构校验）。
+/// bundle 归档在 VM 内的**绝对**路径（传输目标；`tar -xJf` 的来源）。
+pub fn vm_bundle_archive_path() -> String {
+    format!("{VM_CASE_ROOT}/{VM_BUNDLE_ARCHIVE}")
+}
+
+/// `multipass transfer` 的 VM 侧端点：`<实例名>:<VM 内绝对路径>`（源 / 目标同构）。
+pub fn vm_transfer_endpoint(vm_path: &str) -> String {
+    format!("{INSTANCE_NAME}:{vm_path}")
+}
+
+/// bundle 归档的传输目标（源在宿主侧，由调用方给绝对路径）。
+pub fn vm_bundle_transfer_target() -> String {
+    vm_transfer_endpoint(&vm_bundle_archive_path())
+}
+
+/// 求解脚本首段：加载求解环境（`source ~/moldingfoam-env/openfoam14/etc/bashrc`）。
+pub fn env_source_command() -> String {
+    format!("source {}", env_path(ENV_BASHRC))
+}
+
+/// 环境就绪探测命令：确认 bashrc 存在（部署收尾校验 bundle 结构）。
 pub fn env_probe_command() -> String {
-    format!("test -f {ENV_ROOT}/{ENV_BASHRC}")
+    format!("test -f {}", env_path(ENV_BASHRC))
+}
+
+/// 部署环境树：建根目录 → 解压归档 → 校验 bashrc 就位。
+/// 三步用 `&&` 串联：解压半截（归档损坏 / 磁盘满）不算部署成功。
+pub fn env_deploy_command() -> String {
+    format!(
+        "mkdir -p {ENV_ROOT} && tar -xJf {} -C {ENV_ROOT} && {}",
+        vm_bundle_archive_path(),
+        env_probe_command()
+    )
+}
+
+/// VM 内 apt 源切国内镜像。best-effort：源文件布局随发行版变化（sources.list 与
+/// sources.list.d/*.sources 并存），失败不阻断部署（慢一点仍能装）。
+pub fn apt_mirror_command() -> String {
+    format!(
+        "sudo sed -i 's|http://archive.ubuntu.com/ubuntu|https://{CN_MIRROR_HOST}/ubuntu|g; \
+         s|http://security.ubuntu.com/ubuntu|https://{CN_MIRROR_HOST}/ubuntu|g' \
+         /etc/apt/sources.list /etc/apt/sources.list.d/*.sources 2>/dev/null || true"
+    )
+}
+
+/// 安装求解器运行时依赖（OpenMPI）：foamRun 链接 libmpi.so.40。末尾用
+/// `ldconfig -p | grep -q` 复核——装完仍找不到库（镜像缺包 / 缓存未更新）
+/// 必须判失败，否则作业跑到一半才报缺库。
+pub fn openmpi_install_command() -> String {
+    "sudo apt-get update -qq && sudo apt-get install -y -qq libopenmpi-dev openmpi-bin \
+     && sudo ldconfig && ldconfig -p | grep -q libmpi.so.40"
+        .to_string()
 }
 
 /// 求解会话写在 case 目录里的三个文件：标准输出日志、退出码、以及流式回读
@@ -366,11 +464,15 @@ pub fn native_env_tag(env_root: &Path) -> PathBuf {
 }
 
 /// VM 内版本标记路径（`~/moldingfoam-env/.kairos-release-tag`）。
-///
-/// `ENV_ROOT` 是 **shell 相对形态**（`~` 开头），拼进命令时**不能加引号**：单引号
-/// 会阻止波浪号展开，`cat '~/…'` 在 guest 里找不到文件。
 pub fn vm_env_tag_path() -> String {
-    format!("{ENV_ROOT}/{RELEASE_TAG_FILE}")
+    env_path(RELEASE_TAG_FILE)
+}
+
+/// 版本标签文本归一：两端空白不算版本，空 / 全空白 → None（未部署 / 文件写坏）。
+/// VM 内标记、本机记录、原生标记三处的读回都走这一处口径。
+pub fn parse_env_tag(text: &str) -> Option<String> {
+    let tag = text.trim();
+    (!tag.is_empty()).then(|| tag.to_string())
 }
 
 /// 版本标记读取命令输出里的哨兵：哨兵之后到行尾是本轮读到的标记值。
@@ -400,8 +502,9 @@ pub fn vm_env_tag_write_command(tag: &str) -> String {
 /// 哨兵缺失（输出被截断 / 命令异常）→ None，按「未部署」处理，不拿噪声当版本。
 pub fn parse_env_tag_reply(stdout: &str) -> Option<String> {
     let (_, tail) = stdout.rsplit_once(ENV_TAG_MARK)?;
-    let tag = clean_terminal_line(tail.lines().next().unwrap_or_default());
-    if tag.is_empty() { None } else { Some(tag) }
+    parse_env_tag(&clean_terminal_line(
+        tail.lines().next().unwrap_or_default(),
+    ))
 }
 
 /// 已部署版本视图：VM 可达（Running）时以 VM 内标记为准——读到什么就是什么，
@@ -638,6 +741,90 @@ mod tests {
         );
         // 与 VM 内的相对布局同源（ENV_BASHRC 单点维护）
         assert!(native_env_bashrc(root).ends_with(ENV_BASHRC));
+    }
+
+    /// 「目标环境里跑一段脚本」的命令行：实例名 / 发行版名 / bash -lc 的形状
+    /// 只有这一处产出，脚本原样作为最后一个参数（不做二次转义——调用点已经处理）。
+    #[test]
+    fn bash_script_args_carry_instance_and_distro_names() {
+        assert_eq!(
+            bash_script_args(VmProviderKind::Multipass, "cd /tmp && ls"),
+            [
+                "multipass",
+                "exec",
+                "kairos",
+                "--",
+                "bash",
+                "-lc",
+                "cd /tmp && ls"
+            ]
+        );
+        assert_eq!(
+            bash_script_args(VmProviderKind::Wsl, "true"),
+            ["wsl", "-d", "Ubuntu-24.04", "bash", "-lc", "true"]
+        );
+        // 原生环境就在本机：不经任何虚拟机包装。
+        assert_eq!(
+            bash_script_args(VmProviderKind::Native, "echo hi"),
+            ["bash", "-lc", "echo hi"]
+        );
+        // 实例名只此一处：改成常量而不是字面量，重命名时不会漏
+        assert!(
+            bash_script_args(VmProviderKind::Multipass, "x").contains(&INSTANCE_NAME.to_string())
+        );
+    }
+
+    /// 环境路径与部署命令：根目录 / bashrc / 标记同源，归档走绝对路径（传输目标
+    /// 与解压来源同一处），部署命令串起「建目录 → 解压 → 校验」。
+    #[test]
+    fn env_paths_and_deploy_command_share_one_source() {
+        assert_eq!(
+            env_path(ENV_BASHRC),
+            "~/moldingfoam-env/openfoam14/etc/bashrc"
+        );
+        assert_eq!(env_path(RELEASE_TAG_FILE), vm_env_tag_path());
+        assert_eq!(
+            vm_bundle_archive_path(),
+            "/home/ubuntu/moldingfoam-bundle.tar.xz"
+        );
+        assert_eq!(
+            vm_bundle_transfer_target(),
+            "kairos:/home/ubuntu/moldingfoam-bundle.tar.xz"
+        );
+        let deploy = env_deploy_command();
+        assert!(deploy.starts_with("mkdir -p ~/moldingfoam-env && tar -xJf /home/ubuntu/"));
+        assert!(
+            deploy.ends_with(&env_probe_command()),
+            "部署收尾必须复核 bashrc：{deploy}"
+        );
+        assert!(env_source_command().ends_with(&env_path(ENV_BASHRC)));
+    }
+
+    /// 依赖安装与源切换命令：apt 源切国内镜像（best-effort，失败不阻断），
+    /// OpenMPI 装完必须复核 libmpi.so.40（缺库时作业会跑到一半才失败）。
+    #[test]
+    fn dependency_commands_switch_mirror_and_verify_libmpi() {
+        let mirror = apt_mirror_command();
+        assert!(mirror.contains(CN_MIRROR_HOST));
+        assert!(
+            mirror.ends_with("|| true"),
+            "源切换失败不阻断部署：{mirror}"
+        );
+        let install = openmpi_install_command();
+        assert!(install.contains("libopenmpi-dev openmpi-bin"));
+        assert!(install.ends_with("ldconfig -p | grep -q libmpi.so.40"));
+        // 镜像主机与云镜像下载同源（同一常量，改一处全生效）
+        assert!(image_mirror_urls("aarch64")[0].contains(CN_MIRROR_HOST));
+    }
+
+    /// 版本标签归一：两端空白不算版本，空 / 全空白 → None。VM 标记、本机记录、
+    /// 原生标记三处读回共用这一处口径。
+    #[test]
+    fn parse_env_tag_trims_and_rejects_blank() {
+        assert_eq!(parse_env_tag("v1.0.0\n"), Some("v1.0.0".to_string()));
+        assert_eq!(parse_env_tag("  v1.0.0  "), Some("v1.0.0".to_string()));
+        assert_eq!(parse_env_tag(""), None);
+        assert_eq!(parse_env_tag(" \n\t "), None);
     }
 
     /// VM 内版本标记的读写命令：路径与 VM 布局同源（波浪号保持不加引号，
@@ -1033,6 +1220,15 @@ mod tests {
             ),
             "cd '/home/ubuntu/study-1' && tar -czf '/home/ubuntu/.kairos-transfer.tgz' 0.5 1 1.5"
         );
+        // 回传前的清单用同一处转义：case 路径含单引号时不能把命令截断
+        assert_eq!(
+            vm_results_list_command("/home/ubuntu/study-1"),
+            "cd '/home/ubuntu/study-1' && ls -d [0-9]* 2>/dev/null"
+        );
+        assert_eq!(
+            vm_results_list_command("/home/ubuntu/o'brien"),
+            "cd '/home/ubuntu/o'\\''brien' && ls -d [0-9]* 2>/dev/null"
+        );
     }
 
     #[test]
@@ -1040,12 +1236,18 @@ mod tests {
         assert_eq!(
             transfer_args("/tmp/case.tgz", "kairos:/home/ubuntu/.kairos-transfer.tgz"),
             vec![
+                "multipass",
                 "transfer",
                 "/tmp/case.tgz",
                 "kairos:/home/ubuntu/.kairos-transfer.tgz"
             ]
         );
         assert_eq!(vm_archive_path(), "/home/ubuntu/.kairos-transfer.tgz");
+        // 端点形态只此一处：case 中转与 bundle 走同一个构造
+        assert_eq!(
+            vm_transfer_endpoint(&vm_archive_path()),
+            "kairos:/home/ubuntu/.kairos-transfer.tgz"
+        );
     }
 
     #[test]

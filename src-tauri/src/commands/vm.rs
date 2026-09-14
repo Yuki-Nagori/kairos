@@ -190,18 +190,21 @@ pub(crate) fn probe_instance_state(provider: VmProviderKind) -> Result<VmState> 
 }
 
 /// 把管道输出按平台策略回传：Unix 逐行实时流；Windows 读完后整体解码再按行
-/// 发送（wsl 系列输出为 UTF-16LE，按字节流式会撕裂码元）。
+/// 发送（wsl 系列输出为 UTF-16LE，按字节流式会撕裂码元）。清洗与空行过滤共用一处。
 fn forward_output<R: std::io::Read>(pipe: R, progress: &Channel<String>) {
+    let emit = |line: &str| {
+        let cleaned = vm_logic::clean_terminal_line(line);
+        if !cleaned.is_empty() {
+            let _ = progress.send(cleaned);
+        }
+    };
     #[cfg(target_os = "windows")]
     {
         let mut pipe = pipe;
         let mut buffer = Vec::new();
         let _ = pipe.read_to_end(&mut buffer);
         for line in vm_logic::decode_wsl_output(&buffer).lines() {
-            let cleaned = vm_logic::clean_terminal_line(line);
-            if !cleaned.is_empty() {
-                let _ = progress.send(cleaned);
-            }
+            emit(line);
         }
     }
     #[cfg(not(target_os = "windows"))]
@@ -211,10 +214,7 @@ fn forward_output<R: std::io::Read>(pipe: R, progress: &Channel<String>) {
             .lines()
             .map_while(std::result::Result::ok)
         {
-            let cleaned = vm_logic::clean_terminal_line(&line);
-            if !cleaned.is_empty() {
-                let _ = progress.send(cleaned);
-            }
+            emit(&line);
         }
     }
 }
@@ -239,6 +239,40 @@ fn run_and_stream(args: &[String], progress: &Channel<String>) -> Result<bool> {
         let _ = handle.join();
     }
     Ok(child.wait().map(|status| status.success()).unwrap_or(false))
+}
+
+/// 由参数表构造宿主命令（`args[0]` = 可执行名，与 core 侧 `*args` 构造同口径），
+/// 并补上 PATH——应用作为 GUI 进程只继承精简 PATH，multipass / brew 这类工具都住在
+/// Homebrew 或官方 pkg 的目录里。命令层与作业层共用这一处。
+pub(crate) fn host_command(args: &[String]) -> Command {
+    let mut command = platform_command(&args[0]);
+    command.args(&args[1..]);
+    command
+}
+
+/// 跑一条受管命令并等它结束（stdout/stderr 交给父进程，不进 UI）：非零退出即
+/// `{what}失败：{hint}`。`hint` 是给用户的处置建议，不是命令本身的输出。
+fn run_quiet(args: &[String], what: &str, hint: &str) -> Result<()> {
+    match host_command(args).status() {
+        Ok(status) if status.success() => Ok(()),
+        Ok(_) => Err(KairosError::io(format!("{what}失败：{hint}"))),
+        Err(e) => Err(KairosError::io(format!("{what}启动失败：{e}"))),
+    }
+}
+
+/// 跑一条需要实时日志的命令（安装 / 启动这类分钟级步骤）：成功返回 `ok` 文案，
+/// 非零退出按 `fail` 文案报错。
+fn stream_step(
+    args: &[String],
+    progress: &Channel<String>,
+    ok: &str,
+    fail: &str,
+) -> Result<String> {
+    if run_and_stream(args, progress)? {
+        Ok(ok.to_string())
+    } else {
+        Err(KairosError::io(fail.to_string()))
+    }
 }
 
 /// 宿主 IANA 时区名（如 Asia/Shanghai）：unix 读 /etc/localtime 链接目标，
@@ -364,11 +398,15 @@ fn deployed_record_dir(app: &AppHandle) -> Result<PathBuf> {
         .map_err(|e| KairosError::io(format!("无法定位应用数据目录：{e}")))
 }
 
+/// 读一个「内容就是版本标签」的文件（VM 标记的本机记录 / 原生环境的标记）：
+/// 缺失、读失败、全空白都按「没有部署过」处理，归一在 core 一处。
+fn read_tag_file(path: &Path) -> Option<String> {
+    vm_logic::parse_env_tag(&std::fs::read_to_string(path).ok()?)
+}
+
 /// 读本机部署记录：文件缺失 / 空白 → None（未部署过）。
 fn read_deployed_record(dir: &Path) -> Option<String> {
-    let content = std::fs::read_to_string(dir.join(DEPLOYED_RECORD_FILE)).ok()?;
-    let tag = content.trim();
-    (!tag.is_empty()).then(|| tag.to_string())
+    read_tag_file(&dir.join(DEPLOYED_RECORD_FILE))
 }
 
 /// 写本机部署记录（原子替换：半截文件会被当成另一个版本标签）。
@@ -400,12 +438,7 @@ pub async fn vm_deployed_release_tag(app: AppHandle) -> Result<Option<String>> {
         let Some(root) = super::downloads::native_env_root(&app) else {
             return Ok(None);
         };
-        let marker = vm_logic::native_env_tag(&root);
-        let tag = std::fs::read_to_string(marker)
-            .ok()
-            .map(|content| content.trim().to_string())
-            .filter(|tag| !tag.is_empty());
-        return Ok(tag);
+        return Ok(read_tag_file(&vm_logic::native_env_tag(&root)));
     }
     if provider()? != VmProviderKind::Multipass {
         return Ok(None);
@@ -418,16 +451,12 @@ pub async fn vm_deployed_release_tag(app: AppHandle) -> Result<Option<String>> {
     ) {
         return Ok(read_deployed_record(&dir));
     }
+    let read_args = vm_logic::bash_script_args(
+        VmProviderKind::Multipass,
+        &vm_logic::vm_env_tag_read_command(),
+    );
     tauri::async_runtime::spawn_blocking(move || {
-        let output = platform_command("multipass")
-            .args([
-                "exec",
-                "kairos",
-                "--",
-                "bash",
-                "-lc",
-                &vm_logic::vm_env_tag_read_command(),
-            ])
+        let output = host_command(&read_args)
             .output()
             .map_err(|e| KairosError::io(format!("读取版本标记失败：{e}")))?;
         // 探测到 Running 之后实例又停了（竞态）：按不可达处理，回落本机记录。
@@ -525,57 +554,38 @@ pub async fn vm_deploy_bundle(app: AppHandle, progress: Channel<String>) -> Resu
     }
     tauri::async_runtime::spawn_blocking(move || {
         let _ = progress.send("── 传输 bundle 进虚拟机（约 120MB）──".into());
-        let transfer = platform_command("multipass")
-            .args([
-                "transfer",
+        run_quiet(
+            &vm_logic::transfer_args(
                 &archive.to_string_lossy(),
-                "kairos:/home/ubuntu/moldingfoam-bundle.tar.xz",
-            ])
-            .status()
-            .map_err(|e| KairosError::io(format!("传输启动失败：{e}")))?;
-        if !transfer.success() {
-            return Err(KairosError::io("bundle 传输失败，请确认虚拟机已启动。"));
-        }
+                &vm_logic::vm_bundle_transfer_target(),
+            ),
+            "bundle 传输",
+            "请确认虚拟机已启动",
+        )?;
         let _ = progress.send("── 解压环境树 ──".into());
-        let extract = platform_command("multipass")
-            .args([
-                "exec",
-                "kairos",
-                "--",
-                "bash",
-                "-lc",
-                &format!(
-                    "mkdir -p {root} && tar -xJf ~/moldingfoam-bundle.tar.xz -C {root} && {probe}",
-                    root = vm_logic::ENV_ROOT,
-                    probe = vm_logic::env_probe_command()
-                ),
-            ])
-            .status()
-            .map_err(|e| KairosError::io(format!("解压启动失败：{e}")))?;
-        if !extract.success() {
-            return Err(KairosError::io("解压失败，请确认 bundle 完整后重试。"));
-        }
+        run_quiet(
+            &vm_logic::bash_script_args(VmProviderKind::Multipass, &vm_logic::env_deploy_command()),
+            "解压环境树",
+            "请确认 bundle 完整后重试",
+        )?;
         // 版本标记：把 releaseTag 写进 VM，供「更新未部署」提醒比对。
         // 非 release 流组件无标签，跳过标记（比对端视为未部署）。
         if let Some(tag) = &entry.release_tag {
-            let marker = platform_command("multipass")
-                .args([
-                    "exec",
-                    "kairos",
-                    "--",
-                    "bash",
-                    "-lc",
+            run_quiet(
+                &vm_logic::bash_script_args(
+                    VmProviderKind::Multipass,
                     &vm_logic::vm_env_tag_write_command(tag),
-                ])
-                .status()
-                .map_err(|e| KairosError::io(format!("写入版本标记失败：{e}")))?;
-            if !marker.success() {
-                return Err(KairosError::io("版本标记写入失败，请重试部署。"));
-            }
-            // 本机记录同步落盘：虚拟机停机期间靠它记住「已部署」（见命令层读取策略）。
+                ),
+                "写入版本标记",
+                "请重试部署",
+            )?;
+            // 本机记录同步落盘：虚拟机停机期间靠它记住「已部署」（见读取策略）。
             // 记录写不进去不影响本次部署结果，但要在日志里留痕。
             if let Err(error) = write_deployed_record(&deployed_record_dir(&app)?, Some(tag)) {
-                let _ = progress.send(format!("── 本机部署记录未写入（不影响本次部署）：{}", error.message()));
+                let _ = progress.send(format!(
+                    "── 本机部署记录未写入（不影响本次部署）：{}",
+                    error.message()
+                ));
             }
         }
         // 求解器运行时依赖：foamRun 链接 libmpi.so.40，VM 内必须
@@ -584,33 +594,24 @@ pub async fn vm_deploy_bundle(app: AppHandle, progress: Channel<String>) -> Resu
         // 国内时区：先切清华 apt 镜像源（与云镜像同源策略，加速 update）。
         if vm_logic::is_china_timezone(&host_timezone()) {
             let _ = progress.send("── 国内时区：VM 内 apt 源切换清华镜像 ──".into());
-            let _ = platform_command("multipass")
-                .args([
-                    "exec",
-                    "kairos",
-                    "--",
-                    "bash",
-                    "-lc",
-                    "sudo sed -i 's|http://archive.ubuntu.com/ubuntu|https://mirrors.tuna.tsinghua.edu.cn/ubuntu|g; s|http://security.ubuntu.com/ubuntu|https://mirrors.tuna.tsinghua.edu.cn/ubuntu|g' /etc/apt/sources.list /etc/apt/sources.list.d/*.sources 2>/dev/null || true",
-                ])
-                .status();
+            // best-effort：源切换只影响下载速度，失败继续走官方源。
+            let _ = run_quiet(
+                &vm_logic::bash_script_args(
+                    VmProviderKind::Multipass,
+                    &vm_logic::apt_mirror_command(),
+                ),
+                "apt 源切换",
+                "继续使用官方源",
+            );
         }
-        let apt = platform_command("multipass")
-            .args([
-                "exec",
-                "kairos",
-                "--",
-                "bash",
-                "-lc",
-                "sudo apt-get update -qq && sudo apt-get install -y -qq libopenmpi-dev openmpi-bin && sudo ldconfig && ldconfig -p | grep -q libmpi.so.40",
-            ])
-            .status()
-            .map_err(|e| KairosError::io(format!("apt 安装启动失败：{e}")))?;
-        if !apt.success() {
-            return Err(KairosError::io(
-                "OpenMPI 安装失败：foamRun 缺 libmpi.so.40 将无法启动，请检查 VM 网络后重试。",
-            ));
-        }
+        run_quiet(
+            &vm_logic::bash_script_args(
+                VmProviderKind::Multipass,
+                &vm_logic::openmpi_install_command(),
+            ),
+            "OpenMPI 安装",
+            "请检查虚拟机网络后重试（缺 libmpi.so.40 时 foamRun 无法启动）",
+        )?;
         Ok("求解环境已部署（含 OpenMPI）。提交作业即可在虚拟机内执行。".into())
     })
     .await
@@ -686,26 +687,35 @@ pub async fn vm_start(app: AppHandle, progress: Channel<String>) -> Result<Strin
         match state {
             VmState::Missing => {
                 let _ = progress.send("── 实例不存在，开始创建（首次需下载镜像）──".into());
-                if run_and_stream(&launch, &progress)? {
-                    Ok("虚拟机已创建并就绪。".into())
-                } else {
-                    Err(KairosError::io("实例创建失败，详见上方日志。"))
-                }
+                stream_step(
+                    &launch,
+                    &progress,
+                    "虚拟机已创建并就绪。",
+                    "实例创建失败，详见上方日志。",
+                )
             }
             _ => match vm_logic::start_args(provider) {
                 Some(start) => {
                     let _ = progress.send("── 启动已存在的实例 ──".into());
-                    if run_and_stream(&start, &progress)? {
-                        Ok("虚拟机已启动。".into())
-                    } else {
+                    let started = stream_step(
+                        &start,
+                        &progress,
+                        "虚拟机已启动。",
+                        "实例启动失败，详见上方日志。",
+                    );
+                    if let Err(error) = started {
                         // 探测与实际状态存在竞态（或状态解析异常）：start 失败时
                         // 不直接报错，自动回落到创建流程自愈。
-                        let _ = progress.send("── 实例启动失败，改用创建流程 ──".into());
-                        if run_and_stream(&launch, &progress)? {
-                            Ok("虚拟机已创建并就绪。".into())
-                        } else {
-                            Err(KairosError::io("实例创建失败，详见上方日志。"))
-                        }
+                        let _ =
+                            progress.send(format!("── 实例启动失败（{error}），改用创建流程 ──"));
+                        stream_step(
+                            &launch,
+                            &progress,
+                            "虚拟机已创建并就绪。",
+                            "实例创建失败，详见上方日志。",
+                        )
+                    } else {
+                        started
                     }
                 }
                 // WSL 实例随首次执行自启，无独立 start 步骤。
@@ -860,14 +870,8 @@ pub async fn vm_stop(shell: State<'_, VmShellState>) -> Result<String> {
     }
     let args = vm_logic::stop_args(provider);
     tauri::async_runtime::spawn_blocking(move || {
-        if run_bytes(&args)?
-            .map(|output| output.status.success())
-            .unwrap_or(false)
-        {
-            Ok("虚拟机已停止。".into())
-        } else {
-            Err(KairosError::io("停止命令失败，请检查虚拟机状态。"))
-        }
+        run_quiet(&args, "停止虚拟机", "请检查虚拟机状态")?;
+        Ok("虚拟机已停止。".into())
     })
     .await
     .map_err(|e| KairosError::internal(format!("停止任务失败：{e}")))?
