@@ -14,6 +14,7 @@
     "format:rust": "cargo fmt --all",
     "format:rust:check": "cargo fmt --all --check",
     "knip": "knip",
+    "docs:check": "bun scripts/docs-check.mts",
     "lint": "eslint . --max-warnings 0",
     "lint:fix": "eslint . --fix",
     "lint:rust": "cargo clippy --workspace --all-targets -- -D warnings",
