@@ -4,6 +4,7 @@ import { useAppStore } from "../../stores/app";
 import { useResultsStore } from "../../stores/results";
 import type { DeriveRequest, FieldSlot } from "../../types";
 import { minMax } from "../../utils/stats";
+import { significant } from "../../utils/format";
 export function useResultsPanel() {
   const app = useAppStore();
   const results = useResultsStore();
@@ -33,7 +34,7 @@ export function useResultsPanel() {
     const values = field.values;
     const { min, max } = values.length > 0 ? minMax(values) : { min: Number.NaN, max: Number.NaN };
     return {
-      line: `已加载 ${field.field} @ ${field.timeDir}${field.isMagnitude ? "（模量）" : ""}：${values.length} 个值，min ${min.toFixed(3)} / max ${max.toFixed(3)}`,
+      line: `已加载 ${field.field} @ ${field.timeDir}${field.isMagnitude ? "（模量）" : ""}：${values.length} 个值，min ${significant(min)} / max ${significant(max)}`,
       complete: field.complete,
     };
   });
@@ -83,7 +84,7 @@ export function useResultsPanel() {
     const norms = field.components.map((group) => Math.hypot(group[0], group[1], group[2]));
     const { min, max } = minMax(norms);
     return {
-      line: `矢量 ${field.field} @ ${field.timeDir}：${field.components.length} 个单元 · 首单元 (${first.map((value) => value.toExponential(2)).join(", ")}) · |v| ${min.toExponential(2)} ~ ${max.toExponential(2)}`,
+      line: `矢量 ${field.field} @ ${field.timeDir}：${field.components.length} 个单元 · 首单元 (${first.map((value) => significant(value)).join(", ")}) · |v| ${significant(min)} ~ ${significant(max)}`,
       complete: field.complete,
     };
   });
@@ -99,7 +100,7 @@ export function useResultsPanel() {
     const { min, max } = minMax(field.magnitudes);
     const axis = field.principalAxes[0] as [number, number, number];
     return {
-      line: `张量 ${field.field} @ ${field.timeDir}：${field.magnitudes.length} 个单元 · |σ| ${min.toExponential(2)} ~ ${max.toExponential(2)} · 首单元主轴 (${axis.map((value) => value.toFixed(3)).join(", ")})`,
+      line: `张量 ${field.field} @ ${field.timeDir}：${field.magnitudes.length} 个单元 · |σ| ${significant(min)} ~ ${significant(max)} · 首单元主轴 (${axis.map((value) => significant(value)).join(", ")})`,
       complete: field.complete,
     };
   });

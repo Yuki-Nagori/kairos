@@ -154,11 +154,11 @@ describe("ResultsPanel 场统计", () => {
     expect(warn?.classes()).toContain("text-amber-400");
   });
 
-  it("空场以 NaN 占位仍按数值渲染", () => {
+  it("空场按占位符渲染（不把 NaN 漏到界面）", () => {
     const results = useResultsStore();
     results.loadedField = makeField({ values: [] });
     const wrapper = mount(ResultsPanel, { global: { plugins: [pinia] } });
-    expect(wrapper.text()).toContain("0 个值，min NaN / max NaN");
+    expect(wrapper.text()).toContain("0 个值，min — / max —");
   });
 });
 
@@ -356,7 +356,7 @@ describe("ResultsPanel：矢量场三分量", () => {
     // 时间步取当前已加载场的 1（而不是最后一个 2）
     expect(loadVectorField).toHaveBeenCalledWith("/case/run", "1", "D");
     expect(wrapper.text()).toContain("矢量 D @ 1：2 个单元");
-    expect(wrapper.text()).toContain("首单元 (1.00e-3, -2.00e-3, 0.00e+0)");
+    expect(wrapper.text()).toContain("首单元 (0.001, -0.002, 0.000)");
     expect(wrapper.text()).toContain("|v|");
   });
 
