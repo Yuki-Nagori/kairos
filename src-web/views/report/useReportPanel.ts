@@ -8,7 +8,11 @@ import { useResultsStore } from "../../stores/results";
 import { buildReportHtml, type ReportOptions } from "../../utils/report";
 import { minMax } from "../../utils/stats";
 import { getSnapshotDataUrl } from "../../render/snapshot";
-import { saveReportToWorkspace } from "../../api/project";
+import {
+  saveReportPptxToWorkspace,
+  saveReportToWorkspace,
+  type ReportSlidePayload,
+} from "../../api/project";
 import { useAppStore } from "../../stores/app";
 import { fixed, significant } from "../../utils/format";
 
@@ -172,5 +176,50 @@ export function useReportPanel() {
     status.value = "报告已生成并下载";
   }
 
-  return { status, template, generateReport };
+  /** 导出 PPTX：与 HTML 报告同源数据，按「工况参数 / 网格与结果」组装要点。 */
+  async function exportPptx(): Promise<void> {
+    const currentProject = project.project;
+    const study = project.activeStudy;
+    if (currentProject === null || study === null || project.projectPath === null) {
+      status.value = "请先创建项目与方案（散装工程请先保存到工作区）。";
+      return;
+    }
+    const process = study.process;
+    const slides: ReportSlidePayload[] = [
+      {
+        title: "工况参数",
+        bullets: [
+          `材料：${study.materialId ?? "未登记"}`,
+          `熔体温度：${process ? `${process.meltTempC} °C` : "未设置"}`,
+          `模具温度：${process ? `${process.moldTempC} °C` : "未设置"}`,
+          `注射 / 保压 / 冷却：${process ? `${process.injectionTimeS} / ${process.packingTimeS} / ${process.coolingTimeS} s` : "未设置"}`,
+        ],
+      },
+    ];
+    const summary = geometry.geometries[0];
+    if (summary !== undefined) {
+      slides.push({
+        title: "网格与结果",
+        bullets: [
+          `几何：${summary.size.map((value) => fixed(value, 2)).join(" × ")} ${summary.suggestedUnit}`,
+          results.loadedField !== null
+            ? `已加载场：${results.loadedField.field} @ ${results.loadedField.timeDir}`
+            : "尚未加载结果场",
+        ],
+      });
+    }
+    try {
+      const path = await saveReportPptxToWorkspace(
+        project.projectPath,
+        `${currentProject.name}-报告`,
+        template.title.trim() || `${currentProject.name} 仿真报告`,
+        slides,
+      );
+      status.value = `已导出 PPTX：${path}`;
+    } catch (error) {
+      useAppStore().setError(error);
+    }
+  }
+
+  return { status, template, generateReport, exportPptx };
 }

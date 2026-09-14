@@ -11,11 +11,13 @@ import { useGeometryStore } from "../../../../src-web/stores/geometry";
 import { useResultsStore } from "../../../../src-web/stores/results";
 import type { Material, Project, ScalarField, Study } from "../../../../src-web/types";
 
-const { saveReportToWorkspaceMock } = vi.hoisted(() => ({
+const { saveReportToWorkspaceMock, saveReportPptxMock } = vi.hoisted(() => ({
   saveReportToWorkspaceMock: vi.fn(),
+  saveReportPptxMock: vi.fn(),
 }));
 vi.mock("../../../../src-web/api/project", () => ({
   saveReportToWorkspace: saveReportToWorkspaceMock,
+  saveReportPptxToWorkspace: saveReportPptxMock,
 }));
 
 function materialFixture(): Material {
@@ -408,5 +410,150 @@ describe("报告落盘位置", () => {
     await panel.generateReport();
     expect(saveReportToWorkspaceMock).not.toHaveBeenCalled();
     expect(panel.status.value).toBe("报告已生成并下载");
+  });
+});
+
+describe("导出 PPTX", () => {
+  it("把工况要点交给命令层，并在状态里回显落盘路径", async () => {
+    const project = useProjectStore();
+    project.project = projectFixture([studyFixture()]);
+    project.activeStudyId = "study-1";
+    project.projectPath = "/home/u/Documents/kairos/p/p.kairos";
+    saveReportPptxMock.mockResolvedValue("/home/u/Documents/kairos/p/reports/报告.pptx");
+
+    const { useReportPanel } = await import("../../../../src-web/views/report/useReportPanel");
+    const panel = useReportPanel();
+    await panel.exportPptx();
+
+    expect(saveReportPptxMock).toHaveBeenCalledTimes(1);
+    const [path, fileName, title, slides] = saveReportPptxMock.mock.calls[0] ?? [];
+    expect(path).toBe("/home/u/Documents/kairos/p/p.kairos");
+    expect(fileName).toContain("-报告");
+    expect(title).toContain("仿真报告");
+    expect(slides[0].title).toBe("工况参数");
+    expect(panel.status.value).toContain("已导出 PPTX");
+    expect(useAppStore().error).toBeNull();
+  });
+
+  it("有几何与结果场时补一页「网格与结果」；命令失败进全局错误", async () => {
+    const project = useProjectStore();
+    const withProcess = studyFixture();
+    withProcess.process = {
+      meltTempC: 230,
+      moldTempC: 40,
+      ejectionTempC: 90,
+      injectionTimeS: 1.5,
+      vpSwitchVolumePercent: 96,
+      packingPressureMpaCurve: [[0, 60]],
+      packingTimeS: 8,
+      coolingTimeS: 15,
+      coolantTempC: 25,
+    };
+    project.project = projectFixture([withProcess]);
+    project.activeStudyId = "study-1";
+    project.projectPath = "/home/u/Documents/kairos/p/p.kairos";
+    const geometry = useGeometryStore();
+    geometry.geometries = [
+      {
+        geometryId: "geo-1",
+        name: "件",
+        size: [10, 20, 2],
+        suggestedUnit: "mm",
+      } as unknown as (typeof geometry.geometries)[number],
+    ];
+    const results = useResultsStore();
+    results.loadedField = {
+      field: "T",
+      timeDir: "1",
+      values: [300, 320],
+      isMagnitude: false,
+      complete: true,
+    } as unknown as typeof results.loadedField;
+    saveReportPptxMock.mockResolvedValue("/home/u/Documents/kairos/p/reports/报告.pptx");
+
+    const { useReportPanel } = await import("../../../../src-web/views/report/useReportPanel");
+    const panel = useReportPanel();
+    await panel.exportPptx();
+    const slides = saveReportPptxMock.mock.calls.at(-1)?.[3] ?? [];
+    expect(slides.map((slide: { title: string }) => slide.title)).toEqual([
+      "工况参数",
+      "网格与结果",
+    ]);
+    expect(slides[1].bullets.join(" ")).toContain("已加载场：T @ 1");
+    expect(slides[0].bullets.join(" ")).toContain("熔体温度：230 °C");
+    expect(slides[0].bullets.join(" ")).toContain("注射 / 保压 / 冷却：1.5 / 8 / 15 s");
+
+    // 命令层失败 → 进全局错误，不吞掉
+    saveReportPptxMock.mockRejectedValue(new Error("工作区只读"));
+    await panel.exportPptx();
+    expect(useAppStore().error?.message).toBe("工作区只读");
+  });
+
+  it("未登记材料 / 未设置工艺 / 未加载场时给回退文案，空标题回落默认名", async () => {
+    const project = useProjectStore();
+    const bare = studyFixture();
+    bare.materialId = null as unknown as string;
+    bare.process = null;
+    project.project = projectFixture([bare]);
+    project.activeStudyId = "study-1";
+    project.projectPath = "/home/u/Documents/kairos/p/p.kairos";
+    const geometry = useGeometryStore();
+    geometry.geometries = [
+      {
+        geometryId: "geo-1",
+        name: "件",
+        size: [10, 20, 2],
+        suggestedUnit: "mm",
+      } as unknown as (typeof geometry.geometries)[number],
+    ];
+    const results = useResultsStore();
+    results.loadedField = null;
+    saveReportPptxMock.mockClear();
+    saveReportPptxMock.mockResolvedValue("/home/u/Documents/kairos/p/reports/报告.pptx");
+
+    const { useReportPanel } = await import("../../../../src-web/views/report/useReportPanel");
+    const panel = useReportPanel();
+    panel.template.title = "   ";
+    await panel.exportPptx();
+
+    const [, , title, slides] = saveReportPptxMock.mock.calls.at(-1) ?? [];
+    expect(title).toContain("仿真报告");
+    const text = slides.flatMap((slide: { bullets: string[] }) => slide.bullets).join(" ");
+    expect(text).toContain("未登记");
+    expect(text).toContain("未设置");
+    expect(text).toContain("尚未加载结果场");
+  });
+
+  it("缺方案或缺工程路径时同样给出提示（三条件的中间分支）", async () => {
+    const project = useProjectStore();
+    saveReportPptxMock.mockClear();
+    const { useReportPanel } = await import("../../../../src-web/views/report/useReportPanel");
+    const panel = useReportPanel();
+    // 有工程、无方案
+    project.project = projectFixture([studyFixture()]);
+    project.activeStudyId = null;
+    project.projectPath = "/home/u/Documents/kairos/p/p.kairos";
+    await panel.exportPptx();
+    expect(saveReportPptxMock).not.toHaveBeenCalled();
+    // 有工程与方案、工程路径为空（未保存到工作区）
+    project.activeStudyId = "study-1";
+    project.projectPath = null;
+    await panel.exportPptx();
+    expect(saveReportPptxMock).not.toHaveBeenCalled();
+    expect(panel.status.value).toContain("请先创建项目与方案");
+  });
+
+  it("无项目、方案或工程路径时给出提示且不调用命令", async () => {
+    // 上一个用例会留下已就绪的 store 与调用记录：这里显式清空，避免依赖执行顺序
+    const project = useProjectStore();
+    project.project = null;
+    project.activeStudyId = null;
+    project.projectPath = null;
+    saveReportPptxMock.mockClear();
+    const { useReportPanel } = await import("../../../../src-web/views/report/useReportPanel");
+    const panel = useReportPanel();
+    await panel.exportPptx();
+    expect(saveReportPptxMock).not.toHaveBeenCalled();
+    expect(panel.status.value).toContain("请先创建项目与方案");
   });
 });

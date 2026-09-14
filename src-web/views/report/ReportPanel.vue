@@ -5,7 +5,7 @@ import Card from "../../components/ui/UiCard.vue";
 import UiButton from "../../components/ui/UiButton.vue";
 import UiTextInput from "../../components/ui/UiTextInput.vue";
 
-const { status, template, generateReport } = useReportPanel();
+const { status, template, generateReport, exportPptx } = useReportPanel();
 </script>
 
 <template>
@@ -42,6 +42,7 @@ const { status, template, generateReport } = useReportPanel();
     </div>
     <div class="flex flex-wrap items-center gap-2">
       <UiButton variant="primary" @click="generateReport">生成 HTML 报告</UiButton>
+      <UiButton @click="exportPptx">导出 PPTX</UiButton>
       <p class="text-xs text-zinc-500">{{ status }}</p>
     </div>
   </Card>

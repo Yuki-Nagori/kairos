@@ -99,3 +99,24 @@ export function saveReportToWorkspace(
 ): Promise<string> {
   return invokeCommand("save_report_to_workspace", { projectPath, fileName, content });
 }
+
+/** 报告导出 PPTX 的幻灯片载荷（与 Rust `ReportSlidePayload` 镜像）。 */
+export interface ReportSlidePayload {
+  title: string;
+  bullets: string[];
+}
+
+/** 报告导出为 PPTX（core 生成、命令层落盘到工作区 reports/，返回写入路径）。 */
+export function saveReportPptxToWorkspace(
+  projectPath: string,
+  fileName: string,
+  title: string,
+  slides: ReportSlidePayload[],
+): Promise<string> {
+  return invokeCommand("save_report_pptx_to_workspace", {
+    projectPath,
+    fileName,
+    title,
+    slides,
+  });
+}
