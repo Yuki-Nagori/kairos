@@ -67,8 +67,9 @@ export async function createViewportRenderer(
     pitch: number;
     distance: number;
   }) => void,
+  onError?: (message: string) => void,
 ): Promise<{ backend: ViewportBackend; kind: BackendKind } | null> {
-  const gpu = await WebGPURenderer.create(canvas, onFps);
+  const gpu = await WebGPURenderer.create(canvas, onFps, undefined, onError);
   if (gpu !== null) {
     return { backend: gpu, kind: "webgpu" };
   }

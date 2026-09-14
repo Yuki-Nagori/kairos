@@ -87,7 +87,7 @@ const VIEW_TOOLS = [
             style="touch-action: none"
           />
           <p
-            v-show="!slots[id]!.loaded"
+            v-show="!slots[id]!.loaded || emptyError"
             class="pointer-events-none absolute inset-0 flex items-center justify-center text-xs"
             :class="emptyError ? 'text-red-400' : 'text-zinc-600'"
           >

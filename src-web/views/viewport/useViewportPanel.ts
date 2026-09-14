@@ -336,6 +336,13 @@ export function useViewportPanel() {
           viewCenter.value = state;
           syncOrbitFrom(slot);
         },
+        // 渲染器主动上报绘制失败：网格载入后画布空白是最难自查的情况，有原因就
+        // 立刻显示出来（模板侧允许错误态在载入后依然显示）。任意视口失败都上屏——
+        // 副视口静默失败同样是「点了没反应」，不值得为区分来源牺牲可见性。
+        (message) => {
+          emptyText.value = `视口渲染失败：${message}`;
+          emptyError.value = true;
+        },
       );
       if (created === null) {
         if (slot.id === 0) {

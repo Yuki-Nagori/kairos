@@ -22,13 +22,18 @@ import type { ScalarField } from "../../../../src-web/types";
 
 const { createMock, backends, capabilityMock, baseCreate } = vi.hoisted(() => {
   type Backend = Record<keyof ViewportBackend, ReturnType<typeof vi.fn>> & {
-    callbacks: { onFps?: (fps: number) => void; onView?: (state: unknown) => void };
+    callbacks: {
+      onFps?: (fps: number) => void;
+      onView?: (state: unknown) => void;
+      onError?: (message: string) => void;
+    };
   };
   const backends: Backend[] = [];
   const baseCreate = async (
     _canvas: HTMLCanvasElement,
     onFps?: (fps: number) => void,
     onView?: (state: unknown) => void,
+    onError?: (message: string) => void,
   ): Promise<{ backend: ViewportBackend; kind: "webgpu" } | null> => {
     const backend = {
       uploadMesh: vi.fn(),
@@ -54,7 +59,7 @@ const { createMock, backends, capabilityMock, baseCreate } = vi.hoisted(() => {
       zoomBy: vi.fn(),
       fitView: vi.fn(),
       dispose: vi.fn(),
-      callbacks: { onFps, onView },
+      callbacks: { onFps, onView, onError },
     } as Backend;
     backends.push(backend);
     return { backend: backend as unknown as ViewportBackend, kind: "webgpu" as const };
@@ -892,6 +897,22 @@ describe("渲染失败的可见原因", () => {
     await flushPromises();
     expect(panel.emptyText).toContain("视口渲染失败");
     expect(panel.emptyText).toContain("canvas size is zero");
+    expect(panel.emptyError).toBe(true);
+  });
+});
+
+describe("渲染器主动上报失败", () => {
+  it("主视口的失败显示出来", async () => {
+    primeStudy();
+    const { panel } = mountPanel();
+    panel.attachCanvas(0, canvas());
+    await flushPromises();
+    const primary = backends.at(-1)!;
+    // 主视口上报 → 必须可见（网格载入后画布空白是最难自查的情况）
+    primary.callbacks.onError?.("Argument 2 to setBindGroup must be a GPUBindGroup");
+    await flushPromises();
+    expect(panel.emptyText).toContain("视口渲染失败");
+    expect(panel.emptyText).toContain("GPUBindGroup");
     expect(panel.emptyError).toBe(true);
   });
 });

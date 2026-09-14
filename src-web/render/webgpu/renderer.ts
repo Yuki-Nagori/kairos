@@ -42,6 +42,8 @@ export class WebGPURenderer {
   private readonly device: GpuDevice;
   private readonly format: GpuTextureFormat;
   private readonly onFps?: (fps: number) => void;
+  /** 绘制失败的上报通道（仅在与上次不同的原因时触发，避免每帧刷屏）。 */
+  private readonly onError?: (message: string) => void;
   /** 最近一次绘制失败的原因（null = 正常）。 */
   private frameError: string | null = null;
   private readonly onView?: (state: {
@@ -56,6 +58,8 @@ export class WebGPURenderer {
   private meshPipeline: GpuRenderPipeline;
   private linePipeline: GpuRenderPipeline;
   private uniformBuffer: GpuBuffer;
+  /** 网格管线与线管线的 bind group（按当前 uniform 缓冲懒建并缓存）。 */
+  private meshBindGroup: GpuBindGroup | null = null;
   private depthTexture: GpuTexture | null = null;
   private depthView: GpuTextureView | null = null;
   private readonly depthFormat: GpuTextureFormat = "depth24plus";
@@ -67,7 +71,14 @@ export class WebGPURenderer {
 
   private overlays = new Map<
     string,
-    { vertexBuffer: GpuBuffer; uniform: GpuBuffer; count: number; color: [number, number, number] }
+    {
+      vertexBuffer: GpuBuffer;
+      uniform: GpuBuffer;
+      count: number;
+      color: [number, number, number];
+      /** 该层的 bind group（颜色 uniform 固定，创建一次即可）。 */
+      bindGroup?: GpuBindGroup;
+    }
   >();
   private overlayVisible = new Map<string, boolean>();
 
@@ -103,6 +114,7 @@ export class WebGPURenderer {
       pitch: number;
       distance: number;
     }) => void,
+    onError?: (message: string) => void,
   ) {
     this.onView = onView;
     this.canvas = canvas;
@@ -110,6 +122,7 @@ export class WebGPURenderer {
     this.device = device;
     this.format = format;
     this.onFps = onFps;
+    this.onError = onError;
     this.context.configure({ device, format, alphaMode: "opaque" });
     this.meshPipeline = this.buildMeshPipeline();
     this.linePipeline = this.buildLinePipeline();
@@ -133,6 +146,7 @@ export class WebGPURenderer {
       pitch: number;
       distance: number;
     }) => void,
+    onError?: (message: string) => void,
   ): Promise<WebGPURenderer | null> {
     try {
       const gpu = navigator.gpu;
@@ -150,7 +164,7 @@ export class WebGPURenderer {
         return null;
       }
       const format = gpu.getPreferredCanvasFormat();
-      return new WebGPURenderer(canvas, context, device, format, onFps, onView);
+      return new WebGPURenderer(canvas, context, device, format, onFps, onView, onError);
     } catch {
       // 适配器请求可能因驱动 / 黑名单抛错：按不可用处理，交上层回退。
       return null;
@@ -410,6 +424,9 @@ export class WebGPURenderer {
       // 画布尚未布局（宽或高为 0）时跳过绘制：以 0 尺寸创建纹理会被 WebGPU 判为
       // 校验错误，异常会让循环在**第一帧**就死掉——画布保持空白且 FPS 永远停在 —，
       // 用户看到的是「3D 显示不出来」而没有任何提示。
+      // 画布 backing store 同步：CSS 尺寸 × DPR（上限 2）。缺少这一步时 backing
+      // store 停在默认 300×150，画出来的是被拉伸的模糊像（或被判尺寸不合法的空帧）。
+      this.syncCanvasSize();
       if (this.canvas.width === 0 || this.canvas.height === 0) {
         this.rafHandle = requestAnimationFrame(frame);
         return;
@@ -418,9 +435,13 @@ export class WebGPURenderer {
         this.drawFrame();
         this.frameError = null;
       } catch (error) {
-        // 单帧失败不终止循环：把原因留下（面板可读取），下一帧继续尝试，
-        // 布局或尺寸恢复后画面能自己回来。
-        this.frameError = error instanceof Error ? error.message : String(error);
+        // 单帧失败不终止循环：把原因留存并**主动上报**（面板据此显示提示），
+        // 下一帧继续尝试，布局或尺寸恢复后画面能自己回来。
+        const message = error instanceof Error ? error.message : String(error);
+        if (message !== this.frameError) {
+          this.frameError = message;
+          this.onError?.(message);
+        }
       }
       this.rafHandle = requestAnimationFrame(frame);
     };
@@ -430,6 +451,18 @@ export class WebGPURenderer {
   /** 最近一次绘制失败的原因（null = 正常）；供 UI 诊断显示。 */
   renderError(): string | null {
     return this.frameError;
+  }
+
+  /** 按 CSS 尺寸 × DPR（上限 2）同步 backing store；与 WebGL2 后端同一口径。 */
+  private syncCanvasSize(): void {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const rect = this.canvas.getBoundingClientRect();
+    const width = Math.max(Math.round((rect.width || this.canvas.clientWidth) * dpr), 1);
+    const height = Math.max(Math.round((rect.height || this.canvas.clientHeight) * dpr), 1);
+    if (this.canvas.width !== width || this.canvas.height !== height) {
+      this.canvas.width = width;
+      this.canvas.height = height;
+    }
   }
 
   private drawFrame(): void {
@@ -469,7 +502,11 @@ export class WebGPURenderer {
       },
     });
     pass.setPipeline(this.meshPipeline);
-    pass.setBindGroup(0, this.meshPipeline.getBindGroupLayout(0));
+    this.meshBindGroup ??= this.device.createBindGroup({
+      layout: this.meshPipeline.getBindGroupLayout(0),
+      entries: [{ binding: 0, resource: { buffer: this.uniformBuffer } }],
+    });
+    pass.setBindGroup(0, this.meshBindGroup);
     if (this.meshVisible && this.indexBuffer !== null && this.indexCount > 0) {
       pass.setVertexBuffer(0, this.vertexBuffers[0]!);
       pass.setVertexBuffer(1, this.vertexBuffers[1]!);
@@ -486,7 +523,15 @@ export class WebGPURenderer {
       lineUniforms.set([...overlay.color, 1], 16);
       this.device.queue.writeBuffer(overlay.uniform, 0, lineUniforms);
       pass.setPipeline(this.linePipeline);
-      pass.setBindGroup(0, this.linePipeline.getBindGroupLayout(0));
+      // 每层自己的颜色 uniform：bind group 随层缓存（覆盖层的缓冲不会变）
+      const lineBindGroup =
+        overlay.bindGroup ??
+        this.device.createBindGroup({
+          layout: this.linePipeline.getBindGroupLayout(0),
+          entries: [{ binding: 0, resource: { buffer: overlay.uniform } }],
+        });
+      overlay.bindGroup = lineBindGroup;
+      pass.setBindGroup(0, lineBindGroup);
       pass.setVertexBuffer(0, overlay.vertexBuffer);
       pass.draw(overlay.count);
     }
