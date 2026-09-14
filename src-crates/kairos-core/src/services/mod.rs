@@ -18,6 +18,7 @@ pub mod meshing;
 pub mod midplane;
 pub mod moldingfoam;
 pub mod operators;
+pub mod optimize;
 pub mod paths;
 pub mod process;
 pub mod project;
