@@ -6,6 +6,7 @@ import type { ScalarField } from "../../types";
 import { drawLineChart } from "../../utils/chart";
 import { THEME_CHANGED_EVENT } from "../../composables/useTheme";
 import { registerSnapshot } from "../../render/snapshot";
+import { fixed } from "../../utils/format";
 
 export function useXyChartPanel() {
   const app = useAppStore();
@@ -103,7 +104,7 @@ export function useXyChartPanel() {
         ctx.arc(x, y, 4, 0, Math.PI * 2);
         ctx.fill();
         ctx.fillText(
-          `#${probe.nodeIndex}: ${value.toFixed(2)}`,
+          `#${probe.nodeIndex}: ${fixed(value, 2)}`,
           Math.min(x + 6, canvas.width - 90),
           y - 6,
         );

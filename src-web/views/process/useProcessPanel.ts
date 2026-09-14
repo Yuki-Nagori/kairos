@@ -12,6 +12,7 @@ import { useGeometryStore } from "../../stores/geometry";
 import { useProjectStore } from "../../stores/project";
 import type { ProcessSettings } from "../../types";
 import { storageGet, storageIndex, storageKey, storageSet } from "../../utils/storage";
+import { fixed } from "../../utils/format";
 
 export function useProcessPanel() {
   /** 预设存储域：清单在 kairos:process-preset:index，条目在 kairos:process-preset:<名>。 */
@@ -140,10 +141,10 @@ export function useProcessPanel() {
     }
     const { outcome } = record;
     return {
-      text: `浇口入口（最近一次 case）：实际 ${(outcome.inletAreaM2 * 1e6).toFixed(1)} mm² · 等效 Ø${outcome.inletEquivalentDiameterMm.toFixed(1)} mm`,
+      text: `浇口入口（最近一次 case）：实际 ${fixed(outcome.inletAreaM2 * 1e6, 1)} mm² · 等效 Ø${fixed(outcome.inletEquivalentDiameterMm, 1)} mm`,
       gates: outcome.gates.map((gate) => ({
         key: gate.index,
-        text: `浇口 #${gate.index}：请求 Ø${(gate.requestedRadiusMm * 2).toFixed(1)} mm（${gate.requestedAreaMm2.toFixed(1)} mm²）→ 实际 ${gate.actualAreaMm2.toFixed(1)} mm² / ${gate.faceCount} 面（${gate.areaRatio.toFixed(2)}×）`,
+        text: `浇口 #${gate.index}：请求 Ø${fixed(gate.requestedRadiusMm * 2, 1)} mm（${fixed(gate.requestedAreaMm2, 1)} mm²）→ 实际 ${fixed(gate.actualAreaMm2, 1)} mm² / ${gate.faceCount} 面（${fixed(gate.areaRatio, 2)}×）`,
         warn: !gate.expressible,
       })),
       warnings: outcome.warnings,

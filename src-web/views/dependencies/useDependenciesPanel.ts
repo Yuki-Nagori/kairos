@@ -8,6 +8,7 @@ import { useVmStore } from "../../stores/vm";
 import { useDependenciesStore } from "../../stores/dependencies";
 import { isPendingDeploy } from "../../utils/deploy";
 import type { DependencyStatus } from "../../types";
+import { fixed } from "../../utils/format";
 
 /** 单行依赖的展示模型：模板分支与文案集中此处算清，避免模板里重复取值。 */
 interface DependencyRow {
@@ -73,8 +74,7 @@ export function useDependenciesPanel() {
       const downloaded = deps.downloadedFiles[dep.id];
       const saved = deps.savedDownloads[dep.id];
       const usable = dep.ready || dep.managedReady;
-      const sizeMb =
-        downloaded !== undefined ? (downloaded.sizeBytes / 1024 / 1024).toFixed(1) : "";
+      const sizeMb = downloaded !== undefined ? fixed(downloaded.sizeBytes / 1024 / 1024, 1) : "";
       return {
         dep,
         already,

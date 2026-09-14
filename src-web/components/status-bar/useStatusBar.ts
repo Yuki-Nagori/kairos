@@ -3,6 +3,7 @@ import { computed } from "vue";
 import { useAppStore } from "../../stores/app";
 import { useJobsStore } from "../../stores/jobs";
 import { useVmStore } from "../../stores/vm";
+import { fixed } from "../../utils/format";
 
 /** 错误码 → 处置提示。前端按 code 分支的契约消费点（KairosError::as_code），
  *  禁止对 message 做文本匹配。 */
@@ -40,7 +41,7 @@ export function useStatusBar() {
   const solveProgress = computed(() => {
     const job = jobsStore.jobs.at(-1);
     if (job?.status === "running" && job.lastTimeS !== null) {
-      return `求解进度 · Time = ${job.lastTimeS.toFixed(2)} s`;
+      return `求解进度 · Time = ${fixed(job.lastTimeS, 2)} s`;
     }
     return "";
   });

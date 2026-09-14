@@ -4,6 +4,7 @@ import { useResultsPanel } from "./useResultsPanel";
 import UiButton from "../../components/ui/UiButton.vue";
 import Card from "../../components/ui/UiCard.vue";
 import UiTextInput from "../../components/ui/UiTextInput.vue";
+import { significant } from "../../utils/format";
 
 const {
   results,
@@ -59,7 +60,7 @@ const {
                 加载 T 场
               </button>
             </td>
-            <td class="px-2 py-1 text-zinc-400">{{ time.timeS.toFixed(3) }}</td>
+            <td class="px-2 py-1 text-zinc-400">{{ significant(time.timeS) }}</td>
             <td class="px-2 py-1 text-zinc-400">{{ time.fields.join(", ") }}</td>
           </tr>
         </tbody>

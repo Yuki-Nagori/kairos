@@ -14,6 +14,7 @@ import { useGeometryStore } from "../../stores/geometry";
 import { useResultsStore } from "../../stores/results";
 import { useViewportStore } from "../../stores/viewport";
 import type { CoolingChannel, RunnerElement, RunnerKind } from "../../types";
+import { fixed } from "../../utils/format";
 
 export function useMoldPanel() {
   // 坐标按 XYZ 键值存储（键为字面量联合，索引访问不引入 undefined）。
@@ -169,7 +170,7 @@ export function useMoldPanel() {
     if (report === null) {
       return "不改跑求解：以浇口为源估算可充填覆盖范围。";
     }
-    return `覆盖 ${(report.coverageRatio * 100).toFixed(1)}% · 未覆盖 ${report.uncoveredCells.length} 单元 · 最长流动 ${report.arrivalMaxMm.toFixed(1)} mm`;
+    return `覆盖 ${fixed(report.coverageRatio * 100, 1)}% · 未覆盖 ${report.uncoveredCells.length} 单元 · 最长流动 ${fixed(report.arrivalMaxMm, 1)} mm`;
   });
 
   function runPreview(): void {
@@ -185,7 +186,7 @@ export function useMoldPanel() {
   const gateSuggestions = computed(() =>
     (results.gateLocation?.top ?? []).map((candidate) => ({
       cell: candidate.cell,
-      text: `#${candidate.cell} · 适合度 ${(candidate.score * 100).toFixed(0)}% · 流动长 ${candidate.maxFlowLengthMm.toFixed(1)} mm · 厚 ${candidate.thicknessMm.toFixed(2)} mm`,
+      text: `#${candidate.cell} · 适合度 ${fixed(candidate.score * 100, 0)}% · 流动长 ${fixed(candidate.maxFlowLengthMm, 1)} mm · 厚 ${fixed(candidate.thicknessMm, 2)} mm`,
       center: candidate.center,
     })),
   );

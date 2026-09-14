@@ -6,6 +6,7 @@ import { computed, ref } from "vue";
 import { useJobsStore } from "../../stores/jobs";
 import { useGeometryStore } from "../../stores/geometry";
 import { useVmStore } from "../../stores/vm";
+import { fixed } from "../../utils/format";
 
 const TABS = ["分析日志", "网格日志", "VM 终端"] as const;
 type Tab = (typeof TABS)[number];
@@ -26,7 +27,7 @@ export function useLogTabs() {
       const meshLines = report
         ? [
             `引擎 ${report.engine} · ${report.nodeCount} 节点 / ${report.elementCount} 四面体`,
-            `质量（长径比）min ${report.quality.minEdgeRatio.toFixed(2)} / avg ${report.quality.avgEdgeRatio.toFixed(2)} / max ${report.quality.maxEdgeRatio.toFixed(2)}`,
+            `质量（长径比）min ${fixed(report.quality.minEdgeRatio, 2)} / avg ${fixed(report.quality.avgEdgeRatio, 2)} / max ${fixed(report.quality.maxEdgeRatio, 2)}`,
           ]
         : [];
       // 导入日志置顶（最近一次导入在最前），随后是当前网格报告

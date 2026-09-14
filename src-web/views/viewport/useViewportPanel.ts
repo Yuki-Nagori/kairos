@@ -15,6 +15,7 @@ import { registerSnapshot } from "../../render/snapshot";
 import { clipPlaneFromFraction } from "../../render/math";
 import { minMax, quickselect } from "../../utils/stats";
 import { createFieldAnimation } from "../../utils/animation";
+import { fixed } from "../../utils/format";
 
 interface ViewportSlot {
   id: number;
@@ -212,7 +213,7 @@ export function useViewportPanel() {
   const viewCenter = ref({ x: 0, y: 0, z: 0 });
   const centerText = computed(
     () =>
-      `X ${viewCenter.value.x.toFixed(1)} · Y ${viewCenter.value.y.toFixed(1)} · Z ${viewCenter.value.z.toFixed(1)}`,
+      `X ${fixed(viewCenter.value.x, 1)} · Y ${fixed(viewCenter.value.y, 1)} · Z ${fixed(viewCenter.value.z, 1)}`,
   );
 
   /** 相机联动：源实例交互后，把其轨道相机复制到其余实例。 */

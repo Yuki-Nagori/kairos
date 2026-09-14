@@ -7,6 +7,7 @@ import { computed, ref, watch } from "vue";
 import { useAppStore } from "../../stores/app";
 import { useMaterialsStore } from "../../stores/materials";
 import type { Material, PropertyTable } from "../../types";
+import { fixed } from "../../utils/format";
 
 export function useMaterialsPanel() {
   const app = useAppStore();
@@ -100,7 +101,7 @@ export function useMaterialsPanel() {
     }
     return [
       ["类型", filler.kind],
-      ["质量分数", `${(filler.weightFraction * 100).toFixed(1)} %`],
+      ["质量分数", `${fixed(filler.weightFraction * 100, 1)} %`],
       ["长径比", String(filler.aspectRatio)],
       ["备注", filler.note],
     ];
@@ -114,9 +115,9 @@ export function useMaterialsPanel() {
     }
     return [
       ["发泡剂", blowing.kind],
-      ["质量分数", `${blowing.massFractionPercent.toFixed(1)} %`],
-      ["有效密度下降", `${blowing.densityReductionPercent.toFixed(1)} %`],
-      ["表观黏度下降", `${blowing.viscosityReductionPercent.toFixed(1)} %`],
+      ["质量分数", `${fixed(blowing.massFractionPercent, 1)} %`],
+      ["有效密度下降", `${fixed(blowing.densityReductionPercent, 1)} %`],
+      ["表观黏度下降", `${fixed(blowing.viscosityReductionPercent, 1)} %`],
       ["备注", blowing.note],
     ];
   });

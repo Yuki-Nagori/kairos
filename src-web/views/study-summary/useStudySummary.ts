@@ -8,6 +8,7 @@ import { useJobsStore } from "../../stores/jobs";
 import { useMaterialsStore } from "../../stores/materials";
 import { useProjectStore } from "../../stores/project";
 import type { Job } from "../../types";
+import { fixed } from "../../utils/format";
 
 /** 作业状态的展示文案（与作业面板口径一致）。 */
 const JOB_STATUS_LABEL: Record<Job["status"], string> = {
@@ -76,7 +77,7 @@ export function useStudySummary() {
       { k: "并行核数", v: `${job.cores}` },
     ];
     if (job.status === "running" && job.lastTimeS !== null) {
-      rows.push({ k: "物理时间", v: `${job.lastTimeS.toFixed(2)} s` });
+      rows.push({ k: "物理时间", v: `${fixed(job.lastTimeS, 2)} s` });
     }
     return rows;
   });

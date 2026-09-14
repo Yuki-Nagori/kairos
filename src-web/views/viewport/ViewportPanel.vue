@@ -3,6 +3,7 @@
  * 多实例布局：单视口 / 四分格（联动）——任一实例交互后其余实例相机跟随，时间轴全局共享。 */
 import UiButton from "../../components/ui/UiButton.vue";
 import { useViewportPanel } from "./useViewportPanel";
+import { fixed } from "../../utils/format";
 
 const {
   layout,
@@ -102,9 +103,7 @@ const VIEW_TOOLS = [
               style="background: linear-gradient(180deg, #f59e0b, #22c55e, #3b82f6)"
             />
             <div class="flex h-16 flex-col justify-between font-mono text-[10px] text-zinc-400">
-              <span v-for="(value, index) in legendValues" :key="index">{{
-                value.toFixed(2)
-              }}</span>
+              <span v-for="(value, index) in legendValues" :key="index">{{ fixed(value, 2) }}</span>
             </div>
           </div>
           <!-- 悬浮视图工具条：放大 / 缩小 / 适应 / 复位（作用于全部联动视口） -->

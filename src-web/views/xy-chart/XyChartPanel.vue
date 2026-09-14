@@ -5,6 +5,7 @@ import UiTextInput from "../../components/ui/UiTextInput.vue";
 import Card from "../../components/ui/UiCard.vue";
 import { useResultsStore } from "../../stores/results";
 import { useXyChartPanel } from "./useXyChartPanel";
+import { significant } from "../../utils/format";
 
 const results = useResultsStore();
 const {
@@ -39,7 +40,7 @@ const {
             :key="time.dirName"
             :value="time.dirName"
           >
-            {{ time.dirName }} ({{ time.timeS.toFixed(3) }}s)
+            {{ time.dirName }} ({{ significant(time.timeS) }}s)
           </option>
         </select>
       </template>

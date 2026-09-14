@@ -7,10 +7,10 @@ import { useProjectStore } from "../../stores/project";
 import { useResultsStore } from "../../stores/results";
 import { buildReportHtml, type ReportOptions } from "../../utils/report";
 import { minMax } from "../../utils/stats";
-import { fixed, significant } from "../../utils/format";
 import { getSnapshotDataUrl } from "../../render/snapshot";
 import { saveReportToWorkspace } from "../../api/project";
 import { useAppStore } from "../../stores/app";
+import { fixed, significant } from "../../utils/format";
 
 export function useReportPanel() {
   const project = useProjectStore();

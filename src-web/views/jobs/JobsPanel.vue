@@ -4,6 +4,7 @@ import { useJobsPanel } from "./useJobsPanel";
 import Card from "../../components/ui/UiCard.vue";
 import TextInput from "../../components/ui/UiTextInput.vue";
 import UiButton from "../../components/ui/UiButton.vue";
+import { fixed } from "../../utils/format";
 
 const {
   app,
@@ -57,7 +58,7 @@ const {
             </span>
             <span class="truncate text-zinc-500">{{ job.caseDir }}</span>
             <span class="text-zinc-500">
-              {{ job.lastTimeS !== null ? `t = ${job.lastTimeS.toFixed(2)} s` : "" }}
+              {{ job.lastTimeS !== null ? `t = ${fixed(job.lastTimeS, 2)} s` : "" }}
             </span>
             <UiButton
               variant="danger"
