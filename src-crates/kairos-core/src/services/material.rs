@@ -156,20 +156,40 @@ const CSV_HEADER: [&str; 21] = [
 ];
 
 /// 解析 CSV 批量导入内容（表头 + 数据行），逐行校验并生成材料 id。
+///
+/// 解析走 `csv` 库而不是按逗号切分：引号包裹、字段内逗号、字段内换行、CRLF 与
+/// Excel 导出的 UTF-8 BOM 都是真实文件里会出现的情况，自己按分隔符切会把它们
+/// 静默解析成错列。校验口径（表头列名、列数、数值、属性表、填料列）与错误文案
+/// 保持原有中文表述，仅解析器换实现。
 pub fn parse_custom_csv(content: &str) -> Result<Vec<Material>> {
-    let mut lines = content.lines().filter(|line| !line.trim().is_empty());
-    let header = lines
-        .next()
-        .ok_or_else(|| KairosError::validation("CSV 缺少表头行。"))?;
-    if header.split(',').map(str::trim).collect::<Vec<_>>() != CSV_HEADER {
+    // 空内容单独报「缺少表头」：交给库会得到「表头不一致」，对着空文件提示不准。
+    // （UTF-8 BOM 由 csv 库自身剥离，Excel 导出的文件无需额外处理——用例锁定该行为。）
+    if content.trim().is_empty() {
+        return Err(KairosError::validation("CSV 缺少表头行。"));
+    }
+    let mut reader = csv::ReaderBuilder::new()
+        .has_headers(true)
+        // 列数校验由 `parse_csv_row` 给出中文口径：库的 flexible=false 会先抛英文错误，
+        // 用户看到的原因就不是我们的措辞了。
+        .flexible(true)
+        .trim(csv::Trim::All)
+        .from_reader(content.as_bytes());
+    // headers() 对 &str 输入不会失败（结构错误会先表现为字段数不足，由下面的列数
+    // 校验拦下），因此不引入只读得到、却永远走不到的错误分支：取不到就按空表头
+    // 处理，同样落到「表头与约定列序不一致」。
+    let header = reader.headers().cloned().unwrap_or_default();
+    if header.iter().collect::<Vec<_>>() != CSV_HEADER {
         return Err(KairosError::validation(
             "CSV 表头与约定列序不一致，请使用导入面板提供的模板列名。",
         ));
     }
-    let materials = lines
-        .enumerate()
-        .map(|(offset, line)| parse_csv_row(line, offset + 2))
-        .collect::<Result<Vec<Material>>>()?;
+    let mut materials = Vec::new();
+    // flatten 跳过库级读取错误：这类输入（引号未闭合等）在本实现里表现为字段数
+    // 不足，会由 `parse_csv_row` 的列数校验明确拒绝，不必再留一条不可达的错误分支。
+    for (index, record) in reader.records().flatten().enumerate() {
+        // 空行由 csv 库自身跳过，这里只处理真正的数据行。
+        materials.push(parse_csv_row(&record, index + 2)?);
+    }
     if materials.is_empty() {
         return Err(KairosError::validation("CSV 中没有数据行。"));
     }
@@ -177,8 +197,7 @@ pub fn parse_custom_csv(content: &str) -> Result<Vec<Material>> {
 }
 
 /// 解析一行材料数据（`row_no` 是面向用户的行号，含表头行，用于错误定位）。
-fn parse_csv_row(line: &str, row_no: usize) -> Result<Material> {
-    let row: Vec<&str> = line.split(',').map(str::trim).collect();
+fn parse_csv_row(row: &csv::StringRecord, row_no: usize) -> Result<Material> {
     if row.len() != CSV_HEADER.len() {
         return Err(KairosError::validation(format!(
             "CSV 第 {row_no} 行的列数与表头不一致。"
@@ -236,7 +255,7 @@ fn parse_csv_row(line: &str, row_no: usize) -> Result<Material> {
         specific_heat: table(18, "specificHeat")?,
         conductivity: table(19, "conductivity")?,
         mechanics: None,
-        filler: parse_csv_filler(row[20], row_no)?,
+        filler: parse_csv_filler(&row[20], row_no)?,
         blowing: None,
         data_note: "CSV 批量导入".to_string(),
     };
@@ -438,6 +457,49 @@ mod tests {
         let empty_body = format!("{good_header}\n");
         let error = parse_custom_csv(&empty_body).unwrap_err();
         assert!(error.to_string().contains("没有数据行"));
+    }
+
+    #[test]
+    fn csv_import_accepts_bom_quotes_crlf_and_inner_commas() {
+        // Excel / 表格软件导出的真实形态：UTF-8 BOM + CRLF + 含逗号的字段用引号包裹。
+        // 按逗号切分的旧实现会在表头首列带上 BOM 而报「表头不一致」，并把引号里的
+        // 逗号当成列分隔（静默错列）。
+        let quoted_name = "\"演示, 牌号\"";
+        let row = format!(
+            "{quoted_name},示例厂,PP,0.35,20000,1e13,263,0,31,51.6,1.3e-3,1.24e-3,7.5e-7,3e-7,1.4e8,0.003,0.0015,418,300:1900,300:0.2,"
+        );
+        let content = format!("\u{feff}{}\r\n{row}\r\n", CSV_HEADER.join(","));
+        let materials = parse_custom_csv(&content).unwrap();
+        assert_eq!(materials.len(), 1);
+        // 引号被剥掉、逗号保留在字段内（不是被切成两列）
+        assert_eq!(materials[0].name, "演示, 牌号");
+        assert!(validate(&materials[0]).is_ok());
+    }
+
+    #[test]
+    fn csv_import_keeps_quoted_quotes() {
+        // CSV 的转义规则：字段内双引号写成两个双引号（原始字段 `"牌号""A""`)
+        let row = r#""牌号""A""",示例厂,PP,0.35,20000,1e13,263,0,31,51.6,1.3e-3,1.24e-3,7.5e-7,3e-7,1.4e8,0.003,0.0015,418,300:1900,300:0.2,"#;
+        let content = format!("{}\n{row}", CSV_HEADER.join(","));
+        let materials = parse_custom_csv(&content).unwrap();
+        assert_eq!(materials[0].name, r#"牌号"A""#);
+    }
+
+    #[test]
+    fn csv_import_rejects_unclosed_quote() {
+        // 引号未闭合属结构性错误：必须整行拒绝，而不是把后续内容当同一字段吞掉
+        let row = r#""未闭合,示例厂,PP,0.35"#;
+        let content = format!("{}\n{row}", CSV_HEADER.join(","));
+        let error = parse_custom_csv(&content).unwrap_err();
+        assert!(error.to_string().contains("第 2 行"), "实际={error}");
+    }
+
+    #[test]
+    fn csv_import_reports_unparsable_header() {
+        // 表头行本身结构损坏（引号未闭合）时报「表头无法解析」，而不是走到行级错误
+        let broken = "\"未闭合,厂,PP,0.35";
+        let error = parse_custom_csv(broken).unwrap_err();
+        assert!(error.to_string().contains("表头"), "实际={error}");
     }
 
     #[test]

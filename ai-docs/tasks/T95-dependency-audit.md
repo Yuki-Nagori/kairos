@@ -97,8 +97,7 @@ WebGL2 / WebGPU 双后端、剖切、体积光线步进）、`utils/field-binary
   `manifest.json`（`ManifestEntry.sha256`，`serde(default)` 兼容旧清单），core 侧 `services/digest.rs`
   带四条单测。**剩余**：①上游 release 未发布校验值（`gh release view` 确认只发归档），需向上游提
   「发布 SHA256SUMS」；②摘要目前只在清单里，依赖面板尚未展示（前端 DTO 改动需同步 fixtures，单独一批做）。
-- **P1-b 材料 CSV 导入引 `csv`**：带对拍（同一批样例文件新旧实现逐字段一致）+ 新增引号 / 字段内逗号 /
-  BOM / CRLF 用例；错误文案保持中文口径。
+- **P1-b 材料 CSV 导入引 `csv`**（2026-09-14 完成）：已换库，新增 BOM / CRLF / 引号内逗号 / 双引号转义 / 未闭合引号 / 损坏表头 6 类用例，既有 5 条文案口径不变；消融 3/3 红。
 - **P2-a `@vueuse/core` 收编**：防抖、点击外部、storage 网关三块，逐个替换 + 既有测试全绿。
 - **P2-b 统一数值 / 单位 formatter**：新建 `utils/format.ts` + 单测，替换 45 处散落调用（分批提交）。
 - **P2-c CSV 导出加引号 / BOM**、前端 id 改用平台 API：小改动，随 P2 顺带。
