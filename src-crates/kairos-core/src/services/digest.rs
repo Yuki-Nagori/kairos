@@ -14,16 +14,22 @@ use crate::error::{KairosError, Result};
 /// 读取块大小：大归档（百 MB 级）分块喂哈希，避免整文件进内存。
 const CHUNK_BYTES: usize = 1024 * 1024;
 
+/// 读取失败 → io 错误。
+///
+/// 打开与读取共用这一处映射：目录作为路径传入时，有的平台在打开阶段就报错
+/// （Windows 的拒绝访问），有的平台能打开、到读取阶段才报错（unix 的 EISDIR）。
+/// 分开写两个闭包会让覆盖率随平台漂移——某一条路径在某个平台上永远不会执行。
+fn read_failed(error: std::io::Error) -> KairosError {
+    KairosError::io(format!("读取待校验文件失败：{error}"))
+}
+
 /// 计算文件的 SHA-256（小写十六进制）。
 pub fn sha256_file(path: &Path) -> Result<String> {
-    let mut file = std::fs::File::open(path)
-        .map_err(|e| KairosError::io(format!("读取待校验文件失败：{e}")))?;
+    let mut file = std::fs::File::open(path).map_err(read_failed)?;
     let mut hasher = Sha256::new();
     let mut buffer = vec![0u8; CHUNK_BYTES];
     loop {
-        let read = file
-            .read(&mut buffer)
-            .map_err(|e| KairosError::io(format!("读取待校验文件失败：{e}")))?;
+        let read = file.read(&mut buffer).map_err(read_failed)?;
         if read == 0 {
             break;
         }
