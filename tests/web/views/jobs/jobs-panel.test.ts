@@ -177,6 +177,37 @@ describe("JobsPanel 作业列表与提交", () => {
     expect(submitJob).not.toHaveBeenCalled();
   });
 
+  it("作业在跑时轮询列表：结束即停表，卸载后不再刷新", async () => {
+    vi.useFakeTimers();
+    try {
+      const jobs = useJobsStore();
+      jobs.jobs = [makeJob({ id: "job-a", status: "running" })];
+      vi.mocked(listJobs).mockResolvedValue([makeJob({ id: "job-a", status: "running" })]);
+      const wrapper = mount(JobsPanel, { global: { plugins: [pinia] } });
+      const callsAfterMount = vi.mocked(listJobs).mock.calls.length;
+
+      // 运行中：到点刷新（后端早已判定失败也能及时反映到界面）。
+      vi.mocked(listJobs).mockResolvedValue([makeJob({ id: "job-a", status: "failed" })]);
+      await vi.advanceTimersByTimeAsync(1500);
+      expect(vi.mocked(listJobs).mock.calls.length).toBeGreaterThan(callsAfterMount);
+      await vi.waitFor(() => expect(jobs.jobs[0]?.status).toBe("failed"));
+
+      // 结束：停表，再推进时间也不再刷新。
+      const callsAfterFinish = vi.mocked(listJobs).mock.calls.length;
+      await vi.advanceTimersByTimeAsync(6000);
+      expect(vi.mocked(listJobs).mock.calls.length).toBe(callsAfterFinish);
+
+      // 卸载：清理定时器（即便状态又变回运行中也不再刷新）。
+      jobs.jobs = [makeJob({ id: "job-a", status: "running" })];
+      wrapper.unmount();
+      const callsAfterUnmount = vi.mocked(listJobs).mock.calls.length;
+      await vi.advanceTimersByTimeAsync(6000);
+      expect(vi.mocked(listJobs).mock.calls.length).toBe(callsAfterUnmount);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("提交作业：目录去空白、核数取输入值", async () => {
     vi.mocked(submitJob).mockResolvedValue(makeJob({ id: "job-9" }));
     const wrapper = mount(JobsPanel, { global: { plugins: [pinia] } });
