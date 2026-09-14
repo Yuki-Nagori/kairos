@@ -645,18 +645,17 @@ pub async fn vm_status() -> Result<VmStatus> {
 /// Windows 走 UAC 提权（安装窗口在系统层，无法回传日志）。
 #[tauri::command]
 pub async fn vm_install(progress: Channel<String>) -> Result<String> {
-    let provider = provider()?;
-    if provider == VmProviderKind::Native {
+    let Some(args) = vm_logic::install_args(provider()?) else {
         return Err(KairosError::validation("Linux 原生环境无需安装虚拟机。"));
-    }
-    let args = vm_logic::install_args(provider);
+    };
     tauri::async_runtime::spawn_blocking(move || {
         let _ = progress.send("── 开始安装（可能需要管理员授权 / 数分钟）──".into());
-        if run_and_stream(&args, &progress)? {
-            Ok("安装完成。请点击「重新探测」确认。".into())
-        } else {
-            Err(KairosError::io("安装命令失败，详见上方日志。"))
-        }
+        stream_step(
+            &args,
+            &progress,
+            "安装完成。请点击「重新探测」确认。",
+            "安装命令失败，详见上方日志。",
+        )
     })
     .await
     .map_err(|e| KairosError::internal(format!("安装任务失败：{e}")))?

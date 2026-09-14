@@ -33,20 +33,22 @@ pub fn version_args(provider: VmProviderKind) -> Vec<String> {
 }
 
 /// 一键安装命令。Windows 走 UAC 提权（输出不可回传）；macOS 依赖 Homebrew。
-pub fn install_args(provider: VmProviderKind) -> Vec<String> {
+/// 原生环境没有「安装虚拟机」这一步，用 `None` 表达（同 `start_args` / `ready_probe_args`）：
+/// 返回空表会让调用点拿到一个 `args[0]` 就越界的参数表。
+pub fn install_args(provider: VmProviderKind) -> Option<Vec<String>> {
     match provider {
-        VmProviderKind::Multipass => vec![
+        VmProviderKind::Multipass => Some(vec![
             "brew".into(),
             "install".into(),
             "--cask".into(),
             "multipass".into(),
-        ],
-        VmProviderKind::Wsl => vec![
+        ]),
+        VmProviderKind::Wsl => Some(vec![
             "powershell".into(),
             "-Command".into(),
             "Start-Process wsl -ArgumentList '--install' -Verb RunAs".into(),
-        ],
-        VmProviderKind::Native => vec![],
+        ]),
+        VmProviderKind::Native => None,
     }
 }
 
@@ -948,7 +950,7 @@ mod tests {
         // Shell 就是本地登录 bash；安装/启动/停止全部为无操作短路。
         assert_eq!(shell_args(VmProviderKind::Native), vec!["bash", "--login"]);
         assert!(start_args(VmProviderKind::Native).is_none());
-        assert!(install_args(VmProviderKind::Native).is_empty());
+        assert!(install_args(VmProviderKind::Native).is_none());
         for args in [
             version_args(VmProviderKind::Native),
             instance_info_args(VmProviderKind::Native),
@@ -1057,12 +1059,11 @@ mod tests {
             )
         );
         assert!(start_args(VmProviderKind::Wsl).is_none());
-        assert!(install_args(VmProviderKind::Multipass).contains(&"--cask".to_string()));
-        assert!(
-            install_args(VmProviderKind::Wsl)
-                .iter()
-                .any(|a| a.contains("RunAs"))
-        );
+        let brew_install = install_args(VmProviderKind::Multipass).expect("multipass 有安装步骤");
+        assert!(brew_install.contains(&"--cask".to_string()));
+        let wsl_install = install_args(VmProviderKind::Wsl).expect("wsl 有安装步骤");
+        // 提权安装：装完由系统层弹窗，本进程拿不到输出
+        assert!(wsl_install.iter().any(|a| a.contains("RunAs")));
         assert_eq!(shell_args(VmProviderKind::Wsl).last().unwrap(), WSL_DISTRO);
     }
 
