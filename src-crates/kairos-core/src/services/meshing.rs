@@ -11,6 +11,7 @@
 //! 区域模式对与区域盒相交的轴区间逐级对半细分。过渡单元各向异性，
 //! 质量指标在报告中如实呈现。
 
+use crate::services::vec3;
 use std::collections::HashMap;
 
 use crate::error::{KairosError, Result};
@@ -321,26 +322,13 @@ impl TetBuilder {
 /// 保证四面体绕向为正体积（行列式 < 0 时交换两点）。
 fn ensure_positive(tet: &mut [usize; 4], nodes: &[[f64; 3]]) {
     let (a, b, c, d) = (nodes[tet[0]], nodes[tet[1]], nodes[tet[2]], nodes[tet[3]]);
-    let det = dot3(&cross3(&sub(&b, &a), &sub(&c, &a)), &sub(&d, &a));
+    let det = vec3::dot(
+        vec3::cross(vec3::sub(b, a), vec3::sub(c, a)),
+        vec3::sub(d, a),
+    );
     if det < 0.0 {
         tet.swap(2, 3);
     }
-}
-
-fn cross3(a: &[f64; 3], b: &[f64; 3]) -> [f64; 3] {
-    [
-        a[1] * b[2] - a[2] * b[1],
-        a[2] * b[0] - a[0] * b[2],
-        a[0] * b[1] - a[1] * b[0],
-    ]
-}
-
-fn dot3(a: &[f64; 3], b: &[f64; 3]) -> f64 {
-    a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
-}
-
-fn sub(a: &[f64; 3], b: &[f64; 3]) -> [f64; 3] {
-    [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
 }
 
 /// 提取只被一个四面体使用的面（边界面）。
@@ -470,15 +458,15 @@ pub fn report(volume_mesh: &VolumeMesh) -> MeshingReport {
         let mut longest = 0.0f64;
         let mut shortest = f64::INFINITY;
         for (i, j) in [(0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3)] {
-            let d = sub(&p[i], &p[j]);
+            let d = vec3::sub(p[i], p[j]);
             let len = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();
             longest = longest.max(len);
             shortest = shortest.min(len);
         }
         let ratio = longest / shortest.max(1e-15);
-        let det = dot3(
-            &cross3(&sub(&p[1], &p[0]), &sub(&p[2], &p[0])),
-            &sub(&p[3], &p[0]),
+        let det = vec3::dot(
+            vec3::cross(vec3::sub(p[1], p[0]), vec3::sub(p[2], p[0])),
+            vec3::sub(p[3], p[0]),
         )
         .abs();
         let volume = det / 6.0;
@@ -486,8 +474,8 @@ pub fn report(volume_mesh: &VolumeMesh) -> MeshingReport {
         let max_area = [(0, 1, 2), (0, 1, 3), (0, 2, 3), (1, 2, 3)]
             .iter()
             .map(|(a, b, c)| {
-                let cross = cross3(&sub(&p[*b], &p[*a]), &sub(&p[*c], &p[*a]));
-                0.5 * dot3(&cross, &cross).sqrt()
+                let cross = vec3::cross(vec3::sub(p[*b], p[*a]), vec3::sub(p[*c], p[*a]));
+                0.5 * vec3::dot(cross, cross).sqrt()
             })
             .fold(0.0f64, f64::max);
         let aspect = 2.0 * longest * max_area / det.max(1e-15);
