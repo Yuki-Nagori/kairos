@@ -42,6 +42,8 @@ export class WebGPURenderer {
   private readonly device: GpuDevice;
   private readonly format: GpuTextureFormat;
   private readonly onFps?: (fps: number) => void;
+  /** 最近一次绘制失败的原因（null = 正常）。 */
+  private frameError: string | null = null;
   private readonly onView?: (state: {
     x: number;
     y: number;
@@ -405,10 +407,29 @@ export class WebGPURenderer {
       if (this.disposed) {
         return;
       }
-      this.drawFrame();
+      // 画布尚未布局（宽或高为 0）时跳过绘制：以 0 尺寸创建纹理会被 WebGPU 判为
+      // 校验错误，异常会让循环在**第一帧**就死掉——画布保持空白且 FPS 永远停在 —，
+      // 用户看到的是「3D 显示不出来」而没有任何提示。
+      if (this.canvas.width === 0 || this.canvas.height === 0) {
+        this.rafHandle = requestAnimationFrame(frame);
+        return;
+      }
+      try {
+        this.drawFrame();
+        this.frameError = null;
+      } catch (error) {
+        // 单帧失败不终止循环：把原因留下（面板可读取），下一帧继续尝试，
+        // 布局或尺寸恢复后画面能自己回来。
+        this.frameError = error instanceof Error ? error.message : String(error);
+      }
       this.rafHandle = requestAnimationFrame(frame);
     };
     this.rafHandle = requestAnimationFrame(frame);
+  }
+
+  /** 最近一次绘制失败的原因（null = 正常）；供 UI 诊断显示。 */
+  renderError(): string | null {
+    return this.frameError;
   }
 
   private drawFrame(): void {
