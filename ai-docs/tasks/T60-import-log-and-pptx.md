@@ -4,7 +4,7 @@
 - 优先级：P4（回流自 R1 全项目对照评审；两项可独立做或拆分）
 - 状态：**部分实现**（2026-09-13）——导入日志流已落地（`ImportOutcome` +
   `import_log` + 日志区展示）；**PPTX 导出未做**。
-  依赖取向已定：**Rust 侧生成 pptx**（报告走 core → 命令层落盘，前端只触发与打开）。
+  依赖取向已定并**落地了 core 侧生成**：选 `ppt-rs` 0.2（Apache-2.0），`services/report_pptx.rs` 已能产出含中文的 deck（产物经 zip 解析验证中文保真，包体 +16.5 KB）；命令层与前端触发/打开待接。
   候选库（crates.io，均需先核许可与 API 覆盖）：`ppt-rs`（8.8 万下载，「create, read, update
   PowerPoint 2007+」）、`pptx`（约 8 千）、`pptxboss-write`（纯 Rust 确定性写 ECMA-376）。
   准入条件：许可为 permissive（GPL/AGPL 不得进进程内，见 AGENTS.md 的隔离约定）、

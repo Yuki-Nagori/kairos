@@ -22,6 +22,7 @@ pub mod process;
 pub mod project;
 pub mod render_mesh;
 pub mod repair;
+pub mod report_pptx;
 pub mod results;
 pub mod runners;
 pub mod step;
