@@ -109,19 +109,43 @@
 > 端到端验证默认走 **CLI 通道**（`kairos-cli`：生成 case → 送进 VM → 求解 → 结果回传 → 结果扫描），
 > 可脚本化、可重放；只有验证目标本身是界面 / 作业编排行为时才走 GUI（见 T94）。
 
-| ID  | 文件                                                                                         | 任务                                            | 依赖 / 状态                                                                                                                  |
-| --- | -------------------------------------------------------------------------------------------- | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| T29 | [T29-real-solve-e2e.md](T29-real-solve-e2e.md)                                               | 真实求解端到端验证（OpenFOAM 环境）             | v0.2.5 轮三条链路已跑通；剩最小连通性复跑 + 视口截图核验（真实件 4 进程并行：上游 046 已修、**未发版**，等新版 bundle 复测） |
-| T33 | [T33-updater-hardening.md](T33-updater-hardening.md)                                         | 发布加固：CSP 已加固 + updater / 签名待密钥证书 | CSP 零行为变化加固已落地；`style-src 'unsafe-inline'` 移除需真机回归，updater 与三平台签名需密钥 / 证书                      |
-| T48 | [T48-renderer-bench-realdevice.md](T48-renderer-bench-realdevice.md)                         | 渲染后端三端真机验收与 FPS 回填                 | 等三端真机（macOS/Windows/Linux WebView）                                                                                    |
-| T60 | [T60-import-log-and-pptx.md](T60-import-log-and-pptx.md)                                     | 导入日志流 + PPT 报告导出（低优先 / 可选拆分）  | 导入日志已完成；PPTX 取向定为 Rust 侧生成（候选 `ppt-rs` / `pptx` / `pptxboss-write`，先核许可与覆盖），依赖取向审查见 T95   |
-| T82 | [T82-dualdomain-midplane-solve-consumption.md](T82-dualdomain-midplane-solve-consumption.md) | 双域 / 中面网格的求解消费                       | 求解侧消费（双域/中面），依赖上游降维能力                                                                                    |
-| T83 | [T83-multi-cavity-runner-fill.md](T83-multi-cavity-runner-fill.md)                           | 多型腔与流道系统参与填充                        | 流道体进网格 + 多腔分配，依赖 T29 闭环                                                                                       |
-| T89 | [T89-gaim-integration.md](T89-gaim-integration.md)                                           | 气体辅助注塑（GAIM）集成                        | 等上游三相 / 气芯场                                                                                                          |
-| T92 | [T92-doe-orchestration.md](T92-doe-orchestration.md)                                         | DOE / 正交试验编排                              | 等 T29 求解闭环稳定                                                                                                          |
-| T93 | [T93-process-optimization.md](T93-process-optimization.md)                                   | 工艺参数自动寻优                                | 等 T92 汇总表                                                                                                                |
-| T94 | [T94-gui-e2e-verification.md](T94-gui-e2e-verification.md)                                   | GUI 端到端验证（提交 → 回传 → VM 自动关闭）     | 待开工；需人在界面展开求解面板后跑（AX 拿不到折叠面板的输入框）；求解链路本身先走 CLI 通道                                   |
-| T95 | [T95-dependency-audit.md](T95-dependency-audit.md)                                           | 依赖取向审查：用现成库 vs 自造轮子              | 待开工；逐条给结论（规格归属 / 许可 / 可验证性 / 体积 / 维护度），能改的当轮改                                               |
+| ID  | 文件                                                                                         | 任务                                            | 依赖 / 状态                                                                                                                                                       |
+| --- | -------------------------------------------------------------------------------------------- | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| T29 | [T29-real-solve-e2e.md](T29-real-solve-e2e.md)                                               | 真实求解端到端验证（OpenFOAM 环境）             | v0.2.5 轮三条链路已跑通；GUI 作业端到端已拆到 T94（含最小连通性复跑），剩视口截图与 XY 探针核验；真实件 4 进程并行：上游 046 已修、**未发版**，等新版 bundle 复测 |
+| T33 | [T33-updater-hardening.md](T33-updater-hardening.md)                                         | 发布加固：CSP 已加固 + updater / 签名待密钥证书 | CSP 零行为变化加固已落地；`style-src 'unsafe-inline'` 移除需真机回归，updater 与三平台签名需密钥 / 证书                                                           |
+| T48 | [T48-renderer-bench-realdevice.md](T48-renderer-bench-realdevice.md)                         | 渲染后端三端真机验收与 FPS 回填                 | 等三端真机（macOS/Windows/Linux WebView）                                                                                                                         |
+| T60 | [T60-import-log-and-pptx.md](T60-import-log-and-pptx.md)                                     | 导入日志流 + PPT 报告导出（低优先 / 可选拆分）  | 导入日志已完成；PPTX 取向定为 Rust 侧生成（候选 `ppt-rs` / `pptx` / `pptxboss-write`，先核许可与覆盖），依赖取向审查见 T95                                        |
+| T82 | [T82-dualdomain-midplane-solve-consumption.md](T82-dualdomain-midplane-solve-consumption.md) | 双域 / 中面网格的求解消费                       | 求解侧消费（双域/中面），依赖上游降维能力                                                                                                                         |
+| T83 | [T83-multi-cavity-runner-fill.md](T83-multi-cavity-runner-fill.md)                           | 多型腔与流道系统参与填充                        | 流道体进网格 + 多腔分配，依赖 T29 闭环                                                                                                                            |
+| T89 | [T89-gaim-integration.md](T89-gaim-integration.md)                                           | 气体辅助注塑（GAIM）集成                        | 等上游三相 / 气芯场                                                                                                                                               |
+| T92 | [T92-doe-orchestration.md](T92-doe-orchestration.md)                                         | DOE / 正交试验编排                              | 等 T29 求解闭环稳定                                                                                                                                               |
+| T93 | [T93-process-optimization.md](T93-process-optimization.md)                                   | 工艺参数自动寻优                                | 等 T92 汇总表                                                                                                                                                     |
+| T94 | [T94-gui-e2e-verification.md](T94-gui-e2e-verification.md)                                   | GUI 端到端验证（提交 → 回传 → VM 自动关闭）     | 待开工；需人在界面展开求解面板后跑（AX 拿不到折叠面板的输入框）；求解链路本身先走 CLI 通道                                                                        |
+| T95 | [T95-dependency-audit.md](T95-dependency-audit.md)                                           | 依赖取向审查：用现成库 vs 自造轮子              | 待开工；逐条给结论（规格归属 / 许可 / 可验证性 / 体积 / 维护度），能改的当轮改                                                                                    |
+
+## 执行顺序（2026-09-14 核对后确认）
+
+核对范围：全部未完成任务（T29/T33/T48/T60/T82/T83/T89/T91/T92/T93/T94/T95）逐条对照
+文件内声明的依赖、剩余范围与外部条件。结论分三档：
+
+**档 A · 现在就能开工（无外部条件）**——按建议顺序：
+
+1. **T95 依赖取向审查**（P2，进行中）：批次现成，P1-a 下载完整性校验（安全项）→ P1-b 材料 CSV
+   引 `csv`（BOM 会让表头校验失败，真实缺陷）→ P2（VueUse 收编 + 统一 formatter）→ P3（图表、
+   几何数学、bytemuck、解压库化）。每批独立提交 + 对拍/消融证据。
+2. **T89 第一步**（P3）：材料库「气体介质」数据位 + `RunnerElement.medium`（双端镜像 + 契约测试），
+   文件明确「第一步可先行」；第二步等上游三相 / 气芯能力。
+3. **T83 多型腔与流道参与填充**（P1）：文件依赖 T07/T61 均已满足（README 原先写的「依赖 T29 闭环」
+   与文件不符，已改正）；验收在 VM 跑两腔填充，v0.2.5 通道已验证可用。
+4. **T60 PPTX 报告导出**（P4）：纯 Rust 侧离线生成，开工第一步核候选库许可与中文排版覆盖。
+5. **T33 可做部分**（P3）：updater 插件接入 + `style-src 'unsafe-inline'` 改造（nonce / 文件化）；
+   真机回归与三平台签名属档 B。
+
+**档 B · 等外部条件**：T29 剩余（上游 046 发版后复测 np=4）、T82（上游降维支持口径）、
+T91 剩余（上游取向求解）、T89 第二步（上游三相 / 气芯）、T48（三端真机 WebView）、
+T33 收尾（真机回归 + 签名证书密钥）、T94（需人展开求解面板一次）。
+
+**档 C · 被未完成内部任务阻塞**：T92（等 T29 闭环稳定）、T93（等 T92）。
 
 ## 2026-09-13 收口批次（本轮完成）
 
