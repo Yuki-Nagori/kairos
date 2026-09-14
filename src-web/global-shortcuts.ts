@@ -8,6 +8,7 @@
  */
 import { matchesShortcut, SHORTCUTS } from "./utils/shortcuts";
 import { useProjectStore } from "./stores/project";
+import { useNewProjectDialog } from "./components/menu-bar/useNewProjectDialog";
 
 export function setupGlobalShortcuts(): void {
   window.addEventListener("keydown", (event) => {
@@ -23,7 +24,7 @@ export function setupGlobalShortcuts(): void {
       void project().openProject();
     } else if (matchesShortcut(event, SHORTCUTS.fileNew)) {
       event.preventDefault();
-      void project().newProject("未命名项目");
+      useNewProjectDialog().show();
     }
   });
 }

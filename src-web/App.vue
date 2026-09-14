@@ -14,6 +14,7 @@ import MenuBar from "./components/menu-bar/MenuBar.vue";
 import StageTabs from "./components/stage-tabs/StageTabs.vue";
 import StageRibbon from "./components/stage-ribbon/StageRibbon.vue";
 import CommandPalette from "./components/command-palette/CommandPalette.vue";
+import NewProjectDialog from "./components/menu-bar/NewProjectDialog.vue";
 import StatusBar from "./components/status-bar/StatusBar.vue";
 import LogTabs from "./components/log-tabs/LogTabs.vue";
 import VmDock from "./components/vm-dock/VmDock.vue";
@@ -148,5 +149,6 @@ const gridClass = computed(() => {
     </main>
     <StatusBar />
     <CommandPalette />
+    <NewProjectDialog />
   </div>
 </template>

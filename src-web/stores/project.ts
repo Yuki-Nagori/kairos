@@ -64,9 +64,11 @@ export const useProjectStore = defineStore("project", {
       }
     },
     /** 新建空项目（仅内存，保存时才落盘）。 */
-    async newProject(name: string, fileName = ""): Promise<void> {
+    /** 新建项目（仅内存，保存时才落盘）；返回是否创建成功——调用方（新建对话框）
+     *  据此决定是否收起，失败原因已进全局错误通道。 */
+    async newProject(name: string, fileName = ""): Promise<boolean> {
       const app = useAppStore();
-      await app.withBusy("正在创建项目…", async () => {
+      const created = await app.withBusy("正在创建项目…", async () => {
         const project = await createProject(name);
         // 工程目录：<文档目录>/kairos/<工程名>/<文件名>.kairos（文件名留空用默认名）。
         const path = await defaultProjectPath(name, fileName.trim() === "" ? "project" : fileName);
@@ -76,7 +78,9 @@ export const useProjectStore = defineStore("project", {
         this.syncActiveStudy();
         await saveProjectFile(path, project);
         await this.refreshRecents();
+        return true;
       });
+      return created ?? false;
     },
     /** 弹出文件对话框选择并打开工程。 */
     async openProject(): Promise<void> {

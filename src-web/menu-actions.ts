@@ -11,9 +11,11 @@ import { useResultsStore } from "./stores/results";
 import { useDependenciesStore } from "./stores/dependencies";
 import { useVmStore } from "./stores/vm";
 import { useAboutDialog } from "./components/menu-bar/useAboutDialog";
+import { useNewProjectDialog } from "./components/menu-bar/useNewProjectDialog";
 
 const menuActions: Record<string, () => void> = {
-  "file.new": () => void useProjectStore().newProject("未命名项目"),
+  // 新建项目：先弹对话框收项目名与文件名（工程目录名与文件名都由用户定）
+  "file.new": () => useNewProjectDialog().show(),
   "file.open": () => void useProjectStore().openProject(),
   "file.save": () => void useProjectStore().saveProject(),
   "file.saveAs": () => void useProjectStore().saveProjectAs(),

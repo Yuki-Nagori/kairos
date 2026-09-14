@@ -161,8 +161,9 @@ describe("project store", () => {
       });
       const { saveProjectFile } = await import("../../../src-web/api/project");
 
-      await project.newProject("新项目", "模具 A");
+      const created = await project.newProject("新项目", "模具 A");
 
+      expect(created).toBe(true);
       expect(project.project?.name).toBe("新项目");
       // 用户可改文件名；默认名走 project
       expect(project.projectPath).toBe("/home/u/Documents/kairos/新项目/模具 A.kairos");
@@ -187,8 +188,9 @@ describe("project store", () => {
 
       const app = useAppStore();
       const project = useProjectStore();
-      await project.newProject("新项目");
+      const created = await project.newProject("新项目");
 
+      expect(created).toBe(false);
       expect(app.error?.message).toBe("磁盘不可写");
       expect(project.project).toBeNull();
       expect(app.busy).toBeNull();
