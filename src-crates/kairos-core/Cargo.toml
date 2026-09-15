@@ -16,6 +16,9 @@ bytemuck = "1"
 ppt-rs = "0.2"
 nalgebra = { version = "0.35", default-features = false, features = ["std"] }
 sha2 = "0.10"
+# 正则（utils/regex）：本 crate 的依赖图里已有 regex（经 ppt-rs → pdfrs 传递），
+# 提升为直接依赖不新增 crate、不改变编译产物。
+regex = "1"
 
 [dev-dependencies]
 criterion = "0.5"
