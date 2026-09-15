@@ -552,3 +552,7 @@
 - 2026-09-15 22:45 | T101 VM 版本阻塞 | 新 case 在 Multipass VM 被旧版 solver 以缺少 `b4` 拒绝；不添加兼容键，要求先升级 GUI/VM 的 moldingFoam 部署后再做运行时 golden 验收。
 
 - 2026-09-15 22:55 | T101 solver baseline | 按 moldingFoam v1.1.0 正式 Tait 字典输出 `b4/b4s`，在更新后的 Multipass VM 中完成自定义材料 case 真实求解，退出码 0、Cross-WLF/Tait 选型与 `End` 收尾证据齐全。
+
+- 2026-09-15 23:05 | T100/T101 材料快照 | 将 PP-REF-01 的 Cross-WLF、Tait、热性能和机械字段写入 Mug 基线脱敏快照；明确 Mug DOE 的三水平约束与后续单点 baseline 入口需求。
+
+- 2026-09-15 23:15 | 默认 PP 材料更新 | 将 PP-REF-01 的脱敏拟合结果同步为 Kairos 内置 PP 默认模板，保留授权与实测复核说明。
