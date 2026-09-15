@@ -17,6 +17,7 @@ use kairos_core::models::results::{
     DeriveRequest, ResultCatalog, ScalarField, TimeStepMeta, VectorField,
 };
 use kairos_core::models::runners::{CoolingChannel, RunnerElement, RunnerKind, RunnerMedium};
+use kairos_core::models::solver::{CaseOutcome, EnvironmentCheck};
 use kairos_core::services::moldingfoam::{CaseReport, GateInlet, PatchAreas};
 use kairos_core::services::{geometry, material};
 
@@ -335,6 +336,29 @@ fn gate_inlet_report_serializes_with_camel_case() {
     assert_eq!(json["ventAreaM2"], 2.5e-5);
     assert_eq!(json["gates"][0]["index"], 1);
     assert_eq!(json["warnings"].as_array().map(Vec::len), Some(1));
+}
+
+#[test]
+fn solver_dtos_serialize_with_camel_case() {
+    let environment = serde_json::to_value(EnvironmentCheck {
+        moldingfoam: true,
+        solver: false,
+        hint: "install solver".into(),
+    })
+    .unwrap();
+    assert_eq!(environment["moldingfoam"], true);
+    assert_eq!(environment["solver"], false);
+
+    let outcome = serde_json::to_value(CaseOutcome {
+        case_dir: "case".into(),
+        inlet_area_m2: 1.0,
+        inlet_equivalent_diameter_mm: 2.0,
+        gates: Vec::new(),
+        warnings: vec!["warning".into()],
+    })
+    .unwrap();
+    assert_eq!(outcome["caseDir"], "case");
+    assert_eq!(outcome["inletEquivalentDiameterMm"], 2.0);
 }
 
 /// VectorField 的形状：三分量与 camelCase，前端结果面板的矢量行与之对应。

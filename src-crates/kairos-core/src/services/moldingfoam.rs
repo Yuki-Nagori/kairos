@@ -18,6 +18,8 @@ use crate::models::process::ProcessSettings;
 use crate::models::runners::{CoolingChannel, DEFAULT_COOLANT_HTC, RunnerElement, RunnerKind};
 use crate::models::solver::AnalysisStage;
 
+pub use crate::models::solver::GateInlet;
+
 /// 求解入口单点：foamRun 框架的求解模块名。bundle 自带
 /// libmoldingFoamSolver.so 探测链接，libs 行同时显式加载（双保险）。
 pub const SOLVER_MODULE: &str = "moldingFoam";
@@ -143,27 +145,6 @@ pub fn gate_portals(runners: &[RunnerElement]) -> Vec<GatePortal> {
 fn distance(left: [f64; 3], right: [f64; 3]) -> f64 {
     ((left[0] - right[0]).powi(2) + (left[1] - right[1]).powi(2) + (left[2] - right[2]).powi(2))
         .sqrt()
-}
-
-/// 单个浇口的入口口径回显：请求半径 vs 实际落进 case 的入口面。
-#[derive(Debug, Clone, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GateInlet {
-    /// 浇口序号（`gate_portals` 下标，从 1 起算便于面板展示）。
-    pub index: usize,
-    pub requested_radius_mm: f64,
-    pub requested_area_mm2: f64,
-    /// 实际落进 inlet patch 的入口面积（mm²）与面数。
-    pub actual_area_mm2: f64,
-    pub face_count: usize,
-    /// 由实际面积反推的等效圆直径（mm）。
-    pub equivalent_diameter_mm: f64,
-    /// 实际 / 请求面积比。
-    pub area_ratio: f64,
-    /// 网格能否表达该浇口：面积比在上限内，且入口不是「单个超大面」。
-    pub expressible: bool,
-    /// 入口面中的最小面积（mm²）：单个面就超过请求面积时说明网格太粗。
-    pub min_face_area_mm2: f64,
 }
 
 /// case 生成结果：patch 面积 + 浇口入口口径回显与告警。

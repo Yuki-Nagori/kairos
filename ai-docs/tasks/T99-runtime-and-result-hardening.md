@@ -10,7 +10,7 @@
 - [x] 第二批：真实 runner 接入生命周期事件；远端轮询连续失败进入 `Unknown`，取消只有收到终止确认后才进入 `Cancelled`。
 - [x] CSV 导出第一步：标量场 CSV 编码下沉 core，Tauri 提供异步导出命令；无结果目录的本地分析场保留轻量前端回退。百万单元耗时/峰值内存对照仍待补。
 - [x] 场缓存与槽位按算例目录（运行作用域）绑定，并按时间步、字段和文件修改时间/长度区分修订；切换算例会清空标量/矢量槽位与 LRU。Arc 共享、乱序返回、并发读取和文件更新故障注入仍待补。
-- [ ] 将 EnvironmentCheck / CaseOutcome DTO 收口至 core models，同步 TS 镜像与契约测试。
+- [x] 将 EnvironmentCheck / CaseOutcome DTO 收口至 core models；TS 镜像保持同步，并新增 camelCase 契约测试。
 - [ ] 逐条核对 T92/T93 的纯算法、编排、产品入口及验收状态，避免用已实现算法代替端到端完成。
 - [ ] 对跨 store/IPC/进程链继续做故障注入；不以行覆盖率替代进程存活、槽位身份和输出归属断言。
 

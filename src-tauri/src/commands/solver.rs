@@ -9,41 +9,12 @@ use kairos_core::models::material::Material;
 use kairos_core::models::mesh::VolumeMesh;
 use kairos_core::models::process::ProcessSettings;
 use kairos_core::models::runners::{CoolingChannel, RunnerElement};
-use kairos_core::models::solver::AnalysisStage;
+use kairos_core::models::solver::{AnalysisStage, CaseOutcome, EnvironmentCheck};
 use kairos_core::services::dependencies as dependencies_service;
 use kairos_core::services::moldingfoam;
-use serde::Serialize;
 use tauri::State;
 
 use crate::commands::geometry::GeometryStore;
-
-/// 求解环境探测结果（环境 = moldingFoam bundle：OpenFOAM-14 环境树 + 注塑模块）。
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct EnvironmentCheck {
-    /// 环境工具链（以 blockMesh 为代表）是否可用。
-    pub moldingfoam: bool,
-    /// foamRun 模块化运行器是否可用（OpenFOAM 11+ 才有；求解模块由
-    /// case 的 controlDict 指定，无需第三方求解器二进制）。
-    pub solver: bool,
-    /// 面向用户的就绪状态提示。
-    pub hint: String,
-}
-
-/// case 生成结果：case 目录 + 浇口入口口径回显（有效面积 / 等效直径 / 偏差）
-/// 与不可表达告警。面板据此展示「请求 vs 实际」，提示不必再猜网格是否表达了浇口。
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CaseOutcome {
-    pub case_dir: String,
-    /// inlet patch 的实际面积（m²）与等效圆直径（mm）。
-    pub inlet_area_m2: f64,
-    pub inlet_equivalent_diameter_mm: f64,
-    /// 逐浇口回显（请求半径 vs 实际面积、面数、面积比、是否可表达）。
-    pub gates: Vec<moldingfoam::GateInlet>,
-    /// 不可表达等告警（空 = 通过）。
-    pub warnings: Vec<String>,
-}
 
 #[tauri::command]
 pub fn probe_moldingfoam() -> Result<EnvironmentCheck> {

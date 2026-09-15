@@ -2,6 +2,41 @@
 
 use serde::{Deserialize, Serialize};
 
+/// 求解环境探测结果，作为跨 IPC 的稳定 DTO。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EnvironmentCheck {
+    pub moldingfoam: bool,
+    pub solver: bool,
+    pub hint: String,
+}
+
+/// case 生成结果，包含目录和浇口入口表达度量。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CaseOutcome {
+    pub case_dir: String,
+    pub inlet_area_m2: f64,
+    pub inlet_equivalent_diameter_mm: f64,
+    pub gates: Vec<GateInlet>,
+    pub warnings: Vec<String>,
+}
+
+/// 单个浇口的请求口径与网格实际入口面回显。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GateInlet {
+    pub index: usize,
+    pub requested_radius_mm: f64,
+    pub requested_area_mm2: f64,
+    pub actual_area_mm2: f64,
+    pub face_count: usize,
+    pub equivalent_diameter_mm: f64,
+    pub area_ratio: f64,
+    pub expressible: bool,
+    pub min_face_area_mm2: f64,
+}
+
 /// 分析阶段：v1 覆盖填充 / 填充+保压 / 填充+保压+冷却（OpenFOAM compressibleVoF 链路）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
