@@ -338,7 +338,7 @@ pub fn serialize_moldingfoam_material(material: &Material) -> Result<String> {
     let t = &material.pvt;
     let b3s = t.b3s.unwrap_or(t.b3);
     Ok(format!(
-        "mixture\n{{\n    equationOfState\n    {{\n        b1m         {b1m:.17e};\n        b2m         {b2m:.17e};\n        b1s         {b1s:.17e};\n        b2s         {b2s:.17e};\n        b3          {b3:.17e};\n        b4m         {b4m:.17e};\n        b3s         {b3s:.17e};\n        b4s         {b4s:.17e};\n        b5          {b5:.17e};\n        b6          {b6:.17e};\n        C           {c:.17e};\n        smoothBand  {smooth_band:.17e};\n    }}\n    CrossWlfCoeffs\n    {{\n        n           {n:.17e};\n        tauStar     {tau_star:.17e};\n        D1          {d1:.17e};\n        D2          {d2:.17e};\n        D3          {d3:.17e};\n        A1          {a1:.17e};\n        A2          {a2:.17e};\n    }}\n}}\n",
+        "mixture\n{{\n    equationOfState\n    {{\n        b1m         {b1m:.17e};\n        b2m         {b2m:.17e};\n        b1s         {b1s:.17e};\n        b2s         {b2s:.17e};\n        b3          {b3:.17e};\n        b4          {b4m:.17e};\n        b3s         {b3s:.17e};\n        b4s         {b4s:.17e};\n        b5          {b5:.17e};\n        b6          {b6:.17e};\n        C           {c:.17e};\n        smoothBand  {smooth_band:.17e};\n    }}\n    CrossWlfCoeffs\n    {{\n        n           {n:.17e};\n        tauStar     {tau_star:.17e};\n        D1          {d1:.17e};\n        D2          {d2:.17e};\n        D3          {d3:.17e};\n        A1          {a1:.17e};\n        A2          {a2:.17e};\n    }}\n}}\n",
         b1m = t.b1m,
         b2m = t.b2m,
         b1s = t.b1s,

@@ -2,7 +2,7 @@
 
 - 阶段：E3（优化与自动化）
 - 依赖：T04、T76、T100
-- 状态：**进行中（先补齐通用材料曲线输入与拟合能力）**
+- 状态：**核心闭环完成（2026-09-15；前端材料面板列入后续任务）**
 - 目标：建立可审计的 Kairos Generic PP 自定义材料，拟合并验证 PVT/Tait 与 Cross-WLF 参数，使用 `report/mug-moldflow/mug.stl` 重新生成 baseline。
 
 ## 数据输入契约
@@ -20,7 +20,7 @@
 2. **拟合核心**：提供确定性的 Tait 与 Cross-WLF 拟合服务，输出参数、权重、拟合区间、收敛状态和版本化算法标识；数值计算留在 Rust core。
 3. **残差报告**：已在 `kairos-core` 增加 Cross-WLF 与 Tait 预测、摘要计算及 JSON/CSV 摘要与逐点明细导出（绝对误差、相对误差、RMSE、`log10(η)` 最大误差与 RMSE）。
 4. **材料资产元数据**：扩展材料 DTO，记录来源类型、单位、拟合算法版本、参数修订号、数据摘要哈希和创建时间，支持版本化而不覆盖内置材料。
-5. **CLI 闭环**：增加 `material fit` / `material validate`，并让 Mug/DOE case 按材料 ID 或路径选择自定义材料；core 已提供按 `.json`/`.csv` 扩展名分派的受控材料文件读取，`material fit`、`material validate`、`doe run --material <path>` 与 `pipeline run --material <path>` 已接线，fit 还会输出 moldingFoam 材料字典和逐点残差；真实 baseline 与完整多参数优化仍待完成。
+5. **CLI 闭环**：增加 `material fit` / `material validate`，并让 Mug/DOE case 按材料 ID 或路径选择自定义材料；core 已提供按 `.json`/`.csv` 扩展名分派的受控材料文件读取，`material fit`、`material validate`、`doe run --material <path>` 与 `pipeline run --material <path>` 已接线，fit 还会输出 moldingFoam 材料字典和逐点残差；真实 baseline 已完成 CLI/VM 闭环；完整多参数优化与 GUI 材料面板另列后续任务。
 6. **IPC 与界面入口**：补齐 Tauri 命令、前端材料面板的曲线预览/拟合结果/残差下载，以及错误码到 UI 的映射。
 7. **测试与契约**：覆盖单位换算、乱序和重复点、缺失/非法数据、拟合失败、JSON/CSV round-trip、DTO 契约和 case 生成回归；使用合成夹具，不提交受限原始曲线。
 
@@ -34,9 +34,9 @@
 - `kairos-core` Rust 负责曲线解析、单位归一、参数拟合、残差验证、材料版本和求解器配置生成。
 - `moldingFoam` 在真实求解循环中按单元/时间步计算 Cross-WLF 与 Tait；不能通过 IPC 逐步回调 Rust，也不能由前端计算。
 - 两端必须共享参数命名、单位和公式说明，并用固定参数的 golden 点测试校核黏度/比容结果，防止参考实现与运行时实现漂移。
-- 当前 core 已固定 Cross-WLF/Tait golden 点；moldingFoam 运行时对照和 Mug 实际回归仍待完成。
-- case 生成器已改为写出 `b3s/b4m/b4s/b6/C/smoothBand`，不再把 Tait 固态参数或压力项硬编码为常量。
-- 当前 GUI/Multipass VM 仍运行旧版 Tait 实现并要求 `b4`，与规范字典不兼容；按要求不保留兼容键，必须先升级 VM 部署再进行 solver golden 验收。
+- 当前 core 已固定 Cross-WLF/Tait golden 点；已用 moldingFoam v1.1.0 在 Multipass VM 完成运行时对照和 Mug sample-box baseline 回归。
+- case 生成器已改为写出 `b3s/b4/b4s/b6/C/smoothBand`，不再把 Tait 固态参数或压力项硬编码为常量。
+- moldingFoam v1.1.0 的 Tait 入口要求 `b4`（熔体指数，`b4s` 为可选固态指数）；Kairos case 生成器已按该正式字典输出，未增加兼容键。VM 已重新部署 v1.1.0 并完成 solver golden 验收。
 - 本地受控曲线插入测试已验证解析和输出链路；原始内置 Tait 模板不兼容时会明确失败，避免静默生成伪拟合结果。
 
 ### Tait solver parity audit
@@ -81,3 +81,11 @@
 - 原始文本缺少显式列单位和材料数据库元数据，需先完成单位确认。
 - 参考报告的材料名称是 Generic PP，但数据库版本可能不同；名称相同不能推断参数完全相同。
 - 公开典型值只能做量级检查，不能替代实测或已授权曲线。
+
+## 运行时验收记录（2026-09-15）
+
+- solver bundle：moldingFoam v1.1.0 arm64，OpenFOAM 14 build `14-7b05503f98a8`。
+- case：由 `pipeline run --sample-box --material <fitted-json>` 生成，使用实际 case 根目录提交：`solve submit --case-dir <run-dir> --cores 1 --vm`。
+- 结果：退出码 0，日志出现 `Selecting generalisedNewtonian ... CrossWlf`、`equationOfState Tait`，`End` 正常收尾；达到 `Time = 2s`。
+- 关键运行参数：`n=0.32`、`tauStar=20000`、`D1=3.623173e13`、`D2=263`、`A1=31.4`、`A2=51.6`；Tait 字典写出 `b4/b4s/b6/C/smoothBand`。
+- 原始日志与 case 只保留在本地忽略目录，按运行时间戳留档；仓库仅记录脱敏摘要。

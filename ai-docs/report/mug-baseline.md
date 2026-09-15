@@ -1,6 +1,6 @@
 # Mug 基线与实验对照
 
-- 状态：进行中
+- 状态：T101 核心材料闭环已完成；Mug 对照持续进行中
 - 关联任务：[T100](../tasks/T100-solver-runtime-v110-validation.md)、[T101](../tasks/T101-generic-pp-material-fit.md)
 - 模型：`report/mug-moldflow/mug.stl`（本地受控资产）
 - 报告建立时间：2026-09-15
@@ -100,3 +100,11 @@ assessment:
 | 2026-09-15 | 建立报告骨架，冻结 Mug 参考工况与实验对照矩阵 | 等待 T101 材料闭环和 T100 有效 baseline |
 | 2026-09-15 | 本地受控曲线插入测试：250 个 PVT 点、200 个黏度点完成解析；原始内置 Tait 模板因压力尺度不兼容被拒绝，随后用明确标注的合成 Tait 模板验证 `material fit` 输出链路 | 插入链路通过；不能把合成模板结果当作 Generic PP 材料结论 |
 | 2026-09-15 | 使用本地拟合材料生成未求解 moldingFoam case，核对 `physicalProperties.melt` 与 `momentumTransport` 的 Cross-WLF/Tait 键和值；记录两个字典 SHA-256 | case 配置接线通过，尚未代表 solver 运行时数值通过 |
+
+
+### 2026-09-15 · Kairos 自定义材料 VM baseline
+
+- 由 CLI 生成 sample-box case 并用自定义材料运行；实际 case 根目录提交到 Multipass VM。
+- moldingFoam v1.1.0 arm64 / OpenFOAM 14，退出码 `0`，日志以 `End` 收尾并达到 `Time = 2s`。
+- 日志确认 `CrossWlf` 与 `Tait` 均被选中；Tait 使用 `b4/b4s/b6/C/smoothBand` 字段。
+- 该运行验证材料导入、case 字典接线和 solver 启动闭环，不等同于 Moldflow 逐点精度验证；后续仍需把完整 Mug 网格和实验观测量接入同一矩阵。
