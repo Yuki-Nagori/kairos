@@ -143,6 +143,9 @@ enum DoeAction {
         /// 使用 GUI 部署的 Multipass kairos 虚拟机运行求解器
         #[arg(long)]
         vm: bool,
+        /// 自定义材料文件（JSON 或 CSV）；缺省使用内置参考材料
+        #[arg(long)]
+        material: Option<String>,
     },
 }
 
@@ -499,6 +502,7 @@ fn run_doe(action: DoeAction, json: bool) -> kairos_core::error::Result<()> {
             batch,
             solve,
             vm,
+            material,
         } => run_doe_batch(
             &factors,
             &plan,
@@ -513,6 +517,7 @@ fn run_doe(action: DoeAction, json: bool) -> kairos_core::error::Result<()> {
             batch,
             solve,
             vm,
+            material,
             json,
         ),
         DoeAction::Matrix {
@@ -545,6 +550,24 @@ fn run_doe(action: DoeAction, json: bool) -> kairos_core::error::Result<()> {
 
 /// 串行执行整个矩阵：网格与几何只准备一次（每次运行只换工艺参数），
 /// 每次运行独立 case 目录并按「跑完即回填」更新汇总表——中途中断也留下已完成的行。
+fn load_material(
+    path: Option<&str>,
+) -> kairos_core::error::Result<kairos_core::models::material::Material> {
+    match path {
+        None => Ok(services::material::builtin_materials()[0].clone()),
+        Some(path) => {
+            let materials = services::material::read_custom_material_file(Path::new(path))?;
+            match materials.as_slice() {
+                [material] => Ok(material.clone()),
+                [] => Err(KairosError::validation("自定义材料文件没有可用材料。")),
+                _ => Err(KairosError::validation(
+                    "DOE 运行一次只能选择一个自定义材料。",
+                )),
+            }
+        }
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn run_doe_batch(
     factor_specs: &[String],
@@ -560,6 +583,7 @@ fn run_doe_batch(
     batch: Option<String>,
     solve: bool,
     vm: bool,
+    material_path: Option<String>,
     json: bool,
 ) -> kairos_core::error::Result<()> {
     let parsed = parse_doe_factors(factor_specs)?;
@@ -587,7 +611,7 @@ fn run_doe_batch(
             target_size,
         },
     )?;
-    let material = services::material::builtin_materials()[0].clone();
+    let material = load_material(material_path.as_deref())?;
     let mut base_process = default_process_with(injection_time_s);
     if let Some(pressure) = packing_pressure_mpa {
         base_process.packing_pressure_mpa_curve = vec![(0.0, pressure)];
