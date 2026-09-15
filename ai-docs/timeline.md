@@ -489,3 +489,6 @@
 - **13:39** feat(core): 完成 T89 第一步 GAIM 数据位闭环：`RunnerMedium` / `RunnerElement.medium` 双端镜像贯通工程与求解数据路径，补 IPC 契约测试锁定 `gas` 序列化；三相 / 气芯求解仍等待上游能力。
 - **13:42** docs(tasks): 核对 T92 已完成实现与任务档案不一致的问题：DOE 矩阵、串行执行、指标汇总和失败行保留均已落地，现从待办表移入已实现，并将 T93 单独标为等待其汇总口径。
 - **13:45** docs(tasks): 解除 T93 的过时阻塞标记：T92 汇总表依赖已满足，core 优化器（目标函数、约束、粗搜/细化、失败策略）已有实现；任务索引改为 CLI 寻优循环与真实求解回填待推进。
+- **13:48** feat(cli): T93 增加 `optimize plan`：复用 core 优化器按 `名称=min:max:levels` 生成粗搜候选，支持 `fill-time` / `injection-pressure` 与 `--json`；真实求解回填循环留下一批。
+- **13:51** test(cli): 补 T93 优化因子解析边界测试，锁定名称、范围、层数格式及缺字段/多字段拒绝；任务执行顺序将 CLI 寻优循环提前到当前可开工批次。
+- **13:54** refactor(cli): T93 将 DOE 单次 case 生成、可选求解与日志指标解析收成 `run_doe_case` 唯一函数，保持现有 `doe run` 行为不变，为后续 `Optimizer::record` 回填复用铺路。

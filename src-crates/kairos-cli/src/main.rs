@@ -8,7 +8,9 @@ use clap::{Parser, Subcommand};
 use kairos_core::error::KairosError;
 use kairos_core::models::process::ProcessSettings;
 use kairos_core::models::solver::AnalysisStage;
-use kairos_core::services::{self, doe, geometry, meshing, moldingfoam, project, results};
+use kairos_core::services::{
+    self, doe, geometry, meshing, moldingfoam, optimize, project, results,
+};
 use kairos_core::utils::shell;
 use kairos_core::utils::time::now_ms;
 use serde::Serialize;
@@ -59,6 +61,27 @@ enum Commands {
     Doe {
         #[command(subcommand)]
         action: DoeAction,
+    },
+    /// 工艺寻优候选规划（只生成参数，不启动求解器）
+    Optimize {
+        #[command(subcommand)]
+        action: OptimizeAction,
+    },
+}
+
+#[derive(Subcommand)]
+enum OptimizeAction {
+    /// 根据范围生成粗搜候选点
+    Plan {
+        /// 因子，形如 `熔体温度=200:240:3`（最小值:最大值:层数）
+        #[arg(long = "factor", required = true)]
+        factors: Vec<String>,
+        /// 目标：fill-time 或 injection-pressure
+        #[arg(long, default_value = "fill-time")]
+        objective: String,
+        /// 总评估预算
+        #[arg(long, default_value_t = 64)]
+        budget: usize,
     },
 }
 
@@ -276,6 +299,7 @@ fn run(command: Commands, json: bool) -> kairos_core::error::Result<()> {
         Commands::Solve { action } => run_solve(action, json),
         Commands::Results { action } => run_results(action, json),
         Commands::Doe { action } => run_doe(action, json),
+        Commands::Optimize { action } => run_optimize(action, json),
         Commands::Pipeline { action } => match action {
             PipelineAction::Run {
                 sample_box,
@@ -299,6 +323,83 @@ fn run(command: Commands, json: bool) -> kairos_core::error::Result<()> {
             ),
         },
     }
+}
+
+fn run_optimize(action: OptimizeAction, json: bool) -> kairos_core::error::Result<()> {
+    match action {
+        OptimizeAction::Plan {
+            factors,
+            objective,
+            budget,
+        } => {
+            let ranges = factors
+                .iter()
+                .map(|spec| parse_optimize_factor(spec))
+                .collect::<kairos_core::error::Result<Vec<_>>>()?;
+            let objective = match objective.as_str() {
+                "fill-time" => optimize::Objective::MinFillTime,
+                "injection-pressure" => optimize::Objective::MinInjectionPressure,
+                other => {
+                    return Err(KairosError::validation(format!(
+                        "未知寻优目标「{other}」，可用 fill-time 或 injection-pressure。"
+                    )));
+                }
+            };
+            let mut planner = optimize::Optimizer::new(ranges, objective, budget)?;
+            let candidates = planner.next_candidates();
+            if json {
+                emit_json(&serde_json::json!({
+                    "objective": objective.metric_name(),
+                    "budget": budget,
+                    "candidates": candidates,
+                }));
+            } else {
+                println!(
+                    "目标 {}，生成 {} 个候选：",
+                    objective.metric_name(),
+                    candidates.len()
+                );
+                for (index, candidate) in candidates.iter().enumerate() {
+                    println!("{}: {}", index + 1, format_optimize_parameters(candidate));
+                }
+            }
+            Ok(())
+        }
+    }
+}
+
+fn parse_optimize_factor(spec: &str) -> kairos_core::error::Result<optimize::FactorRange> {
+    let (name, values) = spec.split_once('=').ok_or_else(|| {
+        KairosError::validation(format!("寻优因子格式应为 名称=min:max:levels：{spec}"))
+    })?;
+    let mut parts = values.split(':');
+    let min = parts.next().and_then(|value| value.parse().ok());
+    let max = parts.next().and_then(|value| value.parse().ok());
+    let levels = parts.next().and_then(|value| value.parse().ok());
+    if parts.next().is_some()
+        || name.trim().is_empty()
+        || min.is_none()
+        || max.is_none()
+        || levels.is_none()
+    {
+        return Err(KairosError::validation(format!(
+            "寻优因子格式应为 名称=min:max:levels：{spec}"
+        )));
+    }
+    Ok(optimize::FactorRange {
+        name: name.trim().to_string(),
+        min: min.unwrap(),
+        max: max.unwrap(),
+        levels: levels.unwrap(),
+    })
+}
+
+fn format_optimize_parameters(parameters: &std::collections::BTreeMap<String, f64>) -> String {
+    parameters
+        .iter()
+        .map(|(name, value)| format!("{name}={value}"))
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 fn run_project(action: ProjectAction, json: bool) -> kairos_core::error::Result<()> {
@@ -473,42 +574,15 @@ fn run_doe_batch(
         let case_dir = doe::run_case_dir(workspace, DOE_STUDY_ID, index + 1);
         let settings = doe::apply_factors(&base_process, &runs[index])?;
         let started = std::time::Instant::now();
-        let prepared = moldingfoam::generate_case(
-            &case_dir,
-            &moldingfoam::CaseInputs {
-                mesh: &volume,
-                material: &material,
-                process: &settings,
-                stage: &AnalysisStage::Fill,
-                cores: cores as usize,
-                gates: &[],
-                channels: &[],
-            },
-        );
-        match prepared {
-            Err(error) => {
-                // case 生成失败也要落表（参数不合法往往就卡在这一步）
-                let message = error.message().to_string();
-                let elapsed = Some(started.elapsed().as_secs_f64());
-                doe::mark_failed(&mut runs[index], &message, elapsed);
-            }
-            Ok(_) if !solve => {}
-            Ok(_) => {
-                let case_text = case_dir.to_string_lossy().to_string();
-                let outcome = run_solver(&case_text, cores);
-                let elapsed = started.elapsed().as_secs_f64();
-                match outcome {
-                    Ok(()) => {
-                        let log = std::fs::read_to_string(case_dir.join("log.foamRun"))
-                            .unwrap_or_default();
-                        let metrics = moldingfoam::parse_metrics(&log);
-                        doe::mark_done(&mut runs[index], metrics, elapsed);
-                    }
-                    Err(error) => {
-                        let message = error.message().to_string();
-                        doe::mark_failed(&mut runs[index], &message, Some(elapsed));
-                    }
-                }
+        match run_doe_case(&case_dir, &volume, &material, &settings, cores, solve) {
+            Err(error) => doe::mark_failed(
+                &mut runs[index],
+                error.message(),
+                Some(started.elapsed().as_secs_f64()),
+            ),
+            Ok(None) => {}
+            Ok(Some(metrics)) => {
+                doe::mark_done(&mut runs[index], metrics, started.elapsed().as_secs_f64())
             }
         }
         let status = match &runs[index].status {
@@ -546,6 +620,37 @@ fn run_doe_batch(
         print!("{}", doe::summary_csv(&runs));
     }
     Ok(())
+}
+
+/// 执行一次 DOE case：生成 case，可选启动求解并解析日志指标。
+/// 优化器回填复用此函数，避免再复制一套求解与指标解析链。
+fn run_doe_case(
+    case_dir: &Path,
+    volume: &kairos_core::models::mesh::VolumeMesh,
+    material: &kairos_core::models::material::Material,
+    process: &ProcessSettings,
+    cores: u32,
+    solve: bool,
+) -> kairos_core::error::Result<Option<std::collections::BTreeMap<String, f64>>> {
+    moldingfoam::generate_case(
+        case_dir,
+        &moldingfoam::CaseInputs {
+            mesh: volume,
+            material,
+            process,
+            stage: &AnalysisStage::Fill,
+            cores: cores as usize,
+            gates: &[],
+            channels: &[],
+        },
+    )?;
+    if !solve {
+        return Ok(None);
+    }
+    let case_text = case_dir.to_string_lossy().to_string();
+    run_solver(&case_text, cores)?;
+    let log = std::fs::read_to_string(case_dir.join("log.foamRun")).unwrap_or_default();
+    Ok(Some(moldingfoam::parse_metrics(&log)))
 }
 
 /// DOE 批次的方案 id（case 目录 `<工作区>/cases/<方案 id>/run-XXX/`）。
@@ -827,4 +932,25 @@ fn run_pipeline(
         );
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_optimize_factor;
+
+    #[test]
+    fn optimize_factor_parser_accepts_named_range() {
+        let range = parse_optimize_factor("熔体温度=200:240:3").unwrap();
+        assert_eq!(range.name, "熔体温度");
+        assert_eq!(range.levels, 3);
+        assert_eq!(range.min, 200.0);
+        assert_eq!(range.max, 240.0);
+    }
+
+    #[test]
+    fn optimize_factor_parser_rejects_bad_shape() {
+        assert!(parse_optimize_factor("熔体温度=200:240").is_err());
+        assert!(parse_optimize_factor("=200:240:3").is_err());
+        assert!(parse_optimize_factor("熔体温度=200:240:3:4").is_err());
+    }
 }
