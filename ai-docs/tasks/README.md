@@ -129,7 +129,7 @@
 | T93 | [T93-process-optimization.md](T93-process-optimization.md)                                   | 工艺参数自动寻优                                | 等 T92 汇总表                                                                                                                         |
 | T94 | [T94-gui-e2e-verification.md](T94-gui-e2e-verification.md)                                   | GUI 端到端验证（提交 → 回传 → VM 自动关闭）     | 待开工；需人在界面展开求解面板后跑（AX 拿不到折叠面板的输入框）；求解链路本身先走 CLI 通道                                            |
 | T95 | [T95-dependency-audit.md](T95-dependency-audit.md)                                           | 依赖取向审查：用现成库 vs 自造轮子              | 进行中：P1-a/P1-b/P2-b/P2-c 已完成；P2-a 已完成可复用部分，标题栏与 storage 保留产品语义；P3（图表 / 数学 / 二进制 / 解压）待逐项评估 |
-| T97 | [T97-solver-lib-duplication-guard.md](T97-solver-lib-duplication-guard.md)                   | 求解环境库重复守卫 + 部署前清理                 | 进行中：部署前清理已完成；库布局守卫与真实 VM 坏状态验收待下一批                                                                      |
+| T97 | [T97-solver-lib-duplication-guard.md](T97-solver-lib-duplication-guard.md)                   | 求解环境库重复守卫 + 部署前清理                 | 进行中：部署清理与 core/原生库探测已完成；真实 VM 坏状态验收待下一批                                                                  |
 
 ## 整体评审闭环（2026-09-15）
 

@@ -485,6 +485,8 @@ pub struct NativeEnvStatus {
     pub env_ready: bool,
     /// OpenMPI 运行时（`mpirun`）是否可用。
     pub mpi_ready: bool,
+    /// moldingFoam 动态库布局是否无重复且 solver 入口链接正确。
+    pub library_ready: bool,
     /// 面向用户的处置提示（空 = 无问题）。
     pub hints: Vec<String>,
 }
@@ -503,11 +505,31 @@ pub fn native_env_status(app: AppHandle) -> Result<NativeEnvStatus> {
         .status()
         .map(|status| status.success())
         .unwrap_or(false);
+    let library_ready = root
+        .as_ref()
+        .map(|path| {
+            Command::new("bash")
+                .args(["-lc", &vm_logic::native_solver_lib_guard_command(path)])
+                .output()
+                .map(|output| {
+                    output.status.success()
+                        && vm_logic::native_solver_lib_guard_ok(&String::from_utf8_lossy(
+                            &output.stdout,
+                        ))
+                })
+                .unwrap_or(false)
+        })
+        .unwrap_or(false);
+    let mut hints = vm_logic::native_dependency_hints(mpi_ready, env_ready);
+    if env_ready && !library_ready {
+        hints.push("moldingFoam 动态库布局异常：请清理重复库，并确保 libmoldingFoamSolver.so 为同目录相对软链接。".to_string());
+    }
     Ok(NativeEnvStatus {
         env_root: root.map(|path| path.to_string_lossy().to_string()),
         env_ready,
         mpi_ready,
-        hints: vm_logic::native_dependency_hints(mpi_ready, env_ready),
+        library_ready,
+        hints,
     })
 }
 

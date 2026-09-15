@@ -463,6 +463,7 @@ describe("原生（Linux）通道：文案与提示", () => {
       envRoot: "/env/moldingfoam-env",
       envReady: hints.length === 0,
       mpiReady: true,
+      libraryReady: hints.length === 0,
       hints,
     });
     // 已下载 → 行内出现「部署」按钮（already 判定读的是探测结果，不能只改 store）

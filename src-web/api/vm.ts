@@ -55,6 +55,8 @@ export interface NativeEnvStatus {
   envReady: boolean;
   /** OpenMPI 运行时（mpirun）是否可用。 */
   mpiReady: boolean;
+  /** moldingFoam 动态库布局是否无重复且 solver 入口链接正确。 */
+  libraryReady: boolean;
   /** 处置提示（空 = 无问题）。 */
   hints: string[];
 }

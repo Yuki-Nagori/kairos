@@ -628,6 +628,31 @@ pub fn native_env_probe_command(env_root: &Path) -> String {
     )
 }
 
+/// 校验 moldingFoam 动态库布局：每个库名只能在一个 OpenFOAM 库目录出现，
+/// solver 入口必须是同目录下指向核心库的相对软链接。脚本只输出结构化标记，
+/// 调用方按退出码/标记判定，避免把 shell 文案当作契约。
+pub fn native_solver_lib_guard_command(env_root: &Path) -> String {
+    let bashrc = bash_single_quote(&native_env_bashrc(env_root).to_string_lossy());
+    format!(
+        "source '{bashrc}' && \
+         dirs=\"$FOAM_LIBBIN $FOAM_SITE_LIBBIN $FOAM_USER_LIBBIN\"; \
+         for name in libmoldingFoam.so libmoldingFoamSolver.so; do \
+           count=0; for dir in $dirs; do [ -e \"$dir/$name\" ] && count=$((count+1)); done; \
+           [ \"$count\" -le 1 ] || {{ printf 'KAIROS_LIB_GUARD=duplicate:%s\\n' \"$name\"; exit 1; }}; \
+         done; \
+         solver=\"$FOAM_LIBBIN/libmoldingFoamSolver.so\"; \
+         [ -L \"$solver\" ] && [ \"$(readlink \"$solver\")\" = 'libmoldingFoam.so' ] || {{ printf 'KAIROS_LIB_GUARD=invalid-link\\n'; exit 1; }}; \
+         printf 'KAIROS_LIB_GUARD=ok\\n'"
+    )
+}
+
+/// 解析库布局守卫的结构化输出。
+pub fn native_solver_lib_guard_ok(output: &str) -> bool {
+    output
+        .lines()
+        .any(|line| line.trim() == "KAIROS_LIB_GUARD=ok")
+}
+
 /// 单引号内的字面量转义：`'` → `'\''`。实现在 [`crate::utils::shell`]。
 pub use crate::utils::shell::bash_single_quote;
 
@@ -1602,5 +1627,17 @@ mod tests {
             env_probe_command(),
             "test -f ~/moldingfoam-env/openfoam14/etc/bashrc"
         );
+    }
+
+    #[test]
+    fn solver_library_guard_has_single_structured_contract() {
+        let command = native_solver_lib_guard_command(Path::new("/opt/kairos env"));
+        assert!(command.contains("FOAM_LIBBIN"));
+        assert!(command.contains("libmoldingFoamSolver.so"));
+        assert!(command.contains("KAIROS_LIB_GUARD=ok"));
+        assert!(native_solver_lib_guard_ok("noise\nKAIROS_LIB_GUARD=ok\n"));
+        assert!(!native_solver_lib_guard_ok(
+            "KAIROS_LIB_GUARD=duplicate:x\n"
+        ));
     }
 }
