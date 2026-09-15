@@ -5,7 +5,7 @@ import "uplot/dist/uPlot.min.css";
 import { useAppStore } from "../../stores/app";
 import { useResultsStore } from "../../stores/results";
 import { THEME_CHANGED_EVENT } from "../../utils/theme";
-import { createUplot, resetUplot } from "../../render/uplot-runtime";
+import { createUplot, observeUplotSizeIfPresent, resetUplot } from "../../render/uplot-runtime";
 
 export function useXyChartPanel() {
   const app = useAppStore();
@@ -14,6 +14,7 @@ export function useXyChartPanel() {
   const plotHostRef = useTemplateRef<HTMLDivElement>("plotHostRef");
   const plot = shallowRef<uPlot | null>(null);
   const plotSignature = ref("");
+  let stopResizeObserver: () => void = () => undefined;
   const nodeInput = ref("");
   const working = computed(() => app.working);
 
@@ -97,6 +98,8 @@ export function useXyChartPanel() {
     // happy-dom 与部分嵌入式 WebView 没有 Path2D；保留 Canvas 降级路径，避免异步绘制抛错。
     plot.value = createUplot(plotHostRef.value, plotData(), plotSeries());
     plotSignature.value = `${mode.value}:${results.probes.map((probe) => probe.id).join(",")}`;
+    stopResizeObserver();
+    stopResizeObserver = observeUplotSizeIfPresent(plot.value, plotHostRef.value);
     return plot.value;
   }
 
@@ -120,6 +123,7 @@ export function useXyChartPanel() {
   });
   onUnmounted(() => {
     window.removeEventListener(THEME_CHANGED_EVENT, draw);
+    stopResizeObserver();
     plot.value?.destroy();
     plot.value = null;
   });

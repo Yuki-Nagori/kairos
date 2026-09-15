@@ -28,3 +28,21 @@ export function resetUplot(plot: uPlot | null, current: string, next: string): u
   }
   return plot;
 }
+
+function observeUplotSize(plot: uPlot, host: HTMLDivElement): () => void {
+  if (typeof ResizeObserver !== "function") {
+    return () => undefined;
+  }
+  const resize = () => {
+    const width = Math.max(Math.floor(host.getBoundingClientRect().width), 320);
+    plot.setSize({ width, height: 200 });
+  };
+  const observer = new ResizeObserver(resize);
+  observer.observe(host);
+  resize();
+  return () => observer.disconnect();
+}
+
+export function observeUplotSizeIfPresent(plot: uPlot | null, host: HTMLDivElement): () => void {
+  return plot === null ? () => undefined : observeUplotSize(plot, host);
+}
