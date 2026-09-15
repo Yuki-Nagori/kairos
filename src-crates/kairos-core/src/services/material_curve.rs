@@ -488,6 +488,49 @@ pub fn parse_pvt_csv(content: &str) -> Result<Vec<PvtPoint>> {
     Ok(points)
 }
 
+/// 解析分段 PVT 文本：段标题形如 `P=50[MPa]`，数据行是 `序号 温度[C] 比容[cm3/g]`。
+pub fn parse_pvt_text(content: &str) -> Result<Vec<PvtPoint>> {
+    let mut pressure_mpa = None;
+    let mut rows = Vec::new();
+    for (index, line) in content.lines().enumerate() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        if let Some(value) = line
+            .strip_prefix("P=")
+            .and_then(|value| value.strip_suffix("[MPa]"))
+        {
+            pressure_mpa = Some(value.trim().parse::<f64>().map_err(|error| {
+                KairosError::validation(format!("第 {} 行 PVT 压力段标题无效：{error}", index + 1))
+            })?);
+            continue;
+        }
+        let fields: Vec<&str> = line.split_whitespace().collect();
+        if fields.len() != 3 {
+            return Err(KairosError::validation(format!(
+                "第 {} 行 PVT 数据列数不正确。",
+                index + 1
+            )));
+        }
+        let pressure =
+            pressure_mpa.ok_or_else(|| KairosError::validation("PVT 数据行缺少压力段标题。"))?;
+        let temperature = fields[1].parse::<f64>().map_err(|error| {
+            KairosError::validation(format!("第 {} 行 PVT 温度无效：{error}", index + 1))
+        })?;
+        let specific_volume_m3_per_kg = fields[2].parse::<f64>().map_err(|error| {
+            KairosError::validation(format!("第 {} 行 PVT 比容无效：{error}", index + 1))
+        })? * 1.0e-3;
+        rows.push(PvtPoint {
+            pressure_pa: pressure * 1.0e6,
+            temperature_k: temperature + 273.15,
+            specific_volume_m3_per_kg,
+        });
+    }
+    validate_pvt(&mut rows)?;
+    Ok(rows)
+}
+
 pub fn parse_viscosity_csv(content: &str) -> Result<Vec<ViscosityPoint>> {
     let mut reader = csv::ReaderBuilder::new()
         .trim(csv::Trim::All)
@@ -515,6 +558,47 @@ pub fn parse_viscosity_csv(content: &str) -> Result<Vec<ViscosityPoint>> {
     }
     validate_viscosity(&mut points)?;
     Ok(points)
+}
+
+/// 解析分段黏度文本：段标题形如 `T=220[C]`，数据行是 `序号 剪切速率[1/s] 黏度[Pa.s]`。
+pub fn parse_viscosity_text(content: &str) -> Result<Vec<ViscosityPoint>> {
+    let mut temperature_c = None;
+    let mut rows = Vec::new();
+    for (index, line) in content.lines().enumerate() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        if let Some(value) = line
+            .strip_prefix("T=")
+            .and_then(|value| value.strip_suffix("[C]"))
+        {
+            temperature_c = Some(value.trim().parse::<f64>().map_err(|error| {
+                KairosError::validation(format!("第 {} 行黏度温度段标题无效：{error}", index + 1))
+            })?);
+            continue;
+        }
+        let fields: Vec<&str> = line.split_whitespace().collect();
+        if fields.len() != 3 {
+            return Err(KairosError::validation(format!(
+                "第 {} 行黏度数据列数不正确。",
+                index + 1
+            )));
+        }
+        let temperature =
+            temperature_c.ok_or_else(|| KairosError::validation("黏度数据行缺少温度段标题。"))?;
+        rows.push(ViscosityPoint {
+            temperature_k: temperature + 273.15,
+            shear_rate_per_s: fields[1].parse::<f64>().map_err(|error| {
+                KairosError::validation(format!("第 {} 行剪切速率无效：{error}", index + 1))
+            })?,
+            viscosity_pa_s: fields[2].parse::<f64>().map_err(|error| {
+                KairosError::validation(format!("第 {} 行黏度无效：{error}", index + 1))
+            })?,
+        });
+    }
+    validate_viscosity(&mut rows)?;
+    Ok(rows)
 }
 
 fn validate_pvt(points: &mut [PvtPoint]) -> Result<()> {
@@ -917,5 +1001,17 @@ mod tests {
         };
         let specific_volume = tait_specific_volume(&tait, 1.0e6, 450.0).unwrap();
         assert!((specific_volume - 1.0048999991749255).abs() < 1e-12);
+    }
+
+    #[test]
+    fn parses_sectioned_material_text_without_external_conversion() {
+        let pvt = "P=0[MPa]\n0 25 1.1\nP=50[MPa]\n0 25 1.0\n";
+        let pvt_points = parse_pvt_text(pvt).unwrap();
+        assert_eq!(pvt_points.len(), 2);
+        assert_eq!(pvt_points[0].pressure_pa, 0.0);
+        let viscosity = "T=180[C]\n0 1 2104.6\nT=220[C]\n0 10 100.0\n";
+        let viscosity_points = parse_viscosity_text(viscosity).unwrap();
+        assert_eq!(viscosity_points.len(), 2);
+        assert_eq!(viscosity_points[1].shear_rate_per_s, 10.0);
     }
 }

@@ -411,14 +411,28 @@ fn run_material(action: MaterialAction, json: bool) -> kairos_core::error::Resul
                 [] => return Err(KairosError::validation("模板材料文件没有可用材料。")),
                 _ => return Err(KairosError::validation("模板材料文件必须只有一个材料。")),
             };
-            let viscosity_points = material_curve::parse_viscosity_csv(
-                &fs::read_to_string(&viscosity)
-                    .map_err(|error| KairosError::io(format!("读取黏度曲线失败：{error}")))?,
-            )?;
-            let pvt_points = material_curve::parse_pvt_csv(
-                &fs::read_to_string(&pvt)
-                    .map_err(|error| KairosError::io(format!("读取 PVT 曲线失败：{error}")))?,
-            )?;
+            let viscosity_content = fs::read_to_string(&viscosity)
+                .map_err(|error| KairosError::io(format!("读取黏度曲线失败：{error}")))?;
+            let viscosity_points = if Path::new(&viscosity)
+                .extension()
+                .and_then(|value| value.to_str())
+                .is_some_and(|value| value.eq_ignore_ascii_case("txt"))
+            {
+                material_curve::parse_viscosity_text(&viscosity_content)?
+            } else {
+                material_curve::parse_viscosity_csv(&viscosity_content)?
+            };
+            let pvt_content = fs::read_to_string(&pvt)
+                .map_err(|error| KairosError::io(format!("读取 PVT 曲线失败：{error}")))?;
+            let pvt_points = if Path::new(&pvt)
+                .extension()
+                .and_then(|value| value.to_str())
+                .is_some_and(|value| value.eq_ignore_ascii_case("txt"))
+            {
+                material_curve::parse_pvt_text(&pvt_content)?
+            } else {
+                material_curve::parse_pvt_csv(&pvt_content)?
+            };
             let (rheology, viscosity_residual) =
                 material_curve::fit_cross_wlf_d1(&material.rheology, &viscosity_points)?;
             let (pvt, pvt_residual) = material_curve::fit_tait_b1(&material.pvt, &pvt_points)?;
