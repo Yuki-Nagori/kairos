@@ -119,17 +119,17 @@
 > 端到端验证默认走 **CLI 通道**（`kairos-cli`：生成 case → 送进 VM → 求解 → 结果回传 → 结果扫描），
 > 可脚本化、可重放；只有验证目标本身是界面 / 作业编排行为时才走 GUI（见 T94）。
 
-| ID  | 文件                                                                                         | 任务                                            | 依赖 / 状态                                                                                                    |
-| --- | -------------------------------------------------------------------------------------------- | ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| T33 | [T33-updater-hardening.md](T33-updater-hardening.md)                                         | 发布加固：CSP 已加固 + updater / 签名待密钥证书 | CSP 零行为变化加固已落地；`style-src 'unsafe-inline'` 移除需真机回归，updater 与三平台签名需密钥 / 证书        |
-| T48 | [T48-renderer-bench-realdevice.md](T48-renderer-bench-realdevice.md)                         | 渲染后端三端真机验收与 FPS 回填                 | 等三端真机（macOS/Windows/Linux WebView）                                                                      |
-| T82 | [T82-dualdomain-midplane-solve-consumption.md](T82-dualdomain-midplane-solve-consumption.md) | 双域 / 中面网格的求解消费                       | 求解侧消费（双域/中面），依赖上游降维能力                                                                      |
-| T83 | [T83-multi-cavity-runner-fill.md](T83-multi-cavity-runner-fill.md)                           | 多型腔与流道系统参与填充                        | 流道体进网格 + 多腔分配，依赖 T29 闭环                                                                         |
-| T89 | [T89-gaim-integration.md](T89-gaim-integration.md)                                           | 气体辅助注塑（GAIM）集成                        | 进行中：第一步气体介质数据位与 DTO 契约已完成；第二步等上游三相 / 气芯场                                       |
-| T93 | [T93-process-optimization.md](T93-process-optimization.md)                                   | 工艺参数自动寻优                                | 进行中：core 优化器与 `optimize plan` 已完成；真实求解回填循环待实现                                           |
-| T94 | [T94-gui-e2e-verification.md](T94-gui-e2e-verification.md)                                   | GUI 端到端验证（提交 → 回传 → VM 自动关闭）     | 待开工；需人在界面展开求解面板后跑（AX 拿不到折叠面板的输入框）；求解链路本身先走 CLI 通道                     |
-| T95 | [T95-dependency-audit.md](T95-dependency-audit.md)                                           | 依赖取向审查：用现成库 vs 自造轮子              | 进行中：P1-a/P1-b/P2-a/P2-b/P2-c/P3-b/P3-c/P3-d 已完成；P3-a 图表替换待视觉对照；标题栏与 storage 保留产品语义 |
-| T97 | [T97-solver-lib-duplication-guard.md](T97-solver-lib-duplication-guard.md)                   | 求解环境库重复守卫 + 部署前清理                 | 进行中：部署清理与 core/原生库探测已完成；真实 VM 坏状态验收待下一批                                           |
+| ID  | 文件                                                                                         | 任务                                            | 依赖 / 状态                                                                                             |
+| --- | -------------------------------------------------------------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| T33 | [T33-updater-hardening.md](T33-updater-hardening.md)                                         | 发布加固：CSP 已加固 + updater / 签名待密钥证书 | CSP 零行为变化加固已落地；`style-src 'unsafe-inline'` 移除需真机回归，updater 与三平台签名需密钥 / 证书 |
+| T48 | [T48-renderer-bench-realdevice.md](T48-renderer-bench-realdevice.md)                         | 渲染后端三端真机验收与 FPS 回填                 | 等三端真机（macOS/Windows/Linux WebView）                                                               |
+| T82 | [T82-dualdomain-midplane-solve-consumption.md](T82-dualdomain-midplane-solve-consumption.md) | 双域 / 中面网格的求解消费                       | 求解侧消费（双域/中面），依赖上游降维能力                                                               |
+| T83 | [T83-multi-cavity-runner-fill.md](T83-multi-cavity-runner-fill.md)                           | 多型腔与流道系统参与填充                        | 流道体进网格 + 多腔分配，依赖 T29 闭环                                                                  |
+| T89 | [T89-gaim-integration.md](T89-gaim-integration.md)                                           | 气体辅助注塑（GAIM）集成                        | 进行中：第一步气体介质数据位与 DTO 契约已完成；第二步等上游三相 / 气芯场                                |
+| T93 | [T93-process-optimization.md](T93-process-optimization.md)                                   | 工艺参数自动寻优                                | 进行中：core 优化器与 `optimize plan` 已完成；真实求解回填循环待实现                                    |
+| T94 | [T94-gui-e2e-verification.md](T94-gui-e2e-verification.md)                                   | GUI 端到端验证（提交 → 回传 → VM 自动关闭）     | 待开工；需人在界面展开求解面板后跑（AX 拿不到折叠面板的输入框）；求解链路本身先走 CLI 通道              |
+| T95 | [T95-dependency-audit.md](T95-dependency-audit.md)                                           | 依赖取向审查：用现成库 vs 自造轮子              | 进行中：已落地项见 T95；剩图表/前端数学评估、色标统一、repair 向量补漏、摘要展示与证据补齐              |
+| T97 | [T97-solver-lib-duplication-guard.md](T97-solver-lib-duplication-guard.md)                   | 求解环境库重复守卫 + 部署前清理                 | 进行中：部署清理与 core/原生库探测已完成；真实 VM 坏状态验收待下一批                                    |
 
 ## 整体评审闭环（2026-09-15）
 
@@ -147,8 +147,8 @@ T98 的本机测试不替代 T94/T96 的 Windows/WSL、Linux 与真实 VM 验收
 
 **档 A · 现在就能开工（无外部条件）**——按建议顺序：
 
-1. **T95 P2-a**（P2）：已完成可复用收编；标题栏和 storage 需保留自定义语义，下一批转入 P3 对照评估。
-2. **T95 P3**（P2/P3）：按决策表逐项做视觉/性能对照，不直接替换 XY 图表、几何数学或解压路径。
+1. **T95 补漏**（P2）：repair 向量消重、色标统一、摘要展示与准入证据补齐；P2-a 已完成，不重复开工。
+2. **T95 对照评估**（P2/P3）：XY 图表与 gl-matrix 分别做视觉/性能/包体取舍；解压保持系统工具，按重审条件触发。
 3. **T97**（P1）：求解环境库重复守卫与部署前清理；优先于新求解功能。
 4. **T93 CLI 寻优循环**（P3）：先接 `optimize plan` 候选规划，再接真实求解回填与失败策略。
 5. **T83 多型腔与流道参与填充**（P1）：文件依赖 T07/T61 均已满足（README 原先写的「依赖 T29 闭环」
