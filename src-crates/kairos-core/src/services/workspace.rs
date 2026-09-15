@@ -5,7 +5,7 @@
 //!   project.kairos        # 结构 + 相对路径引用
 //!   geometry/             # 导入的原始几何（原样拷贝，保留来源文件名）
 //!   mesh/<studyId>/       # 体积网格（节点 / 单元 / 表面 + 生成参数）
-//!   cases/<studyId>/      # 求解 case（生成物，可重建）
+//!   cases/<studyId>/<runId>/ # 每次运行的独立求解输入与结果
 //!   reports/              # 生成的报告
 //! ```
 //!
@@ -98,6 +98,20 @@ pub fn cases_dir(root: &Path, study_id: &str) -> PathBuf {
     root.join(CASES_DIR).join(study_id)
 }
 
+/// 每次求解预留独立目录；创建失败时不复用现有运行目录。
+pub fn create_run_dir(root: &Path, study_id: &str) -> Result<PathBuf> {
+    paths::validate_id(study_id)?;
+    let parent = cases_dir(root, study_id);
+    std::fs::create_dir_all(&parent).map_err(run_directory_error)?;
+    let run = parent.join(crate::services::project::new_id("run"));
+    std::fs::create_dir(&run).map_err(run_directory_error)?;
+    Ok(run)
+}
+
+fn run_directory_error(error: std::io::Error) -> crate::error::KairosError {
+    crate::error::KairosError::io(format!("创建独立求解目录失败：{error}"))
+}
+
 /// `<root>/reports`。
 pub fn reports_dir(root: &Path) -> PathBuf {
     root.join(REPORTS_DIR)
@@ -136,6 +150,21 @@ pub fn mesh_relative(study_id: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn each_run_has_its_own_directory_and_invalid_roots_fail() {
+        let root = std::env::temp_dir().join(crate::services::project::new_id("runs"));
+        let first = super::create_run_dir(&root, "study-1").unwrap();
+        let second = super::create_run_dir(&root, "study-1").unwrap();
+        assert_ne!(first, second);
+        assert!(first.is_dir());
+        assert!(second.starts_with(&root));
+        assert!(super::create_run_dir(&root, "../escape").is_err());
+        let blocked = root.join("file");
+        std::fs::write(&blocked, "x").unwrap();
+        assert!(super::create_run_dir(&blocked, "study").is_err());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
     use super::*;
 
     #[test]

@@ -467,14 +467,13 @@ pub fn solve_sid_path(vm_case: &str) -> String {
     format!("{vm_case}/{SOLVE_SID_NAME}")
 }
 
-/// 取消求解：按会话 id 整组终止（`kill -TERM -<sid>` 杀的是**进程组**，
+/// 取消求解：按会话 id 整组终止（`kill -KILL -<sid>` 杀的是**进程组**，
 /// decomposePar / mpirun 及其各 rank / reconstructPar 一并结束）。
 ///
-/// 求解已结束或 id 文件缺失时是空操作（`|| true`）：取消是用户意图，不该因为
-/// 「刚好跑完了」而报错。
+/// 已退出的进程组允许重复取消；SID 尚未落盘或损坏时必须报错，交给调用方重试。
 pub fn solver_stop_command(vm_case: &str) -> String {
     format!(
-        "kill -TERM -$(cat '{}' 2>/dev/null) 2>/dev/null || true",
+        r#"sid=$(cat '{}' 2>/dev/null) || exit 1; case "$sid" in ''|*[!0-9]*) exit 1;; esac; [ "$sid" -gt 1 ] || exit 1; kill -KILL -- -"$sid" 2>/dev/null || ! kill -0 -- -"$sid" 2>/dev/null"#,
         bash_single_quote(&solve_sid_path(vm_case))
     )
 }
@@ -506,8 +505,9 @@ pub fn detached_read_command(vm_case: &str, offset: u64) -> String {
     let dir = format!("'{}'", bash_single_quote(vm_case));
     let log = format!("{dir}/{SOLVE_LOG_NAME}");
     let exit = format!("{dir}/{SOLVE_EXIT_NAME}");
+    let sid = format!("{dir}/{SOLVE_SID_NAME}");
     format!(
-        "tail -c +{} {log} 2>/dev/null; printf '\n{STREAM_MARK}\n'; cat {exit} 2>/dev/null || printf -- '-'",
+        "tail -c +{} {log} 2>/dev/null; printf '\n{STREAM_MARK}\n'; if test -f {exit}; then cat {exit}; elif test -f {sid} && ! kill -0 -- -$(cat {sid}) 2>/dev/null; then printf 255; else printf -- '-'; fi",
         offset.saturating_add(1)
     )
 }
@@ -517,16 +517,23 @@ pub fn detached_read_command(vm_case: &str, offset: u64) -> String {
 /// 退出码为 `None` 表示求解仍在进行；哨兵缺失（输出被截断）时按「无新增」处理，
 /// 下一轮从头续读，不把残缺输出当成求解结束。
 pub fn parse_read_output(stdout: &str, offset: u64) -> (String, u64, Option<i32>) {
-    let Some((chunk, status)) = stdout.rsplit_once(STREAM_MARK) else {
+    let Some((chunk, status)) = stdout.rsplit_once(&format!("\n{STREAM_MARK}\n")) else {
         return (String::new(), offset, None);
     };
-    let new_offset = offset + chunk.len() as u64;
     let code = status
         .trim()
         .parse::<i32>()
         .ok()
         .filter(|_| status.trim() != "-");
-    (chunk.to_string(), new_offset, code)
+    // 活跃日志的最后一行可能尚未写完；保留在文件中，下次从同一字节重读。
+    let chunk = if code.is_some() {
+        chunk
+    } else if let Some(end) = chunk.rfind('\n') {
+        &chunk[..=end]
+    } else {
+        ""
+    };
+    (chunk.to_string(), offset + chunk.len() as u64, code)
 }
 
 /// 原生（Linux）求解环境的目录名：应用数据目录下的 `moldingfoam-env`。
@@ -802,6 +809,26 @@ fn instance_hint(provider: VmProviderKind, instance_state: VmState) -> &'static 
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn polling_preserves_offsets_for_idle_and_partial_unicode_lines() {
+        let (chunk, offset, _) = super::parse_read_output("Time = 0.1\n\n##KAIROS-STATUS##\n-", 0);
+        assert_eq!(chunk, "Time = 0.1\n");
+        assert_eq!(offset, 11);
+        let (chunk, next, _) = super::parse_read_output("\n##KAIROS-STATUS##\n-", offset);
+        assert!(chunk.is_empty());
+        assert_eq!(next, offset);
+        let (_, next, _) = super::parse_read_output("FOAM FA\n##KAIROS-STATUS##\n-", offset);
+        assert_eq!(next, offset);
+        let text = "FOAM FATAL 错误\n";
+        let frame = format!("{text}\n##KAIROS-STATUS##\n-");
+        let (chunk, next, _) = super::parse_read_output(&frame, offset);
+        assert_eq!(chunk, text);
+        assert_eq!(next, offset + text.len() as u64);
+        let (chunk, _, code) = super::parse_read_output("末行\n##KAIROS-STATUS##\n1", offset);
+        assert_eq!(chunk, "末行");
+        assert_eq!(code, Some(1));
+    }
+
     use super::*;
 
     /// 原生（Linux）环境路径：bashrc 与版本标记都挂在环境根下，
@@ -1421,13 +1448,12 @@ mod tests {
         );
     }
 
-    /// 取消命令：按会话 id 杀**进程组**，求解已结束或 id 缺失时是空操作（`|| true`）——
-    /// 取消是用户意图，不该因为「刚好跑完」而报错。
+    /// 取消命令拒绝缺失身份，防止准备阶段的取消被误报成功。
     #[test]
-    fn solver_stop_kills_the_session_group_and_tolerates_missing_sid() {
+    fn solver_stop_kills_the_session_group_and_validates_sid() {
         assert_eq!(
             solver_stop_command("/home/ubuntu/study-1"),
-            "kill -TERM -$(cat '/home/ubuntu/study-1/.kairos-solve.sid' 2>/dev/null) 2>/dev/null || true"
+            r#"sid=$(cat '/home/ubuntu/study-1/.kairos-solve.sid' 2>/dev/null) || exit 1; case "$sid" in ''|*[!0-9]*) exit 1;; esac; [ "$sid" -gt 1 ] || exit 1; kill -KILL -- -"$sid" 2>/dev/null || ! kill -0 -- -"$sid" 2>/dev/null"#
         );
         assert_eq!(
             solve_sid_path("/home/ubuntu/study-1"),
@@ -1509,7 +1535,7 @@ mod tests {
         let command = detached_read_command("/home/ubuntu/study-1", 0);
         assert!(command.contains("tail -c +1 "));
         assert!(command.contains(STREAM_MARK));
-        assert!(command.contains("|| printf -- '-'"));
+        assert!(command.contains("printf -- '-'"));
         // offset 之后的字节从 offset+1 开始读（tail 的计数是 1 基）
         assert!(detached_read_command("/home/ubuntu/study-1", 4096).contains("tail -c +4097 "));
     }
@@ -1517,7 +1543,7 @@ mod tests {
     #[test]
     fn read_output_splits_log_from_exit_code() {
         // 仍在求解：退出码位是 `-`
-        let (chunk, offset, code) = parse_read_output("Time = 0.1\n##KAIROS-STATUS##\n-", 0);
+        let (chunk, offset, code) = parse_read_output("Time = 0.1\n\n##KAIROS-STATUS##\n-", 0);
         assert_eq!(chunk, "Time = 0.1\n");
         assert_eq!(offset, 11);
         assert_eq!(code, None);

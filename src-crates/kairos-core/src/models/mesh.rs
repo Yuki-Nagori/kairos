@@ -183,3 +183,11 @@ pub struct MidplaneReport {
     /// 已保留单元的平均厚度。
     pub thickness_avg: f64,
 }
+
+/// 从工作区恢复的网格报告及其所属几何。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RestoredStudyMesh {
+    pub geometry_id: String,
+    pub report: MeshingReport,
+}

@@ -327,6 +327,42 @@ pub fn read_vector_field(case_dir: &Path, time_dir: &str, field: &str) -> Result
     })
 }
 
+/// 批量采样只读文件，不改变交互会话的场槽位，返回体积随探针数而非单元数增长。
+pub fn sample_probes(
+    case_dir: &Path,
+    field: &str,
+    probes: &[crate::models::results::Probe],
+) -> Result<Vec<crate::models::results::ProbeTimeSeries>> {
+    use crate::models::results::{ProbeSample, ProbeTimeSeries};
+    let catalog = scan_times(case_dir)?;
+    let mut series: Vec<ProbeTimeSeries> = probes
+        .iter()
+        .map(|probe| ProbeTimeSeries {
+            probe_id: probe.id,
+            node_index: probe.node_index,
+            samples: Vec::new(),
+        })
+        .collect();
+    for time in catalog.times {
+        let loaded = read_field(case_dir, &time.dir_name, field)?;
+        for entry in &mut series {
+            let value = loaded
+                .values
+                .get(entry.node_index)
+                .ok_or_else(missing_probe_value)?;
+            entry.samples.push(ProbeSample {
+                time_s: time.time_s,
+                value: *value,
+            });
+        }
+    }
+    Ok(series)
+}
+
+fn missing_probe_value() -> KairosError {
+    KairosError::validation("探针索引超出结果范围，无法生成完整曲线。")
+}
+
 /// 读取指定时间步的场文件：标量场直读，矢量场返回模量。
 pub fn read_field(case_dir: &Path, time_dir: &str, field: &str) -> Result<ScalarField> {
     let path = case_dir.join(time_dir).join(field);
@@ -368,6 +404,50 @@ pub fn read_field(case_dir: &Path, time_dir: &str, field: &str) -> Result<Scalar
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn probe_sampling_is_read_only_and_rejects_missing_values() {
+        let root = std::env::temp_dir().join(crate::services::project::new_id("probe-series"));
+        let probes = vec![crate::models::results::Probe {
+            id: 4,
+            node_index: 1,
+        }];
+        assert!(super::sample_probes(&root, "T", &probes).is_err());
+        for time in ["1", "2"] {
+            let dir = root.join(time);
+            std::fs::create_dir_all(&dir).unwrap();
+            std::fs::write(dir.join("T"), format!("FoamFile\n{{\nclass volScalarField;\n}}\ninternalField nonuniform List<scalar>\n2\n(\n10\n{time}\n);\n")).unwrap();
+        }
+        let series = super::sample_probes(&root, "T", &probes).unwrap();
+        assert_eq!(series[0].probe_id, 4);
+        assert_eq!(series[0].samples.len(), 2);
+        assert!((series[0].samples[1].value - 2.0).abs() < 1e-9);
+        assert!(super::sample_probes(&root, "missing", &probes).is_err());
+        let outside = vec![crate::models::results::Probe {
+            id: 5,
+            node_index: 2,
+        }];
+        assert!(super::sample_probes(&root, "T", &outside).is_err());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn clear_discards_cached_fields_and_accounting() {
+        let mut cache = super::FieldCache::new(1).unwrap();
+        let field = crate::models::results::ScalarField {
+            field: "T".into(),
+            time_dir: "1".into(),
+            time_s: 1.0,
+            values: vec![1.0],
+            is_magnitude: false,
+            complete: true,
+        };
+        cache.put("x".into(), field);
+        cache.clear();
+        assert!(cache.is_empty());
+        assert!(cache.get("x").is_none());
+        assert_eq!(cache.usage().0, 0);
+    }
+
     use super::*;
 
     #[test]
@@ -970,6 +1050,10 @@ impl FieldCache {
 
     fn total_values(&self) -> usize {
         self.entries.values().map(|field| field.values.len()).sum()
+    }
+
+    pub fn clear(&mut self) {
+        *self = Self::with_budget(self.capacity, self.value_budget).expect("已有缓存预算合法");
     }
 
     pub fn is_empty(&self) -> bool {

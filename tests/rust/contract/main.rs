@@ -235,6 +235,13 @@ fn meshing_report_serializes_with_camel_case() {
             "目标尺寸 5.00 mm 超过最薄特征的 1/2（5% 分位壁厚 3.00 mm）。".into(),
         ],
     };
+    let restored = kairos_core::models::mesh::RestoredStudyMesh {
+        geometry_id: "geo-2".into(),
+        report: report.clone(),
+    };
+    let restored_json = serde_json::to_value(restored).unwrap();
+    assert_eq!(restored_json["geometryId"], "geo-2");
+    assert_eq!(restored_json["report"]["nodeCount"], 27);
     let json = serde_json::to_value(&report).unwrap();
     assert_eq!(json["engine"], "voxel");
     assert_eq!(json["nodeCount"], 27);
@@ -535,4 +542,22 @@ fn render_mesh_data_serializes_with_camel_case() {
     assert_eq!(json["positions"].as_array().map(Vec::len), Some(9));
     assert_eq!(json["indices"], json!([0, 1, 2]));
     assert_eq!(json["faceCells"], json!([7]));
+}
+
+#[test]
+fn probe_series_contract_uses_camel_case() {
+    use kairos_core::models::results::{Probe, ProbeSample, ProbeTimeSeries};
+    let probe: Probe = serde_json::from_value(serde_json::json!({"id":2,"nodeIndex":7})).unwrap();
+    let series = ProbeTimeSeries {
+        probe_id: probe.id,
+        node_index: probe.node_index,
+        samples: vec![ProbeSample {
+            time_s: 0.5,
+            value: 42.0,
+        }],
+    };
+    assert_eq!(
+        serde_json::to_value(series).unwrap(),
+        serde_json::json!({"probeId":2,"nodeIndex":7,"samples":[{"timeS":0.5,"value":42.0}]})
+    );
 }

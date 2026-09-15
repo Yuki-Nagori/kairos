@@ -76,8 +76,46 @@ pub fn from_surface_mesh(mesh: &TriangleMesh) -> RenderMeshData {
     }
 }
 
+/// 渲染网格二进制：KRM1 + 三段元素数（LE u32）+ 位置 f32 / 索引 u32 / 单元 u32。
+pub fn encode(mesh: &RenderMeshData) -> Vec<u8> {
+    let mut bytes = Vec::with_capacity(
+        16 + 4 * (mesh.positions.len() + mesh.indices.len() + mesh.face_cells.len()),
+    );
+    bytes.extend_from_slice(b"KRM1");
+    for count in [
+        mesh.positions.len(),
+        mesh.indices.len(),
+        mesh.face_cells.len(),
+    ] {
+        bytes.extend_from_slice(&(count as u32).to_le_bytes());
+    }
+    for value in &mesh.positions {
+        bytes.extend_from_slice(&value.to_le_bytes());
+    }
+    for values in [&mesh.indices, &mesh.face_cells] {
+        for value in values {
+            bytes.extend_from_slice(&value.to_le_bytes());
+        }
+    }
+    bytes
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn render_binary_has_little_endian_arrays_and_counts() {
+        let mesh = crate::models::render::RenderMeshData {
+            positions: vec![1.0, -2.0, 3.0],
+            indices: vec![0, 1, 2],
+            face_cells: vec![7],
+        };
+        let bytes = super::encode(&mesh);
+        assert_eq!(&bytes[..4], b"KRM1");
+        assert_eq!(&bytes[4..16], &[3, 0, 0, 0, 3, 0, 0, 0, 1, 0, 0, 0]);
+        assert_eq!(&bytes[16..20], &1.0f32.to_le_bytes());
+        assert_eq!(&bytes[40..44], &7u32.to_le_bytes());
+    }
+
     use super::*;
     use crate::models::geometry::Triangle;
 

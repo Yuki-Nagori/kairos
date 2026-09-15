@@ -80,3 +80,28 @@ pub enum DeriveRequest {
     /// 两场差值：主场 − 对比场（长度不一致时报验证错误）。
     Difference,
 }
+
+/// 探针采样位置（索引属于结果单元域）。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Probe {
+    pub id: u32,
+    pub node_index: usize,
+}
+
+/// 探针在一个物理时刻的采样值。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProbeSample {
+    pub time_s: f64,
+    pub value: f64,
+}
+
+/// 一个探针的时间曲线；缺失数据报错，不填造零值。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProbeTimeSeries {
+    pub probe_id: u32,
+    pub node_index: usize,
+    pub samples: Vec<ProbeSample>,
+}

@@ -713,7 +713,7 @@ fn run_pipeline(
 ) -> kairos_core::error::Result<()> {
     // 工作区布局：case 写在 <工作区>/cases/<方案>/ 下，与桌面端同一套规则。
     let workspace = Path::new(&out_dir);
-    let out = &services::workspace::cases_dir(workspace, "cli");
+    let out = &services::workspace::create_run_dir(workspace, "cli")?;
     let out = out.as_path();
     let case_dir_text = out.to_string_lossy().to_string();
     // 1. 几何

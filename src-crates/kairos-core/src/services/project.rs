@@ -83,7 +83,12 @@ pub fn validate(project: &Project) -> Result<()> {
         )));
     }
     let mut names = HashSet::new();
+    let mut ids = HashSet::new();
     for study in &project.studies {
+        crate::services::paths::validate_id(&study.id)?;
+        if !ids.insert(&study.id) {
+            return Err(KairosError::validation("方案 ID 重复。"));
+        }
         if !names.insert(study.name.as_str()) {
             return Err(KairosError::validation(format!(
                 "方案名称重复：{}",
@@ -106,7 +111,10 @@ pub fn parse(content: &str) -> Result<Project> {
     let project: Project = serde_json::from_str(content)
         .map_err(|e| KairosError::validation(format!("工程文件无法解析：{e}")))?;
     match project.schema_version.cmp(&SCHEMA_VERSION) {
-        std::cmp::Ordering::Equal => Ok(project),
+        std::cmp::Ordering::Equal => {
+            validate(&project)?;
+            Ok(project)
+        }
         std::cmp::Ordering::Greater => Err(KairosError::validation(format!(
             "工程文件版本过新（{} > {SCHEMA_VERSION}），请升级 Kairos。",
             project.schema_version
@@ -192,6 +200,24 @@ mod recents_tests {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn parsing_rejects_unsafe_and_duplicate_study_ids() {
+        let mut project = super::create("test", 0).unwrap();
+        project.studies[0].id = "../outside".into();
+        let json = serde_json::to_string(&project).unwrap();
+        assert!(super::parse(&json).is_err());
+        project.studies[0].id = "safe".into();
+        let mut second = project.studies[0].clone();
+        second.name = "second".into();
+        project.studies.push(second);
+        assert!(
+            super::validate(&project)
+                .unwrap_err()
+                .message()
+                .contains("ID 重复")
+        );
+    }
+
     use super::*;
     use crate::models::process::ProcessSettings;
     use std::fs;

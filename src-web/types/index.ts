@@ -177,10 +177,10 @@ export interface RepairOutcome {
 
 /** 对应 `kairos-core::models::render::RenderMeshData`（视口上传用）。 */
 export interface RenderMeshData {
-  positions: number[];
-  indices: number[];
+  positions: number[] | Float32Array;
+  indices: number[] | Uint32Array;
   /** 每个三角形所属单元索引（云图按单元值着色）。 */
-  faceCells: number[];
+  faceCells: number[] | Uint32Array;
 }
 /** 对应 `kairos-core::models::mesh::MeshQuality`。 */
 export interface MeshQuality {
@@ -550,4 +550,10 @@ export interface ProbeTimeSeries {
   probeId: number;
   nodeIndex: number;
   samples: { timeS: number; value: number }[];
+}
+
+/** 从工作区恢复的网格报告及其所属几何。 */
+export interface RestoredStudyMesh {
+  geometryId: string;
+  report: MeshingReport;
 }

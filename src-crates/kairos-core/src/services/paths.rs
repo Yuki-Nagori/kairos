@@ -108,6 +108,20 @@ pub fn from_storage(relative: &str) -> Result<PathBuf> {
     Ok(PathBuf::from(relative))
 }
 
+/// 持久化 ID 只允许 ASCII 字母、数字、下划线与连字符，禁止携带路径语义。
+pub fn validate_id(id: &str) -> Result<()> {
+    if id.is_empty() || !id.bytes().all(valid_id_byte) {
+        return Err(KairosError::validation(
+            "ID 必须由字母、数字、下划线或连字符组成。",
+        ));
+    }
+    Ok(())
+}
+
+fn valid_id_byte(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-'
+}
+
 /// 相对路径安全校验：拒绝绝对路径、盘符 / 根、`..` 与空路径。
 ///
 /// Windows 上 `C:\x` 与 `/etc/passwd`（无盘符的 rooted 路径）`is_absolute()` 都为
@@ -201,6 +215,16 @@ fn replace_reserved(name: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn ids_reject_path_syntax_on_every_platform() {
+        for id in ["study-Az09_-", "1"] {
+            super::validate_id(id).unwrap();
+        }
+        for id in ["", "/tmp/out", "..", "x/y", r"x\y", "C:drive", " a", "汉字"] {
+            assert!(super::validate_id(id).is_err());
+        }
+    }
+
     use std::path::MAIN_SEPARATOR;
 
     use super::*;

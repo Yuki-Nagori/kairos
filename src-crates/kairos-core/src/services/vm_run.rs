@@ -797,7 +797,7 @@ mod tests {
     #[test]
     fn poll_log_splits_log_from_exit_code_and_flags_abort() {
         let steady = FakeRunner::with_replies(&[&format!(
-            "Time = 0.1\nTime = 0.2\n{}-\n",
+            "Time = 0.1\nTime = 0.2\n\n{}\n-\n",
             vm_logic::STREAM_MARK
         )]);
         let poll = poll_log_once(&steady, "/home/ubuntu/study-7", 0).expect("回读成功");
@@ -807,7 +807,7 @@ mod tests {
         assert_eq!(poll.offset, "Time = 0.1\nTime = 0.2\n".len() as u64);
 
         let failed = FakeRunner::with_replies(&[&format!(
-            "FOAM FATAL ERROR: something went wrong\n{}3\n",
+            "FOAM FATAL ERROR: something went wrong\n\n{}\n3\n",
             vm_logic::STREAM_MARK
         )]);
         let poll = poll_log_once(&failed, "/home/ubuntu/study-7", 0).expect("回读成功");

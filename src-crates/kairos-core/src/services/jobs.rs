@@ -4,6 +4,19 @@
 use crate::error::Result;
 use crate::models::jobs::{Job, JobStatus};
 
+/// 默认调度核数预算；提交与 case 生成共用同一口径。
+pub const MAX_JOB_CORES: u32 = 8;
+
+/// 拒绝当前调度器永远无法启动的核数请求。
+pub fn validate_cores(cores: u32) -> Result<()> {
+    if !(1..=MAX_JOB_CORES).contains(&cores) {
+        return Err(crate::error::KairosError::validation(format!(
+            "核数必须在 1 ~ {MAX_JOB_CORES} 之间。"
+        )));
+    }
+    Ok(())
+}
+
 /// 调度参数：同时运行作业数上限与总核数预算。
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SchedulerLimits {
@@ -43,9 +56,7 @@ pub fn submit(
     cores: u32,
     now_ms: u64,
 ) -> Result<()> {
-    if cores == 0 {
-        return Err(crate::error::KairosError::validation("核数必须为正数。"));
-    }
+    validate_cores(cores)?;
     jobs.push(Job::new(id, study_id, case_dir, cores, now_ms));
     Ok(())
 }
@@ -136,9 +147,8 @@ pub fn cancel(jobs: &mut [Job], id: &str, now_ms: u64) -> Result<()> {
 
 /// 作业收尾判定：返回失败原因（`None` = 成功）。
 ///
-/// 求解器错误标记优先于脚本退出码——求解命令用 `;` 串接 `reconstructPar`
-/// （求解器中途报错时也尽力重建已写出的部分结果），退出码因此可能仍为 0；
-/// 只看退出码会把「写出过部分时间目录的失败作业」判成成功。
+/// 求解器错误标记优先提供诊断；脚本保留求解与重建的非零退出码，
+/// 两项独立检查防止把部分输出误判为成功。
 pub fn job_failure(
     solver_aborted: bool,
     exit_ok: bool,
@@ -156,6 +166,14 @@ pub fn job_failure(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn oversized_requests_are_rejected_before_entering_queue() {
+        let mut jobs = Vec::new();
+        assert!(super::submit(&mut jobs, "j".into(), None, "case".into(), 9, 0).is_err());
+        assert!(jobs.is_empty());
+        super::validate_cores(super::MAX_JOB_CORES).unwrap();
+    }
+
     use super::*;
 
     fn seed() -> Vec<Job> {

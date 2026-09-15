@@ -696,6 +696,11 @@ fn collect_faces(mesh: &VolumeMesh) -> Result<FaceTable> {
 }
 
 pub fn generate_case(case_dir: &Path, inputs: &CaseInputs<'_>) -> Result<CaseReport> {
+    if case_dir.join("system").join("controlDict").exists() {
+        return Err(KairosError::validation(
+            "求解目录已包含运行输入，请选择新的运行目录。",
+        ));
+    }
     let report = write_poly_mesh(case_dir, inputs.mesh, inputs.gates)?;
     // 微发泡近似说明进告警（CLI JSON 与工艺面板都会展示）
     let mut report = report;
@@ -838,9 +843,14 @@ pub fn clamp_cores(cores: u32) -> usize {
 ///
 /// 并行求解把结果写在 `processor*/` 下，必须 `reconstructPar` 之后宿主侧的
 /// results 服务才读得到 case 级时间目录；用 `;` 而非 `&&` 串接，使求解器退出
-/// 码异常时仍尽力重建已写出的部分结果（部分结果对排查有用）。
+/// 码异常时仍尽力重建已写出的部分结果；重建后保留求解失败状态。
 pub fn solve_command(cores: u32) -> String {
-    format!("decomposePar -force && mpirun -np {cores} foamRun -parallel; reconstructPar")
+    if cores == 1 {
+        return "foamRun".to_string();
+    }
+    format!(
+        r#"(decomposePar -force && mpirun -np {cores} foamRun -parallel; solve_status=$?; reconstructPar; rebuild_status=$?; if [ "$solve_status" -ne 0 ]; then exit "$solve_status"; fi; exit "$rebuild_status")"#
+    )
 }
 
 /// 求解器输出行是否表示异常退出路径。
@@ -1083,6 +1093,55 @@ pub fn expected_fields(stage: &AnalysisStage) -> &'static [&'static str] {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn serial_solve_does_not_request_parallel_runtime() {
+        assert_eq!(super::solve_command(1), "foamRun");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn solve_exit_survives_successful_reconstruction() {
+        for (decompose, solve, rebuild, expected) in
+            [(0, 139, 0, 139), (12, 0, 0, 12), (0, 0, 7, 7), (0, 0, 0, 0)]
+        {
+            let script = format!(
+                "decomposePar() {{ return {decompose}; }}; mpirun() {{ return {solve}; }}; reconstructPar() {{ return {rebuild}; }}; {}",
+                super::solve_command(2)
+            );
+            let result = std::process::Command::new("bash")
+                .args(["-c", &script])
+                .status()
+                .unwrap();
+            assert_eq!(result.code(), Some(expected));
+        }
+    }
+
+    #[test]
+    fn generating_existing_case_does_not_overwrite_input() {
+        let root = std::env::temp_dir().join(crate::services::project::new_id("case-no-overwrite"));
+        let system = root.join("system");
+        std::fs::create_dir_all(&system).unwrap();
+        std::fs::write(system.join("controlDict"), "original").unwrap();
+        let error = super::generate_case(
+            &root,
+            &inputs(
+                &two_tet_mesh(),
+                &sample_material(),
+                &process(),
+                &super::AnalysisStage::Fill,
+                &[],
+                &[],
+            ),
+        )
+        .unwrap_err();
+        assert!(error.message().contains("运行输入"));
+        assert_eq!(
+            std::fs::read_to_string(system.join("controlDict")).unwrap(),
+            "original"
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
     use super::*;
     use crate::models::process::ProcessSettings;
     use crate::models::runners::{CoolingChannel, RunnerElement, RunnerKind};
@@ -1364,7 +1423,7 @@ mod tests {
         let command = solve_command(6);
         assert_eq!(
             command,
-            "decomposePar -force && mpirun -np 6 foamRun -parallel; reconstructPar"
+            r#"(decomposePar -force && mpirun -np 6 foamRun -parallel; solve_status=$?; reconstructPar; rebuild_status=$?; if [ "$solve_status" -ne 0 ]; then exit "$solve_status"; fi; exit "$rebuild_status")"#
         );
     }
 
