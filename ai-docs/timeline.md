@@ -588,3 +588,5 @@
 - 2026-09-15 21:05 | T93 CLI 回填循环 | 新增 `optimize run`：候选执行、失败重试、指标回填、连续失败中止与 `optimize/summary.json` 汇总；sample-box smoke 已验证失败历史可见。
 
 - 2026-09-15 21:25 | T93 约束接入 | `optimize run` 在执行 case 前复用 core `process::validate`，将非法候选记录为约束违反并跳过求解；优化器单元测试 10 项通过。
+
+- 2026-09-15 21:45 | T82/T102 延后决策 | Mug 当前实验统一采用三维体网格，接受更长计算时间；Dual Domain solver 消费暂缓，不阻塞 v1.0.0，保留契约与精简 fixture 供后续恢复。

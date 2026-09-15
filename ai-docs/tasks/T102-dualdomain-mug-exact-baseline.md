@@ -2,7 +2,7 @@
 
 - 阶段：E3（求解器一致性与验证）
 - 依赖：T29、T82、T100、T101
-- 状态：**分阶段：三维体网格已可生成并供 moldingFoam 运行；Dual Domain 输入契约已完成，solver 消费等待上游降维模块**
+- 状态：**延后：当前 Mug 基线统一使用三维体网格；Dual Domain 输入契约与样例保留，solver 消费待后续版本**
 - 目标：在 Kairos 中导入或重建与参考结果相同的 Dual Domain 中面网格，使用同一拓扑、厚度、边界、材料和工艺参数，完成 Mug 的可审计基线对照。
 
 ## 冻结基线参数
@@ -69,17 +69,23 @@ cargo run -p kairos-cli -- dual-domain export \
 
 moldingFoam v1.1.0 当前求解器通过 `foamRun` 消费三维 OpenFOAM 体网格（`polyMesh`、体心场和体单元离散），源码没有壳单元、Dual Domain 双面节点或中面厚度场的输入契约。现有 `DualDomainMesh` 是 Kairos 前处理产物，不能直接写成现有 `physicalProperties`/`polyMesh` 并声称等价。
 
-T102 后续采用两步路线：
+T102 后续路线（暂缓实施）：
 
 1. 先定义稳定的 `DualDomainSolverInput`（中面节点、三角形、厚度、双面匹配、边界和积分规则）及契约/golden 测试。
 2. 在 moldingFoam 增加显式降维求解模块后，再由 Kairos 写出该模块的 case；在此之前只允许拓扑前置校验和报告导出，禁止静默回退到 3D 体网格。
 
-因此，当前 Mug 的三维体网格路线可以直接进入 moldingFoam 求解；Dual Domain 仅完成前处理和输入契约，必须等上游显式降维 solver 后才能进行结果对照。
+因此，当前 Mug 实验统一走三维体网格，允许更长的计算时间换取可运行结果；Dual Domain 不进入当前实验验收，待后续上游降维 solver 成熟后再恢复。
 
 - CLI 已支持 `fill-pack-cool` 完整工艺阶段。
 - `dualdomain::validate_solver_topology` 已阻止未配对厚度、越界三角形和非法拓扑进入未来 solver 适配层。
 - 已新增版本化 `DualDomainSolverInput`（`dual-domain/v1`，显式 mm 单位）及 Rust/IPC 契约测试。
 - moldingFoam 当前仍只消费 `VolumeMesh`；双域表面/厚度数据尚未转换为可求解的降维 case，因此尚未宣称 Dual Domain 求解完成。
+
+## 当前决策
+
+- Mug 基线、材料验证和工艺实验优先使用三维体网格。
+- 不为当前版本实现 Dual Domain solver 消费，不把它作为 v1.0.0 阻塞项。
+- 保留 `dual-domain/v1` 契约、精简 fixture 和文档，后续恢复时直接复用。
 
 ## 验收标准
 
