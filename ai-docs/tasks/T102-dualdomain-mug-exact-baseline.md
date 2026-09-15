@@ -2,7 +2,7 @@
 
 - 阶段：E3（求解器一致性与验证）
 - 依赖：T29、T82、T100、T101
-- 状态：**进行中：CLI FillPackCool 契约已接入，Dual Domain 网格与 solver 消费待实现**
+- 状态：**进行中：CLI FillPackCool 与双域拓扑前置校验已接入，solver 消费待实现**
 - 目标：在 Kairos 中导入或重建与参考结果相同的 Dual Domain 中面网格，使用同一拓扑、厚度、边界、材料和工艺参数，完成 Mug 的可审计基线对照。
 
 ## 冻结基线参数
@@ -46,6 +46,12 @@
    - 明确填充结束、最大注射压力、V/P 切换压力、质量、锁模力、平均填充温度、剪切应力和剪切速率的定义。
    - 输出原始 solver 日志、时间目录、指标 JSON/CSV、网格摘要和运行时间戳。
    - 报告逐项给出参考值、Kairos 值、绝对差、相对差和误差来源分类。
+
+## 当前实现进度
+
+- CLI 已支持 `fill-pack-cool` 完整工艺阶段。
+- `dualdomain::validate_solver_topology` 已阻止未配对厚度、越界三角形和非法拓扑进入未来 solver 适配层。
+- moldingFoam 当前仍只消费 `VolumeMesh`；双域表面/厚度数据尚未转换为可求解的降维 case，因此尚未宣称 Dual Domain 求解完成。
 
 ## 验收标准
 
