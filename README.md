@@ -17,6 +17,8 @@ $ cargo run -p kairos-cli -- results list --case-dir kairos-case
 子命令覆盖 project / mesh / solve / results / pipeline；`--json` 输出结构化
 结果，错误一律 `{code, message}` 形态（与 IPC 契约同形）。
 
+默认求解输出按 `cases/<方案 ID>/<运行 ID>` 分开保存；显式指定 `--out-dir` 时请为新运行使用新目录，已有求解输入不会被覆盖。当前作业预算为 1–8 核。工程切换会先保存当前编辑，再恢复目标工程的几何与当前方案网格。
+
 ## 致谢
 
 - CFD 求解基座基于 [OpenFOAM](https://openfoam.org)（GPL-3.0）；

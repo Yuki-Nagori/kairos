@@ -38,7 +38,7 @@ KAIROS_E2E_VM=1 KAIROS_E2E_KEEP=1 cargo test -p kairos-tests --test e2e # 保留
 
 覆盖：case 进 VM（打包 → 传输 → 解压）→ 脱离会话求解到退出码 0 → 结果回传 → 宿主侧扫描并读出速度场；
 再把 case 改坏（删 `constant/polyMesh/boundary`）跑一遍，断言**求解器错误标记**与可归因的失败原因
-（判据用日志标记而不是退出码：脚本尾部的 `; reconstructPar` 会掩盖前面的失败）。
+（日志标记与进程退出码共同判定失败；重建不会覆盖分解或求解的非零退出码）。
 最后跑一遍取消：启动后 2 秒按会话 id 整组终止（`solver_stop_command`），断言退出码非 0、日志不再增长、
 且不出现求解器错误标记（取消不能被误报成失败）。取消与启动必须在**同一次 multipass 往返**里发出——
 一次往返 1~2 秒，小算例墙钟只有几秒，分两次调用会撞上「求解已结束」。
@@ -54,3 +54,10 @@ KAIROS_E2E_VM=1 KAIROS_E2E_KEEP=1 cargo test -p kairos-tests --test e2e # 保留
 - 前端测试与源码分离（本目录）；Rust 单元测试与源码同文件（语言惯例），集成测试归集于此；
 - 测试不写业务逻辑——被测逻辑一律住 `kairos-core`；
 - 覆盖率门槛已并入 verify 门禁，本地与 CI 同卡点（前端四维 100% / Rust core 行 100%）。
+
+## 工程与作业一致性回归
+
+- 前端 `tests/web/stores/{app,project,geometry,results}.test.ts` 与视口测试：并发/嵌套忙碌状态、切换保存、会话重置、网格归属、探针不污染主场、旧视口请求失效。
+- core `services/{jobs,paths,project,workspace,moldingfoam,vm,results,render_mesh}.rs`：核数和 ID 约束、独立运行、退出码、日志帧、只读采样、二进制编码。
+- 桌面 `commands/{jobs,geometry,results}.rs`：真实子进程取消、双流和非 UTF-8 日志、网格快照修订、场缓存与双槽一致性。Unix 子进程测试通过不等于 WSL/VM 已验收。
+- [修复及消融记录](../ai-docs/reviews/review-fixes-0915.md)。

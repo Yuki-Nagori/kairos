@@ -23,6 +23,8 @@
 
 ## 整体审计
 
+- [2026-09-15 整体评审](review-report-0915.md) · [12 项修复闭环](review-fixes-0915.md)
+
 - [R1 全项目对照评审](R1-full-project-review.md)
 - [R1 消融报告](R1-ablation-report.md)
 - [R2 注释审计](R2-code-comment-audit.md)

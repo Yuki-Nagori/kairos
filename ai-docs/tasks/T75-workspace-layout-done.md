@@ -15,7 +15,7 @@
 工程变成一个自包含目录：拷走一个目录 = 拷走整次分析（几何、网格、case、结果、
 报告），换机器可用；机器级资源（求解环境 bundle、自定义材料、最近工程）不重复携带。
 
-## 现状（已按代码核实）
+## 实施前基线（历史问题，已由本任务与 T98 修复）
 
 - `Project` DTO（schema v4）只有 `schemaVersion / id / name / createdMs / updatedMs /
 studies`，**没有任何几何或网格引用**（`models/project.rs` 与 `src-web/types/index.ts`
@@ -35,7 +35,7 @@ default_case_dir`），与工程文件位置无关，结果回传也落在那里
   project.kairos        # 结构 + 相对路径引用
   geometry/             # 导入的原始几何（原样拷贝，保留来源文件名）
   mesh/<studyId>/       # 体积网格（节点 / 单元 / 表面 + 生成参数）
-  cases/<studyId>/      # 求解 case（生成物，可重建）
+  cases/<studyId>/<runId>/ # 每次运行的独立求解输入与结果
   results/<studyId>/    # 回传结果（派生数据，可重建）
   reports/              # 生成的报告
 ```
@@ -57,7 +57,7 @@ default_case_dir`），与工程文件位置无关，结果回传也落在那里
    重载（Rust 侧仍按需入内存，不常驻）；
 3. **网格落盘**：生成后写 `mesh/<studyId>/`，打开工程时可直接载入视口；
 4. **case / 结果路径**：`default_case_dir(workspace, studyId)` →
-   `<workspace>/cases/<studyId>`；无工作区时回退应用数据目录（旧行为保持可用）；
+   `<workspace>/cases/<studyId>/<runId>`；无工作区时回退应用数据目录（旧行为保持可用）；
    作业脚本、结果回传、结果面板扫描随之改口径；
 5. **报告**：输出目录默认 `<workspace>/reports/`；
 6. **界面**：工程名旁显示工作区路径（可点开）；「另存为」→「另存工程目录」；
@@ -85,3 +85,7 @@ default_case_dir`），与工程文件位置无关，结果回传也落在那里
 
 - 工作区根由工程文件位置推导，不支持「工程在别处、数据在工作区」的分离配置；
 - 几何原样拷贝（不压缩、不指纹去重）。
+
+## 工程隔离补强
+
+[T98](T98-review-fixes-done.md)：打开/新建前保存旧工程，切换成功后清理两端会话；恢复当前方案网格时保留真实几何 ID。求解输入与结果按 `cases/<studyId>/<runId>` 隔离，旧运行不被再次生成覆盖。方案 ID 的安全字符与唯一性由 core 校验。
