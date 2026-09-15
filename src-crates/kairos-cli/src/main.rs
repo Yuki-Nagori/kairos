@@ -621,6 +621,16 @@ fn run_doe_batch(
         );
         print!("{}", doe::summary_csv(&runs));
     }
+    let failed = runs
+        .iter()
+        .filter(|run| matches!(run.status, doe::DoeStatus::Failed(_)))
+        .count();
+    if failed > 0 {
+        return Err(KairosError::solver(format!(
+            "DOE 批次包含 {failed}/{} 个失败运行；汇总表已保留",
+            runs.len()
+        )));
+    }
     Ok(())
 }
 

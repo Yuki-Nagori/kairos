@@ -1,0 +1,25 @@
+   Compiling kairos-cli v0.1.0 (/Users/yuki/eit/kairos/src-crates/kairos-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.52s
+     Running `target/debug/kairos-cli doe run --factor '熔体温度=200,210,220' --factor '注射时间=1,2,3' --sample-box --out-dir /private/tmp/t100-solve-20260915T173529+0800 --batch t93-real-solve-20260915T173529+0800 --solve`
+[1] 运行 1/9：注射时间=1 熔体温度=200 → failed（求解失败：bash: decomposePar: command not found）
+[2] 运行 2/9：注射时间=2 熔体温度=200 → failed（求解失败：bash: decomposePar: command not found）
+[3] 运行 3/9：注射时间=3 熔体温度=200 → failed（求解失败：bash: decomposePar: command not found）
+[4] 运行 4/9：注射时间=1 熔体温度=210 → failed（求解失败：bash: decomposePar: command not found）
+[5] 运行 5/9：注射时间=2 熔体温度=210 → failed（求解失败：bash: decomposePar: command not found）
+[6] 运行 6/9：注射时间=3 熔体温度=210 → failed（求解失败：bash: decomposePar: command not found）
+[7] 运行 7/9：注射时间=1 熔体温度=220 → failed（求解失败：bash: decomposePar: command not found）
+[8] 运行 8/9：注射时间=2 熔体温度=220 → failed（求解失败：bash: decomposePar: command not found）
+[9] 运行 9/9：注射时间=3 熔体温度=220 → failed（求解失败：bash: decomposePar: command not found）
+批次「t93-real-solve-20260915T173529+0800」完成：9 次运行，汇总表在 /private/tmp/t100-solve-20260915T173529+0800/doe/t93-real-solve-20260915T173529+0800
+run,注射时间,熔体温度,status,reason,elapsed_s
+1,1,200,failed,求解失败：bash: decomposePar: command not found,0.030589
+2,2,200,failed,求解失败：bash: decomposePar: command not found,0.027184
+3,3,200,failed,求解失败：bash: decomposePar: command not found,0.026033
+4,1,210,failed,求解失败：bash: decomposePar: command not found,0.028055
+5,2,210,failed,求解失败：bash: decomposePar: command not found,0.027761
+6,3,210,failed,求解失败：bash: decomposePar: command not found,0.028253
+7,1,220,failed,求解失败：bash: decomposePar: command not found,0.029043
+8,2,220,failed,求解失败：bash: decomposePar: command not found,0.026341
+9,3,220,failed,求解失败：bash: decomposePar: command not found,0.025063
+{"code":"solver","message":"DOE 批次包含 9/9 个失败运行；汇总表已保留"}
+exit_code=1
