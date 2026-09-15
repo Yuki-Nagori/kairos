@@ -34,6 +34,7 @@
 - `kairos-core` Rust 负责曲线解析、单位归一、参数拟合、残差验证、材料版本和求解器配置生成。
 - `moldingFoam` 在真实求解循环中按单元/时间步计算 Cross-WLF 与 Tait；不能通过 IPC 逐步回调 Rust，也不能由前端计算。
 - 两端必须共享参数命名、单位和公式说明，并用固定参数的 golden 点测试校核黏度/比容结果，防止参考实现与运行时实现漂移。
+- 当前 core 已固定 Cross-WLF/Tait golden 点；moldingFoam 运行时对照和 Mug 实际回归仍待完成。
 
 ## 工作范围
 

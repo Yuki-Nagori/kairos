@@ -884,4 +884,31 @@ mod tests {
         .unwrap();
         assert_eq!(pvt_rows[0].pressure_pa, 1.0e6);
     }
+
+    #[test]
+    fn golden_points_pin_runtime_reference_values() {
+        let cross = CrossWlf {
+            n: 0.3,
+            tau_star: 10_000.0,
+            d1: 1_000.0,
+            d2: 263.15,
+            d3: 0.0,
+            a1: 30.0,
+            a2: 50.0,
+        };
+        let viscosity = cross_wlf_viscosity(&cross, 493.15, 10.0).unwrap();
+        assert!((viscosity - 1.9849204699804817e-8).abs() < 1e-15);
+        let tait = Tait {
+            b1m: 1.0,
+            b1s: 0.9,
+            b2m: 0.0001,
+            b2s: 0.00005,
+            b3: 0.01,
+            b4m: 1.0e8,
+            b4s: 1.0e8,
+            b5: 400.0,
+        };
+        let specific_volume = tait_specific_volume(&tait, 1.0e6, 450.0).unwrap();
+        assert!((specific_volume - 1.0048999991749255).abs() < 1e-12);
+    }
 }

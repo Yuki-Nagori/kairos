@@ -541,3 +541,4 @@
 - 2026-09-15 20:05 | T101 材料校验 CLI | 增加 `material validate --path <json|csv>`，输出材料数量、牌号、材料族和 ID，作为进入 case 前的显式校验步骤。
 - 2026-09-15 20:20 | T101 材料拟合 CLI | 增加 `material fit --template --viscosity --pvt --output`，执行 D1 与 Tait b1 的确定性尺度回填并输出残差；完整多参数优化和真实 Mug baseline 待完成。
 - 2026-09-15 20:35 | T101 逐点残差 | `material fit` 额外输出黏度/PVT 逐点残差 JSON 文件，记录输入坐标、实测值、预测值和误差，支持后续基线审计。
+- 2026-09-15 20:45 | T101 Golden 点 | 固定 Cross-WLF 黏度与 Tait 比容参考点测试，作为 moldingFoam 运行时实现的跨语言数值对照基准。
