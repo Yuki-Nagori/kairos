@@ -568,3 +568,5 @@
 - 2026-09-16 00:35 | T102 双域拓扑前置 | 增加 Dual Domain solver 拓扑校验，拒绝未配对厚度、越界索引和非法网格；明确 moldingFoam 降维消费仍是后续实现。
 
 - 2026-09-16 00:50 | T102 路线确认 | 核对 moldingFoam v1.1.0 仅消费三维体网格；冻结 DualDomainSolverInput 契约与显式降维 solver 扩展路线，禁止静默回退。
+
+- 2026-09-16 01:00 | T102 输入契约 | 新增版本化 `DualDomainSolverInput` DTO、单位字段、拓扑转换和 Rust/IPC 契约测试，供上游 moldingFoam 降维模块消费。

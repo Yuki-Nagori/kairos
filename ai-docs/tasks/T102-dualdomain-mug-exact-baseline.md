@@ -62,6 +62,7 @@ T102 后续采用两步路线：
 
 - CLI 已支持 `fill-pack-cool` 完整工艺阶段。
 - `dualdomain::validate_solver_topology` 已阻止未配对厚度、越界三角形和非法拓扑进入未来 solver 适配层。
+- 已新增版本化 `DualDomainSolverInput`（`dual-domain/v1`，显式 mm 单位）及 Rust/IPC 契约测试。
 - moldingFoam 当前仍只消费 `VolumeMesh`；双域表面/厚度数据尚未转换为可求解的降维 case，因此尚未宣称 Dual Domain 求解完成。
 
 ## 验收标准
