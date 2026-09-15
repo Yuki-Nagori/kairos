@@ -31,11 +31,6 @@ use kairos_core::services::{material, meshing, moldingfoam, results, vm as vm_lo
 const L1_TARGET_SIZE_MM: f64 = 2.0;
 /// 求解核数：真机测试不占满机器。
 const SOLVE_CORES: u32 = 2;
-/// 取消用例的网格目标尺寸（mm）：比 L1 细一档（单元数 ×8），让求解跑到分钟级，
-/// 「启动 → 探针 → 取消」这一串来回才有确定的窗口。
-/// 注意别用「拉长注射时间」来拖时间：步数 ≈ endTime / dt 在 Co 数受限下近似恒定，
-/// 拉长注射时间墙钟时间基本不变（取消会撞上正常结束）。
-const CANCEL_TARGET_SIZE_MM: f64 = 0.5;
 /// L2 求解预算（秒）：超预算即判失败（求解器卡住要暴露出来，不是无限等）。
 const SOLVE_BUDGET_S: u64 = 600;
 /// 失败时打印的日志尾部行数：够定位，不刷屏。
@@ -109,22 +104,15 @@ fn l1_build_case(workspace: &Path) -> (PathBuf, PathBuf, usize, usize) {
     )
     .expect("case 生成失败");
 
-    // 取消用例专用 case（独立目录，免得与正常路径互相干扰时间目录）：细网格让求解
-    // 跑到分钟级，取消窗口才稳（粗算例 6 秒就跑完，探针还没走完就结束了）。
-    // 单份细算例的内存开销很小；把虚拟机压爆的是**多个求解并发**，不是单元数。
-    let cancel_mesh = meshing::generate(
-        &mesh_tri,
-        &meshing::VolumeMeshParams {
-            refinement: None,
-            target_size: CANCEL_TARGET_SIZE_MM,
-        },
-    )
-    .expect("取消用例的网格生成失败");
+    // 取消用例专用 case：与 L1 同一份网格（2.0mm ≈ 625 四面体，求解 10 秒量级），
+    // 仅目录不同（免得与正常路径互相干扰时间目录）。
+    // 别再往细做：0.5mm 是 4 万四面体，单次求解 20 分钟量级——测试用例要的是
+    // 「链路跑通」，不是物理精度（精度靠上游用例与真实件）。
     let cancel_case_dir = workspace.join("cases").join("e2e-cancel");
     moldingfoam::generate_case(
         &cancel_case_dir,
         &moldingfoam::CaseInputs {
-            mesh: &cancel_mesh,
+            mesh: &volume,
             material: &material::builtin_materials()[0],
             process: &test_process(0.4),
             stage: &AnalysisStage::Fill,
