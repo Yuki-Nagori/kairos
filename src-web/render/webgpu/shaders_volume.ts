@@ -1,3 +1,5 @@
+import { FIELD_COLD_RGB, FIELD_HOT_RGB, wgslFieldColor } from "../palette";
+
 /** 体渲染 WGSL（POC）：全屏三角形 + 固定步长光线步进，
  * 体素场三线性采样，前向合成 alpha 混色。
  * 射线由 uniform 传入的轨道相机基向量 + 视口尺寸逐像素构造（无逆矩阵）。
@@ -133,7 +135,7 @@ fn fs(@builtin(position) frag_coord: vec4<f32>) -> @location(0) vec4<f32> {
     if (value > 1e-6) {
       let normalized = clamp(value / u.scalars.x, 0.0, 1.0);
       // 冷（蓝）→ 热（红）迁移函数；不透明度随值升高。
-      let color = mix(vec3<f32>(0.16, 0.38, 0.85), vec3<f32>(0.95, 0.45, 0.15), normalized);
+      let color = mix(${wgslFieldColor(FIELD_COLD_RGB)}, ${wgslFieldColor(FIELD_HOT_RGB)}, normalized);
       let alpha = clamp(step_alpha * (0.3 + normalized), 0.0, 1.0);
       color_acc = color_acc + (1.0 - alpha_acc) * alpha * color;
       alpha_acc = alpha_acc + (1.0 - alpha_acc) * alpha;

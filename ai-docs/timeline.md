@@ -496,3 +496,4 @@
 - **13:57** docs(tasks): 逐项核对 T95 与当前源码、锁文件和基准：修正 CSV/摘要/VueUse/原子写现状与已完成收编清单，作废 dualdomain/midplane 重复项，补回 gl-matrix 评估、色标不一致、repair 局部向量与摘要展示待办；限定官方摘要校验范围，区分历史性能记录和可复现证据，同步任务索引，未改运行时行为。
 - **14:06** refactor(core): T95 P3-b 补漏完成：`repair::triangles_intersect` 移除局部 sub/cross/dot，统一复用 `services::vec3`；保留 Möller 区间相交算法与容差语义，repair 10 项回归全部通过。
 - **14:10** refactor(web): T95 色标基础收编：新增 `render/palette.ts`，WebGL/WebGPU 云图端点与视口图例共用蓝橙色标；不引入 d3，保留桌面截图回归作为剩余验收。
+- **14:20** refactor(web): T95 收编体积云图色标 —— 发现前一批只统一了表面 WebGPU、WebGL 与图例，`shaders_volume.ts` 仍保留独立蓝橙常量；改为复用 `render/palette.ts`，通过 WGSL 模板注入同一组端点。任务表同步为「基础统一完成」，剩余仅桌面截图视觉回归。
