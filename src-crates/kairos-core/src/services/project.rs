@@ -5,7 +5,7 @@ use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::error::{KairosError, Result};
-use crate::models::project::{Project, RecentProject, SCHEMA_VERSION};
+use crate::models::project::{Project, RecentProject, SCHEMA_VERSION, Study};
 
 /// 当前 Unix 毫秒时间戳；实现在 [`crate::utils::time`]（同类语义只留一处）。
 pub use crate::utils::time::now_ms;
@@ -30,11 +30,45 @@ pub const DEFAULT_STUDY_NAME: &str = "方案 1";
 pub fn create(name: &str, now: u64) -> Result<Project> {
     let name = name.trim();
     let mut project = Project::new(new_id("proj"), name.to_string(), now);
-    project
-        .add_study(new_id("study"), DEFAULT_STUDY_NAME, now)
-        .map_err(KairosError::internal)?;
+    add_study(&mut project, new_id("study"), DEFAULT_STUDY_NAME, now)?;
     validate(&project)?;
     Ok(project)
+}
+
+/// 添加方案：名称去空白、非空、项目内唯一。
+///
+/// 规则住 services 而非 DTO——`models` 只描述持久化形状，判断与错误类别属领域逻辑。
+pub fn add_study(project: &mut Project, id: String, name: &str, now: u64) -> Result<Study> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err(KairosError::validation("方案名称不能为空。"));
+    }
+    if project.studies.iter().any(|study| study.name == name) {
+        return Err(KairosError::validation(format!("已存在同名方案：{name}")));
+    }
+    let study = Study {
+        id,
+        name: name.to_string(),
+        created_ms: now,
+        runner_elements: Vec::new(),
+        cooling_channels: Vec::new(),
+        process: None,
+        material_id: None,
+    };
+    project.studies.push(study.clone());
+    project.updated_ms = now;
+    Ok(study)
+}
+
+/// 移除方案；不存在时报 `not_found`（前端据此区分「已被删掉」与其它失败）。
+pub fn remove_study(project: &mut Project, study_id: &str, now: u64) -> Result<()> {
+    let before = project.studies.len();
+    project.studies.retain(|study| study.id != study_id);
+    if project.studies.len() == before {
+        return Err(KairosError::not_found(format!("方案不存在：{study_id}")));
+    }
+    project.updated_ms = now;
+    Ok(())
 }
 
 /// 保存前的一致性校验（名称非空、方案名唯一、schema 版本正确）。
@@ -164,7 +198,7 @@ mod tests {
 
     fn sample() -> Project {
         let mut project = create("演示项目", 1000).unwrap();
-        project.add_study("s-1".into(), "填充分析", 1001).unwrap();
+        add_study(&mut project, "s-1".into(), "填充分析", 1001).unwrap();
         // 方案配置（材料 / 工艺 / 杆系 / 水路）与几何引用都在工程文件里：
         // 样本带上它们，序列化往返才锁得住这些字段（少一个就会静默丢配置）。
         let study = &mut project.studies[0];
@@ -245,6 +279,41 @@ mod tests {
         let project = sample();
         let parsed = parse(&serialize(&project).unwrap()).unwrap();
         assert_eq!(parsed, project);
+    }
+
+    #[test]
+    fn add_study_trims_name_and_touches_updated_ms() {
+        let mut project = create("演示项目", 1000).unwrap();
+        let study = add_study(&mut project, "s-2".into(), " 填充分析 ", 1001).unwrap();
+        assert_eq!(study.name, "填充分析");
+        assert_eq!(project.studies[1].name, "填充分析");
+        assert_eq!(project.updated_ms, 1001);
+    }
+
+    #[test]
+    fn add_study_rejects_blank_and_duplicate_names() {
+        let mut project = create("演示项目", 1000).unwrap();
+        let blank = add_study(&mut project, "s-2".into(), "   ", 1001).unwrap_err();
+        assert_eq!(blank.kind(), crate::error::ErrorKind::Validation);
+        // create 已建了「方案 1」，同名再建即冲突
+        let duplicate =
+            add_study(&mut project, "s-3".into(), DEFAULT_STUDY_NAME, 1002).unwrap_err();
+        assert_eq!(duplicate.kind(), crate::error::ErrorKind::Validation);
+        assert!(duplicate.message().contains("已存在同名方案"));
+    }
+
+    #[test]
+    fn remove_study_reports_missing_as_not_found() {
+        let mut project = create("演示项目", 1000).unwrap();
+        // create 已播下默认方案，取其真实 id（生成的 id 不是固定值）
+        let seeded = project.studies[0].id.clone();
+        remove_study(&mut project, &seeded, 1002).unwrap();
+        assert!(project.studies.is_empty());
+        assert_eq!(project.updated_ms, 1002);
+
+        let missing = remove_study(&mut project, &seeded, 1003).unwrap_err();
+        assert_eq!(missing.kind(), crate::error::ErrorKind::NotFound);
+        assert!(missing.message().contains("方案不存在"));
     }
 
     #[test]
