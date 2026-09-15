@@ -28,10 +28,14 @@ pub fn from_volume_mesh(volume: &VolumeMesh) -> RenderMeshData {
     let mut indices = Vec::new();
     let mut face_cells = Vec::new();
     for (cell_index, tet) in volume.tets.iter().enumerate() {
-        for face in tet_faces(tet) {
+        for (face_index, face) in tet_faces(tet).into_iter().enumerate() {
             let mut key = face;
             key.sort_unstable();
             if face_count.get(&key) == Some(&1) {
+                // 体网格四面体统一为正体积，但固定的面枚举并不保证每个面
+                // 都朝外。视口法向取决于绕向；这里在导出边界时按对顶点
+                // 重新定向，避免体网格显示出翻面、明暗断裂或局部发黑。
+                let face = orient_boundary_face(tet, face_index, face, &volume.nodes);
                 indices.extend_from_slice(&(face.map(|i| i as u32)));
                 face_cells.push(cell_index as u32);
             }
@@ -41,6 +45,36 @@ pub fn from_volume_mesh(volume: &VolumeMesh) -> RenderMeshData {
         positions,
         indices,
         face_cells,
+    }
+}
+
+/// 将四面体边界面定向为向外法向。
+///
+/// `tet_faces` 的面顺序只用于拓扑枚举，不能直接当作渲染绕向。若面法向
+/// 指向四面体内部，则交换后两个顶点；这样所有边界面都与外部半空间同向。
+fn orient_boundary_face(
+    tet: &[usize; 4],
+    face_index: usize,
+    face: [usize; 3],
+    nodes: &[[f64; 3]],
+) -> [usize; 3] {
+    let opposite = tet[[3, 2, 1, 0][face_index]];
+    let a = nodes[face[0]];
+    let b = nodes[face[1]];
+    let c = nodes[face[2]];
+    let d = nodes[opposite];
+    let ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+    let ac = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+    let ad = [d[0] - a[0], d[1] - a[1], d[2] - a[2]];
+    let normal = [
+        ab[1] * ac[2] - ab[2] * ac[1],
+        ab[2] * ac[0] - ab[0] * ac[2],
+        ab[0] * ac[1] - ab[1] * ac[0],
+    ];
+    if normal[0] * ad[0] + normal[1] * ad[1] + normal[2] * ad[2] > 0.0 {
+        [face[0], face[2], face[1]]
+    } else {
+        face
     }
 }
 
@@ -157,6 +191,44 @@ mod tests {
         // 共享面两侧单元的其余面 owner 各自正确
         assert!(render.face_cells.contains(&0));
         assert!(render.face_cells.contains(&1));
+    }
+
+    #[test]
+    fn volume_boundary_faces_point_outward() {
+        let volume = VolumeMesh {
+            nodes: vec![
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                [0.0, 0.0, 1.0],
+            ],
+            tets: vec![[0, 1, 2, 3]],
+            surface_faces: Vec::new(),
+        };
+        let render = from_volume_mesh(&volume);
+        for face in render.indices.chunks(3) {
+            assert_eq!(face.len(), 3);
+            let a = volume.nodes[face[0] as usize];
+            let b = volume.nodes[face[1] as usize];
+            let c = volume.nodes[face[2] as usize];
+            let normal = [
+                (b[1] - a[1]) * (c[2] - a[2]) - (b[2] - a[2]) * (c[1] - a[1]),
+                (b[2] - a[2]) * (c[0] - a[0]) - (b[0] - a[0]) * (c[2] - a[2]),
+                (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]),
+            ];
+            let centroid = [
+                (a[0] + b[0] + c[0]) / 3.0,
+                (a[1] + b[1] + c[1]) / 3.0,
+                (a[2] + b[2] + c[2]) / 3.0,
+            ];
+            let tet_centroid = [0.25, 0.25, 0.25];
+            let away = [
+                centroid[0] - tet_centroid[0],
+                centroid[1] - tet_centroid[1],
+                centroid[2] - tet_centroid[2],
+            ];
+            assert!(normal[0] * away[0] + normal[1] * away[1] + normal[2] * away[2] > 0.0);
+        }
     }
 
     #[test]

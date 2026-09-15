@@ -534,10 +534,17 @@ pub(crate) fn render_snapshot(
         )
     };
     Ok(Arc::clone(render.get_or_init(|| {
-        Arc::new(match &volume {
+        let rendered = match &volume {
             Some(volume) => render_mesh::from_volume_mesh(volume),
             None => render_mesh::from_surface_mesh(&mesh),
-        })
+        };
+        // 坏网格不应让视口变成一块空画布：体网格边界提取失败时回退到
+        // 已验证过的 STL 表面，同时保留求解网格本身供 solver 使用。
+        if rendered.indices.is_empty() {
+            Arc::new(render_mesh::from_surface_mesh(&mesh))
+        } else {
+            Arc::new(rendered)
+        }
     })))
 }
 
@@ -607,5 +614,28 @@ mod tests {
         assert!(!Arc::ptr_eq(&first, &changed));
         assert_ne!(first.positions, changed.positions);
         assert!(render_snapshot(&store, "missing").is_err());
+    }
+
+    #[test]
+    fn render_snapshot_falls_back_to_surface_when_volume_has_no_boundary() {
+        let store = GeometryStore::default();
+        store.lock().insert(
+            "g".into(),
+            MeshSession {
+                mesh: Arc::new(TriangleMesh::sample_box(1.0)),
+                file_name: "box.stl".into(),
+                volume: Some(Arc::new(VolumeMesh {
+                    nodes: Vec::new(),
+                    tets: Vec::new(),
+                    surface_faces: Vec::new(),
+                })),
+                render: Arc::default(),
+                dual: None,
+                midplane: None,
+            },
+        );
+        let render = render_snapshot(&store, "g").unwrap();
+        assert!(!render.indices.is_empty());
+        assert_eq!(render.face_cells.len(), 12);
     }
 }
