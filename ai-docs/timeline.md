@@ -498,3 +498,4 @@
 - **14:10** refactor(web): T95 色标基础收编：新增 `render/palette.ts`，WebGL/WebGPU 云图端点与视口图例共用蓝橙色标；不引入 d3，保留桌面截图回归作为剩余验收。
 - **14:20** refactor(web): T95 收编体积云图色标 —— 发现前一批只统一了表面 WebGPU、WebGL 与图例，`shaders_volume.ts` 仍保留独立蓝橙常量；改为复用 `render/palette.ts`，通过 WGSL 模板注入同一组端点。任务表同步为「基础统一完成」，剩余仅桌面截图视觉回归。
 - **14:40** docs/bench(web): T95 图表取舍收口 —— 盘点 XY Canvas 的产品语义（min-max 保形抽样、探针叠加、主题重绘、报告快照、CSV 导出），新增 `src-web/bench/chart.ts` 记录 100 万点值域扫描与抽样基线。uPlot 需要额外适配上述语义，当前没有实测交互瓶颈，且候选未引入不能伪造 gzip 对照；结论为继续自绘，未来出现瓶颈时再按同口径做候选包体与性能对照。
+- **14:55** docs(review): T95 前端数学取舍收口 —— 核对 `render/math.ts` 的 10 个矩阵 / 向量原语及 WebGL、WebGPU、拾取、剖切调用点，确认统一列主序 `Float32Array` 且已有矩阵与向量对拍测试。调用面小、未发现数学热点；gl-matrix 会增加数组类型与矩阵约定适配，当前无性能或维护收益证据，结论为继续自写。
