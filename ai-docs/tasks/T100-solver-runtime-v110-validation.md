@@ -47,3 +47,5 @@ cargo run -p kairos-cli -- doe run \
 ## 最近一次真实执行
 
 `20260915T173131+0800` 批次已启用 `--solve` 并完成 9 个参数点的逐点尝试。所有点均保留输入、`log.foamRun`、Unix 毫秒时间戳和批次原始输出；失败原因是执行环境找不到 `decomposePar`，详见 [批次清单](../reviews/t100-runs/20260915T173131+0800-solve-manifest.md)。该记录是环境阻塞证据，不计入求解结果通过。
+
+随后通过 `--vm` 复用 GUI 的 Multipass 环境完成 9/9 个真实求解点，详见 [成功批次清单](../reviews/t100-runs/20260915T174242+0800-vm-manifest.md)。
