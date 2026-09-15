@@ -95,5 +95,6 @@ flowchart LR
 ## 与既有文档的关系
 
 - 分层依赖方向、覆盖率门禁：[AGENTS.md](../AGENTS.md)
+- Rust 侧对应规范（代码归属、模块组织、utils / 错误 / 测试约定）：[rust-conventions.md](rust-conventions.md)
 - 注释风格（中文、Why-only）：[comment-style.md](comment-style.md)
 - 分层落地的任务背景：[tasks/T38-frontend-architecture-done.md](tasks/T38-frontend-architecture-done.md)

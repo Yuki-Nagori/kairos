@@ -23,20 +23,25 @@ flowchart TB
     subgraph rust ["Rust"]
         direction TB
         CMD["src-tauri（适配层）<br>commands/ 只做装配：参数校验 → 调 core → 返回 DTO"]
-        CORE["kairos-core（领域层）<br>models/ DTO · services/ 领域逻辑 · error/ 统一错误<br>纯 Rust，不依赖 tauri，可独立测试、可复用给 CLI / 脚本"]
+        CLI["kairos-cli（无头 CLI）<br>clap 子命令 + 批处理编排"]
+        CORE["kairos-core（领域层）<br>models/ DTO · services/ 领域逻辑 · utils/ 通用工具 · error/ 统一错误<br>纯 Rust，不依赖 tauri，可独立测试、可复用给 CLI / 脚本"]
         CMD -- "不反向依赖" --> CORE
+        CLI -- "不反向依赖" --> CORE
     end
     API -- "invoke / Channel（IPC 契约）" --> CMD
 ```
+
+core 内部还有一条单向链：`error ← utils ← models / services`。`utils` 不认识任何领域
+类型，`models` 不含逻辑，判定标尺见 [rust-conventions.md](rust-conventions.md)。
 
 职责边界的判定标准（去掉 Vue 还能测就进 `.ts`、必须依赖 Vue API 才成立就进
 composable、只描述 DOM 就留 `.vue`）与反模式清单见
 [web-conventions.md](web-conventions.md)。
 
-两条铁律：
+三条铁律：
 
-1. **依赖只能向下**：`views / components → stores → api → utils`；Rust 侧 `src-tauri → kairos-core`。`kairos-core` 出现 `use tauri` 即为架构破坏（CI 的 clippy 不会拦，靠 review 把关）。
-2. **业务逻辑只住 core**：`src-tauri` 的 commands 不写业务逻辑，只做「参数 → core 调用 → DTO 返回」的装配。这样所有领域代码都能脱离 Tauri 做单元测试，未来也能直接复用给批处理 CLI、Wasm 模块。
+1. **依赖只能向下**：`views / components → stores → api → utils`；Rust 侧 `src-tauri` / `kairos-cli` → `kairos-core`，core 内部 `error ← utils ← models / services`。`kairos-core` 出现 `use tauri` 即为架构破坏（CI 的 clippy 不会拦，靠 review 把关）。
+2. **业务逻辑只住 core**：`src-tauri` 的 commands 与 `kairos-cli` 都不写业务逻辑，command 只做「参数 → core 调用 → DTO 返回」的装配。这样所有领域代码都能脱离 Tauri 做单元测试，也已实际复用给批处理 CLI（`kairos-cli`），并为 Wasm 模块留好了门。
 3. **计算住 core，前端以 UI 为主（Rust 优先原则）**：数值计算、几何与场处理、统计推断等逻辑代码，凡 Rust 更优（性能、与求解结果一致性、可复用 CLI）一律在 `kairos-core` 实现；TS 大部分场景性能不如 Rust（V8 单线程 + JIT 不确定性、无零成本抽象），前端只做 UI 编排与展示层逻辑。
 
 ### 1.1 逻辑归属判断（Rust 优先原则的落地）
@@ -65,44 +70,77 @@ composable / utils。配套规则：
 Unix 的分隔符、盘符、保留字符差异只在 `src-crates/kairos-core/src/services/paths.rs`
 处理：
 
-| 场景                | 用什么                                                                                  |
-| ------------------- | --------------------------------------------------------------------------------------- |
-| 拼装                | `paths::join(&[…])`（内部 `Path::join`）                                                |
-| 取文件名 / 主干     | `paths::sanitize_file_name` / `paths::file_stem`（内部 `Path::file_name`、`file_stem`） |
-| 补扩展名            | `Path::with_extension`（例：工程文件 `.kairos`、报告 `.html`）                          |
-| 跨机器落盘          | `paths::to_storage`（分隔符归一为 `/`）/ `paths::from_storage`（读回并校验）            |
-| 相对路径安全校验    | `paths::validate_relative`（拒绝绝对 / 根 / 盘符 / `..`）                               |
-| 盘符语义（Windows） | `paths::wsl_path`（`C:` → `/mnt/c/a`）                                                  |
+| 场景                | 用什么                                                                                                    |
+| ------------------- | --------------------------------------------------------------------------------------------------------- |
+| 拼装                | `paths::join(&[…])`（内部 `Path::join`）                                                                  |
+| 取文件名 / 主干     | `paths::file_name_of` / `paths::path_segment` / `paths::file_stem`（内部 `Path::file_name`、`file_stem`） |
+| 补扩展名            | `Path::with_extension`（例：工程文件 `.kairos`、报告 `.html`）                                            |
+| 跨机器落盘          | `paths::to_storage`（分隔符归一为 `/`）/ `paths::from_storage`（读回并校验）                              |
+| 相对路径安全校验    | `paths::validate_relative`（拒绝绝对 / 根 / 盘符 / `..`）                                                 |
+| 盘符语义（Windows） | `paths::wsl_path`（`C:` → `/mnt/c/a`）                                                                    |
 
 两条硬性理由：① `Path` 只认本平台分隔符（Unix 上 `C:` 是普通文件名，Windows 上
 `a/b` 反而可解析），手写判定必然在某平台错；② 工程文件要跨机器搬，落盘形态必须固定
 （`/`）且读取侧不需区分平台。前端同样不解析路径——按扩展名分派之类交给 Rust
 （例：`import_geometry` 用 `Path::extension` 判定 STL/STEP/IGES）。
 
+### 1.3 通用工具（唯一入口 `utils`）
+
+`services::paths` 的「同类语义只留一处」原则适用于全部**域无关**的基础设施，它们统一住
+`src-crates/kairos-core/src/utils/`：
+
+| 主题    | 收口内容                                  | 治的是哪种重复                                         |
+| ------- | ----------------------------------------- | ------------------------------------------------------ |
+| `utf8`  | 安全截断、char 边界、字符↔字节下标、补宽  | 各处手写 `is_char_boundary` / 裸 `&s[..n]`（可 panic） |
+| `regex` | 集中编译与缓存、预定义模式                | 函数体内重复 `Regex::new`（每次重新编译）              |
+| `fs`    | 原子写入、有界深度遍历、带动作描述的读取  | 「临时文件 + rename」与目录树遍历各写一份              |
+| `time`  | `now_ms`                                  | 同一段 `SystemTime` 取毫秒在多个模块复制               |
+| `float` | 浮点排序（`total_cmp`）、极值、包围盒累积 | `partial_cmp().unwrap_or(Equal)` 与 min/max fold       |
+| `shell` | bash 单引号转义与包裹                     | 同一句 `replace('\'', "'\\''")` 在多处复制             |
+
+三条硬性规则：
+
+1. **`utils` 不认识领域**：签名与注释里不得出现网格 / 场 / 工况 / 方案等领域词汇。
+   出现即说明它属于 `services`，「什么都不知道该放哪就塞 utils」会让工具层退化成第二个
+   领域层（`utils` 黑洞）。
+2. **依赖只能向下**：`utils → error`，不得依赖 `models` / `services`；反之
+   `services`、`models` 以及 `src-tauri`、`kairos-cli` 都可以用 `utils`。
+3. **同类语义只写一处**：与 `paths` 同理，引号转义、时间戳、原子写入这类「每个调用点都
+   觉得自己写三行更省事」的逻辑，一旦出现第二份就必须收口——分头演进的差异（如
+   `partial_cmp` 兜底有的 `.unwrap()` 有的 `unwrap_or`）正是隐患本身。
+
+工具模块的接口契约、`unwrap`/`expect` 边界、命名与测试约定见
+[rust-conventions.md](rust-conventions.md)。
+
 ## 2. Rust 工作区
 
 ```
-Cargo.toml               # 工作区根：成员、公共依赖版本、release profile（只能放这里）
-src-crates/kairos-core/ # 领域层 crate（纯 Rust）
-  src/models/            #   IPC DTO（serde 形状 = 前后端契约）
-  src/services/          #   领域服务与计算逻辑（未来的网格/求解器/结果都在这）
-  src/error.rs           #   KairosError 统一错误 + IPC 错误契约
-  tests/contract.rs      #   契约测试：锁定序列化形状
-src-tauri/               # Tauri 适配层 crate
-  src/commands/          #   命令适配（每个领域一个模块）
-  src/lib.rs             #   Builder 装配：插件、State、generate_handler（注册唯一入口）
+Cargo.toml                         # 工作区根：成员、公共依赖版本、release profile（只能放这里）
+src-crates/kairos-core/            # 领域层 crate（纯 Rust，不依赖 Tauri）
+  src/error.rs                     #   KairosError 统一错误 + IPC 错误契约
+  src/utils/                       #   通用工具（utf8 / regex / fs / time / float / shell）
+  src/models/                      #   IPC DTO（serde 形状 = 前后端契约）
+  src/services/                    #   领域服务与计算逻辑（网格 / 求解 / 结果都在这）
+src-crates/kairos-cli/             # 无头 CLI crate：批处理与脚本化验证入口（只依赖 core）
+  src/main.rs                      #   clap 子命令 + 编排
+src-tauri/                         # Tauri 适配层 crate
+  src/commands/                    #   命令适配（每个领域一个模块，只装配）
+  src/lib.rs                       #   Builder 装配：插件、State、generate_handler（注册唯一入口）
   tauri.conf.json
+tests/                             # 根 kairos-tests 包：跨 crate 的契约与端到端测试
+  rust/contract/main.rs            #   契约测试：锁定序列化形状
+  rust/e2e/main.rs                 #   全流程集成（L1 无条件 / L2 真机 VM）
 ```
 
-拆成两个 crate 的收益：领域代码编译/测试不拖 Tauri 全家桶（后续引入 nalgebra、rayon 等重依赖时差距会非常明显）；`cargo test -p kairos-core` 秒级反馈；为 CLI / Python 绑定等复用留好了门。
+拆成多个 crate 的收益：领域代码编译/测试不拖 Tauri 全家桶（引入 nalgebra、wgpu 等重依赖后差距非常明显）；`cargo test -p kairos-core` 秒级反馈；CLI 已复用同一份领域逻辑，为 Python 绑定等留好了门。
 
 ## 3. IPC 契约
 
 ### DTO
 
 - DTO 定义在 `kairos-core/src/models/`，`#[serde(rename_all = "camelCase")]`；
-- 前端在 `src-web/types.ts` 镜像同构类型（一行 Rust 字段对一行 TS 字段）；
-- **任何 DTO 改动必须同步两处，并让 `src-crates/kairos-core/tests/contract.rs` 与前端 vitest 双双通过**——契约测试失败即联调会爆错，宁可 here 失败不要上线失败。
+- 前端在 `src-web/types/index.ts` 镜像同构类型（一行 Rust 字段对一行 TS 字段）；
+- **任何 DTO 改动必须同步两处，并让 `tests/rust/contract/main.rs` 与前端 vitest 双双通过**——契约测试失败即联调会爆错，宁可 here 失败不要上线失败。
 
 ### 错误契约
 
@@ -175,7 +213,7 @@ sequenceDiagram
 ### 新增一个命令的流程
 
 1. core：`models/` 定义 DTO → `services/` 写领域函数（`Result<T, KairosError>`）→ 补单测；
-2. 契约：`src-crates/kairos-core/tests/contract.rs` 补序列化断言；
+2. 契约：`tests/rust/contract/main.rs` 补序列化断言；
 3. 适配：`src-tauri/src/commands/<领域>.rs` 写薄命令；`lib.rs` 的 `generate_handler![]` 注册；
 4. 前端：`types/index.ts` 镜像 DTO → `api/` 封装 → `stores/<域>` 加 action
    （失败经 `app.setError`，busy 用 `beginBusy/endBusy` 配对）→ composable 消费；
@@ -199,12 +237,17 @@ sequenceDiagram
 
 ## 6. 测试策略
 
-| 层               | 工具                           | 覆盖点                                 |
-| ---------------- | ------------------------------ | -------------------------------------- |
-| kairos-core 单测 | `cargo test -p kairos-core`    | 领域逻辑（数值算法对解析解、边界条件） |
-| IPC 契约         | `tests/contract.rs` + `vitest` | serde 形状、错误契约、前端状态动作     |
-| 适配层           | 保持薄，不专门测               | 逻辑都下沉到 core                      |
-| 前端组件         | vitest + happy-dom             | 渲染分支、交互回调                     |
+| 层               | 工具                                     | 覆盖点                                        |
+| ---------------- | ---------------------------------------- | --------------------------------------------- |
+| kairos-core 单测 | `cargo test -p kairos-core`              | 领域逻辑（数值算法对解析解、边界条件）、utils |
+| IPC 契约         | `tests/rust/contract/main.rs` + `vitest` | serde 形状、错误契约、前端状态动作            |
+| 端到端           | `tests/rust/e2e/main.rs`（L2 需真机）    | 正常路径、失败与取消路径                      |
+| 适配层           | `#[cfg(test)]` 就地测                    | **只测装配本身**；装配以外的逻辑先下沉 core   |
+| 前端组件         | vitest + happy-dom                       | 渲染分支、交互回调                            |
+
+适配层「保持薄、不专门测」是目标而非现状：`commands/` 目前仍容纳了脚本拼装、目录遍历、
+数值推导等逻辑，其命令模块之间还存在横向依赖（互相调用 `pub(crate)` 实现）。收缩方向与
+判定标尺见 [rust-conventions.md](rust-conventions.md)。
 
 提交前门禁：`bun run verify`（typecheck → clippy(-D warnings) → format → test → knip，前后端全量）。
 
@@ -278,7 +321,10 @@ core 有 100% 行覆盖门槛，以下六种写法会让工具报出**不可达�
 
 - 后处理是 **GPU 必需** 能力：受支持环境必须有可用的硬件加速 GPU。没有可用
   GPU 时，应用必须在进入后处理前显示明确的不支持原因；不提供 CPU 渲染或 CPU
-  算子回退。CPU 实现只能用于单元测试、数值对拍和离线诊断。
+  算子回退。CPU 实现只能用于单元测试、数值对拍和离线诊断。core 里的 CPU 参考
+  实现（如 `services::operators` 的算子对拍、`services::results::derive_*` 的
+  f64 基准）**只能**按这个定位描述——把它写成「GPU 不可用时的回退路径」与本节
+  决策直接冲突，属必须修正的注释漂移。
 - 前端渲染后端统一抽象为 `RenderBackend`。现有实现是 WebGL2；目标是自研
   WebGPU 主路径。WebGL2 仅可作为仍使用硬件 GPU 的兼容后端，不能被表述为
   CPU 降级或性能验收替代。
