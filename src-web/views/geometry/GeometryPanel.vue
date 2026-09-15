@@ -95,10 +95,10 @@ const {
           <UiButton :disabled="working" @click="generate(row.geometry)">生成体积网格</UiButton>
           <UiButton
             :disabled="working"
-            title="表面厚度配对 + 当前方案流道/浇口梁耦合"
+            title="实验前处理：表面厚度配对 + 当前方案流道/浇口梁耦合；当前 moldingFoam 仅支持三维体网格求解"
             @click="generateDual(row.geometry)"
           >
-            双域网格
+            双域网格（实验）
           </UiButton>
           <UiButton
             :disabled="working"
@@ -126,6 +126,9 @@ const {
           </p>
           <p class="text-xs text-zinc-500">
             {{ dualReportText(geometry.dualDomainReports[row.geometry.geometryId]) }}
+          </p>
+          <p class="text-[11px] text-amber-400">
+            双域网格仅用于前处理与契约验证，当前不能提交 moldingFoam 求解；实际求解请选择体积网格。
           </p>
           <p class="text-xs text-zinc-500">
             {{ midplaneReportText(geometry.midplaneReports[row.geometry.geometryId]) }}

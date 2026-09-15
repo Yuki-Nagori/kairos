@@ -8,13 +8,13 @@
 
 - 工艺面板支持完整保压曲线输入（`时间=压力`，逗号分隔）。
 - 内置 Mug 基线预设：220°C 熔体、50°C 模具、5.5 s 注射、20 s 冷却。
-- 几何面板可生成体积网格、Dual Domain 网格和中面网格，并显示质量摘要。
+- 几何面板可生成体积网格、Dual Domain 网格和中面网格，并显示质量摘要；Dual Domain 已标注为实验前处理，当前不可提交 moldingFoam。
 - 方案任务面板可选择 `fill`、`fill-pack`、`fill-pack-cool` 阶段。
 
 ## 待完成
 
 1. GUI 提供体积网格与 Dual Domain 输入 JSON 的导出入口，复用保存对话框和 Rust 序列化契约。
-2. GUI 显示当前网格类型、schema 版本、节点/单元数量和单位，提交求解前阻止网格类型与 solver 能力不匹配。
+2. GUI 显示当前网格类型、schema 版本、节点/单元数量和单位，提交求解前阻止网格类型与 solver 能力不匹配（Dual Domain 当前仅提示，不进入求解）。
 3. Mug 基线预设与 `ai-docs/report/mug-baseline.md` 做单一来源校验，避免界面默认值漂移。
 4. Web 端回归覆盖上述入口；真实 Tauri 文件对话框只补一条桌面冒烟。
 

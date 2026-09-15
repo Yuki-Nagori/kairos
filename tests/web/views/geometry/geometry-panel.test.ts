@@ -371,7 +371,7 @@ describe("GeometryPanel", () => {
     // 未生成时显示引导语。
     expect(wrapper.text()).toContain("表面厚度配对 + 杆系梁耦合");
 
-    await findButton(wrapper, "双域网格").trigger("click");
+    await findButton(wrapper, "双域网格（实验）").trigger("click");
     await flushPromises();
 
     expect(generateDualDomainMesh).toHaveBeenCalledWith("geo-1", []);
