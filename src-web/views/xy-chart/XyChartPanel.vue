@@ -23,7 +23,7 @@ const {
 
 <template>
   <Card class="shrink-0" title="XY 曲线与探针">
-    <canvas ref="canvasRef" width="720" height="200" class="w-full rounded-lg bg-zinc-950" />
+    <div ref="plotHostRef" class="h-50 w-full rounded-lg bg-zinc-950" />
     <div class="flex flex-wrap items-center gap-2">
       <select v-model="mode" class="text-xs">
         <option value="spatial">空间分布</option>
