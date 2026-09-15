@@ -98,6 +98,7 @@
 | T87 | [T87-multiphysics-coupling-done.md](T87-multiphysics-coupling-done.md)                     | 多物理场耦合规划（纤维取向 / 流固耦合）                                         |
 | T88 | [T88-e3-optimization-planning-done.md](T88-e3-optimization-planning-done.md)               | 优化与自动化规划（DOE 编排 / 工艺参数寻优）                                     |
 | T92 | [T92-doe-orchestration.md](T92-doe-orchestration.md)                                       | DOE / 正交试验编排（矩阵、串行运行、汇总与失败标记）                            |
+| T60 | [T60-import-log-and-pptx.md](T60-import-log-and-pptx.md)                                   | 导入日志流 + Rust PPTX 报告导出（含视口/曲线快照）                              |
 | T96 | [T96-full-flow-e2e-done.md](T96-full-flow-e2e-done.md)                                     | 全流程集成测试（正常使用：几何 → 网格 → case → 求解 → 结果）                    |
 
 ## 循环任务（不进待办清单）
@@ -118,18 +119,17 @@
 > 端到端验证默认走 **CLI 通道**（`kairos-cli`：生成 case → 送进 VM → 求解 → 结果回传 → 结果扫描），
 > 可脚本化、可重放；只有验证目标本身是界面 / 作业编排行为时才走 GUI（见 T94）。
 
-| ID  | 文件                                                                                         | 任务                                            | 依赖 / 状态                                                                                                                |
-| --- | -------------------------------------------------------------------------------------------- | ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| T33 | [T33-updater-hardening.md](T33-updater-hardening.md)                                         | 发布加固：CSP 已加固 + updater / 签名待密钥证书 | CSP 零行为变化加固已落地；`style-src 'unsafe-inline'` 移除需真机回归，updater 与三平台签名需密钥 / 证书                    |
-| T48 | [T48-renderer-bench-realdevice.md](T48-renderer-bench-realdevice.md)                         | 渲染后端三端真机验收与 FPS 回填                 | 等三端真机（macOS/Windows/Linux WebView）                                                                                  |
-| T60 | [T60-import-log-and-pptx.md](T60-import-log-and-pptx.md)                                     | 导入日志流 + PPT 报告导出（低优先 / 可选拆分）  | 导入日志已完成；PPTX 取向定为 Rust 侧生成（候选 `ppt-rs` / `pptx` / `pptxboss-write`，先核许可与覆盖），依赖取向审查见 T95 |
-| T82 | [T82-dualdomain-midplane-solve-consumption.md](T82-dualdomain-midplane-solve-consumption.md) | 双域 / 中面网格的求解消费                       | 求解侧消费（双域/中面），依赖上游降维能力                                                                                  |
-| T83 | [T83-multi-cavity-runner-fill.md](T83-multi-cavity-runner-fill.md)                           | 多型腔与流道系统参与填充                        | 流道体进网格 + 多腔分配，依赖 T29 闭环                                                                                     |
-| T89 | [T89-gaim-integration.md](T89-gaim-integration.md)                                           | 气体辅助注塑（GAIM）集成                        | 进行中：第一步气体介质数据位与 DTO 契约已完成；第二步等上游三相 / 气芯场                                                   |
-| T93 | [T93-process-optimization.md](T93-process-optimization.md)                                   | 工艺参数自动寻优                                | 进行中：core 优化器与 `optimize plan` 已完成；真实求解回填循环待实现                                                       |
-| T94 | [T94-gui-e2e-verification.md](T94-gui-e2e-verification.md)                                   | GUI 端到端验证（提交 → 回传 → VM 自动关闭）     | 待开工；需人在界面展开求解面板后跑（AX 拿不到折叠面板的输入框）；求解链路本身先走 CLI 通道                                 |
-| T95 | [T95-dependency-audit.md](T95-dependency-audit.md)                                           | 依赖取向审查：用现成库 vs 自造轮子              | 进行中：P1-a/P1-b/P2-a/P2-b/P2-c/P3-b/P3-c/P3-d 已完成；P3-a 图表替换待视觉对照；标题栏与 storage 保留产品语义             |
-| T97 | [T97-solver-lib-duplication-guard.md](T97-solver-lib-duplication-guard.md)                   | 求解环境库重复守卫 + 部署前清理                 | 进行中：部署清理与 core/原生库探测已完成；真实 VM 坏状态验收待下一批                                                       |
+| ID  | 文件                                                                                         | 任务                                            | 依赖 / 状态                                                                                                    |
+| --- | -------------------------------------------------------------------------------------------- | ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| T33 | [T33-updater-hardening.md](T33-updater-hardening.md)                                         | 发布加固：CSP 已加固 + updater / 签名待密钥证书 | CSP 零行为变化加固已落地；`style-src 'unsafe-inline'` 移除需真机回归，updater 与三平台签名需密钥 / 证书        |
+| T48 | [T48-renderer-bench-realdevice.md](T48-renderer-bench-realdevice.md)                         | 渲染后端三端真机验收与 FPS 回填                 | 等三端真机（macOS/Windows/Linux WebView）                                                                      |
+| T82 | [T82-dualdomain-midplane-solve-consumption.md](T82-dualdomain-midplane-solve-consumption.md) | 双域 / 中面网格的求解消费                       | 求解侧消费（双域/中面），依赖上游降维能力                                                                      |
+| T83 | [T83-multi-cavity-runner-fill.md](T83-multi-cavity-runner-fill.md)                           | 多型腔与流道系统参与填充                        | 流道体进网格 + 多腔分配，依赖 T29 闭环                                                                         |
+| T89 | [T89-gaim-integration.md](T89-gaim-integration.md)                                           | 气体辅助注塑（GAIM）集成                        | 进行中：第一步气体介质数据位与 DTO 契约已完成；第二步等上游三相 / 气芯场                                       |
+| T93 | [T93-process-optimization.md](T93-process-optimization.md)                                   | 工艺参数自动寻优                                | 进行中：core 优化器与 `optimize plan` 已完成；真实求解回填循环待实现                                           |
+| T94 | [T94-gui-e2e-verification.md](T94-gui-e2e-verification.md)                                   | GUI 端到端验证（提交 → 回传 → VM 自动关闭）     | 待开工；需人在界面展开求解面板后跑（AX 拿不到折叠面板的输入框）；求解链路本身先走 CLI 通道                     |
+| T95 | [T95-dependency-audit.md](T95-dependency-audit.md)                                           | 依赖取向审查：用现成库 vs 自造轮子              | 进行中：P1-a/P1-b/P2-a/P2-b/P2-c/P3-b/P3-c/P3-d 已完成；P3-a 图表替换待视觉对照；标题栏与 storage 保留产品语义 |
+| T97 | [T97-solver-lib-duplication-guard.md](T97-solver-lib-duplication-guard.md)                   | 求解环境库重复守卫 + 部署前清理                 | 进行中：部署清理与 core/原生库探测已完成；真实 VM 坏状态验收待下一批                                           |
 
 ## 整体评审闭环（2026-09-15）
 
@@ -153,10 +153,9 @@ T98 的本机测试不替代 T94/T96 的 Windows/WSL、Linux 与真实 VM 验收
 4. **T93 CLI 寻优循环**（P3）：先接 `optimize plan` 候选规划，再接真实求解回填与失败策略。
 5. **T83 多型腔与流道参与填充**（P1）：文件依赖 T07/T61 均已满足（README 原先写的「依赖 T29 闭环」
    与文件不符，已改正）；验收在 VM 跑两腔填充，v0.2.5 通道已验证可用。
-6. **T60 PPTX 报告导出**（P4）：纯 Rust 侧离线生成，开工第一步核候选库许可与中文排版覆盖。
-7. **T33 可做部分**（P3）：updater 插件接入 + `style-src 'unsafe-inline'` 改造（nonce / 文件化）；
+6. **T33 可做部分**（P3）：updater 插件接入 + `style-src 'unsafe-inline'` 改造（nonce / 文件化）；
    真机回归与三平台签名属档 B。
-8. **T94**（P1）：GUI 端到端验证；需人在界面展开求解面板后跑。
+7. **T94**（P1）：GUI 端到端验证；需人在界面展开求解面板后跑。
 
 **档 B · 等外部条件**：T29 剩余（上游 046 发版后复测 np=4）、T82（上游降维支持口径）、
 T91 剩余（上游取向求解）、T89 第二步（上游三相 / 气芯）、T48（三端真机 WebView）、

@@ -492,3 +492,4 @@
 - **13:48** feat(cli): T93 增加 `optimize plan`：复用 core 优化器按 `名称=min:max:levels` 生成粗搜候选，支持 `fill-time` / `injection-pressure` 与 `--json`；真实求解回填循环留下一批。
 - **13:51** test(cli): 补 T93 优化因子解析边界测试，锁定名称、范围、层数格式及缺字段/多字段拒绝；任务执行顺序将 CLI 寻优循环提前到当前可开工批次。
 - **13:54** refactor(cli): T93 将 DOE 单次 case 生成、可选求解与日志指标解析收成 `run_doe_case` 唯一函数，保持现有 `doe run` 行为不变，为后续 `Optimizer::record` 回填复用铺路。
+- **13:57** docs(tasks): 核对 T60 文档与实现：导入日志、Rust PPTX 生成、报告面板接线和视口/曲线快照均已落地，现从待办表移入已实现，避免重复评估候选库。
