@@ -546,3 +546,4 @@
 - 2026-09-15 21:15 | T101 TXT 原生输入 | core 与 CLI 原生支持分段 `P=...` / `T=...` TXT 曲线，真实本地曲线无需外部转换即可完成 material fit 插入测试；原始文件仍只保留本地。
 - 2026-09-15 21:30 | T101 Tait parity audit | 复核 moldingFoam v1.1.0 源码，确认运行时采用 `B(T)=b3·exp(-b4T)`、压力相关转变温度与固/熔态平滑过渡；当前简化 Tait 评估器不能作为 solver 等价结果，DTO 扩展与重拟合列为下一项。
 - 2026-09-15 21:45 | T101 Tait DTO 对齐 | Rust `Tait` 增加 `b3s/b6/C/smoothBand`，评估器改用 moldingFoam 的 `B(T)`、压力转变温度和 Tait 对数项；旧材料 JSON 通过默认值兼容。
+- 2026-09-15 22:00 | T101 Tait 平滑过渡 | 参考 CAE Specification 增加固/熔态 smoothstep 过渡，避免转变温度附近比容不连续；golden 与异常输入测试通过。

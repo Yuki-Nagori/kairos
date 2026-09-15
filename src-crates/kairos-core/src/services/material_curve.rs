@@ -152,26 +152,36 @@ pub fn tait_specific_volume(
         return Err(KairosError::validation("Tait 温度必须为正有限数值。"));
     }
     let transition_temperature = model.b5 + model.b6 * pressure_pa_value;
-    let (b1, b2, b3, b4) = if temperature_k <= transition_temperature {
-        (
-            model.b1s,
-            model.b2s,
-            model.b3s.unwrap_or(model.b3),
-            model.b4s,
-        )
-    } else {
-        (model.b1m, model.b2m, model.b3, model.b4m)
-    };
-    if b4 <= 0.0 || b3 <= 0.0 || model.c <= 0.0 {
+    let solid = (
+        model.b1s,
+        model.b2s,
+        model.b3s.unwrap_or(model.b3),
+        model.b4s,
+    );
+    let melt = (model.b1m, model.b2m, model.b3, model.b4m);
+    if solid.2 <= 0.0 || melt.2 <= 0.0 || solid.3 <= 0.0 || melt.3 <= 0.0 || model.c <= 0.0 {
         return Err(KairosError::validation("Tait 压力参数必须为正数。"));
     }
-    let thermal = b1 + b2 * (temperature_k - transition_temperature);
-    let bulk_pressure = b3 * (-b4 * temperature_k).exp();
-    if !bulk_pressure.is_finite() || bulk_pressure <= 0.0 {
-        return Err(KairosError::validation("Tait B(T) 必须为正有限数值。"));
-    }
-    let pressure = 1.0 - model.c * (1.0 + pressure_pa_value / bulk_pressure).ln();
-    let specific_volume = thermal * pressure;
+    let branch = |(b1, b2, b3, b4): (f64, f64, f64, f64)| -> Result<f64> {
+        let thermal = b1 + b2 * (temperature_k - transition_temperature);
+        let bulk_pressure = b3 * (-b4 * temperature_k).exp();
+        if !bulk_pressure.is_finite() || bulk_pressure <= 0.0 {
+            return Err(KairosError::validation("Tait B(T) 必须为正有限数值。"));
+        }
+        Ok(thermal * (1.0 - model.c * (1.0 + pressure_pa_value / bulk_pressure).ln()))
+    };
+    let solid_value = branch(solid)?;
+    let melt_value = branch(melt)?;
+    let delta = temperature_k - transition_temperature;
+    let specific_volume = if model.smooth_band > 0.0 && delta.abs() < model.smooth_band {
+        let x = (delta / model.smooth_band + 1.0) * 0.5;
+        let weight = x * x * (3.0 - 2.0 * x);
+        solid_value * (1.0 - weight) + melt_value * weight
+    } else if delta < 0.0 {
+        solid_value
+    } else {
+        melt_value
+    };
     if !specific_volume.is_finite() || specific_volume <= 0.0 {
         return Err(KairosError::validation("Tait 计算结果必须为正有限数值。"));
     }

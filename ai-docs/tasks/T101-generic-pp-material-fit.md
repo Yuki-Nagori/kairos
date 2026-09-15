@@ -42,7 +42,7 @@
 2026-09-15 对 moldingFoam v1.1.0 源码复核后确认：运行时使用
 `B(T)=b3·exp(-b4T)`、`Tt=b5+b6p` 和
 `v=v0(T)·(1-C·ln(1+p/B(T)))`，并对固态/熔态分支做平滑过渡。当前 Kairos
-临时 Tait 评估器已按该公式扩展，`Tait` DTO 已加入 `b3s/b6/C/smoothBand` 默认值；仍需用 moldingFoam 运行时输出完成跨语言 golden 点和材料导出回归，再进行 Mug baseline。
+临时 Tait 评估器已按该公式扩展，`Tait` DTO 已加入 `b3s/b6/C/smoothBand` 默认值，并实现固/熔态 smoothstep 过渡；仍需用 moldingFoam 运行时输出完成跨语言 golden 点和材料导出回归，再进行 Mug baseline。
 
 ## 工作范围
 
