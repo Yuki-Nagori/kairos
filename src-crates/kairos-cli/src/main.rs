@@ -668,6 +668,16 @@ fn run_optimize_batch(
                 elapsed_s: None,
             };
             let settings = doe::apply_factors(&base, &run)?;
+            let violations = services::process::validate(&settings);
+            if !violations.is_empty() {
+                planner.record(optimize::Evaluation {
+                    parameters: candidate,
+                    score: None,
+                    violations,
+                    attempts: 0,
+                });
+                continue;
+            }
             let started = std::time::Instant::now();
             let mut attempts = 0;
             let mut metrics = None;
