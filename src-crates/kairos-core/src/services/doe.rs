@@ -407,6 +407,77 @@ mod tests {
         assert!(apply_factors(&base, &nan).is_err());
     }
 
+    /// 表驱动逐名验证：**每个因子名都要真的落到自己的字段上**。
+    ///
+    /// 覆盖不到就得靠这条用例兜——行口径看不见这种缺口：因子臂所在的那一行同时含
+    /// 「模式比较」区域（遍历每个候选名都会求值、计数非 0），整行因此被判为已执行，
+    /// 而臂体本身可能一次都没跑过。漏一个臂的后果是整批运行的该参数悄悄保持基准值，
+    /// 汇总表却看起来「跑过了」。
+    #[test]
+    fn every_factor_name_lands_on_its_own_field() {
+        use crate::models::process::ProcessSettings;
+
+        let base = ProcessSettings {
+            melt_temp_c: 230.0,
+            mold_temp_c: 40.0,
+            ejection_temp_c: 90.0,
+            injection_time_s: 1.5,
+            vp_switch_volume_percent: 96.0,
+            packing_pressure_mpa_curve: vec![(0.0, 50.0), (8.0, 40.0)],
+            packing_time_s: 8.0,
+            cooling_time_s: 15.0,
+            coolant_temp_c: 25.0,
+        };
+        let pending = || DoeRun {
+            index: 1,
+            parameters: BTreeMap::new(),
+            status: DoeStatus::Pending,
+            metrics: BTreeMap::new(),
+            elapsed_s: None,
+        };
+
+        // 注入值全部与基准值不同（基准 + 1 量级）：臂没执行时字段会保持基准值，断言即失败。
+        type ReadField = fn(&ProcessSettings) -> f64;
+        let cases: [(&str, f64, ReadField); 8] = [
+            ("熔体温度", 231.0, |s| s.melt_temp_c),
+            ("模具温度", 41.0, |s| s.mold_temp_c),
+            ("顶出温度", 91.0, |s| s.ejection_temp_c),
+            ("注射时间", 2.5, |s| s.injection_time_s),
+            ("V/P 切换", 97.0, |s| s.vp_switch_volume_percent),
+            ("保压时间", 9.0, |s| s.packing_time_s),
+            ("冷却时间", 16.0, |s| s.cooling_time_s),
+            ("介质温度", 26.0, |s| s.coolant_temp_c),
+        ];
+        for (name, value, read) in cases {
+            let mut subject = pending();
+            subject.parameters.insert(name.to_string(), value);
+            let settings = apply_factors(&base, &subject).unwrap();
+            assert_eq!(read(&settings), value, "因子「{name}」没落到对应字段");
+        }
+
+        // 保压是曲线而非标量：单值因子落成「从 0 起恒定」的曲线
+        let mut pressure = pending();
+        pressure.parameters.insert("保压压力".to_string(), 60.0);
+        let settings = apply_factors(&base, &pressure).unwrap();
+        assert_eq!(settings.packing_pressure_mpa_curve, vec![(0.0, 60.0)]);
+
+        // 表与 FACTOR_NAMES 双向对齐：新增因子名时这里失败，提醒同时补 match 臂与断言
+        // （只加 FACTOR_NAMES 不补臂会让新名字直接报「未知因子」）。
+        let mut covered: Vec<&str> = cases.iter().map(|(name, _, _)| *name).collect();
+        covered.push("保压压力");
+        for name in FACTOR_NAMES {
+            assert!(
+                covered.contains(&name),
+                "FACTOR_NAMES 的「{name}」没被本用例覆盖"
+            );
+        }
+        assert_eq!(
+            covered.len(),
+            FACTOR_NAMES.len(),
+            "本用例列出了 FACTOR_NAMES 之外的因子"
+        );
+    }
+
     #[test]
     fn run_layout_and_status_transitions() {
         use std::path::Path;
