@@ -24,6 +24,7 @@
     "tauri:build": "tauri build",
     "tauri:dev": "tauri dev",
     "test": "vitest run",
+    "test:web": "vitest run tests/web",
     "test:coverage": "vitest run --coverage",
     "test:rust": "cargo test --workspace",
     "test:watch": "vitest",

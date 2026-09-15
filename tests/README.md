@@ -13,6 +13,17 @@
 
 - 覆盖率门槛（100%，四维）：`bun run test:coverage`（口径 = `src-web/utils/**` + `stores/**` + `composables/**` + 各 `use*.ts`，见 vitest.config.ts）。
 
+### Web GUI 回归（默认快速路径）
+
+日常 GUI 回归直接跑 Web 端，不需要先打包 Tauri：
+
+```bash
+bun run test:web                         # 前端组件、store、composable 与渲染工具
+bun run dev -- --host 127.0.0.1         # 需要手工浏览器走查时启动 Web 预览
+```
+
+Web 测试通过 mock IPC 覆盖页面状态和交互流程，适合每次提交和重构后的快速回归。Tauri 打包只在发布候选、原生窗口/菜单/文件对话框/真实 IPC 变更后做桌面冒烟；VM 求解链路仍按下面的 Rust L2 真机层执行。
+
 ## Rust（cargo test --workspace）
 
 | 位置                                                                      | 内容                                                                                                                                           | 跑法                                                               |
