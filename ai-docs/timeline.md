@@ -503,3 +503,4 @@
 - **15:25** feat(web): uPlot 探针叠加 —— 空间模式将每个探针编码为独立点 series（非探针节点为 NaN），时间模式保留每探针曲线；探针列表或模式变化时重建 series 配置，数据更新仍走 `setData`。缩放 / 拖拽与探针标记现在共用同一 uPlot 交互层。
 - **15:40** feat(web): uPlot 主题联动 —— 坐标轴与网格颜色改从 `--c-text-muted` / `--c-grid` 读取；主题事件销毁并重建 plot，使深浅主题切换不残留旧颜色。图表容器背景继续沿用面板主题。
 - **16:00** feat(web): uPlot 缩放复位 —— XY 面板新增「重置缩放」，同时清除 x / y 两轴的 uPlot scale，回到全场或全时间范围；不触碰结果数据与探针状态。
+- **16:20** docs(bench): T95 uPlot 准入证据补齐 —— `uplot@1.6.32`（MIT）已进入直接依赖；`bun run build` 实测 JS 595.24 kB / gzip 197.07 kB、CSS 64.27 kB / gzip 15.15 kB。Vite 提示 JS chunk 超过 500 kB，记录为后续代码分割优化点。
