@@ -565,4 +565,34 @@ mod tests {
         assert_eq!(session.lock().cache.stats(), (0, 2));
         std::fs::remove_dir_all(root).unwrap();
     }
+
+    #[test]
+    fn concurrent_field_reads_share_session_without_cross_slot_corruption() {
+        let root = std::env::temp_dir().join(kairos_core::services::project::new_id("concurrent"));
+        let time = root.join("1");
+        std::fs::create_dir_all(&time).unwrap();
+        let content = |name: &str, value: f64| {
+            format!(
+                "FoamFile\n{{\nclass volScalarField;\nobject {name};\n}}\ninternalField uniform {value};\n"
+            )
+        };
+        std::fs::write(time.join("p"), content("p", 1.0)).unwrap();
+        std::fs::write(time.join("T"), content("T", 80.0)).unwrap();
+        let session = ResultSession::default();
+        let case_dir = root.to_str().unwrap().to_owned();
+        let left = ResultSession(Arc::clone(&session.0));
+        let right = ResultSession(Arc::clone(&session.0));
+        let left_case = case_dir.clone();
+        let right_case = case_dir.clone();
+        let first = std::thread::spawn(move || load_into_slot(&left, &left_case, "1", "p", false));
+        let second =
+            std::thread::spawn(move || load_into_slot(&right, &right_case, "1", "T", true));
+        assert_eq!(first.join().unwrap().unwrap().values, vec![1.0]);
+        assert_eq!(second.join().unwrap().unwrap().values, vec![80.0]);
+        let slots = session.lock();
+        assert_eq!(slots.primary.as_ref().unwrap().field, "p");
+        assert_eq!(slots.compare.as_ref().unwrap().field, "T");
+        assert_eq!(slots.cache.stats(), (0, 2));
+        std::fs::remove_dir_all(root).unwrap();
+    }
 }
