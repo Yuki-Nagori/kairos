@@ -20,7 +20,7 @@
 2. **拟合核心**：提供确定性的 Tait 与 Cross-WLF 拟合服务，输出参数、权重、拟合区间、收敛状态和版本化算法标识；数值计算留在 Rust core。
 3. **残差报告**：已在 `kairos-core` 增加 Cross-WLF 与 Tait 预测、摘要计算及 JSON/CSV 摘要导出（绝对误差、相对误差、RMSE、`log10(η)` 最大误差与 RMSE）；逐点预测表仍待接入。
 4. **材料资产元数据**：扩展材料 DTO，记录来源类型、单位、拟合算法版本、参数修订号、数据摘要哈希和创建时间，支持版本化而不覆盖内置材料。
-5. **CLI 闭环**：增加 `material fit` / `material validate`，并让 Mug/DOE case 按材料 ID 或路径选择自定义材料；core 已提供按 `.json`/`.csv` 扩展名分派的受控材料文件读取，`doe run --material <path>` 与 `pipeline run --material <path>` 已接线，真实 baseline 仍待完成。
+5. **CLI 闭环**：增加 `material fit` / `material validate`，并让 Mug/DOE case 按材料 ID 或路径选择自定义材料；core 已提供按 `.json`/`.csv` 扩展名分派的受控材料文件读取，`material validate`、`doe run --material <path>` 与 `pipeline run --material <path>` 已接线，真实 baseline 仍待完成。
 6. **IPC 与界面入口**：补齐 Tauri 命令、前端材料面板的曲线预览/拟合结果/残差下载，以及错误码到 UI 的映射。
 7. **测试与契约**：覆盖单位换算、乱序和重复点、缺失/非法数据、拟合失败、JSON/CSV round-trip、DTO 契约和 case 生成回归；使用合成夹具，不提交受限原始曲线。
 

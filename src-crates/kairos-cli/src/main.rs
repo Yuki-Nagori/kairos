@@ -67,6 +67,20 @@ enum Commands {
         #[command(subcommand)]
         action: OptimizeAction,
     },
+    /// 材料资产校验与摘要
+    Material {
+        #[command(subcommand)]
+        action: MaterialAction,
+    },
+}
+
+#[derive(Subcommand)]
+enum MaterialAction {
+    /// 校验 JSON/CSV 自定义材料文件并输出摘要
+    Validate {
+        #[arg(long)]
+        path: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -318,6 +332,7 @@ fn run(command: Commands, json: bool) -> kairos_core::error::Result<()> {
         Commands::Results { action } => run_results(action, json),
         Commands::Doe { action } => run_doe(action, json),
         Commands::Optimize { action } => run_optimize(action, json),
+        Commands::Material { action } => run_material(action, json),
         Commands::Pipeline { action } => match action {
             PipelineAction::Run {
                 sample_box,
@@ -342,6 +357,35 @@ fn run(command: Commands, json: bool) -> kairos_core::error::Result<()> {
                 json,
             ),
         },
+    }
+}
+
+fn run_material(action: MaterialAction, json: bool) -> kairos_core::error::Result<()> {
+    match action {
+        MaterialAction::Validate { path } => {
+            let materials = services::material::read_custom_material_file(Path::new(&path))?;
+            if materials.is_empty() {
+                return Err(KairosError::validation("材料文件没有可用材料。"));
+            }
+            if json {
+                emit_json(&serde_json::json!({
+                    "path": path,
+                    "count": materials.len(),
+                    "materials": materials.iter().map(|material| serde_json::json!({
+                        "id": material.id,
+                        "name": material.name,
+                        "family": material.family,
+                        "manufacturer": material.manufacturer,
+                    })).collect::<Vec<_>>(),
+                }));
+            } else {
+                println!("材料文件校验通过：{}（{} 个材料）", path, materials.len());
+                for material in materials {
+                    println!("- {} [{}] {}", material.name, material.family, material.id);
+                }
+            }
+            Ok(())
+        }
     }
 }
 

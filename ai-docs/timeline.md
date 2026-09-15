@@ -538,3 +538,4 @@
 - 2026-09-15 19:35 | T101 材料文件读取 | 增加 core 按 `.json`/`.csv` 扩展名读取并校验自定义材料的入口，保留旧兼容读取函数；CLI 材料选择接线待完成。
 - 2026-09-15 19:45 | T101 CLI 材料选择 | `doe run` 增加 `--material <json|csv>`，单材料文件可直接进入 case 生成与求解，未指定时保持内置材料兼容路径。
 - 2026-09-15 19:55 | T101 Pipeline 材料选择 | `pipeline run` 增加 `--material <json|csv>`，单次 case 编排与 DOE 使用同一材料加载路径。
+- 2026-09-15 20:05 | T101 材料校验 CLI | 增加 `material validate --path <json|csv>`，输出材料数量、牌号、材料族和 ID，作为进入 case 前的显式校验步骤。
