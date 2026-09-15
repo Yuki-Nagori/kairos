@@ -15,7 +15,6 @@ use kairos_core::models::vm::{VmProviderKind, VmState};
 use kairos_core::services::jobs as job_logic;
 use kairos_core::services::jobs::SchedulerLimits;
 use kairos_core::services::moldingfoam;
-use kairos_core::services::paths;
 use kairos_core::services::project::new_id;
 use kairos_core::utils::time::now_ms;
 // VM 通道（macOS/Windows 的 env source）与原生环境（Linux 的 source 行）都用它，
@@ -130,12 +129,6 @@ pub fn detect_vm_shell() -> Option<String> {
     {
         None
     }
-}
-
-/// Windows 盘符路径 → WSL 的 /mnt 形态：映射逻辑在 core（纯路径策略，
-/// 在 macOS 上也能测——Unix 解析不出 `Component::Prefix`，实现里两种形态都认）。
-fn to_wsl_path(path: &str) -> String {
-    paths::wsl_path(path).unwrap_or_else(|| path.to_string())
 }
 
 /// 往作业日志通道写一行（VM 生命周期提示走同一通道，用户能在作业日志里看到）。
@@ -322,23 +315,6 @@ fn copy_results_from_vm(_case_dir: &str, _vm_case: Option<&str>) -> Result<()> {
     Ok(())
 }
 
-/// 求解脚本里的 case 目录（含 shell 单引号转义）。
-///
-/// 平台经 `os` 传入（与 `std::env::consts::OS` 同口径）而不是编译期分支——三端
-/// 取值都能在同一平台单测覆盖，且函数在原生平台（走宿主路径分支）同样被调用，
-/// 不会因为只有 VM 平台用得上而被判成死代码：
-/// - macOS：VM 内暂存路径（宿主绝对路径在虚拟机里并不存在）；
-/// - Windows：WSL 的 `/mnt` 形态路径（WSL 能直接读宿主文件系统）；
-/// - 原生：宿主路径。
-fn script_case_dir(os: &str, case_dir: &str, vm_case: Option<&str>) -> String {
-    let dir = match os {
-        "macos" => vm_case.unwrap_or(case_dir),
-        "windows" => &to_wsl_path(case_dir),
-        _ => case_dir,
-    };
-    vm_logic::bash_single_quote(dir)
-}
-
 /// 运行期上下文：受管 bin 目录前缀 + 执行通道（VM shell / 原生环境）。
 /// 作业线程与收尾路径共用一份快照，避免长参数表在多个函数间传递。
 #[derive(Clone)]
@@ -359,30 +335,6 @@ struct NativeRun<'a> {
     context: &'a RunContext,
 }
 
-/// 原生求解脚本：`[source env; ] [export PATH; ] cd '<case>' && <solve>`。
-/// 顺序固定——环境 source 在最前（它决定 OpenFOAM 的 PATH / LD_LIBRARY_PATH），
-/// 受管 bin 目录随后追加，避免被环境树的 PATH 覆盖。
-fn native_solve_script(
-    case_dir: &str,
-    env_source: Option<&str>,
-    managed_path: Option<&str>,
-    solve: &str,
-) -> String {
-    let source = env_source
-        .map(|command| format!("{command}; "))
-        .unwrap_or_default();
-    let path_export = managed_path
-        // 前缀来自应用数据目录（用户可自定路径）：按 shell 字面量转义，别把引号漏进去。
-        .map(|prefix| {
-            format!(
-                "export PATH='{}:$PATH'; ",
-                vm_logic::bash_single_quote(prefix)
-            )
-        })
-        .unwrap_or_default();
-    format!("{source}{path_export}cd '{case_dir}' && {solve}")
-}
-
 fn spawn_run_script(run: NativeRun<'_>) -> Result<Child> {
     let NativeRun {
         case_dir,
@@ -398,7 +350,7 @@ fn spawn_run_script(run: NativeRun<'_>) -> Result<Child> {
     #[cfg(any(target_os = "macos", target_os = "windows"))]
     if let Some(vm_provider) = job_vm_provider(vm_shell) {
         let inner = vm_logic::solve_script(
-            &script_case_dir(std::env::consts::OS, case_dir, vm_case),
+            &vm_logic::script_case_dir(std::env::consts::OS, case_dir, vm_case),
             cores,
         );
         return host_command(&vm_logic::bash_script_args(vm_provider, &inner))
@@ -410,7 +362,7 @@ fn spawn_run_script(run: NativeRun<'_>) -> Result<Child> {
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     let _ = vm_shell;
     // 原生平台走宿主路径分支（同一处做 shell 单引号转义，防路径注入）。
-    let safe_dir = script_case_dir(std::env::consts::OS, case_dir, vm_case);
+    let safe_dir = vm_logic::script_case_dir(std::env::consts::OS, case_dir, vm_case);
     // 原生（Linux）环境：bundle 解压在本机时先 source 其 bashrc，
     // 布局与 VM 内一致（core 侧单点构造，路径含空格 / 引号时自动转义）。
     let env_source =
@@ -418,7 +370,8 @@ fn spawn_run_script(run: NativeRun<'_>) -> Result<Child> {
     // 求解入口：foamRun 是 OpenFOAM 11+ 的模块化运行器，具体求解模块由
     // case 的 controlDict（solver 键，见 moldingfoam.rs::SOLVER_MODULE）提供；
     // 并行由 mpirun 发起（见 moldingfoam::solve_command）。
-    let script = native_solve_script(&safe_dir, env_source.as_deref(), managed_path, &solve);
+    let script =
+        vm_logic::native_solve_script(&safe_dir, env_source.as_deref(), managed_path, &solve);
     let mut command = host_command(&vm_logic::bash_script_args(VmProviderKind::Native, &script));
     command.stdout(Stdio::piped()).stderr(Stdio::piped());
     // unix 下让 bash 成为独立进程组长：取消时可整组终止，避免孤儿求解进程。
@@ -814,74 +767,6 @@ pub fn list_jobs(scheduler: State<'_, JobScheduler>) -> Result<Vec<Job>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// 原生求解脚本：环境 source 在最前，随后 PATH 导出、cd、求解命令。
-    #[test]
-    fn native_solve_script_orders_source_path_and_solve() {
-        let script = native_solve_script(
-            "/data/cases/study-1",
-            Some("source '/opt/moldingfoam-env/openfoam14/etc/bashrc'"),
-            Some("/data/downloads/moldingfoam/bin"),
-            "decomposePar -force && mpirun -np 4 foamRun -parallel; reconstructPar",
-        );
-        assert_eq!(
-            script,
-            "source '/opt/moldingfoam-env/openfoam14/etc/bashrc'; export PATH='/data/downloads/moldingfoam/bin:$PATH'; cd '/data/cases/study-1' && decomposePar -force && mpirun -np 4 foamRun -parallel; reconstructPar"
-        );
-    }
-
-    /// 无环境 / 无受管目录（VM 通道未介入时的原生回退）只留 cd + 求解；
-    /// 单引号路径原样透传（转义已由 script_case_dir 完成）。
-    #[test]
-    fn native_solve_script_without_optional_segments() {
-        let script = native_solve_script("/cases/plain", None, None, "foamRun");
-        assert_eq!(script, "cd '/cases/plain' && foamRun");
-        let env_only = native_solve_script(
-            "/cases/a",
-            Some("source '/env/openfoam14/etc/bashrc'"),
-            None,
-            "foamRun",
-        );
-        assert_eq!(
-            env_only,
-            "source '/env/openfoam14/etc/bashrc'; cd '/cases/a' && foamRun"
-        );
-    }
-
-    #[test]
-    fn script_case_dir_picks_path_per_platform() {
-        // macOS：VM 内暂存路径（宿主路径在虚拟机里不存在）；没有暂存路径时退回宿主路径
-        assert_eq!(
-            script_case_dir("macos", "/host/study-1", Some("/home/ubuntu/study-1")),
-            "/home/ubuntu/study-1"
-        );
-        assert_eq!(
-            script_case_dir("macos", "/host/study-1", None),
-            "/host/study-1"
-        );
-        // Windows：WSL 的 /mnt 形态（WSL 能直接读宿主文件系统）
-        assert_eq!(
-            script_case_dir("windows", r"C:\cases\study-1", None),
-            "/mnt/c/cases/study-1"
-        );
-        // 原生 Linux：宿主路径
-        assert_eq!(
-            script_case_dir("linux", "/data/cases/study-1", None),
-            "/data/cases/study-1"
-        );
-        // 单引号转义：拼进 bash -lc 脚本前必须处理，防路径注入
-        assert_eq!(
-            script_case_dir("linux", "/data/it's", None),
-            r"/data/it'\''s"
-        );
-    }
-
-    #[test]
-    fn wsl_path_maps_drive_letters_only() {
-        assert_eq!(to_wsl_path(r"C:\a\b"), "/mnt/c/a/b");
-        assert_eq!(to_wsl_path(r"D:\cases"), "/mnt/d/cases");
-        assert_eq!(to_wsl_path("/already/unix"), "/already/unix");
-    }
 
     /// 作业必须由 promote_and_spawn 提升并起线程：先提升（Running）再让
     /// promote_and_spawn 找不到排队作业，作业会永远停在「运行中」。

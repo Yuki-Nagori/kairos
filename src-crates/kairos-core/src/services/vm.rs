@@ -420,6 +420,48 @@ pub fn solve_script(vm_case: &str, cores: u32) -> String {
 /// 取消只能靠它自己记下来的会话 id（见 [`solver_stop_command`]）。
 pub const SOLVE_SID_NAME: &str = ".kairos-solve.sid";
 
+/// 原生（宿主直跑）求解脚本：`[source env; ] [export PATH; ] cd '<case>' && <solve>`。
+///
+/// 顺序固定——环境 source 在最前（它决定 OpenFOAM 的 PATH / LD_LIBRARY_PATH），
+/// 受管 bin 目录随后追加，避免被环境树的 PATH 覆盖。
+pub fn native_solve_script(
+    case_dir: &str,
+    env_source: Option<&str>,
+    managed_path: Option<&str>,
+    solve: &str,
+) -> String {
+    let source = env_source
+        .map(|command| format!("{command}; "))
+        .unwrap_or_default();
+    let path_export = managed_path
+        // 前缀来自应用数据目录（用户可自定路径）：按 shell 字面量转义，别把引号漏进去。
+        .map(|prefix| format!("export PATH='{}:$PATH'; ", bash_single_quote(prefix)))
+        .unwrap_or_default();
+    format!("{source}{path_export}cd '{case_dir}' && {solve}")
+}
+
+/// 求解脚本里的 case 目录（含 shell 单引号转义）。
+///
+/// 平台经 `os` 传入（与 `std::env::consts::OS` 同口径）而不是编译期分支——三端取值
+/// 都能在同一平台单测覆盖，且函数在原生平台（走宿主路径分支）同样被调用，不会因为
+/// 只有 VM 平台用得上而被判成死代码：
+/// - macOS：VM 内暂存路径（宿主绝对路径在虚拟机里并不存在）；
+/// - Windows：WSL 的 `/mnt` 形态路径（WSL 能直接读宿主文件系统）；
+/// - 原生：宿主路径。
+pub fn script_case_dir(os: &str, case_dir: &str, vm_case: Option<&str>) -> String {
+    let dir = match os {
+        "macos" => vm_case.unwrap_or(case_dir),
+        "windows" => &wsl_style_path(case_dir),
+        _ => case_dir,
+    };
+    bash_single_quote(dir)
+}
+
+/// Windows 盘符路径 → WSL 的 `/mnt` 形态；解析不出来时原样返回。
+fn wsl_style_path(path: &str) -> String {
+    crate::services::paths::wsl_path(path).unwrap_or_else(|| path.to_string())
+}
+
 /// 会话 id 文件在 VM 内的路径（case 目录下）。
 pub fn solve_sid_path(vm_case: &str) -> String {
     format!("{vm_case}/{SOLVE_SID_NAME}")
@@ -1301,6 +1343,82 @@ mod tests {
         assert!(script.ends_with(&crate::services::moldingfoam::solve_command(4)));
         // case 路径含单引号时不能把命令截断
         assert!(solve_script("/home/ubuntu/o'brien", 4).contains("'/home/ubuntu/o'\\''brien'"));
+    }
+
+    /// 原生求解脚本：环境 source 在最前，随后 PATH 导出、cd、求解命令。
+    #[test]
+    fn native_solve_script_orders_source_path_and_solve() {
+        let script = native_solve_script(
+            "/data/cases/study-1",
+            Some("source '/opt/moldingfoam-env/openfoam14/etc/bashrc'"),
+            Some("/data/downloads/moldingfoam/bin"),
+            "decomposePar -force && mpirun -np 4 foamRun -parallel; reconstructPar",
+        );
+        assert_eq!(
+            script,
+            "source '/opt/moldingfoam-env/openfoam14/etc/bashrc'; export PATH='/data/downloads/moldingfoam/bin:$PATH'; cd '/data/cases/study-1' && decomposePar -force && mpirun -np 4 foamRun -parallel; reconstructPar"
+        );
+    }
+
+    /// 无环境 / 无受管目录（VM 通道未介入时的原生回退）只留 cd + 求解；
+    /// 单引号路径原样透传（转义已由 `script_case_dir` 完成）。
+    #[test]
+    fn native_solve_script_without_optional_segments() {
+        let script = native_solve_script("/cases/plain", None, None, "foamRun");
+        assert_eq!(script, "cd '/cases/plain' && foamRun");
+        let env_only = native_solve_script(
+            "/cases/a",
+            Some("source '/env/openfoam14/etc/bashrc'"),
+            None,
+            "foamRun",
+        );
+        assert_eq!(
+            env_only,
+            "source '/env/openfoam14/etc/bashrc'; cd '/cases/a' && foamRun"
+        );
+    }
+
+    /// 受管 PATH 前缀含单引号时（用户可自定应用数据目录）必须转义，否则引号失衡。
+    #[test]
+    fn native_solve_script_escapes_managed_path() {
+        let script = native_solve_script("/cases/a", None, Some("/data/it's here/bin"), "foamRun");
+        assert_eq!(
+            script,
+            "export PATH='/data/it'\\''s here/bin:$PATH'; cd '/cases/a' && foamRun"
+        );
+    }
+
+    #[test]
+    fn script_case_dir_picks_path_per_platform() {
+        // macOS：VM 内暂存路径（宿主路径在虚拟机里不存在）；没有暂存路径时退回宿主路径
+        assert_eq!(
+            script_case_dir("macos", "/host/study-1", Some("/home/ubuntu/study-1")),
+            "/home/ubuntu/study-1"
+        );
+        assert_eq!(
+            script_case_dir("macos", "/host/study-1", None),
+            "/host/study-1"
+        );
+        // Windows：WSL 形态路径（WSL 直接读宿主文件系统）
+        assert_eq!(
+            script_case_dir("windows", r"C:\Users\yuki\study-1", None),
+            "/mnt/c/Users/yuki/study-1"
+        );
+        // 已是 POSIX 形态的路径解析不出盘符：原样使用（不硬套 /mnt 前缀）
+        assert_eq!(
+            script_case_dir("windows", "/already/unix/study-1", None),
+            "/already/unix/study-1"
+        );
+        // 原生：宿主路径原样
+        assert_eq!(
+            script_case_dir("linux", "/data/study-1", Some("/vm/x")),
+            "/data/study-1"
+        );
+        // 转义在同一个入口完成
+        assert_eq!(
+            script_case_dir("linux", "/data/o'brien", None),
+            "/data/o'\\''brien"
+        );
     }
 
     /// 取消命令：按会话 id 杀**进程组**，求解已结束或 id 缺失时是空操作（`|| true`）——
