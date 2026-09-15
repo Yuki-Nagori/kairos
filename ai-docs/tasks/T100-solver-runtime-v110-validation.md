@@ -118,3 +118,14 @@ cargo run -p kairos-cli -- doe run \
 `20260915T173131+0800` 批次已启用 `--solve` 并完成 9 个参数点的逐点尝试。所有点均保留输入、`log.foamRun`、Unix 毫秒时间戳和批次原始输出；失败原因是执行环境找不到 `decomposePar`，详见 [批次清单](../reviews/t100-runs/20260915T173131+0800-solve-manifest.md)。该记录是环境阻塞证据，不计入求解结果通过。
 
 随后通过 `--vm` 复用 GUI 的 Multipass 环境完成 9/9 个真实求解点，详见 [成功批次清单](../reviews/t100-runs/20260915T174242+0800-vm-manifest.md)。
+
+### moldingFoam 实验运行记录（2026-09-15）
+
+基于 Kairos 生成的 `PP-REF-01` 材料 case，使用 moldingFoam v1.1.0 arm64 在 GUI 同源 Multipass VM 中完成真实实验运行。solver 原始日志确认：
+
+- OpenFOAM build：`14-7b05503f98a8`；运行器：`foamRun`，求解模块：`moldingFoam`。
+- Cross-WLF：`n=0.32`、`tauStar=20000 Pa`、`D1=3.623173e13 Pa·s`、`D2=263 K`、`A1=31.4`、`A2=51.6`。
+- Tait：case 字典实际写入 `b4/b4s/b6/C/smoothBand`，与 v1.1.0 入口一致。
+- 时间推进从 `0` 到 `2 s`，日志以 `End` 收尾，进程退出码 `0`。
+
+该记录证明材料导入、case 字典和 moldingFoam 求解器已连通；它是 solver 实验结果，不替代 Moldflow Dual Domain 的逐点对照。完整 Mug 对照仍需单点 baseline 入口或提供三水平因子后再运行 DOE。

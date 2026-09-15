@@ -135,3 +135,7 @@ assessment:
 - moldingFoam v1.1.0 arm64 / OpenFOAM 14，退出码 `0`，日志以 `End` 收尾并达到 `Time = 2s`。
 - 日志确认 `CrossWlf` 与 `Tait` 均被选中；Tait 使用 `b4/b4s/b6/C/smoothBand` 字段。
 - 该运行验证材料导入、case 字典接线和 solver 启动闭环，不等同于 Moldflow 逐点精度验证；后续仍需把完整 Mug 网格和实验观测量接入同一矩阵。
+
+### moldingFoam 实验结果摘要（2026-09-15）
+
+Kairos 生成的 `PP-REF-01` case 已在 moldingFoam v1.1.0 arm64 / OpenFOAM 14 VM 中真实运行：日志选择 `CrossWlf` 与 `Tait`，时间推进到 `2 s`，以 `End` 收尾，退出码为 `0`。该实验验证了默认 PP 材料、Tait 字典和 solver 的运行链路；由于当前 case 是 Kairos sample-box 工况，不能把它当作 Moldflow Mug 的逐点数值结论。
