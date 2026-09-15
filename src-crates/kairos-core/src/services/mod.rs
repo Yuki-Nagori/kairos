@@ -16,6 +16,7 @@ pub mod iges;
 pub mod job_lifecycle;
 pub mod jobs;
 pub mod material;
+pub mod material_curve;
 pub mod mesh_store;
 pub mod meshing;
 pub mod midplane;
