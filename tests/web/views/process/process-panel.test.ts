@@ -344,6 +344,7 @@ describe("ProcessPanel", () => {
     await inputs[6]?.setValue("8"); // packingTimeS
     await inputs[7]?.setValue("20"); // coolingTimeS
     await inputs[8]?.setValue("30"); // coolantTempC
+    await inputs[9]?.setValue("0=55,8=44"); // 完整保压曲线
     await findButton(wrapper, "校验并应用到方案").trigger("click");
     await flushPromises();
 
@@ -433,12 +434,12 @@ describe("ProcessPanel", () => {
 
     // 空名（含纯空白）不写入 localStorage。
     await findButton(wrapper, "保存预设").trigger("click");
-    await fieldInputs(wrapper)[9]?.setValue("   ");
+    await fieldInputs(wrapper)[10]?.setValue("   ");
     await findButton(wrapper, "保存预设").trigger("click");
-    expect(wrapper.findAll("option")).toHaveLength(2); // 占位 + 内置预设
+    expect(wrapper.findAll("option")).toHaveLength(3); // 占位 + 两个内置预设
 
     await fieldInputs(wrapper)[0]?.setValue("250");
-    await fieldInputs(wrapper)[9]?.setValue("快速启动");
+    await fieldInputs(wrapper)[10]?.setValue("快速启动");
     await findButton(wrapper, "保存预设").trigger("click");
 
     const raw = localStorage.getItem("kairos:process-preset:快速启动");
@@ -479,10 +480,20 @@ describe("ProcessPanel", () => {
     expect(fieldInputs(wrapper)[3]?.element.value).toBe("1.5");
 
     // 与内置预设重名：不写存储、清单不出现第二项，并给出提示。
-    await fieldInputs(wrapper)[9]?.setValue("出厂默认");
+    await fieldInputs(wrapper)[10]?.setValue("出厂默认");
     await findButton(wrapper, "保存预设").trigger("click");
     expect(localStorage.getItem("kairos:process-preset:出厂默认")).toBeNull();
-    expect(wrapper.findAll("option")).toHaveLength(2);
+    expect(wrapper.findAll("option")).toHaveLength(3);
     expect(wrapper.text()).toContain("是内置预设名");
+  });
+
+  it("Mug 基线预设回填完整三点保压曲线", async () => {
+    const wrapper = mount(ProcessPanel, { global: { plugins: [pinia] } });
+    await wrapper.find("select").setValue("Mug 基线（220°C / 50°C）");
+    await findButton(wrapper, "载入预设").trigger("click");
+    const inputs = fieldInputs(wrapper);
+    expect(inputs[0]?.element.value).toBe("220");
+    expect(inputs[1]?.element.value).toBe("50");
+    expect(inputs[9]?.element.value).toBe("0=0.9229,0.2=27.6282,315.0797=27.6282");
   });
 });
