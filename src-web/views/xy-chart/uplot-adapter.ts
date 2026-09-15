@@ -1,7 +1,11 @@
 /** uPlot 适配边界：只承载通用图表配置，结果场与探针语义仍由面板编排。 */
 import type uPlot from "uplot";
 
-export type UplotSeries = { label: string; stroke: string };
+export type UplotSeries = {
+  label: string;
+  stroke: string;
+  points?: { show: boolean; size: number };
+};
 
 export function uplotOptions(width: number, height: number, series: UplotSeries[]): uPlot.Options {
   return {

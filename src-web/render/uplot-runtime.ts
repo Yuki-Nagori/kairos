@@ -20,3 +20,11 @@ export function createUplot(
     return null;
   }
 }
+
+export function resetUplot(plot: uPlot | null, current: string, next: string): uPlot | null {
+  if (plot !== null && current !== next) {
+    plot.destroy();
+    return null;
+  }
+  return plot;
+}

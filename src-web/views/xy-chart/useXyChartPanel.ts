@@ -5,7 +5,7 @@ import "uplot/dist/uPlot.min.css";
 import { useAppStore } from "../../stores/app";
 import { useResultsStore } from "../../stores/results";
 import { THEME_CHANGED_EVENT } from "../../utils/theme";
-import { createUplot } from "../../render/uplot-runtime";
+import { createUplot, resetUplot } from "../../render/uplot-runtime";
 
 export function useXyChartPanel() {
   const app = useAppStore();
@@ -13,6 +13,7 @@ export function useXyChartPanel() {
 
   const plotHostRef = useTemplateRef<HTMLDivElement>("plotHostRef");
   const plot = shallowRef<uPlot | null>(null);
+  const plotSignature = ref("");
   const nodeInput = ref("");
   const working = computed(() => app.working);
 
@@ -55,6 +56,24 @@ export function useXyChartPanel() {
     }),
   );
 
+  function plotSeries() {
+    if (mode.value === "time") {
+      return results.probeTimeSeries.map((entry, index) => ({
+        label: `#${entry.nodeIndex}`,
+        stroke: PROBE_COLORS[index % PROBE_COLORS.length]!,
+      }));
+    }
+    const field = results.loadedField;
+    return [
+      { label: field?.field ?? "场值", stroke: "#34d399" },
+      ...results.probes.map((probe, index) => ({
+        label: `探针 #${probe.nodeIndex}`,
+        stroke: PROBE_COLORS[(index + 1) % PROBE_COLORS.length]!,
+        points: { show: true, size: 6 },
+      })),
+    ];
+  }
+
   function plotData(): uPlot.AlignedData {
     if (mode.value === "time") {
       const series = results.probeTimeSeries;
@@ -65,7 +84,10 @@ export function useXyChartPanel() {
       ];
     }
     const values = results.loadedField?.values ?? [];
-    return [Array.from({ length: values.length }, (_, index) => index), values];
+    const probes = results.probes.map((probe) =>
+      values.map((value, index) => (index === probe.nodeIndex ? value : Number.NaN)),
+    );
+    return [Array.from({ length: values.length }, (_, index) => index), values, ...probes];
   }
 
   function ensurePlot() {
@@ -73,18 +95,15 @@ export function useXyChartPanel() {
       return plot.value;
     }
     // happy-dom 与部分嵌入式 WebView 没有 Path2D；保留 Canvas 降级路径，避免异步绘制抛错。
-    const series =
-      mode.value === "time"
-        ? results.probeTimeSeries.map((entry, index) => ({
-            label: `#${entry.nodeIndex}`,
-            stroke: PROBE_COLORS[index % PROBE_COLORS.length]!,
-          }))
-        : [{ label: results.loadedField?.field ?? "场值", stroke: "#34d399" }];
-    plot.value = createUplot(plotHostRef.value, plotData(), series);
+    plot.value = createUplot(plotHostRef.value, plotData(), plotSeries());
+    plotSignature.value = `${mode.value}:${results.probes.map((probe) => probe.id).join(",")}`;
     return plot.value;
   }
 
   function draw(): void {
+    const nextSignature = `${mode.value}:${results.probes.map((probe) => probe.id).join(",")}`;
+    plot.value = resetUplot(plot.value, plotSignature.value, nextSignature);
+    plotSignature.value = nextSignature;
     ensurePlot()?.setData(plotData());
   }
 
