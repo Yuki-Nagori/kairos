@@ -86,3 +86,11 @@ KAIROS_E2E_VM=1 KAIROS_E2E_KEEP=1 cargo test -p kairos-tests --test e2e # 保留
 - core `services/{jobs,paths,project,workspace,moldingfoam,vm,results,render_mesh}.rs`：核数和 ID 约束、独立运行、退出码、日志帧、只读采样、二进制编码。
 - 桌面 `commands/{jobs,geometry,results}.rs`：真实子进程取消、双流和非 UTF-8 日志、网格快照修订、场缓存与双槽一致性。Unix 子进程测试通过不等于 WSL/VM 已验收。
 - [修复及消融记录](../ai-docs/reviews/review-fixes-0915.md)。
+
+### 网格边线双后端回归
+
+启动 Vite 后打开 /tests/mesh-edges-browser.html。页面直接实例化 WebGL2 与 WebGPU，
+载入 core 生成的 625 四面体立方体的 300 个边界三角面。检查边线与表面一致、背面边线被遮挡，
+重新上传后仍显示，Y 中面裁剪时表面和边线一起裁掉。当前是表面裁剪，不显示内部四面体。
+
+/tests/viewport-browser.html 的“载入 Rust 生成的 2 mm 体网格”按钮另覆盖 Vue 面板自动刷新链路。

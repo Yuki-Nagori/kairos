@@ -12,6 +12,7 @@ import {
   meshFarPlane,
   type Vec3,
 } from "../math";
+import { meshEdgeIndices } from "../mesh-edges";
 import { computeVertexNormals } from "../normals";
 import { THEME_CHANGED_EVENT, themeRgb } from "../../utils/theme";
 import { errorMessage } from "../../utils/error";
@@ -64,10 +65,14 @@ export class WebGPURenderer {
   }) => void;
 
   private meshPipeline: GpuRenderPipeline;
+  private edgePipeline: GpuRenderPipeline;
+  private edgeBuffer: GpuBuffer | null = null;
+  private edgeCount = 0;
   private linePipeline: GpuRenderPipeline;
   private uniformBuffer: GpuBuffer;
   /** 网格管线与线管线的 bind group（按当前 uniform 缓冲懒建并缓存）。 */
   private meshBindGroup: GpuBindGroup | null = null;
+  private edgeBindGroup: GpuBindGroup | null = null;
   private depthTexture: GpuTexture | null = null;
   private depthView: GpuTextureView | null = null;
   private readonly depthFormat: GpuTextureFormat = "depth24plus";
@@ -145,6 +150,7 @@ export class WebGPURenderer {
     this.onError = onError;
     this.context.configure({ device, format, alphaMode: "opaque" });
     this.meshPipeline = this.buildMeshPipeline();
+    this.edgePipeline = this.buildMeshPipeline(true);
     this.linePipeline = this.buildLinePipeline();
     this.uniformBuffer = device.createBuffer({
       size: UNIFORM_FLOATS * 4,
@@ -193,7 +199,7 @@ export class WebGPURenderer {
     }
   }
 
-  private buildMeshPipeline(): GpuRenderPipeline {
+  private buildMeshPipeline(edges = false): GpuRenderPipeline {
     const vertexModule = this.device.createShaderModule({ code: MESH_VERTEX_SHADER });
     const fragmentModule = this.device.createShaderModule({ code: MESH_FRAGMENT_SHADER });
     return this.device.createRenderPipeline({
@@ -207,9 +213,19 @@ export class WebGPURenderer {
           { arrayStride: 4, attributes: [{ shaderLocation: 2, offset: 0, format: "float32" }] },
         ],
       },
-      fragment: { module: fragmentModule, entryPoint: "fs", targets: [{ format: this.format }] },
-      primitive: { topology: "triangle-list", cullMode: "none" },
-      depthStencil: { format: this.depthFormat, depthWriteEnabled: true, depthCompare: "less" },
+      fragment: {
+        module: fragmentModule,
+        entryPoint: edges ? "fs_edges" : "fs",
+        targets: [{ format: this.format }],
+      },
+      primitive: { topology: edges ? "line-list" : "triangle-list", cullMode: "none" },
+      depthStencil: {
+        format: this.depthFormat,
+        depthWriteEnabled: !edges,
+        depthCompare: edges ? "less-equal" : "less",
+        depthBias: edges ? 0 : 1,
+        depthBiasSlopeScale: edges ? 0 : 1,
+      },
     });
   }
 
@@ -243,6 +259,14 @@ export class WebGPURenderer {
       usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST,
     });
     this.device.queue.writeBuffer(this.indexBuffer, 0, mesh.indices);
+    const edges = meshEdgeIndices(mesh.indices);
+    this.edgeBuffer?.destroy();
+    this.edgeBuffer = this.device.createBuffer({
+      size: align4(edges.byteLength),
+      usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST,
+    });
+    this.device.queue.writeBuffer(this.edgeBuffer, 0, edges);
+    this.edgeCount = edges.length;
     this.indexCount = mesh.indices.length;
     this.meshVisible = true;
     this.fitView();
@@ -534,6 +558,14 @@ export class WebGPURenderer {
       pass.setVertexBuffer(2, this.vertexBuffers[2]!);
       pass.setIndexBuffer(this.indexBuffer, "uint32");
       pass.drawIndexed(this.indexCount);
+      this.edgeBindGroup ??= this.device.createBindGroup({
+        layout: this.edgePipeline.getBindGroupLayout(0),
+        entries: [{ binding: 0, resource: { buffer: this.uniformBuffer } }],
+      });
+      pass.setPipeline(this.edgePipeline);
+      pass.setBindGroup(0, this.edgeBindGroup);
+      pass.setIndexBuffer(this.edgeBuffer!, "uint32");
+      pass.drawIndexed(this.edgeCount);
     }
     for (const [id, overlay] of this.overlays) {
       if ((this.overlayVisible.get(id) ?? true) === false) {

@@ -85,7 +85,9 @@ interface GpuRenderPipelineDescriptor {
   depthStencil?: {
     format: GpuTextureFormat;
     depthWriteEnabled: boolean;
-    depthCompare: "less" | "greater";
+    depthCompare: "less" | "greater" | "less-equal";
+    depthBias?: number;
+    depthBiasSlopeScale?: number;
   };
 }
 

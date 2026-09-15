@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="zh-CN">
+  <meta charset="utf-8" />
+  <title>网格边线双后端回归</title>
+  <style>
+    body {
+      background: #eee;
+      font-family: sans-serif;
+    }
+    main {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    canvas {
+      width: 480px;
+      height: 420px;
+      display: block;
+    }
+  </style>
+  <h1>网格边线双后端回归</h1>
+  <p>Rust 生成的 10 mm 立方体、2 mm 目标体网格；两侧应显示相同三角边线。</p>
+  <button id="clip">剖切至 Y 中面</button>
+  <button id="reload">重新上传网格</button>
+  <main>
+    <section>
+      <h2>WebGL2</h2>
+      <p id="gl-status">初始化</p>
+      <canvas id="gl"></canvas>
+    </section>
+    <section>
+      <h2>WebGPU</h2>
+      <p id="gpu-status">初始化</p>
+      <canvas id="gpu"></canvas>
+    </section>
+  </main>
+  <script type="module">
+    import { ViewportRenderer } from "/src-web/render/renderer.ts";
+    import { WebGPURenderer } from "/src-web/render/webgpu/renderer.ts";
+    const data = await fetch("/tests/fixtures/render-volume-box.json").then((r) => r.json());
+    const mesh = {
+      positions: new Float32Array(data.positions),
+      indices: new Uint32Array(data.indices),
+      faceCells: new Uint32Array(data.faceCells),
+    };
+    const renderers = [];
+    for (const [id, Backend] of [
+      ["gl", ViewportRenderer],
+      ["gpu", WebGPURenderer],
+    ]) {
+      const status = document.querySelector("#" + id + "-status");
+      const renderer = await Backend.create(document.querySelector("#" + id));
+      if (renderer === null) {
+        status.textContent = "此环境不可用";
+        continue;
+      }
+      renderer.uploadMesh(mesh);
+      status.textContent = "已上传 " + mesh.indices.length / 3 + " 个边界三角形";
+      renderers.push(renderer);
+    }
+    document.querySelector("#clip").onclick = () => {
+      for (const renderer of renderers) renderer.setClipPlane(true, [0, 1, 0], 5);
+    };
+    document.querySelector("#reload").onclick = () => {
+      for (const renderer of renderers) {
+        renderer.uploadMesh(mesh);
+        renderer.setClipPlane(false, [0, 1, 0], 5);
+      }
+    };
+    window.addEventListener("pagehide", () => {
+      for (const renderer of renderers) renderer.dispose();
+    });
+  </script>
+</html>

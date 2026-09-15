@@ -533,19 +533,18 @@ pub(crate) fn render_snapshot(
             Arc::clone(&snapshot.render),
         )
     };
-    Ok(Arc::clone(render.get_or_init(|| {
-        let rendered = match &volume {
+    let rendered = render.get_or_init(|| {
+        Arc::new(match &volume {
             Some(volume) => render_mesh::from_volume_mesh(volume),
             None => render_mesh::from_surface_mesh(&mesh),
-        };
-        // 坏网格不应让视口变成一块空画布：体网格边界提取失败时回退到
-        // 已验证过的 STL 表面，同时保留求解网格本身供 solver 使用。
-        if rendered.indices.is_empty() {
-            Arc::new(render_mesh::from_surface_mesh(&mesh))
-        } else {
-            Arc::new(rendered)
-        }
-    })))
+        })
+    });
+    if rendered.indices.is_empty() {
+        return Err(KairosError::validation(
+            "渲染网格没有可显示的三角面，请检查几何或重新生成体网格。",
+        ));
+    }
+    Ok(Arc::clone(rendered))
 }
 
 #[tauri::command]
@@ -617,7 +616,7 @@ mod tests {
     }
 
     #[test]
-    fn render_snapshot_falls_back_to_surface_when_volume_has_no_boundary() {
+    fn render_snapshot_rejects_volume_without_boundary() {
         let store = GeometryStore::default();
         store.lock().insert(
             "g".into(),
@@ -634,8 +633,7 @@ mod tests {
                 midplane: None,
             },
         );
-        let render = render_snapshot(&store, "g").unwrap();
-        assert!(!render.indices.is_empty());
-        assert_eq!(render.face_cells.len(), 12);
+        let error = render_snapshot(&store, "g").unwrap_err();
+        assert!(error.to_string().contains("没有可显示的三角面"));
     }
 }

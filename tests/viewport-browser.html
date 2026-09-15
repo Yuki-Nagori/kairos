@@ -7,6 +7,7 @@
     <p>仅替代 Rust 网格读取，使用真实 Vue 面板和 GPU 后端。导入后应自动显示立方体。</p>
     <button id="small">导入 10 mm 立方体</button>
     <button id="large">导入 1000 mm 立方体</button>
+    <button id="volume">载入 Rust 生成的 2 mm 体网格</button>
     <button id="remove">删除几何</button>
     <div id="app" style="height: 650px"></div>
     <script type="module">
@@ -19,40 +20,43 @@
       createApp(ViewportPanel).use(pinia).mount("#app");
       const geometry = useGeometryStore(pinia);
       let size = 10;
-      geometry.fetchRenderMesh = async () => ({
-        positions: [
-          0,
-          0,
-          0,
-          size,
-          0,
-          0,
-          size,
-          size,
-          0,
-          0,
-          size,
-          0,
-          0,
-          0,
-          size,
-          size,
-          0,
-          size,
-          size,
-          size,
-          size,
-          0,
-          size,
-          size,
-        ],
-        indices: [
-          0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 3, 7, 6, 3, 6, 2, 0, 4, 7, 0, 7, 3,
-          1, 2, 6, 1, 6, 5,
-        ],
-        faceCells: Array(12).fill(0),
-      });
+      let generated = null;
+      geometry.fetchRenderMesh = async () =>
+        generated ?? {
+          positions: [
+            0,
+            0,
+            0,
+            size,
+            0,
+            0,
+            size,
+            size,
+            0,
+            0,
+            size,
+            0,
+            0,
+            0,
+            size,
+            size,
+            0,
+            size,
+            size,
+            size,
+            size,
+            0,
+            size,
+            size,
+          ],
+          indices: [
+            0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 3, 7, 6, 3, 6, 2, 0, 4, 7, 0, 7,
+            3, 1, 2, 6, 1, 6, 5,
+          ],
+          faceCells: Array(12).fill(0),
+        };
       function importCube(value) {
+        generated = null;
         size = value;
         geometry.geometries = [];
         geometry.recordImport({
@@ -76,6 +80,12 @@
       }
       document.querySelector("#small").onclick = () => importCube(10);
       document.querySelector("#large").onclick = () => importCube(1000);
+      document.querySelector("#volume").onclick = async () => {
+        const data = await fetch("/tests/fixtures/render-volume-box.json").then((r) => r.json());
+        importCube(10);
+        generated = data;
+        geometry.meshReports = { cube: { nodeCount: data.positions.length / 3 } };
+      };
       document.querySelector("#remove").onclick = () => {
         geometry.geometries = [];
       };

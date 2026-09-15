@@ -9,6 +9,7 @@ import {
   type Mat4,
   type Vec3,
 } from "./math";
+import { meshEdgeIndices } from "./mesh-edges";
 import { computeVertexNormals } from "./normals";
 import type { CameraSnapshot } from "./picking";
 import type { OverlayLayer } from "./overlays";
@@ -69,12 +70,14 @@ uniform vec3 u_colorHot;
 uniform float u_valueMin;
 uniform float u_valueMax;
 uniform int u_useField;
+uniform int u_edges;
 uniform int u_clipEnabled;
 uniform vec3 u_clipNormal;
 uniform float u_clipOffset;
 out vec4 outColor;
 void main() {
   if (u_clipEnabled == 1 && dot(v_world, u_clipNormal) > u_clipOffset) { discard; }
+  if (u_edges == 1) { outColor = vec4(0.07, 0.09, 0.12, 1.0); return; }
   vec3 n = normalize(v_normal);
   float diff = max(dot(n, normalize(u_lightDir)), 0.0);
   float t = clamp((v_value - u_valueMin) / max(u_valueMax - u_valueMin, 1e-6), 0.0, 1.0);
@@ -110,6 +113,8 @@ export class ViewportRenderer {
   private positionBuffer: WebGLBuffer | null = null;
   private normalBuffer: WebGLBuffer | null = null;
   private indexBuffer: WebGLBuffer | null = null;
+  private edgeBuffer: WebGLBuffer | null = null;
+  private edgeCount = 0;
   private indexCount = 0;
   private indexType = 0;
   /** uniform 位置缓存：program link 后一次查询，逐帧复用（约 10 次/帧的重复查询）。 */
@@ -251,7 +256,10 @@ export class ViewportRenderer {
     this.distance = orbit.distance;
   }
 
-  private buildProgram(): WebGLProgram {
+  private buildProgram(
+    vertexSource = VERTEX_SHADER,
+    fragmentSource = FRAGMENT_SHADER,
+  ): WebGLProgram {
     const gl = this.gl;
     const compile = (type: number, source: string): WebGLShader => {
       const shader = gl.createShader(type);
@@ -271,8 +279,8 @@ export class ViewportRenderer {
     if (program === null) {
       throw new Error("无法创建着色程序");
     }
-    gl.attachShader(program, compile(gl.VERTEX_SHADER, VERTEX_SHADER));
-    gl.attachShader(program, compile(gl.FRAGMENT_SHADER, FRAGMENT_SHADER));
+    gl.attachShader(program, compile(gl.VERTEX_SHADER, vertexSource));
+    gl.attachShader(program, compile(gl.FRAGMENT_SHADER, fragmentSource));
     gl.linkProgram(program);
     if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
       throw new Error(`着色程序链接失败：${gl.getProgramInfoLog(program) ?? ""}`);
@@ -282,30 +290,7 @@ export class ViewportRenderer {
 
   /** 线段叠加层的极简着色程序：MVP 变换 + 纯色输出。 */
   private buildLineProgram(): WebGLProgram {
-    const gl = this.gl;
-    const compile = (type: number, source: string): WebGLShader => {
-      const shader = gl.createShader(type);
-      if (shader === null) {
-        throw new Error("无法创建着色器");
-      }
-      gl.shaderSource(shader, source);
-      gl.compileShader(shader);
-      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-        throw new Error(`着色器编译失败：${gl.getShaderInfoLog(shader) ?? ""}`);
-      }
-      const program = gl.createProgram();
-      if (program === null) {
-        throw new Error("无法创建着色程序");
-      }
-      gl.attachShader(program, shader);
-      gl.attachShader(program, compile(gl.FRAGMENT_SHADER, LINE_FRAGMENT_SHADER));
-      gl.linkProgram(program);
-      if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-        throw new Error(`着色程序链接失败：${gl.getProgramInfoLog(program) ?? ""}`);
-      }
-      return program;
-    };
-    return compile(gl.VERTEX_SHADER, LINE_VERTEX_SHADER);
+    return this.buildProgram(LINE_VERTEX_SHADER, LINE_FRAGMENT_SHADER);
   }
 
   /** 上传渲染网格：扁平顶点 + 三角形索引（可选每面单元索引用于云图）。 */
@@ -368,6 +353,7 @@ export class ViewportRenderer {
       this.normalBuffer,
       this.valueBuffer,
       this.indexBuffer,
+      this.edgeBuffer,
     ]) {
       if (buffer !== null) {
         gl.deleteBuffer(buffer);
@@ -377,6 +363,7 @@ export class ViewportRenderer {
     this.normalBuffer = null;
     this.valueBuffer = null;
     this.indexBuffer = null;
+    this.edgeBuffer = null;
   }
 
   /** 重建全部 GL 资源（首次上传与上下文恢复共用路径）。 */
@@ -415,6 +402,12 @@ export class ViewportRenderer {
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.indexBuffer);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, mesh.indices, gl.STATIC_DRAW);
 
+    const edges = meshEdgeIndices(mesh.indices);
+    this.edgeBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.edgeBuffer);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, edges, gl.STATIC_DRAW);
+    this.edgeCount = edges.length;
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.indexBuffer);
     this.indexCount = mesh.indices.length;
     this.indexType =
       mesh.indices instanceof Uint32Array ? this.gl.UNSIGNED_INT : this.gl.UNSIGNED_SHORT;
@@ -596,6 +589,7 @@ export class ViewportRenderer {
     }
     this.syncCanvasSize();
     const gl = this.gl;
+    gl.viewport(0, 0, this.canvas.width, this.canvas.height);
     gl.enable(gl.DEPTH_TEST);
     const [clearR, clearG, clearB] = this.clearColor;
     gl.clearColor(clearR, clearG, clearB, 1);
@@ -650,7 +644,20 @@ export class ViewportRenderer {
     gl.uniform1f(this.locOf(this.meshUniforms, this.program, "u_clipOffset"), this.clipOffset);
 
     gl.bindVertexArray(this.vao);
+    gl.uniform1i(this.locOf(this.meshUniforms, this.program, "u_edges"), 0);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.indexBuffer);
+    gl.enable(gl.POLYGON_OFFSET_FILL);
+    gl.polygonOffset(1, 1);
     gl.drawElements(gl.TRIANGLES, this.indexCount, this.indexType, 0);
+    gl.disable(gl.POLYGON_OFFSET_FILL);
+    gl.uniform1i(this.locOf(this.meshUniforms, this.program, "u_edges"), 1);
+    gl.depthMask(false);
+    gl.depthFunc(gl.LEQUAL);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.edgeBuffer);
+    gl.drawElements(gl.LINES, this.edgeCount, gl.UNSIGNED_INT, 0);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.indexBuffer);
+    gl.depthFunc(gl.LESS);
+    gl.depthMask(true);
     gl.bindVertexArray(null);
   }
 

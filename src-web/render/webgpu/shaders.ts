@@ -68,6 +68,14 @@ fn fs(in: VSOut) -> @location(0) vec4<f32> {
   let base = select(vec3<f32>(0.55, 0.58, 0.62), field, u.use_field > 0.5);
   return vec4<f32>(base * (0.35 + 0.65 * diff), 1.0);
 }
+
+@fragment
+fn fs_edges(in: VSOut) -> @location(0) vec4<f32> {
+  if (u.clip_enabled > 0.5 && dot(in.world, u.clip_normal) > u.clip_offset) {
+    discard;
+  }
+  return vec4<f32>(0.07, 0.09, 0.12, 1.0);
+}
 `;
 
 export const LINE_VERTEX_SHADER = /* wgsl */ `
