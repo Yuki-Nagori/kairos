@@ -9,17 +9,12 @@ use std::process::Command;
 
 use kairos_core::error::{KairosError, Result};
 use kairos_core::services::digest;
+use kairos_core::services::downloads::{derive_file_name, ensure_allowed_source};
 use kairos_core::utils::fs::{walk_dirs_bounded, write_atomic};
 use kairos_core::utils::time::now_ms;
 use serde::Serialize;
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager};
-
-/// 允许下载的官方源前缀白名单（防任意 URL 下载）。
-const ALLOWED_PREFIXES: &[&str] = &[
-    "https://gmsh.info/",
-    "https://github.com/Yuki-Nagori/moldingFoam/releases/",
-];
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -39,55 +34,6 @@ pub fn downloads_dir(app: &AppHandle) -> Result<PathBuf> {
         .app_data_dir()
         .map_err(|e| KairosError::io(format!("无法定位应用数据目录：{e}")))?;
     Ok(dir.join("downloads"))
-}
-
-/// 白名单校验：只允许目录里登记过的官方源。
-fn ensure_allowed(url: &str) -> Result<()> {
-    if ALLOWED_PREFIXES
-        .iter()
-        .any(|prefix| url.starts_with(prefix))
-    {
-        Ok(())
-    } else {
-        Err(KairosError::validation(format!(
-            "下载源不在白名单内：{url}"
-        )))
-    }
-}
-
-/// 从 URL 推导落盘文件名。
-///
-/// 规则：URL 末段是分支名形态（`master.tar.gz` / `master` 等，codeload 直链
-/// 的典型样子，落盘完全没法用）时改用「组件 id + 扩展名」；其余保留官方
-/// 原始文件名。仍剥离 query/hash 并拒绝相对路径段。
-fn derive_file_name(component_id: &str, url: &str) -> String {
-    let last_segment = url.rsplit('/').next().unwrap_or_default();
-    let stem = last_segment.split(['?', '#']).next().unwrap_or_default();
-    let branch_like = stem.is_empty()
-        || stem == "."
-        || stem == ".."
-        || stem.starts_with("master")
-        || stem.starts_with("main")
-        || !stem.contains('.');
-    if !branch_like {
-        return stem.to_string();
-    }
-    // 扩展名判定顺序：.tar.gz / .tgz 双段扩展优先于最后一个点（否则
-    // master.tar.gz 会被截成 .gz）；相对路径段（. / ..）视为无扩展名。
-    let ext = if stem == "." || stem == ".." {
-        String::new()
-    } else if stem.ends_with(".tar.gz") || url.contains(".tar.gz") || url.contains("/tar.gz/") {
-        ".tar.gz".to_string()
-    } else if stem.ends_with(".tgz") || url.contains(".tgz") {
-        ".tgz".to_string()
-    } else if let Some(dot) = stem.rfind('.') {
-        stem[dot..].to_string()
-    } else if url.contains(".zip") || url.contains("/zip/") {
-        ".zip".to_string()
-    } else {
-        String::new()
-    };
-    format!("{component_id}{ext}")
 }
 
 /// moldingFoam 仓库：bundle 由其 CI 按 release 发布。
@@ -176,7 +122,7 @@ pub async fn download_file(
     url: String,
     progress: Channel<u64>,
 ) -> Result<SavedDownload> {
-    ensure_allowed(&url)?;
+    ensure_allowed_source(&url)?;
 
     tauri::async_runtime::spawn_blocking(move || {
         // /releases/latest 的资产解析要走 GitHub API（阻塞网络 IO），
@@ -524,42 +470,6 @@ mod tests {
         assert_eq!(read_manifest(&dir).len(), 2);
 
         fs::remove_dir_all(&dir).unwrap();
-    }
-
-    #[test]
-    fn derive_file_name_covers_branch_rules() {
-        let cases = [
-            // release 资产：官方原始文件名保留（.tar.xz 双段扩展不受最后一个点影响）
-            (
-                "moldingfoam",
-                "https://github.com/Yuki-Nagori/moldingFoam/releases/download/v0.1.1/moldingFoam-openfoam14-linuxArm64GccDPInt32Opt-20260909.tar.xz",
-                "moldingFoam-openfoam14-linuxArm64GccDPInt32Opt-20260909.tar.xz",
-            ),
-            // 分支归档形态 → 组件 id + 扩展名（.tar.gz 双段扩展优先于最后一个点）
-            (
-                "gmsh",
-                "https://github.com/example/example/archive/refs/heads/master.tar.gz",
-                "gmsh.tar.gz",
-            ),
-            // 官方原始文件名保留
-            (
-                "gmsh",
-                "https://gmsh.info/bin/macOS/gmsh-4.15.2-MacOSARM-sdk.tgz",
-                "gmsh-4.15.2-MacOSARM-sdk.tgz",
-            ),
-            // 剥离 query；拒绝空段与相对路径段
-            (
-                "gmsh",
-                "https://gmsh.info/bin/Linux/gmsh.zip?query=1#hash",
-                "gmsh.zip",
-            ),
-            ("solver", "https://openfoam.org/master", "solver"),
-            ("solver", "https://openfoam.org/..", "solver"),
-            ("solver", "https://openfoam.org/", "solver"),
-        ];
-        for (id, url, expected) in cases {
-            assert_eq!(derive_file_name(id, url), expected, "url: {url}");
-        }
     }
 
     #[test]
