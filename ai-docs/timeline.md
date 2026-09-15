@@ -539,3 +539,4 @@
 - 2026-09-15 19:45 | T101 CLI 材料选择 | `doe run` 增加 `--material <json|csv>`，单材料文件可直接进入 case 生成与求解，未指定时保持内置材料兼容路径。
 - 2026-09-15 19:55 | T101 Pipeline 材料选择 | `pipeline run` 增加 `--material <json|csv>`，单次 case 编排与 DOE 使用同一材料加载路径。
 - 2026-09-15 20:05 | T101 材料校验 CLI | 增加 `material validate --path <json|csv>`，输出材料数量、牌号、材料族和 ID，作为进入 case 前的显式校验步骤。
+- 2026-09-15 20:20 | T101 材料拟合 CLI | 增加 `material fit --template --viscosity --pvt --output`，执行 D1 与 Tait b1 的确定性尺度回填并输出残差；完整多参数优化和真实 Mug baseline 待完成。

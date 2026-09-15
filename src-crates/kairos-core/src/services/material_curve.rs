@@ -192,6 +192,73 @@ pub fn evaluate_cross_wlf(model: &CrossWlf, points: &[ViscosityPoint]) -> Result
     })
 }
 
+/// 第一阶段确定性拟合：以观测/预测黏度中位比缩放 D1，其余 Cross-WLF 参数保持模板值。
+pub fn fit_cross_wlf_d1(
+    model: &CrossWlf,
+    points: &[ViscosityPoint],
+) -> Result<(CrossWlf, ResidualSummary)> {
+    if points.is_empty() {
+        return Err(KairosError::validation(
+            "Cross-WLF 拟合至少需要一个数据点。",
+        ));
+    }
+    let mut ratios = Vec::with_capacity(points.len());
+    for point in points {
+        let predicted = cross_wlf_viscosity(model, point.temperature_k, point.shear_rate_per_s)?;
+        if point.viscosity_pa_s <= 0.0 || !point.viscosity_pa_s.is_finite() {
+            return Err(KairosError::validation(
+                "Cross-WLF 拟合观测黏度必须为正有限数值。",
+            ));
+        }
+        ratios.push(point.viscosity_pa_s / predicted);
+    }
+    ratios.sort_by(f64::total_cmp);
+    let scale = ratios[ratios.len() / 2];
+    let mut fitted = model.clone();
+    fitted.d1 *= scale;
+    let summary = evaluate_cross_wlf(&fitted, points)?;
+    Ok((fitted, summary))
+}
+
+/// 第一阶段确定性 PVT 拟合：按温度区间分别用观测/预测中位比缩放 b1m/b1s。
+pub fn fit_tait_b1(model: &Tait, points: &[PvtPoint]) -> Result<(Tait, PvtResidualSummary)> {
+    if points.is_empty() {
+        return Err(KairosError::validation("Tait 拟合至少需要一个数据点。"));
+    }
+    let mut solid = Vec::new();
+    let mut melt = Vec::new();
+    for point in points {
+        let predicted = tait_specific_volume(model, point.pressure_pa, point.temperature_k)?;
+        let ratio = point.specific_volume_m3_per_kg / predicted;
+        if !ratio.is_finite() || ratio <= 0.0 {
+            return Err(KairosError::validation(
+                "Tait 拟合比容比值必须为正有限数值。",
+            ));
+        }
+        if point.temperature_k < model.b5 {
+            solid.push(ratio);
+        } else {
+            melt.push(ratio);
+        }
+    }
+    let median = |values: &mut Vec<f64>| -> Option<f64> {
+        if values.is_empty() {
+            return None;
+        }
+        values.sort_by(f64::total_cmp);
+        Some(values[values.len() / 2])
+    };
+    let mut fitted = model.clone();
+    if let Some(scale) = median(&mut solid) {
+        fitted.b1s *= scale;
+    }
+    if let Some(scale) = median(&mut melt) {
+        fitted.b1m *= scale;
+    }
+    let summary = evaluate_tait(&fitted, points)?;
+    Ok((fitted, summary))
+}
+
 const PVT_HEADER: [&str; 6] = [
     "pressure",
     "pressureUnit",
@@ -655,5 +722,48 @@ mod tests {
         assert!(json.contains("maxAbsolutePaS"));
         assert!(viscosity_residual_summary_csv(&viscosity).starts_with("count,"));
         assert!(pvt_residual_summary_csv(&pvt).contains("maxAbsoluteM3PerKg"));
+    }
+
+    #[test]
+    fn deterministic_template_fits_scale_primary_parameters() {
+        let cross = CrossWlf {
+            n: 0.3,
+            tau_star: 10_000.0,
+            d1: 1_000.0,
+            d2: 263.15,
+            d3: 0.0,
+            a1: 30.0,
+            a2: 50.0,
+        };
+        let base = cross_wlf_viscosity(&cross, 493.15, 10.0).unwrap();
+        let points = [ViscosityPoint {
+            temperature_k: 493.15,
+            shear_rate_per_s: 10.0,
+            viscosity_pa_s: base * 2.0,
+        }];
+        let (fitted, _) = fit_cross_wlf_d1(&cross, &points).unwrap();
+        assert!(fitted.d1 > cross.d1);
+
+        let tait = Tait {
+            b1m: 1.0,
+            b1s: 0.9,
+            b2m: 0.0001,
+            b2s: 0.00005,
+            b3: 0.01,
+            b4m: 1.0e8,
+            b4s: 1.0e8,
+            b5: 400.0,
+        };
+        let pv = tait_specific_volume(&tait, 1.0e6, 450.0).unwrap();
+        let (fitted_tait, _) = fit_tait_b1(
+            &tait,
+            &[PvtPoint {
+                pressure_pa: 1.0e6,
+                temperature_k: 450.0,
+                specific_volume_m3_per_kg: pv * 1.5,
+            }],
+        )
+        .unwrap();
+        assert!(fitted_tait.b1m > tait.b1m);
     }
 }

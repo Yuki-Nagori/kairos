@@ -1,6 +1,7 @@
 //! Kairos 无头 CLI：复用 kairos-core 的纯函数服务，零 Tauri 依赖。
 //! 错误一律以 `{code, message}` 结构化输出（与 IPC 契约同形），--json 供脚本消费。
 
+use std::fs;
 use std::path::Path;
 use std::process::Command;
 
@@ -9,7 +10,8 @@ use kairos_core::error::KairosError;
 use kairos_core::models::process::ProcessSettings;
 use kairos_core::models::solver::AnalysisStage;
 use kairos_core::services::{
-    self, doe, geometry, meshing, moldingfoam, optimize, project, results, vm as vm_logic, vm_run,
+    self, doe, geometry, material_curve, meshing, moldingfoam, optimize, project, results,
+    vm as vm_logic, vm_run,
 };
 use kairos_core::utils::shell;
 use kairos_core::utils::time::now_ms;
@@ -80,6 +82,17 @@ enum MaterialAction {
     Validate {
         #[arg(long)]
         path: String,
+    },
+    /// 以模板材料和曲线执行第一阶段确定性参数回填
+    Fit {
+        #[arg(long)]
+        template: String,
+        #[arg(long)]
+        viscosity: String,
+        #[arg(long)]
+        pvt: String,
+        #[arg(long)]
+        output: String,
     },
 }
 
@@ -383,6 +396,47 @@ fn run_material(action: MaterialAction, json: bool) -> kairos_core::error::Resul
                 for material in materials {
                     println!("- {} [{}] {}", material.name, material.family, material.id);
                 }
+            }
+            Ok(())
+        }
+        MaterialAction::Fit {
+            template,
+            viscosity,
+            pvt,
+            output,
+        } => {
+            let materials = services::material::read_custom_material_file(Path::new(&template))?;
+            let material = match materials.as_slice() {
+                [material] => material.clone(),
+                [] => return Err(KairosError::validation("模板材料文件没有可用材料。")),
+                _ => return Err(KairosError::validation("模板材料文件必须只有一个材料。")),
+            };
+            let viscosity_points = material_curve::parse_viscosity_csv(
+                &fs::read_to_string(&viscosity)
+                    .map_err(|error| KairosError::io(format!("读取黏度曲线失败：{error}")))?,
+            )?;
+            let pvt_points = material_curve::parse_pvt_csv(
+                &fs::read_to_string(&pvt)
+                    .map_err(|error| KairosError::io(format!("读取 PVT 曲线失败：{error}")))?,
+            )?;
+            let (rheology, viscosity_residual) =
+                material_curve::fit_cross_wlf_d1(&material.rheology, &viscosity_points)?;
+            let (pvt, pvt_residual) = material_curve::fit_tait_b1(&material.pvt, &pvt_points)?;
+            let mut fitted = material;
+            fitted.rheology = rheology;
+            fitted.pvt = pvt;
+            services::material::write_custom_file(Path::new(&output), &[fitted.clone()])?;
+            if json {
+                emit_json(&serde_json::json!({
+                    "output": output,
+                    "material": fitted,
+                    "viscosityResidual": viscosity_residual,
+                    "pvtResidual": pvt_residual,
+                }));
+            } else {
+                println!("材料拟合完成：{}", output);
+                println!("Cross-WLF log10(η) RMSE：{}", viscosity_residual.rmse_log10);
+                println!("Tait 比容 RMSE：{}", pvt_residual.rmse_m3_per_kg);
             }
             Ok(())
         }
