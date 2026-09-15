@@ -7,6 +7,27 @@ interface ChartSeries {
   label: string;
 }
 
+interface ChartRange {
+  min: number;
+  max: number;
+}
+
+/** 计算曲线值域；无有效数据时返回 null，调用方可直接跳过绘制。 */
+export function chartRange(series: Array<Pick<ChartSeries, "values">>): ChartRange | null {
+  let min = Infinity;
+  let max = -Infinity;
+  for (const item of series) {
+    for (const value of item.values) {
+      min = Math.min(min, value);
+      max = Math.max(max, value);
+    }
+  }
+  if (!Number.isFinite(min) || !Number.isFinite(max)) {
+    return null;
+  }
+  return min === max ? { min: min - 1, max: max + 1 } : { min, max };
+}
+
 /** min-max 抽样：每桶保留最小/最大值，长度变为 2 × 桶数（保形降采样）。 */
 export function downsampleSeries(values: number[], targetBuckets: number): number[] {
   if (targetBuckets <= 0 || values.length <= targetBuckets * 2) {
@@ -56,28 +77,15 @@ export function drawLineChart(
   ctx.fillStyle = options.background ?? themeVar("--c-bg-input", "#09090b");
   ctx.fillRect(0, 0, width, height);
 
-  let minValue = Infinity;
-  let maxValue = -Infinity;
   let maxPoints = 0;
   for (const seriesItem of series) {
-    for (const value of seriesItem.values) {
-      minValue = Math.min(minValue, value);
-      maxValue = Math.max(maxValue, value);
-    }
     maxPoints = Math.max(maxPoints, seriesItem.values.length);
   }
-  if (
-    !series.length ||
-    maxPoints === 0 ||
-    !Number.isFinite(minValue) ||
-    !Number.isFinite(maxValue)
-  ) {
+  const range = chartRange(series);
+  if (!series.length || maxPoints === 0 || range === null) {
     return 0;
   }
-  if (minValue === maxValue) {
-    minValue -= 1;
-    maxValue += 1;
-  }
+  const { min: minValue, max: maxValue } = range;
   const valueSpan = maxValue - minValue;
 
   // 网格（4×4）

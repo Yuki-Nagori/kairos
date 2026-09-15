@@ -3,7 +3,7 @@ import { computed, onMounted, onUnmounted, ref, useTemplateRef, watch } from "vu
 import { useAppStore } from "../../stores/app";
 import { useResultsStore } from "../../stores/results";
 import type { ScalarField } from "../../types";
-import { drawLineChart } from "../../utils/chart";
+import { chartRange, drawLineChart } from "../../utils/chart";
 import { THEME_CHANGED_EVENT } from "../../utils/theme";
 import { registerSnapshot } from "../../render/snapshot";
 import { fixed } from "../../utils/format";
@@ -87,18 +87,15 @@ export function useXyChartPanel() {
     if (field !== null && field.values.length > 0) {
       const padding = { left: 56, top: 16 };
       const plotWidth = canvas.width - padding.left - 16;
-      let minValue = Infinity;
-      let maxValue = -Infinity;
-      for (const value of field.values) {
-        minValue = Math.min(minValue, value);
-        maxValue = Math.max(maxValue, value);
-      }
-      const span = Math.max(maxValue - minValue, 1e-9);
+      const range = chartRange([field]);
+      // loadedField 的 values 已由结果解析器过滤非有限值；此处与主图绘制共享同一值域。
+      const safeRange = range!;
+      const span = Math.max(safeRange.max - safeRange.min, 1e-9);
       const plotHeight = canvas.height - 16 - 36;
       for (const { probe, value } of probeDots.value) {
         const x =
           padding.left + (probe.nodeIndex / Math.max(field.values.length - 1, 1)) * plotWidth;
-        const y = 16 + plotHeight - ((value - minValue) / span) * plotHeight;
+        const y = 16 + plotHeight - ((value - safeRange.min) / span) * plotHeight;
         ctx.fillStyle = "#fbbf24";
         ctx.beginPath();
         ctx.arc(x, y, 4, 0, Math.PI * 2);

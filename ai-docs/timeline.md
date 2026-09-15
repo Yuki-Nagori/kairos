@@ -484,3 +484,5 @@
 - **13:22** fix(vm): 开始 T97：部署 moldingFoam bundle 前清理受管 `openfoam14` 环境树，避免新旧库叠加；保留解压后 bashrc 复核，core 用例锁定清理 → 建目录 → 解压 → 复核顺序。库布局守卫和真实 VM 坏状态验收列入下一批。
 - **13:26** fix(vm): 完成 T97 库布局守卫基础接入：core 生成 source bashrc 后的结构化检查命令，校验三个 OpenFOAM 库目录的重复名字与 solver 相对软链接；原生环境状态新增 `libraryReady` 与独立修复提示。真实 VM 坏状态 / 恢复验收、inode 去重与路径摘要列入下一批。
 - **13:31** fix(vm): 完成 T97 库守卫 inode 去重：按设备号 + inode 归并硬链接与同目标软链接，新增 bash 语法回归；本机 Multipass socket 权限不足，真实 VM 坏状态 / 恢复验收保留待可访问环境执行。
+- **13:34** docs(tasks): 校正 T95 实际进度：P2-a、P3-b（nalgebra/vec3）、P3-c（bytemuck）与 P3-d（解压库评估）均已有提交并完成，剩余 P3-a 图表仅待视觉对照；同步任务索引与执行清单，避免重复施工。
+- **13:36** perf(web): T95 P3-a 先优化现有 Canvas 图表：抽出共享 `chartRange`，绘制与探针标注复用同一值域，避免大场景重复扫描；补齐空值/平坦序列测试，uPlot 替换保留到可渲染桌面环境做视觉对照。

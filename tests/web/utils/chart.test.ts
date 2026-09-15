@@ -1,5 +1,16 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { drawLineChart, downsampleSeries, toCsv } from "../../../src-web/utils/chart";
+import { chartRange, drawLineChart, downsampleSeries, toCsv } from "../../../src-web/utils/chart";
+
+describe("chartRange", () => {
+  it("returns the shared range and expands flat data", () => {
+    expect(chartRange([{ values: [2, -1, 4] }])).toEqual({ min: -1, max: 4 });
+    expect(chartRange([{ values: [5, 5] }])).toEqual({ min: 4, max: 6 });
+  });
+
+  it("returns null when no finite values exist", () => {
+    expect(chartRange([{ values: [] }, { values: [Number.NaN] }])).toBeNull();
+  });
+});
 
 describe("downsampleSeries", () => {
   it("returns a copy when small enough", () => {
