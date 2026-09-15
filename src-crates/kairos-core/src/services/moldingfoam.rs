@@ -240,11 +240,7 @@ fn select_gate_inlet_faces(
             .iter()
             .map(|&index| (distance(centres[index], gate.center), index))
             .collect();
-        candidates.sort_by(|left, right| {
-            left.0
-                .partial_cmp(&right.0)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
+        candidates.sort_by(|left, right| left.0.total_cmp(&right.0));
         let mut area = 0.0;
         let mut face_count = 0usize;
         let mut min_face_area = f64::INFINITY;

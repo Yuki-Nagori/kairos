@@ -81,6 +81,16 @@ pub fn min_max(values: &[f64]) -> Option<(f64, f64)> {
     Some((min, max))
 }
 
+/// 点集包围盒；空集合返回 `None`。
+///
+/// 空集合返回 `None` 而不是某个哨兵值：调用方的空输入口径各不相同（有的要零点、
+/// 有的要自己的哨兵），由调用方 `unwrap_or` 决定比在工具里猜一个更明确。
+pub fn bounds_of_points(points: &[[f64; 3]]) -> Option<([f64; 3], [f64; 3])> {
+    let mut aabb = Aabb::empty();
+    aabb.extend_points(points);
+    aabb.bounds()
+}
+
 /// 安全比例：分母的绝对值不超过 `epsilon` 时返回 0，避免 inf / NaN 污染后续统计。
 pub fn safe_ratio(numerator: f64, denominator: f64, epsilon: f64) -> f64 {
     if denominator.abs() <= epsilon {
@@ -155,6 +165,20 @@ mod tests {
     #[test]
     fn min_max_is_none_for_empty_slice() {
         assert_eq!(min_max(&[]), None);
+    }
+
+    #[test]
+    fn bounds_of_points_covers_every_axis() {
+        let points = [[1.0, -2.0, 3.0], [-1.0, 5.0, 0.0]];
+        assert_eq!(
+            bounds_of_points(&points),
+            Some(([-1.0, -2.0, 0.0], [1.0, 5.0, 3.0]))
+        );
+    }
+
+    #[test]
+    fn bounds_of_points_is_none_for_empty_slice() {
+        assert_eq!(bounds_of_points(&[]), None);
     }
 
     #[test]

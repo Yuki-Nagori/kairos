@@ -58,11 +58,7 @@ pub fn time_dir_names(listing: &str) -> Vec<String> {
         .split_whitespace()
         .filter_map(|name| parse_time_dir_name(name).map(|time_s| (time_s, name.to_string())))
         .collect();
-    names.sort_by(|left, right| {
-        left.0
-            .partial_cmp(&right.0)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
+    names.sort_by(|left, right| left.0.total_cmp(&right.0));
     names.dedup_by(|left, right| left.1 == right.1);
     names.into_iter().map(|(_, name)| name).collect()
 }

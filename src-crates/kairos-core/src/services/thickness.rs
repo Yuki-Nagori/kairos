@@ -7,6 +7,7 @@
 use crate::models::geometry::TriangleMesh;
 use crate::services::dualdomain::{TriangleGrid, weld_surface};
 use crate::services::vec3;
+use crate::utils::float;
 
 /// 抽样上限：面数很大时按等距抽样，保证探测耗时可控（真实件 46.7 万面）。
 pub const MAX_THICKNESS_SAMPLES: usize = 4000;
@@ -106,7 +107,7 @@ pub fn probe_thickness(mesh: &TriangleMesh) -> ThicknessReport {
     if thicknesses.is_empty() {
         return ThicknessReport::empty();
     }
-    thicknesses.sort_by(|left, right| left.partial_cmp(right).unwrap_or(std::cmp::Ordering::Equal));
+    float::sort_asc(&mut thicknesses);
     ThicknessReport {
         samples: thicknesses,
     }
@@ -142,17 +143,9 @@ pub fn thin_feature_hints(target_size_mm: f64, report: &ThicknessReport) -> Vec<
     )]
 }
 
+/// 节点集包围盒；无节点（或坐标全为 NaN）时退化成哨兵值。
 fn bounds(nodes: &[[f64; 3]]) -> ([f64; 3], [f64; 3]) {
-    nodes.iter().fold(
-        ([f64::MAX; 3], [f64::MIN; 3]),
-        |(mut min, mut max), node| {
-            for axis in 0..3 {
-                min[axis] = min[axis].min(node[axis]);
-                max[axis] = max[axis].max(node[axis]);
-            }
-            (min, max)
-        },
-    )
+    float::bounds_of_points(nodes).unwrap_or(([f64::MAX; 3], [f64::MIN; 3]))
 }
 
 /// 三角形单位法向；退化（零面积）返回 `None`，由调用方按自己的口径兜底。

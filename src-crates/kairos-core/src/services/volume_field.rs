@@ -8,6 +8,7 @@
 
 use crate::error::{KairosError, Result};
 use crate::models::mesh::VolumeMesh;
+use crate::utils::float;
 
 /// 重采样参数：三轴统一的体素分辨率。
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -112,28 +113,16 @@ pub fn resample(
     })
 }
 
+/// 空输入的包围盒哨兵：与原逐轴 fold 的初值一致。
+const EMPTY_BOUNDS: ([f64; 3], [f64; 3]) = ([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]);
+
+/// 节点集包围盒；无节点（或坐标全为 NaN）时退化成哨兵值。
 fn mesh_bounds(volume: &VolumeMesh) -> ([f64; 3], [f64; 3]) {
-    let mut min = [f64::INFINITY; 3];
-    let mut max = [f64::NEG_INFINITY; 3];
-    for node in &volume.nodes {
-        for axis in 0..3 {
-            min[axis] = min[axis].min(node[axis]);
-            max[axis] = max[axis].max(node[axis]);
-        }
-    }
-    (min, max)
+    float::bounds_of_points(&volume.nodes).unwrap_or(EMPTY_BOUNDS)
 }
 
 fn tet_bounds(p: &[[f64; 3]; 4]) -> ([f64; 3], [f64; 3]) {
-    let mut lo = [f64::INFINITY; 3];
-    let mut hi = [f64::NEG_INFINITY; 3];
-    for vertex in p {
-        for axis in 0..3 {
-            lo[axis] = lo[axis].min(vertex[axis]);
-            hi[axis] = hi[axis].max(vertex[axis]);
-        }
-    }
-    (lo, hi)
+    float::bounds_of_points(p).unwrap_or(EMPTY_BOUNDS)
 }
 
 /// 世界坐标 → 体素索引（体素 [i] 覆盖 [origin + i·h, origin + (i+1)·h)，夹取到网格内）。

@@ -3,6 +3,8 @@
 
 use serde::Serialize;
 
+use crate::utils::float::Aabb;
+
 /// 单个三角形：三顶点 + 文件中声明的法向。
 #[derive(Debug, Clone, PartialEq)]
 pub struct Triangle {
@@ -59,21 +61,18 @@ impl TriangleMesh {
 
     /// 包围盒 (min, max)；空网格返回 (零点, 零点)。
     pub fn bounding_box(&self) -> ([f64; 3], [f64; 3]) {
-        let mut min = [f64::INFINITY; 3];
-        let mut max = [f64::NEG_INFINITY; 3];
-        for triangle in &self.triangles {
-            for vertex in [&triangle.a, &triangle.b, &triangle.c] {
-                for axis in 0..3 {
-                    min[axis] = min[axis].min(vertex[axis]);
-                    max[axis] = max[axis].max(vertex[axis]);
-                }
-            }
-        }
         if self.triangles.is_empty() {
-            ([0.0; 3], [0.0; 3])
-        } else {
-            (min, max)
+            return ([0.0; 3], [0.0; 3]);
         }
+        let mut aabb = Aabb::empty();
+        for triangle in &self.triangles {
+            aabb.extend_point(triangle.a);
+            aabb.extend_point(triangle.b);
+            aabb.extend_point(triangle.c);
+        }
+        // 坐标全为 NaN 时退化成原始哨兵值（与逐轴 fold 的初值一致）。
+        aabb.bounds()
+            .unwrap_or(([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]))
     }
 
     /// 包围盒对角线长度。

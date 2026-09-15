@@ -6,6 +6,7 @@
 //! 这是覆盖与先后顺序的估计，不含粘性/传热/冻层物理，不代表真实前沿。
 
 use crate::services::vec3;
+use crate::utils::float;
 use std::cmp::Reverse;
 use std::collections::{BinaryHeap, HashMap};
 
@@ -79,16 +80,7 @@ fn gate_cells(centroids: &[[f64; 3]], gates: &[[f64; 3]]) -> Vec<usize> {
 
 /// 平均单元边长（mm）：包围盒对角线 / 单元数的立方根，用作「件外」判据的尺度。
 fn cell_scale(mesh: &VolumeMesh) -> f64 {
-    let (min, max) =
-        mesh.nodes
-            .iter()
-            .fold(([f64::MAX; 3], [f64::MIN; 3]), |(mut lo, mut hi), point| {
-                for axis in 0..3 {
-                    lo[axis] = lo[axis].min(point[axis]);
-                    hi[axis] = hi[axis].max(point[axis]);
-                }
-                (lo, hi)
-            });
+    let (min, max) = float::bounds_of_points(&mesh.nodes).unwrap_or(([f64::MAX; 3], [f64::MIN; 3]));
     let diagonal = vec3::distance(min, max).max(1e-9);
     diagonal / (mesh.tets.len() as f64).cbrt().max(1.0)
 }
@@ -243,7 +235,7 @@ mod tests {
             .field
             .iter()
             .enumerate()
-            .max_by(|left, right| left.1.partial_cmp(right.1).unwrap())
+            .max_by(|left, right| left.1.total_cmp(right.1))
             .unwrap()
             .0;
         assert_ne!(gate_cell, far);

@@ -10,6 +10,7 @@ use crate::error::{KairosError, Result};
 use crate::models::analysis::{GateCandidate, GateLocationReport};
 use crate::models::mesh::VolumeMesh;
 use crate::services::vec3;
+use crate::utils::float;
 
 /// 候选上限：评分成本 ≈ 候选数 × 单元数，超出预算的网格按等距抽样取候选。
 const MAX_CANDIDATES: usize = 400;
@@ -84,7 +85,7 @@ fn cell_geometry(mesh: &VolumeMesh, tet: &[usize; 4]) -> CellGeometry {
         .min_by(|left, right| {
             let dl = vec3::distance_sq(mesh.nodes[*left], centre);
             let dr = vec3::distance_sq(mesh.nodes[*right], centre);
-            dl.partial_cmp(&dr).unwrap_or(std::cmp::Ordering::Equal)
+            dl.total_cmp(&dr)
         })
         .unwrap_or(tet[0]);
     CellGeometry {
@@ -104,7 +105,7 @@ fn thickness_factor(thickness: f64, median_thickness: f64) -> f64 {
 
 /// 中位数（就地排副本；偶数取中间两值均值）。调用方保证非空（单元表已校验）。
 fn median(values: &mut [f64]) -> f64 {
-    values.sort_by(|left, right| left.partial_cmp(right).unwrap_or(std::cmp::Ordering::Equal));
+    float::sort_asc(values);
     let mid = values.len() / 2;
     if values.len() % 2 == 1 {
         values[mid]
@@ -126,16 +127,7 @@ pub fn analyze(mesh: &VolumeMesh, params: &GateLocationParams) -> Result<GateLoc
         .iter()
         .map(|tet| cell_geometry(mesh, tet))
         .collect();
-    let (min, max) =
-        mesh.nodes
-            .iter()
-            .fold(([f64::MAX; 3], [f64::MIN; 3]), |(mut lo, mut hi), point| {
-                for axis in 0..3 {
-                    lo[axis] = lo[axis].min(point[axis]);
-                    hi[axis] = hi[axis].max(point[axis]);
-                }
-                (lo, hi)
-            });
+    let (min, max) = float::bounds_of_points(&mesh.nodes).unwrap_or(([f64::MAX; 3], [f64::MIN; 3]));
     let diagonal =
         ((max[0] - min[0]).powi(2) + (max[1] - min[1]).powi(2) + (max[2] - min[2]).powi(2))
             .sqrt()
@@ -196,11 +188,7 @@ pub fn analyze(mesh: &VolumeMesh, params: &GateLocationParams) -> Result<GateLoc
         .collect();
 
     let mut ranked: Vec<usize> = (0..candidates.len()).collect();
-    ranked.sort_by(|left, right| {
-        scores[*right]
-            .partial_cmp(&scores[*left])
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
+    ranked.sort_by(|left, right| scores[*right].total_cmp(&scores[*left]));
     let top: Vec<GateCandidate> = ranked
         .into_iter()
         .take(params.top_n)

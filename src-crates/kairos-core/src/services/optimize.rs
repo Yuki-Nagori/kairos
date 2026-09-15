@@ -8,6 +8,7 @@
 //! 失败处置（任务要求）：非物理 / 无指标的结果按**高惩罚**参与比较但不算可行；
 //! 同一候选重试一次；连续 3 次失败即中止并报出失败参数点。
 
+use std::cmp::Ordering;
 use std::collections::BTreeMap;
 
 use crate::error::{KairosError, Result};
@@ -57,6 +58,18 @@ impl Evaluation {
     /// 可行 = 有指标且无约束违反。
     pub fn feasible(&self) -> bool {
         self.score.is_some() && self.violations.is_empty()
+    }
+}
+
+/// 可选得分的全序：`None`（无可用指标）排在 `Some` 之前，与 `Option` 的
+/// `PartialOrd` 同序；两个 `Some` 之间用 `total_cmp`——`score_of` 已保证得分有限，
+/// 故排序结果与原来的 `partial_cmp` 完全一致，只不再依赖「NaN 当相等」的兜底。
+fn score_order(left: Option<f64>, right: Option<f64>) -> Ordering {
+    match (left, right) {
+        (None, None) => Ordering::Equal,
+        (None, Some(_)) => Ordering::Less,
+        (Some(_), None) => Ordering::Greater,
+        (Some(left), Some(right)) => left.total_cmp(&right),
     }
 }
 
@@ -200,11 +213,7 @@ impl Optimizer {
         self.history
             .iter()
             .filter(|item| item.feasible())
-            .min_by(|left, right| {
-                left.score
-                    .partial_cmp(&right.score)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            })
+            .min_by(|left, right| score_order(left.score, right.score))
     }
 
     /// 已完成的评估历史。
@@ -300,6 +309,17 @@ mod tests {
                 pressure,
             ),
         ])
+    }
+
+    #[test]
+    fn score_order_is_total_over_options() {
+        // None（无可用指标）排在 Some 之前，与 Option 的 PartialOrd 同序
+        assert_eq!(score_order(None, None), Ordering::Equal);
+        assert_eq!(score_order(None, Some(1.0)), Ordering::Less);
+        assert_eq!(score_order(Some(1.0), None), Ordering::Greater);
+        assert_eq!(score_order(Some(1.0), Some(2.0)), Ordering::Less);
+        assert_eq!(score_order(Some(2.0), Some(1.0)), Ordering::Greater);
+        assert_eq!(score_order(Some(2.0), Some(2.0)), Ordering::Equal);
     }
 
     #[test]
