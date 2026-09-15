@@ -55,6 +55,136 @@ pub trait HostRunner {
     fn capture(&self, command: &HostCommand, what: &str) -> Result<String>;
 }
 
+/// 生产用的 runner：起进程 → 并行抽干 stdout / stderr → 等退出码（带超时）→ [`judge`]。
+///
+/// 它住在 core 而不是适配层，是因为**这段是接缝上最容易被忽略的一处**：判定口径、
+/// 超时兜底、管道抽干各错一处都会表现为「命令明明成功了却被判失败」或「作业永远停在
+/// 运行中」，而它此前是 macOS 专属代码，CI 的 Linux / Windows 两个平台根本跑不到。
+/// 具体工具的定位（PATH 前缀等宿主差异）仍由调用方注入。
+pub struct ProcessRunner {
+    /// 补进 PATH 的前缀（GUI 进程只继承精简 PATH；终端里跑传 None）。
+    pub path_prefix: Option<String>,
+    /// 单条命令的等待上限：超时即杀进程并判失败，卡住的 CLI 不该拖住作业线程。
+    pub timeout: std::time::Duration,
+}
+
+impl ProcessRunner {
+    /// 默认超时（秒）：multipass 的 stdin 管道通道偶发不回退（远端命令早已结束、
+    /// CLI 进程仍在自旋），没有上限时作业会永远停在「运行中」。
+    pub const DEFAULT_TIMEOUT_S: u64 = 600;
+
+    /// 按前缀与超时构造（`path_prefix = None` 表示用当前进程的 PATH 原样）。
+    pub fn new(path_prefix: Option<&str>, timeout_s: u64) -> Self {
+        Self {
+            path_prefix: path_prefix.map(str::to_string),
+            timeout: std::time::Duration::from_secs(timeout_s),
+        }
+    }
+
+    fn execute(
+        &self,
+        command: &HostCommand,
+        what: &str,
+        capture_stdout: bool,
+    ) -> Result<(Vec<u8>, String)> {
+        let mut process = std::process::Command::new(&command.args[0]);
+        process.args(&command.args[1..]);
+        for (key, value) in &command.env {
+            process.env(key, value);
+        }
+        if let Some(prefix) = &self.path_prefix {
+            process.env("PATH", prefixed_path(&current_path(), prefix));
+        }
+        let mut child = process
+            .stdin(std::process::Stdio::null())
+            .stdout(if capture_stdout {
+                std::process::Stdio::piped()
+            } else {
+                std::process::Stdio::null()
+            })
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .map_err(|e| KairosError::io(format!("{what}启动失败：{e}")))?;
+        // stdout / stderr 都要并行抽干：管道写满会卡住子进程，而父进程正在等它退出。
+        let stderr_drain = child.stderr.take().map(drain_bytes);
+        let stdout_drain = child.stdout.take().map(drain_bytes);
+        let outcome = wait_for_exit(&mut child, self.timeout);
+        let stderr_text = stderr_drain
+            .map(|handle| handle.join().unwrap_or_default())
+            .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
+            .unwrap_or_default();
+        let stdout = stdout_drain
+            .map(|handle| handle.join().unwrap_or_default())
+            .unwrap_or_default();
+        match outcome {
+            Ok(()) => Ok((stdout, stderr_text)),
+            Err(fallback) => Err(failure(what, &stderr_text, &fallback)),
+        }
+    }
+}
+
+impl HostRunner for ProcessRunner {
+    fn run(&self, command: &HostCommand, what: &str) -> Result<()> {
+        self.execute(command, what, false).map(|_| ())
+    }
+
+    fn capture(&self, command: &HostCommand, what: &str) -> Result<String> {
+        self.execute(command, what, true)
+            .map(|(stdout, _)| String::from_utf8_lossy(&stdout).into_owned())
+    }
+}
+
+/// 当前进程的 PATH（缺失时按空串处理：前缀仍然会被补上）。
+fn current_path() -> String {
+    std::env::var("PATH").unwrap_or_default()
+}
+
+/// 补 PATH 前缀：已经以该前缀开头时原样返回（避免同一目录被反复叠加）。
+pub fn prefixed_path(path: &str, prefix: &str) -> String {
+    if path.starts_with(prefix) {
+        path.to_string()
+    } else {
+        format!("{prefix}:{path}")
+    }
+}
+
+/// 起一个把管道读空的线程（返回原始字节，解码交给调用方）。
+fn drain_bytes(mut pipe: impl std::io::Read + Send + 'static) -> std::thread::JoinHandle<Vec<u8>> {
+    std::thread::spawn(move || {
+        let mut buffer = Vec::new();
+        let _ = pipe.read_to_end(&mut buffer);
+        buffer
+    })
+}
+
+/// 轮询等待子进程结束（毫秒级间隔：命令本身是分钟级，轮询开销可忽略）。
+const WAIT_POLL_MS: u64 = 50;
+
+/// 等子进程结束：成功返回 Ok，失败给出兜底原因（stderr 为空时才用得上它）。
+/// 返回的是 `String` 而不是 `KairosError`：调用方要先看 stderr，再决定用哪个当原因。
+fn wait_for_exit(
+    child: &mut std::process::Child,
+    timeout: std::time::Duration,
+) -> std::result::Result<(), String> {
+    let deadline = std::time::Instant::now() + timeout;
+    loop {
+        // try_wait 报错（平台层罕见）等同「还不知道结果」：与「仍在跑」同处置，
+        // 由超时兜底——不让一条永远走不到的错误臂单独占一行。
+        let pending = match child.try_wait() {
+            Ok(Some(status)) if status.success() => return Ok(()),
+            Ok(Some(status)) => return Err(format!("退出状态 {status}")),
+            Ok(None) | Err(_) => true,
+        };
+        if pending && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(WAIT_POLL_MS));
+            continue;
+        }
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err(format!("超时（{} 秒无响应），已中止", timeout.as_secs()));
+    }
+}
+
 /// 退出码 → 结果：**只看退出码**。stderr 上的警告（tar 的 pax 扩展头关键字、
 /// multipass 的进度提示）不是失败信号——这条口径踩过坑，所以只在 core 写一处。
 pub fn judge(exit_ok: bool, what: &str, stderr: &str, fallback: &str) -> Result<()> {
@@ -227,6 +357,142 @@ mod tests {
     use super::*;
     use std::cell::RefCell;
     use std::path::PathBuf;
+
+    /// 跨平台的最小「shell 命令」构造：测试要让真进程按脚本说话（写 stderr、给退出码）。
+    #[cfg(unix)]
+    fn shell(script: &str) -> Vec<String> {
+        vec!["sh".into(), "-c".into(), script.into()]
+    }
+
+    #[cfg(windows)]
+    fn shell(script: &str) -> Vec<String> {
+        vec!["cmd".into(), "/C".into(), script.into()]
+    }
+
+    /// 退出码 0 但 stderr 有输出的命令——tar 打印警告就是这个形态，曾经被判成失败。
+    #[cfg(unix)]
+    const NOISY_OK: &str = "echo 'tar: Ignoring unknown extended header keyword' >&2; exit 0";
+    #[cfg(windows)]
+    const NOISY_OK: &str = "echo tar: Ignoring unknown extended header keyword 1>&2 & exit 0";
+
+    /// 跑得比超时久的命令：用来验证「超时杀掉并判失败」这条兜底。
+    #[cfg(unix)]
+    const SLOW: &str = "sleep 5";
+    #[cfg(windows)]
+    const SLOW: &str = "ping -n 6 127.0.0.1 > NUL";
+
+    /// 生产 runner 的判定：退出码 0 即成功（哪怕 stderr 有警告），非 0 报 stderr 首行，
+    /// 超时杀掉并给出超时原因，启动失败单独报——四种形态各一条，跨平台跑。
+    #[test]
+    fn process_runner_judges_by_exit_code_and_timeout() {
+        let runner = ProcessRunner::new(None, ProcessRunner::DEFAULT_TIMEOUT_S);
+        runner
+            .run(&HostCommand::new(shell(NOISY_OK)), "命令")
+            .expect("退出码 0 的命令即使 stderr 有输出也算成功");
+
+        let failed = runner
+            .run(
+                &HostCommand::new(shell(
+                    "echo 'transfer failed: instance is stopped' >&2; exit 3",
+                )),
+                "命令",
+            )
+            .expect_err("非零退出码必须判失败");
+        let message = failed.message().to_string();
+        assert!(
+            message.contains("transfer failed: instance is stopped"),
+            "失败原因取 stderr：{message}"
+        );
+
+        let silent = runner
+            .run(&HostCommand::new(shell("exit 7")), "命令")
+            .expect_err("无 stderr 的非零退出码也要报失败");
+        let message = silent.message().to_string();
+        assert!(
+            message.contains("退出状态"),
+            "无 stderr 时用退出状态兜底：{message}"
+        );
+
+        let missing = runner
+            .run(
+                &HostCommand::new(vec!["kairos-no-such-binary".into()]),
+                "命令",
+            )
+            .expect_err("不存在的可执行文件必须报启动失败");
+        let message = missing.message().to_string();
+        assert!(message.contains("启动失败"), "启动失败要单独报：{message}");
+
+        // 超时：0 秒的等待窗口对 SLOW 一定不够
+        let impatient = ProcessRunner::new(None, 0);
+        let timeout = impatient
+            .run(&HostCommand::new(shell(SLOW)), "命令")
+            .expect_err("跑不完的命令必须超时判失败");
+        let message = timeout.message().to_string();
+        assert!(message.contains("超时"), "超时原因必须可读：{message}");
+    }
+
+    /// 补 PATH 前缀：子进程拿到的 PATH 以注入的前缀开头（GUI 进程靠它找到
+    /// multipass / brew；终端里跑则传 None 走原样 PATH）。
+    #[test]
+    fn process_runner_prepends_path_prefix_for_the_child() {
+        let prefix = "/opt/kairos-prefix";
+        let runner = ProcessRunner::new(Some(prefix), ProcessRunner::DEFAULT_TIMEOUT_S);
+        #[cfg(unix)]
+        let script = "printf '%s' \"$PATH\"";
+        #[cfg(windows)]
+        let script = "echo %PATH%";
+        let path = runner
+            .capture(&HostCommand::new(shell(script)), "命令")
+            .expect("回读 PATH");
+        assert!(
+            path.trim().starts_with(prefix),
+            "子进程 PATH 应以注入前缀开头：{path}"
+        );
+        // 已经带前缀时不重复叠加（同一目录进两次会让 PATH 越来越长）
+        let path_again = runner
+            .capture(&HostCommand::new(shell(script)), "命令")
+            .expect("回读 PATH");
+        assert_eq!(path_again.matches(prefix).count(), 1, "{path_again}");
+    }
+
+    /// capture 取回 stdout 且不把 stderr 混进来；环境变量按 HostCommand 注入。
+    #[test]
+    fn process_runner_captures_stdout_and_injects_env() {
+        let runner = ProcessRunner::new(None, ProcessRunner::DEFAULT_TIMEOUT_S);
+        #[cfg(unix)]
+        let script = "echo 'KAIROS-TAG:v1.0.0'; echo 'noise' >&2";
+        #[cfg(windows)]
+        let script = "echo KAIROS-TAG:v1.0.0 & echo noise 1>&2";
+        let stdout = runner
+            .capture(&HostCommand::new(shell(script)), "命令")
+            .expect("回读 stdout");
+        assert_eq!(stdout.trim(), "KAIROS-TAG:v1.0.0");
+
+        #[cfg(unix)]
+        let env_script = "printf '%s' \"$COPYFILE_DISABLE\"";
+        #[cfg(windows)]
+        let env_script = "echo %COPYFILE_DISABLE%";
+        let value = runner
+            .capture(
+                &HostCommand::new(shell(env_script)).with_env("COPYFILE_DISABLE", "1"),
+                "命令",
+            )
+            .expect("环境变量应传给子进程");
+        assert_eq!(value.trim(), "1");
+    }
+
+    /// PATH 前缀：没带前缀时补在最前，已经带了就原样返回（不重复叠加）。
+    #[test]
+    fn prefixed_path_does_not_stack_the_same_prefix_twice() {
+        assert_eq!(
+            prefixed_path("/usr/bin:/bin", "/opt/homebrew/bin:/usr/local/bin"),
+            "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+        );
+        assert_eq!(
+            prefixed_path("/opt/homebrew/bin:/usr/bin", "/opt/homebrew/bin"),
+            "/opt/homebrew/bin:/usr/bin"
+        );
+    }
 
     /// 记账用假 runner：记下每条命令与 stdout 应答，不碰任何进程。
     #[derive(Default)]

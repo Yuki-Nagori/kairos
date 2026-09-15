@@ -2,7 +2,7 @@
 //! core（services::jobs）负责状态机与并发策略的纯逻辑；本模块负责进程副作用与进度回传。
 
 use std::collections::HashMap;
-use std::io::{BufRead, BufReader, Read};
+use std::io::{BufRead, BufReader};
 #[cfg(target_os = "macos")]
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
@@ -21,8 +21,9 @@ use kairos_core::services::project::new_id;
 // 因此导入**不带 cfg**——只在 cfg 块里引用会让 Linux 构建找不到符号。
 use kairos_core::services::vm as vm_logic;
 use kairos_core::services::vm_run;
-// 命令层与作业层共用的宿主命令构造（core 的参数表 + GUI 进程的 PATH 修补）。
-use super::vm::host_command;
+// 命令层与作业层共用：宿主命令构造与 VM 通道 runner（core 的参数表 + GUI 进程的 PATH 修补）。
+use super::vm::{host_command, host_runner};
+use kairos_core::services::vm_run::HostRunner;
 use tauri::State;
 use tauri::ipc::Channel;
 
@@ -267,6 +268,21 @@ fn stop_vm_when_idle(inner: &Arc<Mutex<Inner>>) {
     }
 }
 
+/// 宿主侧归档中转文件：`<临时目录>/kairos-<作业随机串>.tgz`。
+#[cfg(target_os = "macos")]
+fn host_transfer_path() -> std::path::PathBuf {
+    std::env::temp_dir().join(format!(
+        "kairos-{}.tgz",
+        kairos_core::services::project::new_id("transfer").replace(':', "-")
+    ))
+}
+
+/// 删宿主侧中转文件：失败不改变作业结果（临时目录由系统清理）。
+#[cfg(target_os = "macos")]
+fn remove_quietly(path: &Path) {
+    let _ = std::fs::remove_file(path);
+}
+
 /// 把 case 目录复制进 VM 原生文件系统（macOS multipass 通道专用；multipass mount
 /// 的 sshfs 权限映射不可用）。返回 VM 内路径：求解进程必须在虚拟机里 cd 到它，
 /// 宿主绝对路径在 VM 内并不存在。大 case 可能耗时数分钟，只允许在作业线程调用
@@ -283,133 +299,9 @@ fn copy_case_into_vm(case_dir: &str, vm_shell: Option<&str>) -> Result<Option<St
     let archive = host_transfer_path();
     // 步骤编排在 core（services::vm_run，与集成测试同一段代码）：打包 → transfer → 解压。
     // 本函数只负责「用哪个 runner」与中转文件的清理。
-    let staged = vm_run::stage_case(&HostRunnerImpl, &archive, case_dir);
+    let staged = vm_run::stage_case(&host_runner(), &archive, case_dir);
     remove_quietly(&archive);
     staged.map(Some)
-}
-
-/// 宿主命令执行者：补 GUI 进程缺失的 PATH，退出码判成败（口径在 core 的 `judge`）。
-#[cfg(target_os = "macos")]
-struct HostRunnerImpl;
-
-#[cfg(target_os = "macos")]
-impl vm_run::HostRunner for HostRunnerImpl {
-    fn run(&self, command: &vm_run::HostCommand, what: &str) -> Result<()> {
-        let mut process = host_command(&command.args);
-        process.envs(command.env.iter().cloned());
-        run_host(&mut process, what)
-    }
-
-    fn capture(&self, command: &vm_run::HostCommand, what: &str) -> Result<String> {
-        let mut process = host_command(&command.args);
-        process.envs(command.env.iter().cloned());
-        capture_host(&mut process, what)
-    }
-}
-
-/// 宿主侧归档中转文件：`<临时目录>/kairos-<作业随机串>.tgz`。
-#[cfg(target_os = "macos")]
-fn host_transfer_path() -> std::path::PathBuf {
-    std::env::temp_dir().join(format!(
-        "kairos-{}.tgz",
-        kairos_core::services::project::new_id("transfer").replace(':', "-")
-    ))
-}
-
-/// 跑一条宿主侧命令并等它结束（统一走超时保护）：stdout 丢弃，只关心成败。
-///
-/// 成败口径在 core（`vm_run::judge`）：**只看退出码**——stderr 是诊断通道而不是失败
-/// 信号（tar 会为 pax 扩展头关键字打警告而退出码仍为 0，把「stderr 非空」当失败会把
-/// 成功的解压报成失败）。stderr 与等待并行抽干：先等后读会在输出超过管道缓冲时互锁。
-#[cfg(target_os = "macos")]
-fn run_host(command: &mut Command, what: &str) -> Result<()> {
-    spawn_host(command, what, false).map(|_| ())
-}
-
-/// 跑一条宿主侧命令并取回 stdout（成败口径同上）：日志回读要用 stdout。
-#[cfg(target_os = "macos")]
-fn capture_host(command: &mut Command, what: &str) -> Result<String> {
-    let (stdout, _) = spawn_host(command, what, true)?;
-    Ok(String::from_utf8_lossy(&stdout).into_owned())
-}
-
-/// 宿主命令的统一执行：stdout 可选捕获、stderr 并行抽干、超时保护、
-/// 退出码交给 core 的判定（失败时 stderr 首行非空内容作原因，否则用超时措辞兜底）。
-#[cfg(target_os = "macos")]
-fn spawn_host(
-    command: &mut Command,
-    what: &str,
-    capture_stdout: bool,
-) -> Result<(Vec<u8>, String)> {
-    let mut child = command
-        .stdin(Stdio::null())
-        .stdout(if capture_stdout {
-            Stdio::piped()
-        } else {
-            Stdio::null()
-        })
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| KairosError::io(format!("{what}启动失败：{e}")))?;
-    let stderr = child.stderr.take();
-    let stderr_drain = thread::spawn(move || {
-        let mut text = String::new();
-        if let Some(pipe) = stderr {
-            let _ = BufReader::new(pipe).read_to_string(&mut text);
-        }
-        text
-    });
-    // stdout 也要并行抽干：管道写满会卡住子进程，而父进程正在等它退出。
-    let stdout_drain = child.stdout.take().map(|pipe| {
-        thread::spawn(move || {
-            let mut buffer = Vec::new();
-            let _ = BufReader::new(pipe).read_to_end(&mut buffer);
-            buffer
-        })
-    });
-    let outcome = wait_exec(&mut child, what);
-    let stderr_text = stderr_drain.join().unwrap_or_default();
-    let stdout = stdout_drain
-        .map(|handle| handle.join().unwrap_or_default())
-        .unwrap_or_default();
-    match outcome {
-        Ok(()) => Ok((stdout, stderr_text)),
-        Err(error) => Err(vm_run::failure(what, &stderr_text, error.message())),
-    }
-}
-
-/// 删宿主侧中转文件：失败不改变作业结果（临时目录由系统清理）。
-#[cfg(target_os = "macos")]
-fn remove_quietly(path: &Path) {
-    let _ = std::fs::remove_file(path);
-}
-
-/// VM 侧命令的等待上限（秒）：multipass 的 stdin 管道通道偶发不回退——远端命令
-/// 早已结束、CLI 进程仍在自旋，没有上限时作业会永远停在「运行中」。
-#[cfg(target_os = "macos")]
-const VM_EXEC_TIMEOUT_S: u64 = 600;
-
-/// 等子进程结束：超时杀掉并报错，避免作业线程被卡死的 CLI 拖着。
-#[cfg(target_os = "macos")]
-fn wait_exec(child: &mut Child, what: &str) -> Result<()> {
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(VM_EXEC_TIMEOUT_S);
-    loop {
-        match child.try_wait() {
-            Ok(Some(status)) if status.success() => return Ok(()),
-            Ok(Some(_)) => return Err(KairosError::io(format!("{what}失败。"))),
-            Ok(None) if std::time::Instant::now() < deadline => {
-                thread::sleep(std::time::Duration::from_millis(200));
-            }
-            Ok(None) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err(KairosError::io(format!(
-                    "{what}超时（{VM_EXEC_TIMEOUT_S} 秒无响应），已中止。"
-                )));
-            }
-            Err(e) => return Err(KairosError::io(format!("{what}等待失败：{e}"))),
-        }
-    }
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -426,7 +318,7 @@ fn copy_results_from_vm(case_dir: &str, vm_case: Option<&str>) -> Result<()> {
         return Ok(());
     };
     let archive = host_transfer_path();
-    let copied = vm_run::copy_results(&HostRunnerImpl, &archive, case_dir, vm_case);
+    let copied = vm_run::copy_results(&host_runner(), &archive, case_dir, vm_case);
     remove_quietly(&archive);
     copied.map(|_| ())
 }
@@ -707,16 +599,14 @@ fn run_job_detached(
 ) {
     let script = vm_logic::solve_script(vm_case, cores);
     let launch = vm_logic::detached_launch_command(vm_case, &script);
-    let launched = host_command(&vm_logic::bash_script_args(
-        VmProviderKind::Multipass,
-        &launch,
-    ))
-    .stdin(Stdio::null())
-    .stdout(Stdio::null())
-    .stderr(Stdio::null())
-    .spawn()
-    .map_err(|e| KairosError::io(format!("VM 求解启动失败：{e}")))
-    .and_then(|mut child| wait_exec(&mut child, "VM 求解启动"));
+    // 启动命令自身立即返回（求解在 setsid 会话里跑）：走 core 的 runner 拿统一判定与超时。
+    let launched = host_runner().run(
+        &vm_run::HostCommand::new(vm_logic::bash_script_args(
+            VmProviderKind::Multipass,
+            &launch,
+        )),
+        "VM 求解启动",
+    );
     if let Err(e) = launched {
         fail_and_promote(inner, job_id, e.message(), context);
         return;
@@ -771,7 +661,7 @@ fn stream_vm_log(
     vm_case: &str,
     offset: u64,
 ) -> Result<(bool, u64, Option<i32>)> {
-    let poll = vm_run::poll_log_once(&HostRunnerImpl, vm_case, offset)?;
+    let poll = vm_run::poll_log_once(&host_runner(), vm_case, offset)?;
     for line in &poll.lines {
         let forward = {
             let mut guard = inner
@@ -905,36 +795,6 @@ pub fn list_jobs(scheduler: State<'_, JobScheduler>) -> Result<Vec<Job>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// 宿主命令的成败只看退出码：tar 会为 pax 扩展头关键字打警告、multipass 也会在
-    /// 正常时输出进度提示，退出码都是 0——按「stderr 非空」判失败会把成功的解压
-    /// 报成「case 解压进虚拟机失败」，作业根本跑不起来。
-    #[test]
-    #[cfg(target_os = "macos")]
-    fn host_command_exit_code_decides_not_stderr() {
-        let warned_but_ok = run_host(
-            Command::new("sh").arg("-c").arg(
-                "echo \"tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr'\" >&2; exit 0",
-            ),
-            "case 解压进虚拟机",
-        );
-        assert!(
-            warned_but_ok.is_ok(),
-            "退出码 0 的命令不该因 stderr 有警告而判失败"
-        );
-
-        let failed = run_host(
-            Command::new("sh")
-                .arg("-c")
-                .arg("echo 'transfer failed: instance is stopped' >&2; exit 3"),
-            "case 传输进虚拟机",
-        );
-        assert_eq!(
-            failed.expect_err("非零退出码必须判失败").message(),
-            "case 传输进虚拟机失败：transfer failed: instance is stopped",
-            "失败原因取 stderr 首行非空内容"
-        );
-    }
 
     /// 原生求解脚本：环境 source 在最前，随后 PATH 导出、cd、求解命令。
     #[test]

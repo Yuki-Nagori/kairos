@@ -11,6 +11,7 @@ use std::time::{Duration, Instant};
 use kairos_core::error::{KairosError, Result};
 use kairos_core::models::vm::{VmProviderKind, VmState, VmStatus};
 use kairos_core::services::vm as vm_logic;
+use kairos_core::services::vm_run;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 use tauri::ipc::Channel;
@@ -39,22 +40,34 @@ fn provider() -> Result<VmProviderKind> {
         .ok_or_else(|| KairosError::validation("不支持的平台。"))
 }
 
-/// 构造受管命令（macOS）：GUI 进程只继承精简 PATH，必须补上
-/// Homebrew（/opt/homebrew/bin）与官方 pkg（/usr/local/bin）的常见安装位置。
+/// GUI 进程缺失的 PATH 前缀：应用从 Finder 启动时只继承精简 PATH，
+/// multipass / brew 这类工具都在 Homebrew（`/opt/homebrew/bin`）或官方 pkg
+/// （`/usr/local/bin`）的目录里。非 macOS 无此问题。
 #[cfg(target_os = "macos")]
+fn mac_path_prefix() -> Option<&'static str> {
+    Some("/opt/homebrew/bin:/usr/local/bin")
+}
+
+#[cfg(not(target_os = "macos"))]
+fn mac_path_prefix() -> Option<&'static str> {
+    None
+}
+
+/// 构造受管命令：补上 GUI 进程缺失的 PATH（`prefixed_path` 不重复叠加已有前缀）。
 pub(crate) fn platform_command(bin: &str) -> Command {
     let mut command = Command::new(bin);
-    let path = std::env::var("PATH").unwrap_or_default();
-    if !path.starts_with("/opt/homebrew/bin:") {
-        command.env("PATH", format!("/opt/homebrew/bin:/usr/local/bin:{path}"));
+    if let Some(prefix) = mac_path_prefix() {
+        let path = std::env::var("PATH").unwrap_or_default();
+        command.env("PATH", vm_run::prefixed_path(&path, prefix));
     }
     command
 }
 
-/// 构造受管命令（Windows / Linux）：无需 PATH 修补。
-#[cfg(not(target_os = "macos"))]
-pub(crate) fn platform_command(bin: &str) -> Command {
-    Command::new(bin)
+/// VM 通道的宿主命令 runner：宿主差异（PATH 前缀）在这里注入，
+/// 起进程 / 抽干管道 / 超时 / 成败判定全部复用 core（services::vm_run）。
+#[cfg(target_os = "macos")]
+pub(crate) fn host_runner() -> vm_run::ProcessRunner {
+    vm_run::ProcessRunner::new(mac_path_prefix(), vm_run::ProcessRunner::DEFAULT_TIMEOUT_S)
 }
 
 /// 带超时的一次性探测：multipass / wsl 首次调用可能要按需拉起守护进程，
@@ -902,6 +915,7 @@ mod tests {
     use super::{read_deployed_record, write_deployed_record};
     use std::path::PathBuf;
 
+    /// 用例的临时目录根：进程号隔离不同 `cargo test` 运行，各用例只用它自己的子目录。
     fn scratch_dir() -> PathBuf {
         std::env::temp_dir().join(format!("kairos-deployed-tag-{}", std::process::id()))
     }
@@ -909,7 +923,8 @@ mod tests {
     /// 本机部署记录：未写 → 未部署；写入后读回同一标签；清空（None）后回到未部署。
     #[test]
     fn deployed_record_round_trips_and_clears() {
-        let dir = scratch_dir();
+        // 每个用例独占一个子目录：并行跑时清理父目录会把别的用例的现场删掉
+        let dir = scratch_dir().join("round-trip");
         let _ = std::fs::remove_dir_all(&dir);
         assert_eq!(read_deployed_record(&dir), None, "没有记录 = 未部署");
         write_deployed_record(&dir, Some("v1.0.0")).expect("写记录");

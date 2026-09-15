@@ -17,11 +17,9 @@
 //! 本测试只提供「怎么跑宿主命令」的 runner 与断言。
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use kairos_core::error::{KairosError, Result};
 use kairos_core::models::geometry::TriangleMesh;
 use kairos_core::models::process::ProcessSettings;
 use kairos_core::models::solver::AnalysisStage;
@@ -38,50 +36,10 @@ const SOLVE_BUDGET_S: u64 = 600;
 /// 失败时打印的日志尾部行数：够定位，不刷屏。
 const LOG_TAIL_LINES: usize = 40;
 
-/// 宿主命令执行者：直接按参数表起进程，成败口径复用 core 的 `judge`。
-///
-/// 与桌面端 runner 的差别只有两点：不补 GUI 进程的 PATH（测试从终端跑，PATH 是全的）、
-/// 不做超时保护（L2 用整体预算兜底）。
-struct ShellRunner;
-
-impl ShellRunner {
-    fn command(&self, command: &HostCommand) -> Command {
-        let mut process = Command::new(&command.args[0]);
-        process.args(&command.args[1..]);
-        for (key, value) in &command.env {
-            process.env(key, value);
-        }
-        process
-    }
-}
-
-impl HostRunner for ShellRunner {
-    fn run(&self, command: &HostCommand, what: &str) -> Result<()> {
-        let output = self
-            .command(command)
-            .output()
-            .map_err(|e| KairosError::io(format!("{what}启动失败：{e}")))?;
-        vm_run::judge(
-            output.status.success(),
-            what,
-            &String::from_utf8_lossy(&output.stderr),
-            &format!("退出码 {:?}", output.status.code()),
-        )
-    }
-
-    fn capture(&self, command: &HostCommand, what: &str) -> Result<String> {
-        let output = self
-            .command(command)
-            .output()
-            .map_err(|e| KairosError::io(format!("{what}启动失败：{e}")))?;
-        vm_run::judge(
-            output.status.success(),
-            what,
-            &String::from_utf8_lossy(&output.stderr),
-            &format!("退出码 {:?}", output.status.code()),
-        )?;
-        Ok(String::from_utf8_lossy(&output.stdout).into_owned())
-    }
+/// 宿主命令执行者：core 的生产实现（补 PATH 前缀 / 抽干管道 / 超时 / 成败判定同一份代码）。
+/// 测试从终端跑，PATH 是全的，因此不补前缀。
+fn runner() -> vm_run::ProcessRunner {
+    vm_run::ProcessRunner::new(None, vm_run::ProcessRunner::DEFAULT_TIMEOUT_S)
 }
 
 /// 默认工艺（与 CLI / 面板同一口径的量级：注射时间取小值让端到端跑得快）。
@@ -198,7 +156,7 @@ fn l1_scan_initial_time(case_dir: &Path) {
 }
 
 /// L2 前置：multipass 可用、实例在、求解环境已部署。开关显式打开时缺前置即失败。
-fn require_vm_ready(runner: &ShellRunner) {
+fn require_vm_ready(runner: &vm_run::ProcessRunner) {
     runner
         .run(
             &HostCommand::new(vec![
@@ -220,9 +178,38 @@ fn require_vm_ready(runner: &ShellRunner) {
         .expect("虚拟机内没有求解环境：先在依赖面板下载并部署 moldingFoam bundle");
 }
 
+/// 轮询到求解结束：返回（退出码, 末尾日志）。预算内没等到退出码时退出码为 None，
+/// 由调用方判定（成功路径要 Some(0)，失败路径要非 0）。预算用尽即返回，不无限等。
+fn poll_until_exit(
+    runner: &vm_run::ProcessRunner,
+    vm_case: &str,
+    budget_s: u64,
+) -> (Option<i32>, Vec<String>) {
+    let deadline = Instant::now() + Duration::from_secs(budget_s);
+    let mut offset = 0u64;
+    let mut exit_code: Option<i32> = None;
+    let mut log_tail: Vec<String> = Vec::new();
+    while exit_code.is_none() && Instant::now() < deadline {
+        thread::sleep(Duration::from_secs(1));
+        match vm_run::poll_log_once(runner, vm_case, offset) {
+            Ok(poll) => {
+                offset = poll.offset;
+                exit_code = poll.exit_code;
+                log_tail.extend(poll.lines);
+                if log_tail.len() > LOG_TAIL_LINES {
+                    log_tail.drain(0..log_tail.len() - LOG_TAIL_LINES);
+                }
+            }
+            // 回读失败多为通道抖动（与桌面端同一处置）：重试，等下一轮。
+            Err(error) => eprintln!("日志回读失败（重试中）：{}", error.message()),
+        }
+    }
+    (exit_code, log_tail)
+}
+
 /// L2 主体：case 进 VM → 脱离会话求解 → 等退出码 → 结果回传 → 宿主侧扫描与读场。
 fn l2_solve_and_collect(case_dir: &Path, workspace: &Path) {
-    let runner = ShellRunner;
+    let runner = runner();
     require_vm_ready(&runner);
     let case_dir_text = case_dir.to_string_lossy().to_string();
     let archive = workspace.join("transfer.tgz");
@@ -245,31 +232,7 @@ fn l2_solve_and_collect(case_dir: &Path, workspace: &Path) {
         .expect("求解启动失败（staging 或环境有问题）");
 
     // 3. 轮询日志与退出码：预算内必须读到退出码，否则判失败并打印日志尾部
-    let deadline = Instant::now() + Duration::from_secs(SOLVE_BUDGET_S);
-    let mut offset = 0u64;
-    let mut exit_code: Option<i32> = None;
-    let mut log_tail: Vec<String> = Vec::new();
-    let mut fatal_line: Option<String> = None;
-    while exit_code.is_none() && Instant::now() < deadline {
-        thread::sleep(Duration::from_secs(1));
-        match vm_run::poll_log_once(&runner, &vm_case, offset) {
-            Ok(poll) => {
-                offset = poll.offset;
-                exit_code = poll.exit_code;
-                for line in poll.lines {
-                    if line.contains("FOAM FATAL") && fatal_line.is_none() {
-                        fatal_line = Some(line.clone());
-                    }
-                    log_tail.push(line);
-                }
-                if log_tail.len() > LOG_TAIL_LINES {
-                    log_tail.drain(0..log_tail.len() - LOG_TAIL_LINES);
-                }
-            }
-            // 回读失败多为通道抖动（与桌面端同一处置）：重试，等下一轮。
-            Err(error) => eprintln!("日志回读失败（重试中）：{}", error.message()),
-        }
-    }
+    let (exit_code, log_tail) = poll_until_exit(&runner, &vm_case, SOLVE_BUDGET_S);
     assert_eq!(
         exit_code,
         Some(0),
@@ -277,14 +240,8 @@ fn l2_solve_and_collect(case_dir: &Path, workspace: &Path) {
         log_tail.join("\n")
     );
     assert!(
-        fatal_line.is_none(),
-        "日志出现求解器致命错误：{}",
-        fatal_line.unwrap_or_default()
-    );
-    assert!(
         log_tail.iter().any(|line| line.starts_with("Time = ")),
-        "日志里没有时间步推进：{:?}",
-        log_tail
+        "日志里没有时间步推进：{log_tail:?}"
     );
 
     // 4. 结果回传：VM 内列出时间目录 → 打包 → 传输回宿主 → 解压到 case 目录
@@ -315,7 +272,48 @@ fn l2_solve_and_collect(case_dir: &Path, workspace: &Path) {
     assert!(!field.components.is_empty(), "速度场没有分量");
     assert!(field.complete, "速度场分量数与网格不一致（不完整结果）");
 
-    // 6. 清理 VM 内的 case 暂存（宿主 case 目录保留，便于人工查看）
+    // 6. 失败可见性：把 case 改坏（删掉网格边界文件，等价于用户手改坏 case）→ 必须失败且可归因。
+    //    判据用**求解器错误标记**而不是退出码：求解脚本尾部的 `; reconstructPar` 会掩盖
+    //    decomposePar / foamRun 的退出码，产品侧同样以日志标记为准（moldingfoam::failure_reason）。
+    let break_case = format!(
+        "rm -f '{}/constant/polyMesh/boundary'",
+        vm_logic::bash_single_quote(&vm_case)
+    );
+    runner
+        .run(
+            &HostCommand::new(vm_logic::bash_script_args(
+                VmProviderKind::Multipass,
+                &break_case,
+            )),
+            "改坏 case（失败用例）",
+        )
+        .expect("改坏 case 的命令本身应当成功");
+    let broken_launch =
+        vm_logic::detached_launch_command(&vm_case, &vm_logic::solve_script(&vm_case, SOLVE_CORES));
+    runner
+        .run(
+            &HostCommand::new(vm_logic::bash_script_args(
+                VmProviderKind::Multipass,
+                &broken_launch,
+            )),
+            "VM 求解启动（失败用例）",
+        )
+        .expect("失败用例的启动命令本身应能跑起来（失败要发生在求解里）");
+    let (_broken_code, broken_log) = poll_until_exit(&runner, &vm_case, SOLVE_BUDGET_S);
+    let broken_text = broken_log.join("\n");
+    assert!(
+        broken_log
+            .iter()
+            .any(|line| moldingfoam::is_abort_line(line)),
+        "改坏的 case 必须报出求解器错误标记（作业据此判失败）\n{broken_text}"
+    );
+    let reason = moldingfoam::failure_reason(&broken_text);
+    assert!(
+        reason.contains("FOAM FATAL"),
+        "失败原因必须可归因（强特征优先），实际：{reason}\n{broken_text}"
+    );
+
+    // 7. 清理 VM 内的 case 暂存（宿主 case 目录保留，便于人工查看）
     let cleanup = format!("rm -rf '{}'", vm_logic::bash_single_quote(&vm_case));
     runner
         .run(
