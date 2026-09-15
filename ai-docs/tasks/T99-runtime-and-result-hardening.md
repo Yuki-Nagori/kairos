@@ -14,6 +14,6 @@
 - [x] 将 EnvironmentCheck / CaseOutcome DTO 收口至 core models；TS 镜像保持同步，并新增 camelCase 契约测试。
 - [ ] 逐条核对 T92/T93 的纯算法、编排、产品入口及验收状态，避免用已实现算法代替端到端完成。
 - [x] 增加可复现大结果基准入口：`cargo test -p kairos-core --test large_result_benchmark -- --ignored --nocapture`。本机 arm64 / rustc 1.98.1，1,000,000 个 f64 的 core min/max/count 约 5.8 ms，CSV 编码约 211 ms、载荷约 27.5 MB；该数字用于同机回归，不作为跨硬件承诺。
-- [ ] 对跨 store/IPC/进程链继续做故障注入；不以行覆盖率替代进程存活、槽位身份和输出归属断言。
+- [ ] 对跨 store/IPC/进程链继续做故障注入；本批已补结果修订缺失的 `io` 错误码契约，进程存活与输出归属注入仍待补；不以行覆盖率替代这些断言。
 
 每批遵循许可/性能/包体依赖准入规则；无新增依赖时不虚构对比。未知远端状态的恢复与调度策略必须明确且可测，不能只改提示文案。

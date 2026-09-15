@@ -595,4 +595,11 @@ mod tests {
         assert_eq!(slots.cache.stats(), (0, 2));
         std::fs::remove_dir_all(root).unwrap();
     }
+
+    #[test]
+    fn missing_result_revision_uses_io_error_contract() {
+        let error = cache_key("/definitely-missing-case", "1", "p").unwrap_err();
+        assert_eq!(error.kind(), kairos_core::error::ErrorKind::Io);
+        assert_eq!(error.kind().as_code(), "io");
+    }
 }
