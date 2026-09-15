@@ -12,22 +12,22 @@
 3. 参考工况与结果：`report/mug-moldflow/setting.txt`、`result.txt`、`log.txt`。原始材料资产只在本地或受控存储留档，不进入代码仓库。
 4. 任何受控留档记录 SHA-256、来源、单位确认和授权状态；报告只提交脱敏后的参数、残差和生成时间。
 
-## Kairos 当前缺口（实现清单）
+## 实现状态与后续边界
 
-当前材料服务仍未形成从曲线到可运行材料的闭环。曲线 CSV 的单位归一和基础质量校验已落到 `kairos-core`；T101 还需要补齐：
+T101 的材料闭环已经落地。以下清单保留实现边界和后续产品化工作，避免把已完成内容误写成待开发：
 
 1. **曲线解析与单位归一**：已增加 `material_curve` 输入模型与 CSV/分段 TXT 解析，支持压力/温度/比容/剪切速率/黏度的单位归一、排序和重复点拒绝；后续补充更丰富的元数据格式。
-2. **拟合核心**：提供确定性的 Tait 与 Cross-WLF 拟合服务，输出参数、权重、拟合区间、收敛状态和版本化算法标识；数值计算留在 Rust core。
+2. **拟合核心**：提供确定性的 Tait 与 Cross-WLF 拟合服务，输出参数、残差摘要和版本化算法标识；数值计算留在 Rust core。权重、拟合区间和更完整的收敛元数据仍是后续增强项。
 3. **残差报告**：已在 `kairos-core` 增加 Cross-WLF 与 Tait 预测、摘要计算及 JSON/CSV 摘要与逐点明细导出（绝对误差、相对误差、RMSE、`log10(η)` 最大误差与 RMSE）。
-4. **材料资产元数据**：扩展材料 DTO，记录来源类型、单位、拟合算法版本、参数修订号、数据摘要哈希和创建时间，支持版本化而不覆盖内置材料。
-5. **CLI 闭环**：增加 `material fit` / `material validate`，并让 Mug/DOE case 按材料 ID 或路径选择自定义材料；core 已提供按 `.json`/`.csv` 扩展名分派的受控材料文件读取，`material fit`、`material validate`、`doe run --material <path>` 与 `pipeline run --material <path>` 已接线，fit 还会输出 moldingFoam 材料字典和逐点残差；真实 baseline 已完成 CLI/VM 闭环；完整多参数优化与 GUI 材料面板另列后续任务。
+4. **材料资产元数据**：当前通过 `dataNote` 和外部报告记录来源与免责声明；来源类型、单位、拟合算法版本、参数修订号和数据摘要哈希的专用字段仍待后续 DTO 版本化。
+5. **CLI 闭环**：`material fit` / `material validate`、`doe run --material <path>` 与 `pipeline run --material <path>` 已接线；fit 输出 moldingFoam 材料字典和逐点残差，Mug/DOE baseline 已完成 CLI/VM 闭环。完整多参数优化与 GUI 材料面板另列后续任务。
 6. **IPC 与界面入口**：补齐 Tauri 命令、前端材料面板的曲线预览/拟合结果/残差下载，以及错误码到 UI 的映射。
 7. **测试与契约**：覆盖单位换算、乱序和重复点、缺失/非法数据、拟合失败、JSON/CSV round-trip、DTO 契约和 case 生成回归；使用合成夹具，不提交受限原始曲线。
 
 ## 当前已具备
 
 - `kairos-core` 已支持内置材料读取、已拟合自定义材料 JSON/CSV 导入导出和基础字段校验。
-- T100 已冻结 Mug 参考工况与对比口径，但 CLI 仍未把自定义材料选择接入真实求解。
+- T100 已冻结 Mug 参考工况与对比口径，自定义材料选择已接入 CLI 真实求解；完整 Mug 数值对照仍受体网格规模和运行时间限制。
 
 ## 运行时边界
 
