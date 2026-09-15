@@ -114,31 +114,9 @@ assessment:
   conclusion:
 ```
 
-## 6. 当前结论
+## 6. 最终复现实验命令
 
-- Moldflow 参考工况已冻结，Kairos 的第一次 Mug 试跑尚未形成有效逐点对照。
-- T101 正在补齐通用曲线输入、拟合、材料版本和自定义材料选择入口。
-- 在真实实验数据进入前，只能报告可复现性和与参考报告的量级差异，不能写成“准确”或“验证通过”。
-
-## 7. 更新记录
-
-| 时间 | 变更 | 结论 |
-| --- | --- | --- |
-| 2026-09-15 | 建立报告骨架，冻结 Mug 参考工况与实验对照矩阵 | 等待 T101 材料闭环和 T100 有效 baseline |
-| 2026-09-15 | 本地受控曲线插入测试：250 个 PVT 点、200 个黏度点完成解析；原始内置 Tait 模板因压力尺度不兼容被拒绝，随后用明确标注的合成 Tait 模板验证 `material fit` 输出链路 | 插入链路通过；不能把合成模板结果当作 Generic PP 材料结论 |
-| 2026-09-15 | 使用本地拟合材料生成未求解 moldingFoam case，核对 `physicalProperties.melt` 与 `momentumTransport` 的 Cross-WLF/Tait 键和值；记录两个字典 SHA-256 | case 配置接线通过，尚未代表 solver 运行时数值通过 |
-
-
-### 2026-09-15 · Kairos 自定义材料 VM baseline
-
-- 由 CLI 生成 sample-box case 并用自定义材料运行；实际 case 根目录提交到 Multipass VM。
-- moldingFoam v1.1.0 arm64 / OpenFOAM 14，退出码 `0`，日志以 `End` 收尾并达到 `Time = 2s`。
-- 日志确认 `CrossWlf` 与 `Tait` 均被选中；Tait 使用 `b4/b4s/b6/C/smoothBand` 字段。
-- 该运行验证材料导入、case 字典接线和 solver 启动闭环，不等同于 Moldflow 逐点精度验证；后续仍需把完整 Mug 网格和实验观测量接入同一矩阵。
-
-### Mug 与参考工况一致的最终复现实验命令
-
-下面命令固定 Moldflow 参考工况中的工艺输入，并使用仓库内置的 `PP-REF-01` 默认材料。Kairos 根据导入 STL 的实际体积和 `5.5 s` 注射时间计算名义流量；不会手写覆盖流量值。
+该命令作为后续“完全对齐”实验的唯一入口，使用内置 `PP-REF-01`，固定 Mug 参考工艺，并分配 VM 五核：
 
 ```bash
 cargo run -p kairos-cli -- doe run --plan full \
@@ -146,8 +124,7 @@ cargo run -p kairos-cli -- doe run --plan full \
   --factor '模具温度=50' \
   --factor '注射时间=5.5' \
   --stl report/mug-moldflow/mug.stl \
-  --target-size 5.0 \
-  --cores 5 \
+  --target-size 5.0 --cores 5 \
   --injection-time 5.5 \
   --packing-pressure-mpa 27.6282 \
   --packing-time-s 315.0797 \
@@ -156,39 +133,28 @@ cargo run -p kairos-cli -- doe run --plan full \
   --solve --vm --json
 ```
 
-对应参考输入：熔体 `220 °C`、模具 `50 °C`、注射 `5.5 s`。命令将保压时长设为参考曲线的 `315.0797 s`，压力参数使用曲线高位 `27.6282 MPa`。Moldflow 的初始 `0.9229 MPa`、0.2 s 压力爬升和独立 `20 s` 冷却段目前尚未由 CLI 单独表达，报告不得将这部分写成完全一致。当前 CLI case 的求解终止时间由生成器控制，完整 Mug 结果以原始 `log.foamRun`、时间目录和 CLI JSON 汇总为准。网格仍是 Kairos 体积网格，不能与参考 Dual Domain 结果宣称逐点等价。
+`setting.txt` 中的初始保压 `0.9229 MPa`、0.2 s 压力爬升和独立 20 s 冷却段目前没有对应 CLI 参数；在这些参数接入前，结果只能标记为工艺近似，不能称为完全对齐。Kairos 使用体积网格，参考结果使用 Dual Domain，也不能逐点等价。
 
-### moldingFoam 实验结果摘要（2026-09-15）
+## 7. 已执行运行
 
-Kairos 生成的 `PP-REF-01` case 已在 moldingFoam v1.1.0 arm64 / OpenFOAM 14 VM 中真实运行：日志选择 `CrossWlf` 与 `Tait`，时间推进到 `2 s`，以 `End` 收尾，退出码为 `0`。该实验验证了默认 PP 材料、Tait 字典和 solver 的运行链路；由于当前 case 是 Kairos sample-box 工况，不能把它当作 Moldflow Mug 的逐点数值结论。
+| 运行 | 目的 | 状态 | 结论 |
+| --- | --- | --- | --- |
+| sample-box + PP-REF-01 + VM 单核 | 验证材料、字典和 solver 链路 | 通过，退出码 0，`End` | Cross-WLF/Tait 真实加载，推进到 2 s |
+| Mug STL + VM 单核 | 性能摸底 | CLI 600 s 超时 | 原始日志保留，未作为结果验收 |
+| Mug STL + VM 五核 | 并行链路 smoke run | 已启动并按要求停止 | `mpirun -np 5 foamRun -parallel` 正常拉起五个 rank；不作为数值结果 |
 
-### Mug STL 单点实验命令（运行中）
+## 8. 当前结论
 
-```bash
-cargo run -p kairos-cli -- doe run --plan full \
-  --factor '熔体温度=220' --factor '注射时间=5.5' \
-  --stl report/mug-moldflow/mug.stl \
-  --target-size 5.0 --cores 1 \
-  --injection-time 5.5 \
-  --packing-pressure-mpa 27.6282 --packing-time-s 20 \
-  --out-dir /private/tmp/t100-mug-full \
-  --batch mug-baseline-full --solve --vm \
-  --material report/mug-moldflow/material-input/generic-pp-fitted-v3.json --json
-```
+- `PP-REF-01` 已作为 Kairos 内置 PP 默认模板，参数快照见第 3.1 节。
+- moldingFoam v1.1.0 的材料导入、Tait/Cross-WLF 字典和 VM 求解链路已跑通。
+- Mug 完全对齐实验仍待 CLI 支持完整保压曲线、冷却时间和结果指标提取后再执行。
+- Moldflow 参考值只作为对照基线；在网格、边界和工艺曲线未一致前，不报告“准确”或“验证通过”。
 
-该命令使用 `full` 计划执行单点（`orthogonal` 计划要求每个因子三个水平），GUI 同源 Multipass VM 中的 moldingFoam v1.1.0 负责实际求解。case 的 `endTime=11 s`；截至记录时物理时间约 `1.45 s`、墙钟约 `235 s`，当前运行预计总耗时约 27 分钟。完成后补写退出码、填充时间、压力和质量预算结果。
+## 9. 更新记录
 
-### 五核重跑（2026-09-15）
-
-单核运行因 CLI 600 秒超时中止，保留其原始日志作为性能记录。按要求使用 5 核重新提交同一工况：
-
-```bash
-cargo run -p kairos-cli -- doe run --plan full \
-  --factor '熔体温度=220' --factor '注射时间=5.5' \
-  --stl report/mug-moldflow/mug.stl --target-size 5.0 --cores 5 \
-  --injection-time 5.5 --packing-pressure-mpa 27.6282 --packing-time-s 20 \
-  --out-dir /private/tmp/t100-mug-full-5c --batch mug-baseline-full-5c \
-  --solve --vm --material report/mug-moldflow/material-input/generic-pp-fitted-v3.json --json
-```
-
-当前 VM 已启动 `mpirun -np 5 foamRun -parallel`，五个 solver rank 均在工作；完成后补写实际退出码和指标。
+| 时间 | 变更 | 结论 |
+| --- | --- | --- |
+| 2026-09-15 | 建立报告并冻结 Mug 参考工况 | 形成 Moldflow/Kairos/实验统一对照口径 |
+| 2026-09-15 | 完成 PP 曲线解析、拟合、残差和材料字典输出 | T101 材料核心闭环完成 |
+| 2026-09-15 | sample-box 自定义材料 VM 实验 | solver 真实启动、Cross-WLF/Tait 生效、退出码 0 |
+| 2026-09-15 | Mug 单核/五核 smoke run | 单核超时；五核并行链路拉起并停止，均不作为数值验收 |
