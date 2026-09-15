@@ -11,6 +11,8 @@ use tauri::ipc::Response;
 
 /// 会话内的场槽位：派生直接基于缓存计算，前端不回传数值数组。
 pub struct ResultSlots {
+    /// 当前槽位所属算例目录；每个算例目录对应一次运行结果。
+    pub case_dir: Option<String>,
     /// 主场：普通加载 / 展示 / 单场派生的数据源。
     pub primary: Option<ScalarField>,
     /// 对比场：两场差值派生的减数。
@@ -27,6 +29,7 @@ pub struct ResultSession(pub Arc<Mutex<ResultSlots>>);
 impl Default for ResultSession {
     fn default() -> Self {
         Self(Arc::new(Mutex::new(ResultSlots {
+            case_dir: None,
             primary: None,
             compare: None,
             cache: FieldCache::new(8).expect("默认容量在合法区间"),
@@ -36,6 +39,22 @@ impl Default for ResultSession {
 }
 
 impl ResultSession {
+    /// 切换算例时原子清空所有结果槽位，避免旧运行的场参与新运行混用。
+    fn begin_case(&self, case_dir: &str) {
+        let scope = std::path::Path::new(case_dir)
+            .to_string_lossy()
+            .into_owned();
+        let mut slots = self.lock();
+        if slots.case_dir.as_deref() == Some(scope.as_str()) {
+            return;
+        }
+        slots.case_dir = Some(scope);
+        slots.primary = None;
+        slots.compare = None;
+        slots.vectors = None;
+        slots.cache.clear();
+    }
+
     pub fn reset(&self) {
         let fresh = Self::default();
         let mut slots = self.lock();
@@ -66,6 +85,8 @@ pub async fn list_result_times(
     session: tauri::State<'_, ResultSession>,
     case_dir: String,
 ) -> Result<ResultCatalog> {
+    session.begin_case(&case_dir);
+    // 目录重扫显式失效同一算例的文件版本，确保新增/替换文件可见。
     session.lock().cache.clear();
     tauri::async_runtime::spawn_blocking(move || {
         results::scan_times(std::path::Path::new(&case_dir))
@@ -94,6 +115,7 @@ fn load_into_slot(
     field: &str,
     compare: bool,
 ) -> Result<ScalarField> {
+    session.begin_case(case_dir);
     let key = cache_key(case_dir, time_dir, field)?;
     let cached = session.lock().cache.get(&key).cloned();
     let loaded = match cached {
@@ -172,7 +194,10 @@ pub async fn load_vector_field_binary(
     time_dir: String,
     field: String,
 ) -> Result<Response> {
+    let session = ResultSession(Arc::clone(&session.0));
+    let load_session = ResultSession(Arc::clone(&session.0));
     let vectors = tauri::async_runtime::spawn_blocking(move || {
+        load_session.begin_case(&case_dir);
         results::read_vector_field(std::path::Path::new(&case_dir), &time_dir, &field)
     })
     .await
@@ -373,5 +398,49 @@ mod tests {
         assert!(session.lock().cache.get(&first).is_none());
         assert!(session.lock().primary.is_none());
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn switching_case_scope_clears_scalar_and_vector_slots() {
+        let first = std::env::temp_dir().join(kairos_core::services::project::new_id("case-a"));
+        let second = std::env::temp_dir().join(kairos_core::services::project::new_id("case-b"));
+        let session = ResultSession::default();
+        let field = ScalarField {
+            field: "p".into(),
+            time_dir: "1".into(),
+            time_s: 1.0,
+            values: vec![1.0],
+            is_magnitude: false,
+            complete: true,
+        };
+        session.begin_case(first.to_str().unwrap());
+        {
+            let mut slots = session.lock();
+            slots.primary = Some(field);
+            slots.compare = Some(ScalarField {
+                field: "p".into(),
+                time_dir: "2".into(),
+                time_s: 2.0,
+                values: vec![2.0],
+                is_magnitude: false,
+                complete: true,
+            });
+            let cached = slots.primary.clone().unwrap();
+            slots.cache.put("first".into(), cached);
+            slots.vectors = Some(Arc::new(VectorField {
+                field: "U".into(),
+                time_dir: "1".into(),
+                time_s: 1.0,
+                components: vec![[0.0, 0.0, 0.0]],
+                complete: true,
+            }));
+        }
+        session.begin_case(second.to_str().unwrap());
+        let mut slots = session.lock();
+        assert_eq!(slots.case_dir.as_deref(), second.to_str());
+        assert!(slots.primary.is_none());
+        assert!(slots.compare.is_none());
+        assert!(slots.vectors.is_none());
+        assert!(slots.cache.get("first").is_none());
     }
 }
