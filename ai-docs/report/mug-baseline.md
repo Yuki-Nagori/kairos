@@ -128,12 +128,13 @@ cargo run -p kairos-cli -- doe run --plan full \
   --injection-time 5.5 \
   --packing-pressure-curve '0=0.9229,0.2=27.6282,315.0797=27.6282' \
   --cooling-time-s 20 \
+  --stage fill-pack-cool \
   --out-dir /private/tmp/kairos-mug-baseline \
   --batch mug-baseline-220c-50c-5p5s-5c \
   --solve --vm --json
 ```
 
-CLI 现已支持完整保压曲线和独立冷却时间，命令参数与 `setting.txt` 的温度、注射、保压曲线和冷却时间输入一致；但当前 `doe run` 仍按 `AnalysisStage::Fill` 生成 case，尚未执行完整填充+保压+冷却阶段。Kairos 使用体积网格，参考结果使用 Dual Domain；网格、阶段和边界仍不同，结果不能逐点等价。
+CLI 现已支持完整保压曲线、独立冷却时间和显式 `fill-pack-cool` 阶段；命令参数与 `setting.txt` 的温度、注射、保压曲线和冷却时间输入一致。Kairos 使用体积网格，参考结果使用 Dual Domain；网格和边界仍不同，结果不能逐点等价。
 
 ## 7. 已执行运行
 
@@ -147,7 +148,7 @@ CLI 现已支持完整保压曲线和独立冷却时间，命令参数与 `setti
 
 - `PP-REF-01` 已作为 Kairos 内置 PP 默认模板，参数快照见第 3.1 节。
 - moldingFoam v1.1.0 的材料导入、Tait/Cross-WLF 字典和 VM 求解链路已跑通。
-- Mug 完全对齐实验仍待 CLI 将 `doe run` 接入 `FillPackCool` 阶段，并完成结果指标提取后再执行。
+- Mug 完全对齐实验已具备 `FillPackCool` 命令入口；仍待 Dual Domain 网格和结果指标逐项接入后执行。
 - Moldflow 参考值只作为对照基线；在网格、边界和工艺曲线未一致前，不报告“准确”或“验证通过”。
 
 ## 9. 更新记录

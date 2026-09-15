@@ -167,6 +167,9 @@ enum DoeAction {
         /// 冷却时间（s）
         #[arg(long)]
         cooling_time_s: Option<f64>,
+        /// 求解阶段：fill、fill-pack 或 fill-pack-cool
+        #[arg(long, default_value = "fill")]
+        stage: String,
         /// 批次名（缺省 = 因子名以短横连接）
         #[arg(long)]
         batch: Option<String>,
@@ -645,6 +648,7 @@ fn run_doe(action: DoeAction, json: bool) -> kairos_core::error::Result<()> {
             packing_pressure_curve,
             packing_time_s,
             cooling_time_s,
+            stage,
             batch,
             solve,
             vm,
@@ -662,6 +666,7 @@ fn run_doe(action: DoeAction, json: bool) -> kairos_core::error::Result<()> {
             packing_pressure_curve,
             packing_time_s,
             cooling_time_s,
+            &stage,
             batch,
             solve,
             vm,
@@ -759,6 +764,7 @@ fn run_doe_batch(
     packing_pressure_curve: Option<String>,
     packing_time_s: Option<f64>,
     cooling_time_s: Option<f64>,
+    stage: &str,
     batch: Option<String>,
     solve: bool,
     vm: bool,
@@ -813,6 +819,7 @@ fn run_doe_batch(
         }
         base_process.cooling_time_s = time;
     }
+    let stage = parse_analysis_stage(stage)?;
 
     let total = runs.len();
     for index in 0..total {
@@ -820,7 +827,9 @@ fn run_doe_batch(
         let settings = doe::apply_factors(&base_process, &runs[index])?;
         let started = std::time::Instant::now();
         write_run_timestamp(&case_dir, "started-at-ms", now_ms())?;
-        match run_doe_case(&case_dir, &volume, &material, &settings, cores, solve, vm) {
+        match run_doe_case(
+            &case_dir, &volume, &material, &settings, stage, cores, solve, vm,
+        ) {
             Err(error) => doe::mark_failed(
                 &mut runs[index],
                 error.message(),
@@ -899,6 +908,7 @@ fn run_doe_case(
     volume: &kairos_core::models::mesh::VolumeMesh,
     material: &kairos_core::models::material::Material,
     process: &ProcessSettings,
+    stage: AnalysisStage,
     cores: u32,
     solve: bool,
     vm: bool,
@@ -909,7 +919,7 @@ fn run_doe_case(
             mesh: volume,
             material,
             process,
-            stage: &AnalysisStage::Fill,
+            stage: &stage,
             cores: cores as usize,
             gates: &[],
             channels: &[],
@@ -1007,6 +1017,17 @@ fn parse_doe_plan(plan: &str) -> kairos_core::error::Result<doe::DoePlan> {
         other => Err(KairosError::validation(format!(
             "未知的编排方式「{other}」，可用：orthogonal / full。"
         ))),
+    }
+}
+
+fn parse_analysis_stage(value: &str) -> kairos_core::error::Result<AnalysisStage> {
+    match value {
+        "fill" => Ok(AnalysisStage::Fill),
+        "fill-pack" => Ok(AnalysisStage::FillPack),
+        "fill-pack-cool" => Ok(AnalysisStage::FillPackCool),
+        _ => Err(KairosError::validation(
+            "--stage 必须是 fill、fill-pack 或 fill-pack-cool。",
+        )),
     }
 }
 
