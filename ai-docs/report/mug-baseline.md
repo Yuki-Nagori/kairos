@@ -116,7 +116,7 @@ assessment:
 
 ## 6. 最终复现实验命令
 
-该命令作为后续“完全对齐”实验的唯一入口，使用内置 `PP-REF-01`，固定 Mug 参考工艺，并分配 VM 五核：
+该命令作为当前“三维体网格基线”实验的唯一入口，使用内置 `PP-REF-01`，固定 Mug 参考工艺，并分配 VM 五核：
 
 ```bash
 cargo run -p kairos-cli -- doe run --plan full \
@@ -134,7 +134,7 @@ cargo run -p kairos-cli -- doe run --plan full \
   --solve --vm --json
 ```
 
-CLI 现已支持完整保压曲线、独立冷却时间和显式 `fill-pack-cool` 阶段；命令参数与 `setting.txt` 的温度、注射、保压曲线和冷却时间输入一致。Kairos 使用体积网格，参考结果使用 Dual Domain；网格和边界仍不同，结果不能逐点等价。
+CLI 现已支持完整保压曲线、独立冷却时间和显式 `fill-pack-cool` 阶段。工艺输入与 `setting.txt` 一致；Kairos 当前使用 5.0 mm 目标尺寸的三维体网格（15,868 节点 / 48,605 四面体），参考结果为 Dual Domain（33,418 节点 / 66,830 三角形），网格和边界不同，结果只能做量级对照。
 
 ## 7. 已执行运行
 
@@ -148,8 +148,8 @@ CLI 现已支持完整保压曲线、独立冷却时间和显式 `fill-pack-cool
 
 - `PP-REF-01` 已作为 Kairos 内置 PP 默认模板，参数快照见第 3.1 节。
 - moldingFoam v1.1.0 的材料导入、Tait/Cross-WLF 字典和 VM 求解链路已跑通。
-- Mug 完全对齐实验已具备 `FillPackCool` 命令入口；仍待 Dual Domain 网格和结果指标逐项接入后执行。
-- Moldflow 参考值只作为对照基线；在网格、边界和工艺曲线未一致前，不报告“准确”或“验证通过”。
+- Mug 三维体网格实验已具备 `FillPackCool` 命令入口，可直接提交 moldingFoam；Dual Domain solver 消费延后，不阻塞当前实验。
+- Moldflow 参考值只作为对照基线。当前已对齐几何文件、温度、注射时间、保压曲线、冷却时间和求解阶段；网格类型/分辨率、浇口边界和 OpenFOAM 离散仍不一致，不报告逐点准确或完全验证通过。
 
 ## 9. 更新记录
 
