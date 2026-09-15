@@ -1,55 +1,12 @@
 /** XY 图表绘制工具：Canvas 自绘，min-max 抽样保证万点曲线流畅且形状保真。 */
 import { themeVar } from "./theme";
+import { chartRange, downsampleSeries } from "./chart-data";
+export { chartRange, downsampleSeries } from "./chart-data";
 
 interface ChartSeries {
   values: number[];
   color: string;
   label: string;
-}
-
-interface ChartRange {
-  min: number;
-  max: number;
-}
-
-/** 计算曲线值域；无有效数据时返回 null，调用方可直接跳过绘制。 */
-export function chartRange(series: Array<Pick<ChartSeries, "values">>): ChartRange | null {
-  let min = Infinity;
-  let max = -Infinity;
-  for (const item of series) {
-    for (const value of item.values) {
-      min = Math.min(min, value);
-      max = Math.max(max, value);
-    }
-  }
-  if (!Number.isFinite(min) || !Number.isFinite(max)) {
-    return null;
-  }
-  return min === max ? { min: min - 1, max: max + 1 } : { min, max };
-}
-
-/** min-max 抽样：每桶保留最小/最大值，长度变为 2 × 桶数（保形降采样）。 */
-export function downsampleSeries(values: number[], targetBuckets: number): number[] {
-  if (targetBuckets <= 0 || values.length <= targetBuckets * 2) {
-    return [...values];
-  }
-  const out: number[] = [];
-  const bucketSize = values.length / targetBuckets;
-  for (let bucket = 0; bucket < targetBuckets; bucket += 1) {
-    const start = Math.floor(bucket * bucketSize);
-    const end = Math.min(values.length, Math.max(start + 1, Math.floor((bucket + 1) * bucketSize)));
-    let min = Infinity;
-    let max = -Infinity;
-    for (let index = start; index < end; index += 1) {
-      // 不变量：index < end <= values.length
-      const value = values[index]!;
-      min = Math.min(min, value);
-      max = Math.max(max, value);
-    }
-    // end >= start+1 恒成立，桶内必有元素，min/max 必然被赋值。
-    out.push(min, max);
-  }
-  return out;
 }
 
 interface DrawOptions {
