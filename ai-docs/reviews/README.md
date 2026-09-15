@@ -38,6 +38,7 @@
 
 - [上游问题清单](upstream-questions.md)：等上游答复的问题（含我方证据）
 - [给上游的回复草稿](upstream-reply-draft.md)：核对上游建议后标出的问题
+- [求解器库重复加载核对报告](solver-lib-duplication-report.md)：037 双载的日志证据 + 受控 A/B/C 复现与判据修正
 
 ## 专项
 

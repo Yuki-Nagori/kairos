@@ -7,6 +7,10 @@
 
 ## 1. 037（退出崩溃）的结论链不成立
 
+> **【2026-09-15 更新】** 本节针对「用重建库仍崩 → 与源码无关」这条推理链的质疑**依然成立**，
+> 但我们随后自己复现了双载（见文末追加回复）：**崩溃与打包/环境确有直接关系**，本节要求的
+> 「栈证据 + 复现条件」也由我们这边的受控实验补齐了。读这一节时请连着追加回复一起看。
+
 **你的说法**：用当前源码重建的库在同一 VM 上同样崩 → 「与求解器源码无关，属 bundle / VM 环境相关」。
 
 **为什么推不出这个结论**：重建后仍崩，只排除了「bundle 打包 / 编译器差异」，**没有排除源码本身**——
@@ -73,4 +77,46 @@
   上游 main `9198af5` 与 tag v1.0.0 的关系也核对过（v1.0.0 领先该提交 13 个提交、落后 0）；
 - 模板值按件选档的实测方法（只改 `nSubCycles` / `nCorrectors` 做对照）——我们会在 1–2 个件上照做；
 - 037 的过渡兜底口径（按 `End` + 无 `FATAL` 判成功）与我们的失败判定一致（错误标记优先于退出码）；
+  **【已过期】** 该兜底已在 v0.2.1 复跑确认后撤除（`decomposePar` 也打印 `End`，宽判会把求解中途
+  段错误误判成功），现按退出码严格判定、只用输出标记区分失败原因；
 - 契约 v1.29 与我们生成器的值差异记入待对齐项。
+
+---
+
+## 追加回复（2026-09-15）：037 双载——结论成立，但判据要收窄
+
+**你们说的双载，我们复现了**，而且不只停在「日志里有 `Duplicate entry`」：在自己的 VM 里用同一份
+case 跑 `mpirun -np 4`、边跑边数 `/proc/<pid>/maps`，三组布局对照（细节与复现命令见
+[solver-lib-duplication-report.md](solver-lib-duplication-report.md)）：
+
+| 库目录布局                                                                  | 每 rank 映射 | 命中的实体                       | Duplicate entry |
+| --------------------------------------------------------------------------- | ------------ | -------------------------------- | --------------- |
+| 核对时现状：LIBBIN 只剩被禁用的旧库，USER 为「实体 + 相对符号链接」         | 1            | USER                             | 0               |
+| **两处各放一份**（按 redeploy 恢复 LIBBIN 的实体与符号链接）                | **1**        | USER（靠前目录把两个名字都遮住） | **0**           |
+| **名字被拆开**（USER 只留 `libmoldingFoamSolver.so` 实体，基名落到 LIBBIN） | **2**        | USER + LIBBIN（两个 sha）        | **152**         |
+
+第二行那个状态——**正是你们要求避免的「`$FOAM_LIBBIN` 与 `$FOAM_USER_LIBBIN` 各放一份」——
+实测并不会双载**：bundle 的 bashrc 里 `FOAM_USER_LIBBIN` 排在 `FOAM_LIBBIN` 前面，
+两个 dlopen 名字都被遮住了。真正会双载的是第三行：`solver::load`
+（`src/finiteVolume/solver/solverNew.C:32`，裸 soname `lib<moldingFoam>Solver.so`）与 controlDict 的
+`libs ("libmoldingFoam.so")` 这两个名字**落到两个不同实体**上。glibc 按文件实体去重，所以符号链接能让
+两个名字塌缩成一次映射——这既是符号链接修复有效的机理，也说明不变式应当写成：
+**每个 dlopen 名字在加载路径上只能有一个实体可达，且 `<名字>Solver.so` 必须是同目录下的相对符号链接**。
+按原措辞（「两处各放一份即违规」）去做检查脚本会误报，同时漏掉真正危险的**半更新状态**
+（旧包残留让某个目录只剩一个名字）。
+
+**我们已确认的事实**：v1.0.0 归档本身是对的（`libmoldingFoam.so` 单一实体 + 相对符号链接
+`libmoldingFoamSolver.so`）；我们崩溃日志里的签名与你们给的栈完全同构（`End` → `Finalising parallel run`
+→ `malloc_consolidate(): unaligned fastbin chunk detected` → `UPstream::exit` ← `argList::~argList`），
+`Duplicate entry` 去重后 28 条（`moldingFoam` / `moldingCoolantFluid` 在 `solver` 表、10 条 `molding*` 在
+`fvPatchField` 表、`moldingEigenstrain` / `moldingVoidClosure` / `viscoelasticStress` 在 `fvModel` 表，
+另加 `CrossWlf` 与 12 条 `heRhoThermo<…>` 实例化）。
+
+**我们认领的一件事**：核对时发现，我们 VM 里当前生效的库是**从源码重建**的一份
+（`FOAM_USER_LIBBIN`，sha256 `7d4c7965…`），而归档里那份被手工改名禁用了（sha256 `76e5e5e3…`）——
+也就是说我们此前「np4 退出码 0」的绿色运行**验证的是重建库，不是你们发布的库**。这个缺口我们补：
+干净部署（只留归档的库）复跑 np4 作为验收；并加一道就绪守卫
+（[T97](../tasks/T97-solver-lib-duplication-guard.md)），按上面的不变式在提交作业前报错，而不是跑完才崩。
+
+**请你们确认两点**：① 上述不变式表述（我们会照它做守卫）；② release 说明里补一句「升级时如何清理旧库」——
+半更新状态是升级路径上的通用坑，我们在应用侧兜住，发布侧也值得写一句。

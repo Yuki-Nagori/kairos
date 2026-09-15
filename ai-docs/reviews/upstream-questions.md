@@ -14,9 +14,17 @@
   第 1 条问题（发版节奏）就此关闭；下面保留原文以便追溯。
 - 上游同时给出三项工程建议（模板值、体素/时间步口径、037 退出崩溃的排查边界）与契约
   变更（v1.29），已分别记入本文件 §7–§10，作为我方后续动作的依据。
+- **2026-09-15**：上游追问 037 的退出崩溃是否由「求解器库被映射两次」引起，要我们在运行日志里
+  `grep -c 'Duplicate entry' log.foamRun`、并核对加载路径上 `libmoldingFoam.so` 只有一份实体。
+  核对结论：**成立，且已在我们自己的 VM 里受控复现**（`mpirun -np 4` 运行期数 `/proc/<pid>/maps`：
+  两个 dlopen 名字落到两个不同实体时，每 rank 2 条映射、`Duplicate entry` 152 条）。
+  但上游给的判据要收窄——「`$FOAM_LIBBIN` 与 `$FOAM_USER_LIBBIN` 各放一份就会双载」**不成立**
+  （两份完整拷贝时，`LD_LIBRARY_PATH` 靠前的目录会把两个名字都遮住，实测仍是 1 次映射）；
+  真正危险的是**名字被拆开**的半更新状态。全部证据见
+  [solver-lib-duplication-report.md](solver-lib-duplication-report.md)，§5 / §9 已按此改写。
 
 > 针对上游 2026-09-14 建议的**回复草稿**（含我们核对出的问题）见
-> [upstream-reply-draft.md](upstream-reply-draft.md)。
+> [upstream-reply-draft.md](upstream-reply-draft.md)（含 2026-09-15 追加的 037 双载复现回复）。
 
 ## 1. 【已关闭】发版节奏：046（并行死锁修复）与版本可预期性
 
@@ -55,14 +63,26 @@
 - **影响**：有官方值后，我们能把「记录摘要」升级为「比对校验」，供应链完整性才算闭环。
   在此之前应用侧无法判断下载物是否被中间人替换。
 
-## 5. 求解正常结束后的退出崩溃（malloc 告警）
+## 5. 【已定位】求解正常结束后的退出崩溃（上游 037）
 
 - **现状**：bundle 环境在求解跑到 endTime 后、析构阶段偶发
   `malloc_consolidate(): unaligned fastbin chunk detected` 并带崩溃退出码。
-- **我们的现状处置**：作业成败以「求解到 endTime + 输出完整」为准，退出码不单独作为判定依据
-  （失败判定优先看求解器错误标记，见 `job_logic::job_failure`）。
-- **需要上游**：这是否已知；若不修，是否会随 046 的版本一并变化。
-- **影响**：自动化验收与 CI 只能绕过退出码，长期会掩盖真实的进程级问题。
+- **根因（2026-09-15 受控复现）**：同一求解模块被两个 dlopen 名字加载到**两个不同实体**上——
+  `solver::load` 的 `libmoldingFoamSolver.so`（`solverNew.C:32`，裸 soname）与 controlDict 的
+  `libs ("libmoldingFoam.so")`；日志先出现 28 条 `Duplicate entry … in runtime selection table`，
+  退出析构时 `free` 触发 `malloc_consolidate`。三组布局对照与运行期 `maps` 证据见
+  [solver-lib-duplication-report.md](solver-lib-duplication-report.md)。
+- **判据修正**：「`$FOAM_LIBBIN` 与 `$FOAM_USER_LIBBIN` 各放一份就会双载」不成立——两份完整拷贝时
+  靠前目录（`FOAM_USER_LIBBIN` 在 `LD_LIBRARY_PATH` 第 5 位、`FOAM_LIBBIN` 第 7 位）会把两个名字都遮住；
+  真正危险的是**名字在两个目录之间被拆开**（旧包残留让某目录只剩一个名字）。不变式应为
+  「每个 dlopen 名字在加载路径上只能有一个实体可达，且 `<名字>Solver.so` 是同目录下的相对符号链接」。
+- **打包侧**：v0.2.1 起 `libmoldingFoamSolver.so` 已是符号链接；v1.0.0 归档核对无误（单实体 + 相对符号链接）。
+- **我们的现状处置**：v0.2.1 复跑确认后**已撤除**过渡期的退出码宽判（`decomposePar` 也打印 `End`，
+  宽判会把求解中途段错误误判成功）——现按退出码严格判定，只用输出标记区分失败原因
+  （`job_logic::job_failure`）。
+- **需要上游**：①确认上述不变式表述（我们照它做守卫）；②release 说明里补一句「升级时如何清理旧库」。
+- **影响**：升级 / 手工重建容易留下半更新状态；[T97](../tasks/T97-solver-lib-duplication-guard.md) 的就绪守卫
+  把它变成提交作业前的显式报错，不再靠「跑完才崩」发现。
 
 ## 6. 特殊工艺能力路线图（GAIM 气芯 / 纤维取向）
 
@@ -98,18 +118,22 @@
 **我们的动作**：T57 的网格预估与 T74 的浇口速度阈值都不受影响；这条主要影响我们对
 「网格加密后守恒变差」的解释口径，已记入 T29 的验收说明。
 
-## 9. 退出崩溃（037）：上游排查边界与过渡口径
+## 9. 退出崩溃（037）的排查边界（结论已收口到 §5，本节留作过程记录）
 
 - 只在 **np4**、且求解正常打印 `End` 之后出现（`malloc_consolidate(): unaligned fastbin chunk detected`，
   退出码非零）；串行与秒级小 case 干净；
-- bundle 无重复载入（`libmoldingFoam*.so` 单一 inode）、该 VM 无 apt 树可混用；用当前源码重建的库
-  在同一 VM 上同样崩 → 与求解器源码无关，属 **bundle / VM 环境相关**；
-- 上游建议的两个对照：① `mpirun --mca btl self,tcp`（排除 OpenMPI vader/CMA 共享内存路径）；
-  ② 崩溃时 `MALLOC_CHECK_=3` + gdb 取栈；
-- **过渡期兜底**：run 脚本按「日志含 `End` 且无 `FATAL`」判成功、忽略退出码。
+- 当时记录的「bundle 无重复载入（`libmoldingFoam*.so` 单一 inode）」**与我们后来的日志不符**：
+  崩溃日志（`study-1a09bc8e6c8-1`，09-14 11:12）里 `Duplicate entry` 152 条、堆报告 4 条。
+  该次运行的环境树是 09-13 12:02 那份（早于 v1.0.0 归档的 09-14 20:10），当时的库布局未留档，
+  无法回溯究竟是「同目录内一对」还是「跨目录被拆开」——两种都产生同一签名；
+  能确认的是 **v1.0.0 归档已是修好的形态**（单实体 + 相对符号链接）；
+- 「用当前源码重建的库在同一 VM 上同样崩 → 与求解器源码无关」这条推理链不成立（只排除了打包 /
+  工具链差异），而且**重建动作本身就会在加载路径上引入第二个实体**——这正是双载的成因之一（§5）；
+- 上游建议的两个对照（`mpirun --mca btl self,tcp`、`MALLOC_CHECK_=3` + gdb 取栈）我们**不再需要**：
+  运行期 `/proc/<pid>/maps` 实验已直接证明机制，崩溃栈也已从日志里取到；
+- **过渡期兜底已撤除**（v0.2.1 复跑确认后），现按退出码严格判定。
 
-**我们的状态**：Kairos 的失败判定本来就以求解器错误标记优先、退出码次之（`job_logic::job_failure`），
-与这条兜底口径一致；不需改动。等上游给出两个对照的结论后再决定是否收紧。
+**我们的状态**：已按 §5 收口；本节保留作为排查边界的记录。
 
 ## 10. 契约与后续能力（上游建议 P4）
 

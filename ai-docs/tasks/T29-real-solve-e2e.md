@@ -14,7 +14,13 @@
   退出码 **0**、**1389 步到 endTime 2 s**、无 `FOAM FATAL`，V/P 切换 0.9624 @ t = 1.0419 s、
   质量预算残差 −7.2e-07 kg。上游另在真实件上复测 np4 → 5069 步到 endTime、1/2/4 进程结果一致。
   **剩余**：本地真实件目录已不完整（workspace 现存为 np=2 小件），拿到真实件后补一次本地 np4
-  端到端（含结果回传与结果面板读场）。
+  端到端（含结果回传与结果面板读场）；**d) 干净部署复跑归档库（2026-09-15 核对后新增）**：
+  c) 那次 np4 复跑时，VM 里生效的是 `FOAM_USER_LIBBIN` 下一份**源码重建**的库，bundle 自带的库被
+  手工改名禁用（两份 sha256 不同）——它验证的是重建库，**未验证上游 v1.0.0 归档里的库**。
+  补法：清掉 `FOAM_USER_LIBBIN` 的重建库、只留归档解压出来的那份（单实体 + 相对符号链接），
+  复跑 np4 并以「`grep -c 'Duplicate entry'` = 0 + `End` 之后退出码 0」为通过判据；
+  判据与证据见 [solver-lib-duplication-report.md](../reviews/solver-lib-duplication-report.md)，
+  防复发守卫见 [T97](T97-solver-lib-duplication-guard.md)。
 - 依赖：T09、T10、T11（已完成的求解集成代码）、T34（求解入口收口）
 - 优先级：**P1**
 
