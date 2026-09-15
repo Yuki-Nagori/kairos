@@ -101,7 +101,10 @@ export function useXyChartPanel() {
       return plot.value;
     }
     // happy-dom 与部分嵌入式 WebView 没有 Path2D；保留 Canvas 降级路径，避免异步绘制抛错。
-    plot.value = createUplot(plotHostRef.value, plotData(), plotSeries());
+    plot.value = createUplot(plotHostRef.value, plotData(), plotSeries(), {
+      x: mode.value === "time" ? "时间步（序）" : "节点序号",
+      y: results.probeSeriesField ?? results.loadedField?.field ?? "值",
+    });
     plotSignature.value = `${mode.value}:${results.probes.map((probe) => probe.id).join(",")}`;
     stopResizeObserver();
     stopResizeObserver = observeUplotSizeIfPresent(plot.value, plotHostRef.value);

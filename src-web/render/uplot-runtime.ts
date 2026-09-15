@@ -7,12 +7,13 @@ export function createUplot(
   host: HTMLDivElement,
   data: uPlot.AlignedData,
   series: UplotSeries[],
+  labels?: { x: string; y: string },
 ): uPlot | null {
   if (typeof Path2D !== "function") {
     return null;
   }
   try {
-    const plot = new uPlot(uplotOptions(720, 200, series), data, host);
+    const plot = new uPlot(uplotOptions(720, 200, series, labels), data, host);
     plot.ctx.canvas.classList.add("w-full", "rounded-lg", "bg-zinc-950");
     registerSnapshot("xy-chart", plot.ctx.canvas);
     return plot;

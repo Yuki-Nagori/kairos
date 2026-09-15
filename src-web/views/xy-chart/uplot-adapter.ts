@@ -8,7 +8,12 @@ export type UplotSeries = {
   points?: { show: boolean; size: number };
 };
 
-export function uplotOptions(width: number, height: number, series: UplotSeries[]): uPlot.Options {
+export function uplotOptions(
+  width: number,
+  height: number,
+  series: UplotSeries[],
+  labels: { x: string; y: string } = { x: "序号", y: "值" },
+): uPlot.Options {
   return {
     width,
     height,
@@ -16,12 +21,12 @@ export function uplotOptions(width: number, height: number, series: UplotSeries[
     series: [{ label: "序号" }, ...series],
     axes: [
       {
-        label: "序号",
+        label: labels.x,
         stroke: themeVar("--c-text-muted", "#71717a"),
         grid: { stroke: themeVar("--c-grid", "#27272a"), width: 1 },
       },
       {
-        label: "值",
+        label: labels.y,
         stroke: themeVar("--c-text-muted", "#71717a"),
         grid: { stroke: themeVar("--c-grid", "#27272a"), width: 1 },
       },
