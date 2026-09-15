@@ -574,6 +574,7 @@ fn run_doe_batch(
         let case_dir = doe::run_case_dir(workspace, DOE_STUDY_ID, index + 1);
         let settings = doe::apply_factors(&base_process, &runs[index])?;
         let started = std::time::Instant::now();
+        write_run_timestamp(&case_dir, "started-at-ms", now_ms())?;
         match run_doe_case(&case_dir, &volume, &material, &settings, cores, solve) {
             Err(error) => doe::mark_failed(
                 &mut runs[index],
@@ -585,6 +586,7 @@ fn run_doe_batch(
                 doe::mark_done(&mut runs[index], metrics, started.elapsed().as_secs_f64())
             }
         }
+        write_run_timestamp(&case_dir, "finished-at-ms", now_ms())?;
         let status = match &runs[index].status {
             doe::DoeStatus::Pending => "pending".to_string(),
             doe::DoeStatus::Done => "done".to_string(),
@@ -619,6 +621,19 @@ fn run_doe_batch(
         );
         print!("{}", doe::summary_csv(&runs));
     }
+    Ok(())
+}
+
+/// 每个 DOE 运行目录保留原始日志旁的时间戳文件，便于与外部参考结果逐次对照。
+fn write_run_timestamp(
+    case_dir: &Path,
+    name: &str,
+    timestamp_ms: u64,
+) -> kairos_core::error::Result<()> {
+    std::fs::create_dir_all(case_dir)
+        .map_err(|e| KairosError::io(format!("创建运行留档目录失败：{e}")))?;
+    std::fs::write(case_dir.join(name), timestamp_ms.to_string())
+        .map_err(|e| KairosError::io(format!("写入运行时间戳失败：{e}")))?;
     Ok(())
 }
 
@@ -936,7 +951,7 @@ fn run_pipeline(
 
 #[cfg(test)]
 mod tests {
-    use super::parse_optimize_factor;
+    use super::{parse_optimize_factor, write_run_timestamp};
 
     #[test]
     fn optimize_factor_parser_accepts_named_range() {
@@ -952,5 +967,16 @@ mod tests {
         assert!(parse_optimize_factor("熔体温度=200:240").is_err());
         assert!(parse_optimize_factor("=200:240:3").is_err());
         assert!(parse_optimize_factor("熔体温度=200:240:3:4").is_err());
+    }
+
+    #[test]
+    fn run_timestamp_is_written_as_raw_epoch_milliseconds() {
+        let root = std::env::temp_dir().join(kairos_core::services::project::new_id("cli-run"));
+        write_run_timestamp(&root, "started-at-ms", 1_725_000_000_123).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(root.join("started-at-ms")).unwrap(),
+            "1725000000123"
+        );
+        std::fs::remove_dir_all(root).unwrap();
     }
 }

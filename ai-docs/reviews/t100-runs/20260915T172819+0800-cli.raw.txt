@@ -1,0 +1,24 @@
+   Compiling kairos-cli v0.1.0 (/Users/yuki/eit/kairos/src-crates/kairos-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.13s
+     Running `target/debug/kairos-cli doe run --factor '熔体温度=200,210,220' --factor '注射时间=1,2,3' --sample-box --out-dir /private/tmp/t100-workspace-20260915T172819+0800 --batch t93-real-cli-20260915T172819+0800`
+[1] 运行 1/9：注射时间=1 熔体温度=200 → pending
+[2] 运行 2/9：注射时间=2 熔体温度=200 → pending
+[3] 运行 3/9：注射时间=3 熔体温度=200 → pending
+[4] 运行 4/9：注射时间=1 熔体温度=210 → pending
+[5] 运行 5/9：注射时间=2 熔体温度=210 → pending
+[6] 运行 6/9：注射时间=3 熔体温度=210 → pending
+[7] 运行 7/9：注射时间=1 熔体温度=220 → pending
+[8] 运行 8/9：注射时间=2 熔体温度=220 → pending
+[9] 运行 9/9：注射时间=3 熔体温度=220 → pending
+批次「t93-real-cli-20260915T172819+0800」完成：9 次运行，汇总表在 /private/tmp/t100-workspace-20260915T172819+0800/doe/t93-real-cli-20260915T172819+0800
+run,注射时间,熔体温度,status,reason,elapsed_s
+1,1,200,pending,,
+2,2,200,pending,,
+3,3,200,pending,,
+4,1,210,pending,,
+5,2,210,pending,,
+6,3,210,pending,,
+7,1,220,pending,,
+8,2,220,pending,,
+9,3,220,pending,,
+exit_code=0
