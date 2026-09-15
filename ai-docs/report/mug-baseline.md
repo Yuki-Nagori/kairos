@@ -136,6 +136,39 @@ assessment:
 - 日志确认 `CrossWlf` 与 `Tait` 均被选中；Tait 使用 `b4/b4s/b6/C/smoothBand` 字段。
 - 该运行验证材料导入、case 字典接线和 solver 启动闭环，不等同于 Moldflow 逐点精度验证；后续仍需把完整 Mug 网格和实验观测量接入同一矩阵。
 
+### Mug 与参考工况一致的最终复现实验命令
+
+下面命令固定 Moldflow 参考工况中的工艺输入，并使用仓库内置的 `PP-REF-01` 默认材料。Kairos 根据导入 STL 的实际体积和 `5.5 s` 注射时间计算名义流量；不会手写覆盖流量值。
+
+```bash
+cargo run -p kairos-cli -- doe run --plan full \
+  --factor '熔体温度=220' \
+  --factor '模具温度=50' \
+  --factor '注射时间=5.5' \
+  --stl report/mug-moldflow/mug.stl \
+  --target-size 5.0 \
+  --cores 5 \
+  --injection-time 5.5 \
+  --packing-pressure-mpa 27.6282 \
+  --packing-time-s 20 \
+  --out-dir /private/tmp/kairos-mug-baseline \
+  --batch mug-baseline-220c-50c-5p5s-5c \
+  --solve --vm --json
+```
+
+对应参考输入：熔体 `220 °C`、模具 `50 °C`、注射 `5.5 s`、保压 `27.6282 MPa / 20 s`、冷却参考 `20 s`。当前 CLI case 的求解终止时间由生成器控制，完整 Mug 结果以原始 `log.foamRun`、时间目录和 CLI JSON 汇总为准。网格仍是 Kairos 体积网格，不能与参考 Dual Domain 结果宣称逐点等价。
+
+与临时五核命令的差异：
+
+| 项目 | 临时命令 | 最终命令 |
+| --- | --- | --- |
+| 材料 | 显式传入本地拟合 JSON | 使用仓库内置 `PP-REF-01` |
+| 因子 | 熔体温度、注射时间 | 另固定模具温度 50°C |
+| 输出目录 | `/private/tmp/t100-mug-full-5c` | `/private/tmp/kairos-mug-baseline` |
+| 批次名 | `mug-baseline-full-5c` | `mug-baseline-220c-50c-5p5s-5c` |
+
+两条命令的几何、注射时间、保压压力和五核 VM 设置相同；最终命令用于仓库文档复现。
+
 ### moldingFoam 实验结果摘要（2026-09-15）
 
 Kairos 生成的 `PP-REF-01` case 已在 moldingFoam v1.1.0 arm64 / OpenFOAM 14 VM 中真实运行：日志选择 `CrossWlf` 与 `Tait`，时间推进到 `2 s`，以 `End` 收尾，退出码为 `0`。该实验验证了默认 PP 材料、Tait 字典和 solver 的运行链路；由于当前 case 是 Kairos sample-box 工况，不能把它当作 Moldflow Mug 的逐点数值结论。
@@ -170,25 +203,3 @@ cargo run -p kairos-cli -- doe run --plan full \
 ```
 
 当前 VM 已启动 `mpirun -np 5 foamRun -parallel`，五个 solver rank 均在工作；完成后补写实际退出码和指标。
-
-### Mug 与参考工况一致的最终复现实验命令
-
-下面命令固定 Moldflow 参考工况中的工艺输入，并使用仓库内置的 `PP-REF-01` 默认材料。Kairos 根据导入 STL 的实际体积和 `5.5 s` 注射时间计算名义流量；不会手写覆盖流量值。
-
-```bash
-cargo run -p kairos-cli -- doe run --plan full \
-  --factor '熔体温度=220' \
-  --factor '模具温度=50' \
-  --factor '注射时间=5.5' \
-  --stl report/mug-moldflow/mug.stl \
-  --target-size 5.0 \
-  --cores 5 \
-  --injection-time 5.5 \
-  --packing-pressure-mpa 27.6282 \
-  --packing-time-s 20 \
-  --out-dir /private/tmp/kairos-mug-baseline \
-  --batch mug-baseline-220c-50c-5p5s-5c \
-  --solve --vm --json
-```
-
-对应参考输入：熔体 `220 °C`、模具 `50 °C`、注射 `5.5 s`、保压 `27.6282 MPa / 20 s`、冷却参考 `20 s`。当前 CLI case 的求解终止时间由生成器控制，完整 Mug 结果以原始 `log.foamRun`、时间目录和 CLI JSON 汇总为准。网格仍是 Kairos 体积网格，不能与参考 Dual Domain 结果宣称逐点等价。
