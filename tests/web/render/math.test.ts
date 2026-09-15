@@ -9,6 +9,7 @@ import {
   mat4LookAt,
   mat4Multiply,
   mat4Perspective,
+  meshFarPlane,
   mat4RotateX,
   mat4RotateY,
   normalize,
@@ -113,4 +114,19 @@ describe("fitCameraToBounds（逐轴适配，回归锁定）", () => {
     ]);
     expect(fit.clipOffset).toBeCloseTo(2 * Math.SQRT1_2, 12);
   });
+});
+
+it("远裁剪面容纳大型模型和偏离原点的相机", () => {
+  expect(meshFarPlane([0, 0, 3], null)).toBe(100);
+  const bounds = { min: [0, 0, 0] as Vec3, max: [1000, 1000, 1000] as Vec3 };
+  const eye: Vec3 = [2000, 1500, 3000];
+  const far = meshFarPlane(eye, bounds);
+  expect(far).toBeGreaterThan(Math.hypot(...eye));
+  const projection = mat4Perspective(Math.PI / 4, 1, 0.01, far);
+  const view = mat4LookAt(eye, [500, 500, 500], [0, 1, 0]);
+  const mvp = mat4Multiply(projection, view);
+  const z = mvp[2]! * 500 + mvp[6]! * 500 + mvp[10]! * 500 + mvp[14]!;
+  const w = mvp[3]! * 500 + mvp[7]! * 500 + mvp[11]! * 500 + mvp[15]!;
+  expect(z / w).toBeGreaterThan(0);
+  expect(z / w).toBeLessThan(1);
 });

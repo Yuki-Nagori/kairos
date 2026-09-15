@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="zh-CN">
+  <meta charset="utf-8" />
+  <title>3D 视口浏览器回归</title>
+  <body>
+    <h1>3D 视口浏览器回归</h1>
+    <p>仅替代 Rust 网格读取，使用真实 Vue 面板和 GPU 后端。导入后应自动显示立方体。</p>
+    <button id="small">导入 10 mm 立方体</button>
+    <button id="large">导入 1000 mm 立方体</button>
+    <button id="remove">删除几何</button>
+    <div id="app" style="height: 650px"></div>
+    <script type="module">
+      import "/src-web/app.css";
+      import { createApp } from "vue";
+      import { createPinia } from "pinia";
+      import ViewportPanel from "/src-web/views/viewport/ViewportPanel.vue";
+      import { useGeometryStore } from "/src-web/stores/geometry.ts";
+      const pinia = createPinia();
+      createApp(ViewportPanel).use(pinia).mount("#app");
+      const geometry = useGeometryStore(pinia);
+      let size = 10;
+      geometry.fetchRenderMesh = async () => ({
+        positions: [
+          0,
+          0,
+          0,
+          size,
+          0,
+          0,
+          size,
+          size,
+          0,
+          0,
+          size,
+          0,
+          0,
+          0,
+          size,
+          size,
+          0,
+          size,
+          size,
+          size,
+          size,
+          0,
+          size,
+          size,
+        ],
+        indices: [
+          0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 3, 7, 6, 3, 6, 2, 0, 4, 7, 0, 7, 3,
+          1, 2, 6, 1, 6, 5,
+        ],
+        faceCells: Array(12).fill(0),
+      });
+      function importCube(value) {
+        size = value;
+        geometry.geometries = [];
+        geometry.recordImport({
+          summary: {
+            geometryId: "cube",
+            fileName: `cube-${size}mm.stl`,
+            triangleCount: 12,
+            size: [size, size, size],
+            surfaceArea: 6 * size * size,
+            signedVolume: size ** 3,
+            suggestedUnit: "mm",
+            issues: {
+              degenerate: 0,
+              openEdges: 0,
+              nonManifoldEdges: 0,
+              normalInconsistentEdges: 0,
+            },
+          },
+          log: [],
+        });
+      }
+      document.querySelector("#small").onclick = () => importCube(10);
+      document.querySelector("#large").onclick = () => importCube(1000);
+      document.querySelector("#remove").onclick = () => {
+        geometry.geometries = [];
+      };
+    </script>
+  </body>
+</html>

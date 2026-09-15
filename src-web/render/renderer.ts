@@ -5,6 +5,7 @@ import {
   mat4LookAt,
   mat4Multiply,
   mat4Perspective,
+  meshFarPlane,
   type Mat4,
   type Vec3,
 } from "./math";
@@ -455,11 +456,12 @@ export class ViewportRenderer {
     this.yaw = 0.6;
     this.pitch = 0.4;
     this.distance = 3;
+    this.fitView();
   }
 
   /** 以注视点为中心缩放（factor < 1 拉近，> 1 推远），距离夹在有效区间。 */
   zoomBy(factor: number): void {
-    this.distance = Math.min(Math.max(this.distance * factor, 0.1), 500);
+    this.distance = Math.max(this.distance * factor, 0.1);
   }
 
   /** 重新适配最后上传的网格（无网格时不动）。 */
@@ -612,7 +614,7 @@ export class ViewportRenderer {
     eye[0] = this.target[0] + this.distance * Math.cos(this.pitch) * Math.sin(this.yaw);
     eye[1] = this.target[1] + this.distance * Math.sin(this.pitch);
     eye[2] = this.target[2] + this.distance * Math.cos(this.pitch) * Math.cos(this.yaw);
-    mat4Perspective(FOV_Y, aspect, 0.01, 100, scratch.projection);
+    mat4Perspective(FOV_Y, aspect, 0.01, meshFarPlane(eye, this.meshBounds), scratch.projection);
     mat4LookAt(eye, this.target, [0, 1, 0], scratch.view);
     if (!scratch.initialized) {
       mat4Identity(scratch.model);

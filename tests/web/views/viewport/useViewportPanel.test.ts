@@ -18,7 +18,7 @@ import { useProjectStore } from "../../../../src-web/stores/project";
 import { registerSnapshot } from "../../../../src-web/render/snapshot";
 import type { Mock } from "vitest";
 import type { ViewportBackend } from "../../../../src-web/render/backend";
-import type { ScalarField } from "../../../../src-web/types";
+import type { RenderMeshData, ScalarField } from "../../../../src-web/types";
 
 const { createMock, backends, capabilityMock, baseCreate } = vi.hoisted(() => {
   type Backend = Record<keyof ViewportBackend, ReturnType<typeof vi.fn>> & {
@@ -268,9 +268,7 @@ describe("useViewportPanel：渲染器生命周期", () => {
     expect(createMock).toHaveBeenCalledTimes(1);
     expect(panel.emptyError).toBe(false);
 
-    await panel.loadMesh();
-    await flushPromises();
-
+    // 已有几何在挂载时自动载入，无需额外点击按钮。
     const backend = backends[0]!;
     expect(backend.uploadMesh).toHaveBeenCalledTimes(1);
     // 浇注系统叠加层（方案为空 → buildOverlayLayers 空层仍上传三个 id）
@@ -358,11 +356,11 @@ describe("useViewportPanel：云图 / 剖切 / 图层（renderMesh 回归锁定�
     await nextTick();
     expect(backend.setFaceValues).toHaveBeenLastCalledWith(new Float32Array([10, 0]));
 
-    // 几何列表清空后（载入态由槽位决定）→ 文件名走「—」回退
+    // 删除几何必须释放旧网格并恢复空态。
     const geometryStore = useGeometryStore();
     geometryStore.geometries = [];
     await nextTick();
-    expect(panel.title).toBe("— · 未选择方案");
+    expect(panel.title).toBe("");
     geometryStore.geometries = [
       {
         geometryId: "g-1",
@@ -375,7 +373,7 @@ describe("useViewportPanel：云图 / 剖切 / 图层（renderMesh 回归锁定�
         issues: { degenerate: 0, openEdges: 0, nonManifoldEdges: 0, normalInconsistentEdges: 0 },
       },
     ];
-    await nextTick();
+    await flushPromises();
 
     // 空场 → 图例清空且不再映射
     backend.setFaceValues.mockClear();
@@ -925,6 +923,7 @@ describe("载入网格的可见反馈", () => {
     await flushPromises();
     const { useGeometryStore } = await import("../../../../src-web/stores/geometry");
     useGeometryStore().geometries = [];
+    await nextTick();
     await panel.loadMesh();
     expect(panel.emptyText).toContain("尚未导入几何");
     expect(panel.emptyError).toBe(true);
@@ -943,7 +942,7 @@ describe("载入网格的可见反馈", () => {
     ] as never;
     vi.spyOn(geometry, "fetchRenderMesh").mockResolvedValue(undefined);
     await panel.loadMesh();
-    expect(panel.emptyText).toContain("读取渲染网格失败");
+    expect(panel.emptyText).toContain("读取几何表面失败");
     expect(panel.emptyError).toBe(true);
   });
 });
@@ -1020,6 +1019,61 @@ describe("工程切换隔离", () => {
     resolve({ positions: [], indices: [], faceCells: [] });
     await pending;
     expect(backend.uploadMesh).not.toHaveBeenCalled();
+    panel.unmount();
+  });
+});
+
+describe("几何与视口自动同步", () => {
+  it("导入后自动上传；刷新替换旧网格；删除释放后端", async () => {
+    const { panel } = await mountLoaded();
+    const geometry = useGeometryStore();
+    const summary = geometry.geometries[0]!;
+    geometry.geometries = [];
+    expect(panel.title).toBe("— · 未选择方案");
+    await flushPromises();
+    expect(panel.meshLoaded).toBe(false);
+    expect(backends[0]!.dispose).toHaveBeenCalled();
+
+    geometry.recordImport({ summary, log: [] });
+    await flushPromises();
+    expect(panel.meshLoaded).toBe(true);
+    const backend = backends.at(-1)!;
+    expect(backend.uploadMesh).toHaveBeenCalledTimes(1);
+    // 渲染器保持原生身份，不能被 slots 的深响应式代理。
+    expect(panel.slots[0]!.renderer).toBe(backend);
+
+    const { getRenderMesh } = await import("../../../../src-web/api/geometry");
+    vi.mocked(getRenderMesh).mockResolvedValueOnce({
+      positions: [0, 0, 0, 20, 0, 0, 0, 20, 0],
+      indices: [0, 1, 2],
+      faceCells: [0],
+    });
+    await panel.loadMesh();
+    expect(backend.uploadMesh).toHaveBeenCalledTimes(2);
+    expect(backend.uploadMesh.mock.lastCall?.[0].positions[3]).toBe(20);
+
+    panel.layout = "quad";
+    expect(useViewportStore().layout).toBe("quad");
+    panel.unmount();
+  });
+
+  it("后发刷新完成后，较早的读取不能覆盖新网格", async () => {
+    const { panel } = await mountLoaded();
+    const geometry = useGeometryStore();
+    let finish!: (data: RenderMeshData) => void;
+    vi.spyOn(geometry, "fetchRenderMesh").mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const pending = panel.loadMesh();
+    await panel.loadMesh();
+    const backend = backends[0]!;
+    const calls = backend.uploadMesh.mock.calls.length;
+    finish({ positions: [9, 9, 9], indices: [], faceCells: [] });
+    await pending;
+    expect(backend.uploadMesh).toHaveBeenCalledTimes(calls);
     panel.unmount();
   });
 });

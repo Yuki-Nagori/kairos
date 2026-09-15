@@ -125,7 +125,7 @@ const {
         </div>
       </div>
       <div class="flex shrink-0 flex-wrap items-center gap-2">
-        <UiButton :disabled="loadDisabled" @click="loadMesh()">载入网格到视口</UiButton>
+        <UiButton :disabled="loadDisabled" @click="loadMesh()">刷新视口</UiButton>
         <UiButton :disabled="playDisabled" @click="togglePlay()">{{ playLabel }}</UiButton>
         <UiButton :disabled="!meshReady" @click="toggleClip()">
           剖切：{{ clipOn ? "开" : "关" }}

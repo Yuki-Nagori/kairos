@@ -9,6 +9,7 @@ import {
   mat4LookAt,
   mat4Multiply,
   mat4Perspective,
+  meshFarPlane,
   type Vec3,
 } from "../math";
 import { computeVertexNormals } from "../normals";
@@ -36,7 +37,6 @@ interface WebGPUOverlayLayer {
 
 const FOV_Y = Math.PI / 4;
 const NEAR = 0.01;
-const FAR = 100;
 /** WGSL Uniforms 结构对齐后的大小：64(mvp) + 16 + 16 + 16 = 112 字节。 */
 const UNIFORM_FLOATS = 28;
 /** 线段 uniform：64(mvp) + 16(color) = 80 字节。 */
@@ -194,13 +194,12 @@ export class WebGPURenderer {
   }
 
   private buildMeshPipeline(): GpuRenderPipeline {
-    const module = this.device.createShaderModule({
-      code: MESH_VERTEX_SHADER + MESH_FRAGMENT_SHADER,
-    });
+    const vertexModule = this.device.createShaderModule({ code: MESH_VERTEX_SHADER });
+    const fragmentModule = this.device.createShaderModule({ code: MESH_FRAGMENT_SHADER });
     return this.device.createRenderPipeline({
       layout: "auto",
       vertex: {
-        module,
+        module: vertexModule,
         entryPoint: "vs",
         buffers: [
           { arrayStride: 12, attributes: [{ shaderLocation: 0, offset: 0, format: "float32x3" }] },
@@ -208,26 +207,25 @@ export class WebGPURenderer {
           { arrayStride: 4, attributes: [{ shaderLocation: 2, offset: 0, format: "float32" }] },
         ],
       },
-      fragment: { module, entryPoint: "fs", targets: [{ format: this.format }] },
+      fragment: { module: fragmentModule, entryPoint: "fs", targets: [{ format: this.format }] },
       primitive: { topology: "triangle-list", cullMode: "none" },
       depthStencil: { format: this.depthFormat, depthWriteEnabled: true, depthCompare: "less" },
     });
   }
 
   private buildLinePipeline(): GpuRenderPipeline {
-    const module = this.device.createShaderModule({
-      code: LINE_VERTEX_SHADER + LINE_FRAGMENT_SHADER,
-    });
+    const vertexModule = this.device.createShaderModule({ code: LINE_VERTEX_SHADER });
+    const fragmentModule = this.device.createShaderModule({ code: LINE_FRAGMENT_SHADER });
     return this.device.createRenderPipeline({
       layout: "auto",
       vertex: {
-        module,
+        module: vertexModule,
         entryPoint: "vs",
         buffers: [
           { arrayStride: 12, attributes: [{ shaderLocation: 0, offset: 0, format: "float32x3" }] },
         ],
       },
-      fragment: { module, entryPoint: "fs", targets: [{ format: this.format }] },
+      fragment: { module: fragmentModule, entryPoint: "fs", targets: [{ format: this.format }] },
       primitive: { topology: "line-list" },
       depthStencil: { format: this.depthFormat, depthWriteEnabled: true, depthCompare: "less" },
     });
@@ -247,6 +245,7 @@ export class WebGPURenderer {
     this.device.queue.writeBuffer(this.indexBuffer, 0, mesh.indices);
     this.indexCount = mesh.indices.length;
     this.meshVisible = true;
+    this.fitView();
   }
 
   /** 云图逐面值热更新（与 WebGL2 的 setFaceValues 同语义）。 */
@@ -323,10 +322,11 @@ export class WebGPURenderer {
     this.pitch = 0.4;
     this.distance = 3;
     this.target = [0, 0, 0];
+    this.fitView();
   }
 
   zoomBy(factor: number): void {
-    this.distance = Math.min(Math.max(this.distance * factor, 0.1), 500);
+    this.distance = Math.max(this.distance * factor, 0.1);
   }
 
   /** 轨道相机快照 / 恢复（多视口联动）。 */
@@ -478,7 +478,12 @@ export class WebGPURenderer {
 
   private drawFrame(): void {
     const aspect = this.canvas.width / Math.max(this.canvas.height, 1);
-    const projection = mat4Perspective(FOV_Y, aspect, NEAR, FAR);
+    const projection = mat4Perspective(
+      FOV_Y,
+      aspect,
+      NEAR,
+      meshFarPlane(this.eye(), this.meshBounds),
+    );
     const view = mat4LookAt(this.eye(), this.target, [0, 1, 0]);
     const mvp = mat4Multiply(mat4Multiply(projection, view), mat4Identity());
 

@@ -195,3 +195,19 @@ export function clipPlaneFromFraction(
   const offset = normal[axisIndex] * position;
   return { normal, offset };
 }
+
+/** 远裁剪面覆盖整个模型；固定 100 会裁掉以毫米导入的大型制品。 */
+export function meshFarPlane(eye: Vec3, bounds: { min: Vec3; max: Vec3 } | null): number {
+  if (bounds === null) {
+    return 100;
+  }
+  return Math.max(
+    100,
+    2 *
+      Math.hypot(
+        Math.max(Math.abs(eye[0] - bounds.min[0]), Math.abs(eye[0] - bounds.max[0])),
+        Math.max(Math.abs(eye[1] - bounds.min[1]), Math.abs(eye[1] - bounds.max[1])),
+        Math.max(Math.abs(eye[2] - bounds.min[2]), Math.abs(eye[2] - bounds.max[2])),
+      ),
+  );
+}

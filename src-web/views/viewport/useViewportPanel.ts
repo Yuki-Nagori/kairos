@@ -1,7 +1,7 @@
 /** 3D 视口面板：多实例视口（单视口 / 四分格）+ 云图 / 剖切 / 时间步动画 /
  * 空间拾取。布局与图层意图存于视口 store；相机在实例间联动——任一实例
  * 交互后，其余实例沿其轨道相机跟随（时间轴经 results store 天然同步）。 */
-import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, markRaw, reactive, ref, watch } from "vue";
 import { useGeometryStore } from "../../stores/geometry";
 import { useProjectStore } from "../../stores/project";
 import { useResultsStore } from "../../stores/results";
@@ -35,7 +35,12 @@ export function useViewportPanel() {
   // —— 多实例布局 ——
   // slot 0 为主视口（FPS 读数 / 快照来源）；四分格时每个实例独立画布与相机，
   // 任一实例交互即把轨道相机复制到其余实例（联动）。
-  const layout = computed<ViewportLayout>(() => viewport.layout);
+  const layout = computed<ViewportLayout>({
+    get: () => viewport.layout,
+    set: (value) => {
+      viewport.layout = value;
+    },
+  });
   const slotIds = computed(() => (viewport.layout === "quad" ? [0, 1, 2, 3] : [0]));
   const slots = reactive(
     [0, 1, 2, 3].map((id): ViewportSlot => ({
@@ -75,9 +80,7 @@ export function useViewportPanel() {
   }
 
   // 空态提示：载入网格前主视口不应是一片空白；探测备注动态替换。
-  const emptyText = ref(
-    "导入几何并生成网格后，点击「载入网格到视口」查看 3D 模型（WebGPU 可用时自动启用）",
-  );
+  const emptyText = ref("导入 STL / STEP / IGES 或样例后，自动显示 3D 模型。");
   const emptyError = ref(false);
   const meshLoaded = computed(() => slots.some((slot) => slot.loaded));
 
@@ -153,7 +156,7 @@ export function useViewportPanel() {
       indices: new Uint32Array(deformed.indices),
       faceCells: new Uint32Array(deformed.faceCells),
     };
-    sharedMesh = mesh;
+    sharedMesh = markRaw(mesh);
     for (const slot of slots) {
       if (slot.renderer === null) {
         continue;
@@ -385,7 +388,8 @@ export function useViewportPanel() {
         backend.dispose();
         return;
       }
-      slot.renderer = backend;
+      // GPU 资源保持原生对象身份；Vue 深代理会破坏 WebGL/WebGPU 方法的接收者。
+      slot.renderer = markRaw(backend);
       attachPointerHandlers(slot, slot.el);
     })();
     creating.set(slot.id, task);
@@ -397,12 +401,12 @@ export function useViewportPanel() {
 
   /** 单实例就绪：建渲染器 + 上传共享网格 + 应用云图 / 剖切 / 图层。 */
   async function setupSlot(slot: ViewportSlot): Promise<void> {
-    if (sharedMesh === null || slot.el === null || slot.loaded) {
+    if (sharedMesh === null || slot.el === null || slot.renderMesh === sharedMesh) {
       return;
     }
     await ensureSlotRenderer(slot);
     const renderer = slot.renderer;
-    if (renderer === null) {
+    if (renderer === null || sharedMesh === null) {
       return;
     }
     // 共享网格入槽：applyField / applyClip / 空间拾取都按槽读取
@@ -420,7 +424,10 @@ export function useViewportPanel() {
     slot.loaded = true;
   }
 
+  let meshRequest = 0;
+
   async function loadMesh(): Promise<void> {
+    const request = ++meshRequest;
     const first = geometry.geometries[0];
     if (first === undefined) {
       // 点按钮没有任何动静是最糟的反馈：明确说清缺什么、去哪补
@@ -433,20 +440,19 @@ export function useViewportPanel() {
     emptyError.value = false;
     const epoch = project.autoSaveEpoch;
     const data = await geometry.fetchRenderMesh(first.geometryId);
-    if (epoch !== project.autoSaveEpoch) {
+    if (epoch !== project.autoSaveEpoch || request !== meshRequest) {
       return;
     }
     if (data === undefined) {
-      emptyText.value =
-        "读取渲染网格失败：请先在几何面板生成体积网格，并确认工程已保存到工作区（散装工程没有网格落盘路径）。";
+      emptyText.value = "读取几何表面失败：请查看错误详情，或点击「刷新视口」重试。";
       emptyError.value = true;
       return;
     }
-    sharedMesh = {
+    sharedMesh = markRaw({
       positions: new Float32Array(data.positions),
       indices: new Uint32Array(data.indices),
       faceCells: new Uint32Array(data.faceCells),
-    };
+    });
     for (const slot of slots) {
       await setupSlot(slot);
     }
@@ -537,6 +543,22 @@ export function useViewportPanel() {
     },
   );
 
+  // 导入、修复和体网格更新都会改变渲染表面；无需再手动加载。
+  watch([() => geometry.geometries, () => geometry.meshReports], () => {
+    if (geometry.geometries.length > 0) {
+      void loadMesh();
+      return;
+    }
+    meshRequest += 1;
+    sharedMesh = null;
+    for (const slot of slots) {
+      releaseSlot(slot);
+    }
+    viewport.setMeshLoaded(false);
+    emptyText.value = "导入几何后自动显示 3D 模型。";
+    emptyError.value = false;
+  });
+
   watch(
     () => results.loadedField,
     (field) => {
@@ -558,6 +580,9 @@ export function useViewportPanel() {
   });
 
   onMounted(() => {
+    if (geometry.geometries.length > 0) {
+      void loadMesh();
+    }
     void detectRenderCapabilityInBrowser().then((capability) => {
       if (capability.backend === "webgl2") {
         emptyText.value = `${emptyText.value}（${capability.note}）`;
@@ -566,6 +591,7 @@ export function useViewportPanel() {
   });
   onUnmounted(() => {
     stopPlay();
+    meshRequest += 1;
     for (const slot of slots) {
       releaseSlot(slot);
     }

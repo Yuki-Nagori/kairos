@@ -58,7 +58,7 @@
 | T45 | [T45-viewport-picking-done.md](T45-viewport-picking-done.md)                               | 视口空间拾取与探针场关联                                                        |
 | T46 | [T46-probe-time-series-done.md](T46-probe-time-series-done.md)                             | 探针时间曲线与时间轴联动                                                        |
 | T47 | [T47-full-clipping-done.md](T47-full-clipping-done.md)                                     | 视口完整剖切（三轴平面 + 位置 + 反向）                                          |
-| T49 | [T49-multi-viewport-done.md](T49-multi-viewport-done.md)                                   | 多视口联动（多实例布局与相机 / 时间轴同步）                                     |
+| T49 | [T49-multi-viewport-done.md](T49-multi-viewport-done.md)                                   | 多视口联动；2026-09-15 修复导入自动显示、GPU 着色器与模型取景                   |
 | T50 | [T50-volume-rendering-poc-done.md](T50-volume-rendering-poc-done.md)                       | 三维体渲染 POC（体绘制）                                                        |
 | T51 | [T51-result-binary-chain-done.md](T51-result-binary-chain-done.md)                         | 大结果数据链第一步（二进制通道 + 会话缓存淘汰）                                 |
 | T52 | [T52-report-content-done.md](T52-report-content-done.md)                                   | 分析报告内容增强（几何摘要 / 探针数值 / 时间序列）                              |
