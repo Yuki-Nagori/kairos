@@ -46,3 +46,12 @@ function observeUplotSize(plot: uPlot, host: HTMLDivElement): () => void {
 export function observeUplotSizeIfPresent(plot: uPlot | null, host: HTMLDivElement): () => void {
   return plot === null ? () => undefined : observeUplotSize(plot, host);
 }
+
+export function resetUplotZoom(plot: uPlot | null): void {
+  if (plot === null) {
+    return;
+  }
+  const auto = { min: null, max: null } as unknown as { min: number; max: number };
+  plot.setScale("x", auto);
+  plot.setScale("y", auto);
+}

@@ -5,7 +5,12 @@ import "uplot/dist/uPlot.min.css";
 import { useAppStore } from "../../stores/app";
 import { useResultsStore } from "../../stores/results";
 import { THEME_CHANGED_EVENT } from "../../utils/theme";
-import { createUplot, observeUplotSizeIfPresent, resetUplot } from "../../render/uplot-runtime";
+import {
+  createUplot,
+  observeUplotSizeIfPresent,
+  resetUplot,
+  resetUplotZoom,
+} from "../../render/uplot-runtime";
 
 export function useXyChartPanel() {
   const app = useAppStore();
@@ -110,6 +115,10 @@ export function useXyChartPanel() {
     ensurePlot()?.setData(plotData());
   }
 
+  function resetZoom(): void {
+    resetUplotZoom(plot.value);
+  }
+
   function redrawTheme(): void {
     stopResizeObserver();
     plot.value?.destroy();
@@ -147,6 +156,7 @@ export function useXyChartPanel() {
     jumpToTime,
     addProbeFromInput,
     draw,
+    resetZoom,
     plotHostRef,
   };
 }

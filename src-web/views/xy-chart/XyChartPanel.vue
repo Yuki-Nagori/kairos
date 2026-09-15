@@ -18,6 +18,7 @@ const {
   jumpToTime,
   addProbeFromInput,
   draw,
+  resetZoom,
 } = useXyChartPanel();
 </script>
 
@@ -49,6 +50,7 @@ const {
       <UiTextInput v-model="nodeInput" placeholder="节点序号" class="w-28" :disabled="working" />
       <UiButton :disabled="working" @click="addProbeFromInput()">添加探针</UiButton>
       <UiButton :disabled="working" @click="results.exportFieldCsv()">导出 CSV</UiButton>
+      <UiButton @click="resetZoom()">重置缩放</UiButton>
       <UiButton @click="draw()">重绘</UiButton>
     </div>
     <div class="space-y-1">

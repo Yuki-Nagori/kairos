@@ -160,6 +160,7 @@ describe("XyChartPanel", () => {
 
   it("重绘按钮手动触发 draw", async () => {
     const wrapper = mountPanel();
+    await findButton(wrapper, "重置缩放").trigger("click");
     await findButton(wrapper, "重绘").trigger("click");
   });
 
