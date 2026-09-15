@@ -39,6 +39,29 @@ pub struct PvtResidualSummary {
     pub rmse_m3_per_kg: f64,
 }
 
+pub fn residual_summary_json<T: Serialize>(summary: &T) -> Result<String> {
+    serde_json::to_string_pretty(summary)
+        .map_err(|error| KairosError::internal(format!("残差摘要 JSON 序列化失败：{error}")))
+}
+
+pub fn viscosity_residual_summary_csv(summary: &ResidualSummary) -> String {
+    format!(
+        "count,maxAbsolutePaS,rmsePaS,maxAbsoluteLog10,rmseLog10\n{},{},{},{},{}\n",
+        summary.count,
+        summary.max_absolute_pa_s,
+        summary.rmse_pa_s,
+        summary.max_absolute_log10,
+        summary.rmse_log10
+    )
+}
+
+pub fn pvt_residual_summary_csv(summary: &PvtResidualSummary) -> String {
+    format!(
+        "count,maxAbsoluteM3PerKg,maxRelative,rmseM3PerKg\n{},{},{},{}\n",
+        summary.count, summary.max_absolute_m3_per_kg, summary.max_relative, summary.rmse_m3_per_kg
+    )
+}
+
 /// 计算 Kairos Tait 参数的比容预测（m³/kg）。
 ///
 /// `b1` 与 `b2` 是相对于 `b5` 的线性温度项，`b3` 为压力对数项，`b4` 为压力尺度。
@@ -611,5 +634,26 @@ mod tests {
             specific_volume_m3_per_kg: f64::NAN,
         }];
         assert!(evaluate_tait(&model, &invalid_point).is_err());
+    }
+
+    #[test]
+    fn residual_summaries_export_as_json_and_csv() {
+        let viscosity = ResidualSummary {
+            count: 2,
+            max_absolute_pa_s: 1.0,
+            rmse_pa_s: 0.5,
+            max_absolute_log10: 0.1,
+            rmse_log10: 0.05,
+        };
+        let pvt = PvtResidualSummary {
+            count: 2,
+            max_absolute_m3_per_kg: 0.01,
+            max_relative: 0.02,
+            rmse_m3_per_kg: 0.005,
+        };
+        let json = residual_summary_json(&viscosity).unwrap();
+        assert!(json.contains("maxAbsolutePaS"));
+        assert!(viscosity_residual_summary_csv(&viscosity).starts_with("count,"));
+        assert!(pvt_residual_summary_csv(&pvt).contains("maxAbsoluteM3PerKg"));
     }
 }
