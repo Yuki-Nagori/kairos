@@ -155,3 +155,18 @@ cargo run -p kairos-cli -- doe run --plan full \
 ```
 
 该命令使用 `full` 计划执行单点（`orthogonal` 计划要求每个因子三个水平），GUI 同源 Multipass VM 中的 moldingFoam v1.1.0 负责实际求解。case 的 `endTime=11 s`；截至记录时物理时间约 `1.45 s`、墙钟约 `235 s`，当前运行预计总耗时约 27 分钟。完成后补写退出码、填充时间、压力和质量预算结果。
+
+### 五核重跑（2026-09-15）
+
+单核运行因 CLI 600 秒超时中止，保留其原始日志作为性能记录。按要求使用 5 核重新提交同一工况：
+
+```bash
+cargo run -p kairos-cli -- doe run --plan full \
+  --factor '熔体温度=220' --factor '注射时间=5.5' \
+  --stl report/mug-moldflow/mug.stl --target-size 5.0 --cores 5 \
+  --injection-time 5.5 --packing-pressure-mpa 27.6282 --packing-time-s 20 \
+  --out-dir /private/tmp/t100-mug-full-5c --batch mug-baseline-full-5c \
+  --solve --vm --material report/mug-moldflow/material-input/generic-pp-fitted-v3.json --json
+```
+
+当前 VM 已启动 `mpirun -np 5 foamRun -parallel`，五个 solver rank 均在工作；完成后补写实际退出码和指标。
