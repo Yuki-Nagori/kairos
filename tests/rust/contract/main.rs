@@ -16,7 +16,7 @@ use kairos_core::models::project::{GeometryRef, Project, Study};
 use kairos_core::models::results::{
     DeriveRequest, ResultCatalog, ScalarField, TimeStepMeta, VectorField,
 };
-use kairos_core::models::runners::CoolingChannel;
+use kairos_core::models::runners::{CoolingChannel, RunnerElement, RunnerKind, RunnerMedium};
 use kairos_core::services::moldingfoam::{CaseReport, GateInlet, PatchAreas};
 use kairos_core::services::{geometry, material};
 
@@ -103,6 +103,22 @@ fn project_serializes_with_camel_case() {
         json["studies"][0]["coolingChannels"][0]["specificHeatJKgK"],
         4180.0
     );
+}
+
+#[test]
+fn runner_medium_serializes_with_snake_case() {
+    let runner = RunnerElement {
+        id: "gate-1".into(),
+        kind: RunnerKind::Gate,
+        diameter_mm: 2.0,
+        start: [0.0; 3],
+        end: [1.0, 0.0, 0.0],
+        medium: Some(RunnerMedium::Gas),
+    };
+    let value = serde_json::to_value(runner).unwrap();
+    assert_eq!(value["kind"], "gate");
+    assert_eq!(value["medium"], "gas");
+    assert_eq!(value["diameterMm"], 2.0);
 }
 
 /// BlowingGroup 的形状：camelCase 微发泡近似参数，前端材料面板与之对应。

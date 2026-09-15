@@ -3,7 +3,7 @@
 - 阶段：E1（特殊工艺）
 - 依赖：上游 moldingFoam 三相 / 气芯能力进入 release bundle；T07（浇注系统建模）
 - 优先级：P3（等上游）
-- 状态：**待开工**（开工条件见下；第一步可先行）
+- 状态：**进行中**（第一步数据位已完成；第二步等待上游三相 / 气芯能力）
 - 来源：[特殊工艺可行性](../research/special-process-feasibility.md)
 
 ## 目标
@@ -28,4 +28,10 @@
 - 第一步：气体介质可导入、可挂到浇口单元，工程文件往返保真，`bun run verify` 全绿；
 - 第二步：GAIM case 在真机 bundle 上跑通（exit 0、无 NaN），气芯体积分数云图可读，
   与未注气基线对比给出穿透深度读数；
+
+## 已完成批次
+
+- `RunnerMedium::{Melt, Gas}` 已加入 core 模型，旧工程缺省仍按熔体处理。
+- `RunnerElement.medium` 已镜像到前端类型，并贯通工程校验、双域 / 中面 / moldingFoam 数据路径。
+- IPC 契约测试锁定 `kind: "gate"`、`medium: "gas"` 与 `diameterMm` 的序列化形状。
 - DTO 双端镜像 + 契约测试锁定新字段。

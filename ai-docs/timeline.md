@@ -486,3 +486,4 @@
 - **13:31** fix(vm): 完成 T97 库守卫 inode 去重：按设备号 + inode 归并硬链接与同目标软链接，新增 bash 语法回归；本机 Multipass socket 权限不足，真实 VM 坏状态 / 恢复验收保留待可访问环境执行。
 - **13:34** docs(tasks): 校正 T95 实际进度：P2-a、P3-b（nalgebra/vec3）、P3-c（bytemuck）与 P3-d（解压库评估）均已有提交并完成，剩余 P3-a 图表仅待视觉对照；同步任务索引与执行清单，避免重复施工。
 - **13:36** perf(web): T95 P3-a 先优化现有 Canvas 图表：抽出共享 `chartRange`，绘制与探针标注复用同一值域，避免大场景重复扫描；补齐空值/平坦序列测试，uPlot 替换保留到可渲染桌面环境做视觉对照。
+- **13:39** feat(core): 完成 T89 第一步 GAIM 数据位闭环：`RunnerMedium` / `RunnerElement.medium` 双端镜像贯通工程与求解数据路径，补 IPC 契约测试锁定 `gas` 序列化；三相 / 气芯求解仍等待上游能力。
