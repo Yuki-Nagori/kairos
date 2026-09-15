@@ -170,3 +170,25 @@ cargo run -p kairos-cli -- doe run --plan full \
 ```
 
 当前 VM 已启动 `mpirun -np 5 foamRun -parallel`，五个 solver rank 均在工作；完成后补写实际退出码和指标。
+
+### Mug 与参考工况一致的最终复现实验命令
+
+下面命令固定 Moldflow 参考工况中的工艺输入，并使用仓库内置的 `PP-REF-01` 默认材料。Kairos 根据导入 STL 的实际体积和 `5.5 s` 注射时间计算名义流量；不会手写覆盖流量值。
+
+```bash
+cargo run -p kairos-cli -- doe run --plan full \
+  --factor '熔体温度=220' \
+  --factor '模具温度=50' \
+  --factor '注射时间=5.5' \
+  --stl report/mug-moldflow/mug.stl \
+  --target-size 5.0 \
+  --cores 5 \
+  --injection-time 5.5 \
+  --packing-pressure-mpa 27.6282 \
+  --packing-time-s 20 \
+  --out-dir /private/tmp/kairos-mug-baseline \
+  --batch mug-baseline-220c-50c-5p5s-5c \
+  --solve --vm --json
+```
+
+对应参考输入：熔体 `220 °C`、模具 `50 °C`、注射 `5.5 s`、保压 `27.6282 MPa / 20 s`、冷却参考 `20 s`。当前 CLI case 的求解终止时间由生成器控制，完整 Mug 结果以原始 `log.foamRun`、时间目录和 CLI JSON 汇总为准。网格仍是 Kairos 体积网格，不能与参考 Dual Domain 结果宣称逐点等价。
