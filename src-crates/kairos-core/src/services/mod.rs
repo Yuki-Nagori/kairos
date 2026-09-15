@@ -13,6 +13,7 @@ pub mod geometry;
 pub mod gmsh;
 pub mod host;
 pub mod iges;
+pub mod job_lifecycle;
 pub mod jobs;
 pub mod material;
 pub mod mesh_store;

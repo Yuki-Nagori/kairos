@@ -508,3 +508,4 @@
 - **17:30** fix(ci)+build: 修复 Windows / Ubuntu CI 并消除 Vite 大 chunk 警告 —— Windows `ProcessRunner` 测试改用 `cmd /C` 可识别的 `exit /b` 语法；Ubuntu CI 设置 `RUST_TEST_THREADS=1`，规避 wgpu GLES 软件适配器并行测试的 adapter context deadlock。Vite 按 KaTeX / uPlot / Vue vendor 拆包，主入口从 595 kB 降至 205 kB，构建不再提示超过 500 kB。
 
 - 2026-09-15 16:22 | 视口回归 | 修复 WebGPU 着色器重复声明、导入自动加载与刷新失效、四分格只读绑定；按模型取景和动态远裁剪，增加真实 GPU 浏览器夹具与自动同步测试。
+- 2026-09-15 16:30 | T99 第一批 | 新增可注入作业生命周期状态机，锁定准备取消、启动失败、远端状态未知/恢复和非法事件回滚契约。
