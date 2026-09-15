@@ -924,7 +924,7 @@ fn momentum_transport_dict(material: &Material) -> String {
         )
 }
 
-/// 熔体相热物理：Tait 双域 PVT（b4 取熔体域 b4m；latentHeat 必须 0，
+/// 熔体相热物理：Tait 双域 PVT（latentHeat 必须 0，
 /// 非零会使过渡带 Cv 为负而发散——moldingFoam README §6）。
 fn physical_properties_melt(material: &Material, process: &ProcessSettings) -> Result<String> {
     let pvt = &material.pvt;
@@ -944,8 +944,20 @@ fn physical_properties_melt(material: &Material, process: &ProcessSettings) -> R
     let pr = MELT_TRANSPORT_MU * cp / conductivity;
     Ok(foam_header("dictionary", "physicalProperties.melt")
         + &format!(
-            "thermoType\n{{\n    type            heRhoThermo;\n    mixture         pureMixture;\n    transport       const;\n    thermo          hMelt;\n    equationOfState Tait;\n    specie          specie;\n    energy          sensibleInternalEnergy;\n}}\n\nmixture\n{{\n    specie\n    {{\n        molWeight   1;\n    }}\n\n    equationOfState\n    {{\n        b1m         {:.6e};\n        b2m         {:.6e};\n        b1s         {:.6e};\n        b2s         {:.6e};\n        b3          {:.6e};\n        b4          {:.6e};\n        b5          {:.4};\n        b6          0;\n        C           0.0894;\n        smoothBand  0.5;\n    }}\n\n    thermodynamics\n    {{\n        Cp          {:.4};\n        latentHeat  0;\n        hf          0;\n    }}\n\n    transport\n    {{\n        mu          {MELT_TRANSPORT_MU:.4};\n        Pr          {pr:.6e};\n    }}\n}}\n",
-            pvt.b1m, pvt.b2m, pvt.b1s, pvt.b2s, pvt.b3, pvt.b4m, pvt.b5, cp
+            "thermoType\n{{\n    type            heRhoThermo;\n    mixture         pureMixture;\n    transport       const;\n    thermo          hMelt;\n    equationOfState Tait;\n    specie          specie;\n    energy          sensibleInternalEnergy;\n}}\n\nmixture\n{{\n    specie\n    {{\n        molWeight   1;\n    }}\n\n    equationOfState\n    {{\n        b1m         {:.6e};\n        b2m         {:.6e};\n        b1s         {:.6e};\n        b2s         {:.6e};\n        b3          {:.6e};\n        b3s         {:.6e};\n        b4m         {:.6e};\n        b4s         {:.6e};\n        b5          {:.4};\n        b6          {:.6e};\n        C           {:.6e};\n        smoothBand  {:.6e};\n    }}\n\n    thermodynamics\n    {{\n        Cp          {:.4};\n        latentHeat  0;\n        hf          0;\n    }}\n\n    transport\n    {{\n        mu          {MELT_TRANSPORT_MU:.4};\n        Pr          {pr:.6e};\n    }}\n}}\n",
+            pvt.b1m,
+            pvt.b2m,
+            pvt.b1s,
+            pvt.b2s,
+            pvt.b3,
+            pvt.b3s.unwrap_or(pvt.b3),
+            pvt.b4m,
+            pvt.b4s,
+            pvt.b5,
+            pvt.b6,
+            pvt.c,
+            pvt.smooth_band,
+            cp
         ))
 }
 
