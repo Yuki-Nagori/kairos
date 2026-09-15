@@ -110,6 +110,14 @@ export function useXyChartPanel() {
     ensurePlot()?.setData(plotData());
   }
 
+  function redrawTheme(): void {
+    stopResizeObserver();
+    plot.value?.destroy();
+    plot.value = null;
+    plotSignature.value = "";
+    draw();
+  }
+
   watch(
     () => [results.loadedField, results.probes, results.probeTimeSeries, mode.value],
     () => draw(),
@@ -118,11 +126,11 @@ export function useXyChartPanel() {
   onMounted(() => {
     ensurePlot();
     // 主题切换后画布配色取自 CSS 变量，需整帧重绘。
-    window.addEventListener(THEME_CHANGED_EVENT, draw);
+    window.addEventListener(THEME_CHANGED_EVENT, redrawTheme);
     draw();
   });
   onUnmounted(() => {
-    window.removeEventListener(THEME_CHANGED_EVENT, draw);
+    window.removeEventListener(THEME_CHANGED_EVENT, redrawTheme);
     stopResizeObserver();
     plot.value?.destroy();
     plot.value = null;
