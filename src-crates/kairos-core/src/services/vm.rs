@@ -365,11 +365,12 @@ pub fn env_probe_command() -> String {
     format!("test -f {}", env_path(ENV_BASHRC))
 }
 
-/// 部署环境树：建根目录 → 解压归档 → 校验 bashrc 就位。
-/// 三步用 `&&` 串联：解压半截（归档损坏 / 磁盘满）不算部署成功。
+/// 部署环境树：删除旧 OpenFOAM 树 → 建根目录 → 解压归档 → 校验 bashrc 就位。
+/// 旧树必须先清掉，否则 bundle 更新会把旧库叠加进新环境，形成重复加载风险；
+/// 各步用 `&&` 串联，解压半截（归档损坏 / 磁盘满）不算部署成功。
 pub fn env_deploy_command() -> String {
     format!(
-        "mkdir -p {ENV_ROOT} && tar -xJf {} -C {ENV_ROOT} && {}",
+        "rm -rf {ENV_ROOT}/openfoam14 && mkdir -p {ENV_ROOT} && tar -xJf {} -C {ENV_ROOT} && {}",
         vm_bundle_archive_path(),
         env_probe_command()
     )
@@ -899,7 +900,9 @@ mod tests {
             "kairos:/home/ubuntu/moldingfoam-bundle.tar.xz"
         );
         let deploy = env_deploy_command();
-        assert!(deploy.starts_with("mkdir -p ~/moldingfoam-env && tar -xJf /home/ubuntu/"));
+        assert!(deploy.starts_with(
+            "rm -rf ~/moldingfoam-env/openfoam14 && mkdir -p ~/moldingfoam-env && tar -xJf /home/ubuntu/"
+        ));
         assert!(
             deploy.ends_with(&env_probe_command()),
             "部署收尾必须复核 bashrc：{deploy}"

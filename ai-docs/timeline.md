@@ -481,3 +481,4 @@
 - **13:05** docs(review): 同步 T75/T84/T94/T96、架构生命周期与状态、README 和测试地图；归档评审及闭环报告，新增 T98 实现记录与 T99 后续优化任务，保留真实平台验收边界。文档检查 171 篇、零断链/孤儿，完整提交门禁通过。
 - **13:13** refactor(web): 完成 T95 P2-c：CSV 导出统一 RFC 4180 引号、CRLF 与 UTF-8 BOM；工程、流道、水路和自定义材料 ID 改用平台 CSPRNG，旧 WebView 使用单调回退；补充边界回归，前端 706 项测试与四维覆盖率 100%。
 - **13:18** refactor(web): 完成 T95 P2-a 可复用收编：方案任务菜单改用 VueUse `onClickOutside` / `onKeyStroke`，工程自动保存继续使用 `useDebounceFn`；核实标题栏菜单和 storage 索引协议保留自定义实现，避免破坏产品语义。
+- **13:22** fix(vm): 开始 T97：部署 moldingFoam bundle 前清理受管 `openfoam14` 环境树，避免新旧库叠加；保留解压后 bashrc 复核，core 用例锁定清理 → 建目录 → 解压 → 复核顺序。库布局守卫和真实 VM 坏状态验收列入下一批。
