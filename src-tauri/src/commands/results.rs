@@ -148,6 +148,21 @@ pub async fn load_result_field_binary(
     .map_err(|e| KairosError::internal(format!("结果加载任务失败：{e}")))?
 }
 
+/// 在 core 侧完成场 CSV 编码，避免把整场复制成前端二维行数组。
+#[tauri::command]
+pub async fn export_result_field_csv(
+    case_dir: String,
+    time_dir: String,
+    field: String,
+) -> Result<String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let loaded = results::read_field(std::path::Path::new(&case_dir), &time_dir, &field)?;
+        Ok(results::scalar_field_csv(&loaded))
+    })
+    .await
+    .map_err(|e| KairosError::internal(format!("结果 CSV 导出任务失败：{e}")))?
+}
+
 /// 矢量场三分量通道：[magic][meta JSON][f32 值区 ×3]（每单元 x/y/z 顺序平铺）。
 /// 供变形显示与矢量派生消费；标量模量仍走 load_result_field_binary。
 #[tauri::command]

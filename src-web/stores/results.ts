@@ -10,6 +10,7 @@ import {
   loadResultField,
   loadTensorField,
   loadVectorField,
+  exportResultFieldCsv,
 } from "../api/results";
 import type {
   DeriveRequest,
@@ -211,20 +212,29 @@ export const useResultsStore = defineStore("results", {
       });
     },
     /** 导出已加载场为 CSV（节点序号 + 值）。 */
-    exportFieldCsv(): void {
+    async exportFieldCsv(): Promise<void> {
       const app = useAppStore();
       const { loadedField } = this;
       if (loadedField === null || loadedField.values.length === 0) {
         app.setError("暂无可导出的场数据，请先加载场。");
         return;
       }
-      const headers = [
-        "node",
-        `${loadedField.field}${loadedField.isMagnitude ? " (magnitude)" : ""}`,
-      ];
-      const rows = loadedField.values.map((value, index) => [index, value]);
-      const csv = toCsv(headers, rows);
-      // Blob/锚点的 DOM 操作集中在 util 层，store 只负责数据与文件名。
+      let csv: string;
+      const catalog = this.resultCatalog;
+      const rawField = loadedField.field.split(" · ")[0]!;
+      if (catalog !== null && loadedField.timeDir !== "—") {
+        csv = await exportResultFieldCsv(catalog.caseDir, loadedField.timeDir, rawField);
+      } else {
+        // 非求解器生成的本地分析场（如浇口适合度）没有结果目录，保留轻量回退。
+        const headers = [
+          "node",
+          `${loadedField.field}${loadedField.isMagnitude ? " (magnitude)" : ""}`,
+        ];
+        csv = toCsv(
+          headers,
+          loadedField.values.map((value, index) => [index, value]),
+        );
+      }
       downloadTextFile(`${loadedField.field}-${loadedField.timeDir}.csv`, csv);
     },
   },

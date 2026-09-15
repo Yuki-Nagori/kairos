@@ -36,6 +36,15 @@ export async function loadResultField(
   return decodeFieldBinary(buffer);
 }
 
+/** 由 core 直接编码当前时间步的 CSV，前端不创建逐行中间数组。 */
+export function exportResultFieldCsv(
+  caseDir: string,
+  timeDir: string,
+  field: string,
+): Promise<string> {
+  return invokeCommand("export_result_field_csv", { caseDir, timeDir, field });
+}
+
 /** 加载指定时间步的矢量场三分量（变形显示 / 矢量派生用）。 */
 export async function loadVectorField(
   caseDir: string,

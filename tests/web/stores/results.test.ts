@@ -13,6 +13,7 @@ import {
   listResultTimes,
   loadResultField,
   loadVectorField,
+  exportResultFieldCsv,
 } from "../../../src-web/api/results";
 import { analyzeGateLocation, previewFill } from "../../../src-web/api/geometry";
 import type {
@@ -31,6 +32,7 @@ vi.mock("../../../src-web/api/results", () => ({
   deformRenderMesh: vi.fn(),
   deriveField: vi.fn(),
   deriveDifference: vi.fn(),
+  exportResultFieldCsv: vi.fn(),
 }));
 vi.mock("../../../src-web/api/geometry", () => ({
   analyzeGateLocation: vi.fn(),
@@ -256,6 +258,22 @@ describe("results store", () => {
         "T-0.100.csv",
         "\uFEFFnode,T\r\n0,1\r\n1,2\r\n2,3\r\n",
       );
+    });
+
+    it("uses the core CSV exporter for a solver result field", async () => {
+      const results = useResultsStore();
+      results.resultCatalog = catalog;
+      results.loadedField = makeField({ field: "p", isMagnitude: false });
+      vi.mocked(exportResultFieldCsv).mockResolvedValue("\uFEFFnode,p\r\n0,1\r\n");
+
+      await results.exportFieldCsv();
+
+      expect(exportResultFieldCsv).toHaveBeenCalledWith("/case/run", "0.100", "p");
+      expect(downloadTextFile).toHaveBeenCalledWith("p-0.100.csv", "\uFEFFnode,p\r\n0,1\r\n");
+
+      results.loadedField = makeField({ timeDir: "—", isMagnitude: false });
+      await results.exportFieldCsv();
+      expect(exportResultFieldCsv).toHaveBeenCalledTimes(1);
     });
   });
 

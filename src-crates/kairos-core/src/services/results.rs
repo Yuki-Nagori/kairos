@@ -223,6 +223,31 @@ pub fn parse_internal_vector_magnitudes(content: &str) -> (Vec<f64>, bool) {
     (magnitudes, complete)
 }
 
+/// 将已解析的标量场编码为 Excel 兼容的 RFC 4180 CSV。
+///
+/// 导出在 core 完成，避免前端为百万级场创建 `rows` 二维数组；字段名中的逗号、引号
+/// 与换行按 CSV 规则转义，BOM/CRLF 保持桌面表格软件兼容。
+pub fn scalar_field_csv(field: &ScalarField) -> String {
+    fn cell(value: &str) -> String {
+        if value.contains([',', '"', '\r', '\n']) {
+            format!("\"{}\"", value.replace('"', "\"\""))
+        } else {
+            value.to_string()
+        }
+    }
+
+    let label = if field.is_magnitude {
+        format!("{} (magnitude)", field.field)
+    } else {
+        field.field.clone()
+    };
+    let mut csv = format!("\u{feff}node,{}\r\n", cell(&label));
+    for (index, value) in field.values.iter().enumerate() {
+        csv.push_str(&format!("{index},{value}\r\n"));
+    }
+    csv
+}
+
 /// 解析 internalField 为对称张量分量（每 6 个标量一组，(xx, xy, xz, yy, yz, zz)）。
 /// 分量数不是 6 的倍数时按可用分量截断并把 complete 置 false。
 pub fn parse_internal_tensors(content: &str) -> (Vec<[f64; 6]>, bool) {
@@ -473,6 +498,31 @@ boundaryField
     walls { type zeroGradient; }
 }
 "#;
+
+    #[test]
+    fn scalar_field_csv_escapes_labels_and_keeps_excel_shape() {
+        let field = ScalarField {
+            field: "T,\"wall".into(),
+            time_dir: "0".into(),
+            time_s: 0.0,
+            values: vec![1.25, 2.5],
+            is_magnitude: true,
+            complete: true,
+        };
+        assert_eq!(
+            scalar_field_csv(&field),
+            "\u{feff}node,\"T,\"\"wall (magnitude)\"\r\n0,1.25\r\n1,2.5\r\n"
+        );
+        let plain = ScalarField {
+            field: "T".into(),
+            time_dir: "0".into(),
+            time_s: 0.0,
+            values: vec![3.0],
+            is_magnitude: false,
+            complete: true,
+        };
+        assert_eq!(scalar_field_csv(&plain), "\u{feff}node,T\r\n0,3\r\n");
+    }
 
     const SCALAR_NONUNIFORM: &str = r#"FoamFile
 {
