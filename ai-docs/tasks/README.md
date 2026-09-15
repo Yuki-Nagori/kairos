@@ -126,7 +126,7 @@
 | T82 | [T82-dualdomain-midplane-solve-consumption.md](T82-dualdomain-midplane-solve-consumption.md) | 双域 / 中面网格的求解消费                       | 求解侧消费（双域/中面），依赖上游降维能力                                                                                  |
 | T83 | [T83-multi-cavity-runner-fill.md](T83-multi-cavity-runner-fill.md)                           | 多型腔与流道系统参与填充                        | 流道体进网格 + 多腔分配，依赖 T29 闭环                                                                                     |
 | T89 | [T89-gaim-integration.md](T89-gaim-integration.md)                                           | 气体辅助注塑（GAIM）集成                        | 进行中：第一步气体介质数据位与 DTO 契约已完成；第二步等上游三相 / 气芯场                                                   |
-| T93 | [T93-process-optimization.md](T93-process-optimization.md)                                   | 工艺参数自动寻优                                | 等 T92 汇总表                                                                                                              |
+| T93 | [T93-process-optimization.md](T93-process-optimization.md)                                   | 工艺参数自动寻优                                | 进行中：core 优化器已完成；CLI 寻优循环与真实求解回填待实现                                                                |
 | T94 | [T94-gui-e2e-verification.md](T94-gui-e2e-verification.md)                                   | GUI 端到端验证（提交 → 回传 → VM 自动关闭）     | 待开工；需人在界面展开求解面板后跑（AX 拿不到折叠面板的输入框）；求解链路本身先走 CLI 通道                                 |
 | T95 | [T95-dependency-audit.md](T95-dependency-audit.md)                                           | 依赖取向审查：用现成库 vs 自造轮子              | 进行中：P1-a/P1-b/P2-a/P2-b/P2-c/P3-b/P3-c/P3-d 已完成；P3-a 图表替换待视觉对照；标题栏与 storage 保留产品语义             |
 | T97 | [T97-solver-lib-duplication-guard.md](T97-solver-lib-duplication-guard.md)                   | 求解环境库重复守卫 + 部署前清理                 | 进行中：部署清理与 core/原生库探测已完成；真实 VM 坏状态验收待下一批                                                       |
@@ -161,7 +161,7 @@ T98 的本机测试不替代 T94/T96 的 Windows/WSL、Linux 与真实 VM 验收
 T91 剩余（上游取向求解）、T89 第二步（上游三相 / 气芯）、T48（三端真机 WebView）、
 T33 收尾（真机回归 + 签名证书密钥）、T94（需人展开求解面板一次）。
 
-**档 C · 被未完成内部任务阻塞**：T93（等 T92 汇总表与优化目标口径）。
+**档 C · 被未完成内部任务阻塞**：无；T93 已具备 T92 汇总表依赖，可进入 CLI 编排批次。
 
 ## 2026-09-13 收口批次（本轮完成）
 
