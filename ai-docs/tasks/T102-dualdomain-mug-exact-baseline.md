@@ -9,15 +9,15 @@
 
 唯一参数来源为 [`ai-docs/report/mug-baseline.md`](../report/mug-baseline.md) 与本地受控参考设置。实现和测试不得在命令、GUI、case 生成器之间复制另一份默认值。
 
-| 类别 | 冻结值 |
-| --- | --- |
-| 几何 | `report/mug-moldflow/mug.stl`；总体积 `1163.6855 cm³` |
-| 参考网格 | Dual Domain；`33418` nodes；`66830` triangles |
-| 材料 | 内置 `PP-REF-01`；参数快照见 Mug baseline 第 3.1 节 |
-| 温度 | 熔体 `220 °C`；型腔/型芯模温 `50 / 50 °C` |
-| 注射 | 注射时间 `5.5 s`；名义流量 `211.5792 cm³/s` |
-| 保压 | `(0 s, 0.9229 MPa) → (0.2 s, 27.6282 MPa) → (315.0797 s, 27.6282 MPa)` |
-| 冷却 | `20 s` |
+| 类别     | 冻结值                                                                                                                                                                         |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 几何     | `report/mug-moldflow/mug.stl`；总体积 `1163.6855 cm³`                                                                                                                          |
+| 参考网格 | Dual Domain；`33418` nodes；`66830` triangles                                                                                                                                  |
+| 材料     | 内置 `PP-REF-01`；参数快照见 Mug baseline 第 3.1 节                                                                                                                            |
+| 温度     | 熔体 `220 °C`；型腔/型芯模温 `50 / 50 °C`                                                                                                                                      |
+| 注射     | 注射时间 `5.5 s`；名义流量 `211.5792 cm³/s`                                                                                                                                    |
+| 保压     | `(0 s, 0.9229 MPa) → (0.2 s, 27.6282 MPa) → (315.0797 s, 27.6282 MPa)`                                                                                                         |
+| 冷却     | `20 s`                                                                                                                                                                         |
 | 参考输出 | 充填结束 `5.7916 s`、最大注射压力 `2.5106 MPa`、质量 `899.7875 g`、最大锁模力 `6.5605 t`、平均填充温度 `218.9642 °C`、最大剪切应力 `0.1552 MPa`、最大剪切速率 `1.0061×10⁴ s⁻¹` |
 
 ## 实施范围
@@ -48,9 +48,10 @@
    - 报告逐项给出参考值、Kairos 值、绝对差、相对差和误差来源分类。
 
 ## 当前实现进度
-- CLI 已新增 `dual-domain export`，可从 STL 或 sample-box 生成 `dual-domain/v1` JSON，供上游 moldingFoam 集成测试。
+
+- CLI 已新增 `dual-domain export`，只接受真实零件 STL，生成 `dual-domain/v1` JSON；Dual Domain 不再提供闭合方盒样例，避免把 `sum(area × thickness)` 误当作实体体积。
 - 上游联调顺序和字段定义已记录在 [T102 Dual Domain 上游联调契约](../reviews/t102-dualdomain-contract.md)。
-- 仓库提供 `tests/fixtures/dual-domain-v1.sample.json` 最小 fixture 和 `tests/fixtures/dual-domain-v1-experiment-manifest.json` 完整工艺 manifest，上游可脱离 Mug 专有资产先完成读取与 smoke test。
+- 仓库保留 `tests/fixtures/dual-domain-v1.sample.json` 作为纯 DTO 拓扑契约 fixture（不是物理几何或基线结果），完整 Mug 导出必须使用本地 `report/mug-moldflow/mug.stl`。
 
 示例：
 
@@ -59,6 +60,8 @@ cargo run -p kairos-cli -- dual-domain export \
   --stl report/mug-moldflow/mug.stl \
   --out /private/tmp/mug-dual-domain-v1.json --json
 ```
+
+该命令会读取 Mug STL，输出节点、三角形、厚度和梁耦合数据；不再接受 `--sample-box`。
 
 ## 路线确认（2026-09-16）
 
@@ -70,7 +73,6 @@ T102 后续采用两步路线：
 2. 在 moldingFoam 增加显式降维求解模块后，再由 Kairos 写出该模块的 case；在此之前只允许拓扑前置校验和报告导出，禁止静默回退到 3D 体网格。
 
 因此，当前 Mug 命令已经做到工艺参数一致，但 Dual Domain 网格与 solver 消费仍未完成；报告中的数值结果不得标记为完全一致。
-
 
 - CLI 已支持 `fill-pack-cool` 完整工艺阶段。
 - `dualdomain::validate_solver_topology` 已阻止未配对厚度、越界三角形和非法拓扑进入未来 solver 适配层。

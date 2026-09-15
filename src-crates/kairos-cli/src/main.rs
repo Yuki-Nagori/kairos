@@ -105,10 +105,9 @@ enum MaterialAction {
 enum DualDomainAction {
     /// 从 STL 生成并导出 dual-domain/v1 输入 JSON
     Export {
-        #[arg(long)]
-        stl: Option<String>,
-        #[arg(long)]
-        sample_box: bool,
+        /// Mug STL（Dual Domain 导出必须使用真实零件，禁止用闭合方盒冒充）
+        #[arg(long, required = true)]
+        stl: String,
         #[arg(long)]
         out: String,
     },
@@ -654,20 +653,8 @@ fn run_mesh(action: MeshAction, json: bool) -> kairos_core::error::Result<()> {
 
 fn run_dual_domain(action: DualDomainAction, json: bool) -> kairos_core::error::Result<()> {
     match action {
-        DualDomainAction::Export {
-            stl,
-            sample_box,
-            out,
-        } => {
-            let mesh = match (sample_box, stl) {
-                (true, _) => kairos_core::models::geometry::TriangleMesh::sample_box(10.0),
-                (false, Some(path)) => geometry::parse_stl_file(Path::new(&path))?,
-                (false, None) => {
-                    return Err(KairosError::validation(
-                        "必须指定 --sample-box 或 --stl <路径>。",
-                    ));
-                }
-            };
+        DualDomainAction::Export { stl, out } => {
+            let mesh = geometry::parse_stl_file(Path::new(&stl))?;
             let dual = services::dualdomain::generate(
                 &mesh,
                 &[],

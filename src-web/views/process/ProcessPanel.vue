@@ -37,6 +37,16 @@ const {
         />
       </label>
     </div>
+    <label class="mt-2 flex flex-col gap-1">
+      <span class="text-xs text-zinc-400">完整保压曲线 MPa（可选，格式：时间=压力，逗号分隔）</span>
+      <TextInput
+        v-model="form.packingPressureCurve"
+        type="text"
+        placeholder="0=0.9229,0.2=27.6282,315.0797=27.6282"
+        class="w-full max-w-xl"
+      />
+      <span class="text-[11px] text-zinc-500">留空时沿用上方保压压力和时间生成两点曲线。</span>
+    </label>
     <UiButton
       variant="primary"
       :disabled="project.activeStudy === null || app.working"

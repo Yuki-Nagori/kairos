@@ -576,3 +576,5 @@
 - 2026-09-16 01:35 | T102 联调 fixture | 提交 `dual-domain/v1` sample-box JSON fixture 与 round-trip 契约测试，上游可先完成无专有资产的读取实验。
 
 - 2026-09-16 01:50 | T102 实验 manifest | 新增 Dual Domain 网格、PP-REF-01 和 fill-pack-cool 工艺参数的机器可读实验 manifest，上游更新后可直接执行完整 smoke test。
+
+- 2026-09-16 02:10 | T102 Mug STL 导出收口 | Dual Domain CLI 导出改为强制真实 STL，移除物理语义不成立的闭合方盒入口；用本地 Mug STL 生成 4417 节点 / 8834 三角形 `dual-domain/v1` JSON，并补充 GUI 工艺面板完整保压曲线输入与 Mug 基线预设。

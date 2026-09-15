@@ -21,6 +21,7 @@ export function useProcessPanel() {
 
   /** 内置预设名：常驻选择清单（不落存储），选中即回填出厂默认。 */
   const BUILTIN_PRESET = "出厂默认";
+  const MUG_BASELINE_PRESET = "Mug 基线（220°C / 50°C）";
 
   /** 出厂默认工艺（量级取通用热塑性塑料的典型值，用户可覆盖）。 */
   function defaultProcess(): ProcessSettings {
@@ -40,6 +41,25 @@ export function useProcessPanel() {
     };
   }
 
+  /** Mug 基线工艺预设。 */
+  function mugBaselineProcess(): ProcessSettings {
+    return {
+      meltTempC: 220,
+      moldTempC: 50,
+      ejectionTempC: 101,
+      injectionTimeS: 5.5,
+      vpSwitchVolumePercent: 96,
+      packingPressureMpaCurve: [
+        [0, 0.9229],
+        [0.2, 27.6282],
+        [315.0797, 27.6282],
+      ],
+      packingTimeS: 315.0797,
+      coolingTimeS: 20,
+      coolantTempC: 50,
+    };
+  }
+
   const app = useAppStore();
   const processStore = useProcessStore();
   const project = useProjectStore();
@@ -56,6 +76,7 @@ export function useProcessPanel() {
     packingTimeS: "",
     coolingTimeS: "",
     coolantTempC: "",
+    packingPressureCurve: "",
   });
 
   /** 表单字段定义，顺序即渲染顺序；保压压力出厂量级固定 60。 */
@@ -78,16 +99,25 @@ export function useProcessPanel() {
   function collectSettings(): ProcessSettings {
     const packingPressure = Number(form.packingPressureMpa);
     const packingTime = Number(form.packingTimeS);
+    const curve = form.packingPressureCurve
+      .split(",")
+      .map((point) => point.trim())
+      .filter(Boolean)
+      .map((point) => point.split("=").map(Number) as [number, number])
+      .filter(([time, pressure]) => Number.isFinite(time) && Number.isFinite(pressure));
     return {
       meltTempC: Number(form.meltTempC),
       moldTempC: Number(form.moldTempC),
       ejectionTempC: Number(form.ejectionTempC),
       injectionTimeS: Number(form.injectionTimeS),
       vpSwitchVolumePercent: Number(form.vpSwitchVolumePercent),
-      packingPressureMpaCurve: [
-        [0, packingPressure],
-        [packingTime, packingPressure * 0.8],
-      ],
+      packingPressureMpaCurve:
+        curve.length >= 2
+          ? curve
+          : [
+              [0, packingPressure],
+              [packingTime, packingPressure * 0.8],
+            ],
       packingTimeS: packingTime,
       coolingTimeS: Number(form.coolingTimeS),
       coolantTempC: Number(form.coolantTempC),
@@ -107,6 +137,12 @@ export function useProcessPanel() {
     form.packingTimeS = String(settings.packingTimeS);
     form.coolingTimeS = String(settings.coolingTimeS);
     form.coolantTempC = String(settings.coolantTempC);
+    form.packingPressureCurve =
+      settings.packingPressureMpaCurve.length > 2
+        ? settings.packingPressureMpaCurve
+            .map(([time, pressure]) => `${time}=${pressure}`)
+            .join(",")
+        : "";
   }
 
   // 校验问题（红）与成功/引导提示（灰）互斥，每次应用后整体重建。
@@ -181,7 +217,7 @@ export function useProcessPanel() {
   // localStorage 非响应式，选项清单以显式刷新驱动（保存后面板内同步重建一次）。
   // 内置预设排在最前：不落存储，随时可回填出厂默认。
   function refreshPresetSelect(): void {
-    presetNames.value = [BUILTIN_PRESET, ...presets.list(PRESET_DOMAIN)];
+    presetNames.value = [BUILTIN_PRESET, MUG_BASELINE_PRESET, ...presets.list(PRESET_DOMAIN)];
   }
 
   function savePreset(): void {
@@ -189,7 +225,7 @@ export function useProcessPanel() {
     if (!name) {
       return;
     }
-    if (name === BUILTIN_PRESET) {
+    if (name === BUILTIN_PRESET || name === MUG_BASELINE_PRESET) {
       // 内置预设不落存储：同名保存会让清单出现两项、载入语义分叉。
       notice.value = `「${BUILTIN_PRESET}」是内置预设名，请换一个名称。`;
       issueLines.value = [];
@@ -204,6 +240,10 @@ export function useProcessPanel() {
   function loadPreset(): void {
     if (selectedPreset.value === BUILTIN_PRESET) {
       backfill(defaults);
+      return;
+    }
+    if (selectedPreset.value === MUG_BASELINE_PRESET) {
+      backfill(mugBaselineProcess());
       return;
     }
     const saved = storageGet<ProcessSettings | null>(
