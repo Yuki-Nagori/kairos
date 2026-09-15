@@ -15,12 +15,12 @@
 
 ## Rust（cargo test --workspace）
 
-| 位置                                                                      | 内容                                                                                                                         | 跑法                                                               |
-| ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| `src-crates/kairos-core/src/**`（`#[cfg(test)] mod tests` / `gap_tests`） | 领域单元测试（Rust 惯例：与源码同文件，无法外移）                                                                            | `cargo test -p kairos-core --lib`                                  |
-| `src-tauri/src/commands/**`                                               | 适配层单元测试（下载清单 / GPU）                                                                                             | `cargo test -p kairos --lib`                                       |
-| `tests/rust/contract/main.rs`                                             | DTO 契约测试（serde 形态锁定）                                                                                               | `cargo test -p kairos-tests --test contract`                       |
-| `tests/rust/e2e/main.rs`                                                  | 全流程集成测试：L1 无条件（几何 → 网格 → case → 结果扫描）；L2 真机 VM（case → 求解 → 回传 → 读场 + 改坏 case 的失败可见性） | `cargo test -p kairos-tests --test e2e`（L2 加 `KAIROS_E2E_VM=1`） |
+| 位置                                                                      | 内容                                                                                                                                           | 跑法                                                               |
+| ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `src-crates/kairos-core/src/**`（`#[cfg(test)] mod tests` / `gap_tests`） | 领域单元测试（Rust 惯例：与源码同文件，无法外移）                                                                                              | `cargo test -p kairos-core --lib`                                  |
+| `src-tauri/src/commands/**`                                               | 适配层单元测试（下载清单 / GPU）                                                                                                               | `cargo test -p kairos --lib`                                       |
+| `tests/rust/contract/main.rs`                                             | DTO 契约测试（serde 形态锁定）                                                                                                                 | `cargo test -p kairos-tests --test contract`                       |
+| `tests/rust/e2e/main.rs`                                                  | 全流程集成测试：L1 无条件（几何 → 网格 → case → 结果扫描）；L2 真机 VM（case → 求解 → 回传 → 读场 + 改坏 case 的失败可见性 + 启动后 2 秒取消） | `cargo test -p kairos-tests --test e2e`（L2 加 `KAIROS_E2E_VM=1`） |
 
 - 覆盖率门槛（kairos-core 行 100%）：`bun run coverage:rust`（cargo-llvm-cov，统计口径 = lib 单元测试）；非 rustup 管理的 rustc（如 Homebrew）由 `scripts/coverage-rust.mts` 自动定位 LLVM 工具。
 - 新增 Rust 集成测试：在 `tests/rust/<分类>/main.rs` 落文件（根包的 `[[test]]` 目标自动发现），并在上方表格登记。
@@ -39,6 +39,9 @@ KAIROS_E2E_VM=1 KAIROS_E2E_KEEP=1 cargo test -p kairos-tests --test e2e # 保留
 覆盖：case 进 VM（打包 → 传输 → 解压）→ 脱离会话求解到退出码 0 → 结果回传 → 宿主侧扫描并读出速度场；
 再把 case 改坏（删 `constant/polyMesh/boundary`）跑一遍，断言**求解器错误标记**与可归因的失败原因
 （判据用日志标记而不是退出码：脚本尾部的 `; reconstructPar` 会掩盖前面的失败）。
+最后跑一遍取消：启动后 2 秒按会话 id 整组终止（`solver_stop_command`），断言退出码非 0、日志不再增长、
+且不出现求解器错误标记（取消不能被误报成失败）。取消与启动必须在**同一次 multipass 往返**里发出——
+一次往返 1~2 秒，小算例墙钟只有几秒，分两次调用会撞上「求解已结束」。
 
 **发版前手动门禁**：发布候选版本时跑一次上面的 L2（CI 的三端托管 runner 没有 multipass 与 120MB 求解环境，
 跑不了这一层），把输出与 case 路径记入当次发布记录。层级与剩余范围见

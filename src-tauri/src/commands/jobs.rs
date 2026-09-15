@@ -761,7 +761,7 @@ pub fn submit_job(
     Ok(job)
 }
 
-/// 取消作业：运行中的先终止进程组，再迁移状态；排队中的直接取消。
+/// 取消作业：先终止求解进程，再迁移状态；排队中的直接取消。
 #[tauri::command]
 pub fn cancel_job(scheduler: State<'_, JobScheduler>, job_id: String) -> Result<()> {
     let child = scheduler.lock().children.remove(&job_id);
@@ -782,6 +782,31 @@ pub fn cancel_job(scheduler: State<'_, JobScheduler>, job_id: String) -> Result<
         }
         let _ = child.kill();
         let _ = child.wait();
+    }
+    // VM 通道：求解脱离会话跑在虚拟机里（宿主侧的启动命令早已返回，`children` 里没有它），
+    // 杀宿主进程没有意义——按求解自己记下的会话 id 在 VM 内整组终止。
+    #[cfg(target_os = "macos")]
+    if job_vm_provider(scheduler.vm_shell.as_deref()).is_some() {
+        let case_dir = {
+            let inner = scheduler.lock();
+            inner
+                .jobs
+                .iter()
+                .find(|job| job.id == job_id)
+                .map(|job| job.case_dir.clone())
+        };
+        if let Some(case_dir) = case_dir {
+            let vm_case = vm_logic::vm_case_dir(&case_dir);
+            let args = vm_logic::bash_script_args(
+                VmProviderKind::Multipass,
+                &vm_logic::solver_stop_command(&vm_case),
+            );
+            // 远端 kill 是阻塞调用：detached 派发（取消要立刻返回给界面），
+            // 线程里 wait 一下把子进程回收掉，别留僵尸。
+            thread::spawn(move || {
+                let _ = host_command(&args).status();
+            });
+        }
     }
     let mut inner = scheduler.lock();
     job_logic::cancel(&mut inner.jobs, &job_id, now_ms())

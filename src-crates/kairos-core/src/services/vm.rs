@@ -402,16 +402,38 @@ pub const SOLVE_EXIT_NAME: &str = ".kairos-solve.exit";
 /// 流式回读命令输出里的分隔哨兵：哨兵之前的字节是日志，之后是退出码。
 pub const STREAM_MARK: &str = "##KAIROS-STATUS##";
 
-/// 求解脚本：加载求解环境 → 进 VM 内 case 目录 → 分步求解。
+/// 求解脚本：记录会话 id → 加载求解环境 → 进 VM 内 case 目录 → 分步求解。
 ///
 /// 路径按 shell 字面量转义（case 目录可能含空格 / 引号），与原生分支共用同一口径。
 /// 桌面端作业线程与脚本化集成测试都用它，避免各写一份「source + cd + solve」。
 pub fn solve_script(vm_case: &str, cores: u32) -> String {
     format!(
-        "{} && cd '{}' && {}",
+        "echo $$ > '{}' 2>/dev/null; {} && cd '{}' && {}",
+        bash_single_quote(&solve_sid_path(vm_case)),
         env_source_command(),
         bash_single_quote(vm_case),
         crate::services::moldingfoam::solve_command(cores)
+    )
+}
+
+/// 求解会话 id 文件名：脱离会话的求解在 VM 里跑，宿主侧拿不到它的 pid，
+/// 取消只能靠它自己记下来的会话 id（见 [`solver_stop_command`]）。
+pub const SOLVE_SID_NAME: &str = ".kairos-solve.sid";
+
+/// 会话 id 文件在 VM 内的路径（case 目录下）。
+pub fn solve_sid_path(vm_case: &str) -> String {
+    format!("{vm_case}/{SOLVE_SID_NAME}")
+}
+
+/// 取消求解：按会话 id 整组终止（`kill -TERM -<sid>` 杀的是**进程组**，
+/// decomposePar / mpirun 及其各 rank / reconstructPar 一并结束）。
+///
+/// 求解已结束或 id 文件缺失时是空操作（`|| true`）：取消是用户意图，不该因为
+/// 「刚好跑完了」而报错。
+pub fn solver_stop_command(vm_case: &str) -> String {
+    format!(
+        "kill -TERM -$(cat '{}' 2>/dev/null) 2>/dev/null || true",
+        bash_single_quote(&solve_sid_path(vm_case))
     )
 }
 
@@ -1267,16 +1289,38 @@ mod tests {
         );
     }
 
-    /// 求解脚本：环境 source 在最前（它决定 OpenFOAM 的 PATH / LD_LIBRARY_PATH），
-    /// 随后进 VM 内 case 目录，最后是求解命令（分步求解的编排在 moldingfoam 服务）。
+    /// 求解脚本：先记会话 id（取消要靠它），再 source 环境（它决定 OpenFOAM 的
+    /// PATH / LD_LIBRARY_PATH），随后进 VM 内 case 目录，最后是求解命令。
     #[test]
-    fn solve_script_sources_env_then_enters_case() {
+    fn solve_script_records_sid_then_sources_env_and_enters_case() {
         let script = solve_script("/home/ubuntu/study-1", 4);
-        assert!(script.starts_with(&format!("{} && cd ", env_source_command())));
+        assert!(
+            script.starts_with("echo $$ > '/home/ubuntu/study-1/.kairos-solve.sid'"),
+            "首段必须记会话 id：{script}"
+        );
+        assert!(script.contains(&format!("; {} && cd ", env_source_command())));
         assert!(script.contains("cd '/home/ubuntu/study-1'"));
         assert!(script.ends_with(&crate::services::moldingfoam::solve_command(4)));
         // case 路径含单引号时不能把命令截断
         assert!(solve_script("/home/ubuntu/o'brien", 4).contains("'/home/ubuntu/o'\\''brien'"));
+    }
+
+    /// 取消命令：按会话 id 杀**进程组**，求解已结束或 id 缺失时是空操作（`|| true`）——
+    /// 取消是用户意图，不该因为「刚好跑完」而报错。
+    #[test]
+    fn solver_stop_kills_the_session_group_and_tolerates_missing_sid() {
+        assert_eq!(
+            solver_stop_command("/home/ubuntu/study-1"),
+            "kill -TERM -$(cat '/home/ubuntu/study-1/.kairos-solve.sid' 2>/dev/null) 2>/dev/null || true"
+        );
+        assert_eq!(
+            solve_sid_path("/home/ubuntu/study-1"),
+            "/home/ubuntu/study-1/.kairos-solve.sid"
+        );
+        assert!(
+            solver_stop_command("/home/ubuntu/a'b")
+                .contains("'/home/ubuntu/a'\\''b/.kairos-solve.sid'")
+        );
     }
 
     #[test]
@@ -1307,6 +1351,8 @@ mod tests {
         let commands = [
             solve_script("/home/ubuntu/study-1", 4),
             solve_script(quoted_case, 2),
+            solver_stop_command("/home/ubuntu/study-1"),
+            solver_stop_command(quoted_case),
             detached_launch_command(
                 "/home/ubuntu/study-1",
                 &solve_script("/home/ubuntu/study-1", 4),

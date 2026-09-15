@@ -31,6 +31,11 @@ use kairos_core::services::{material, meshing, moldingfoam, results, vm as vm_lo
 const L1_TARGET_SIZE_MM: f64 = 2.0;
 /// 求解核数：真机测试不占满机器。
 const SOLVE_CORES: u32 = 2;
+/// 取消用例的网格目标尺寸（mm）：比 L1 细一档（单元数 ×8），让求解跑到分钟级，
+/// 「启动 → 探针 → 取消」这一串来回才有确定的窗口。
+/// 注意别用「拉长注射时间」来拖时间：步数 ≈ endTime / dt 在 Co 数受限下近似恒定，
+/// 拉长注射时间墙钟时间基本不变（取消会撞上正常结束）。
+const CANCEL_TARGET_SIZE_MM: f64 = 0.5;
 /// L2 求解预算（秒）：超预算即判失败（求解器卡住要暴露出来，不是无限等）。
 const SOLVE_BUDGET_S: u64 = 600;
 /// 失败时打印的日志尾部行数：够定位，不刷屏。
@@ -66,8 +71,9 @@ fn scratch_workspace() -> PathBuf {
     std::env::temp_dir().join(format!("kairos-e2e-{stamp}"))
 }
 
-/// L1：几何 → 网格 → case → 结果扫描。返回 case 目录与网格规模（节点 / 四面体）。
-fn l1_build_case(workspace: &Path) -> (PathBuf, usize, usize) {
+/// L1：几何 → 网格 → case → 结果扫描。返回（case 目录, 取消用例的长跑 case 目录,
+/// 网格节点数, 四面体数）。
+fn l1_build_case(workspace: &Path) -> (PathBuf, PathBuf, usize, usize) {
     // 1. 几何：内置样例方盒（与「新建方案 → 用样例」同一条 core 路径）
     let mesh_tri = TriangleMesh::sample_box(10.0);
     // 2. 网格：体素引擎（不依赖外部可执行，CI 也能跑）
@@ -102,7 +108,38 @@ fn l1_build_case(workspace: &Path) -> (PathBuf, usize, usize) {
         },
     )
     .expect("case 生成失败");
-    (case_dir, volume.nodes.len(), volume.tets.len())
+
+    // 取消用例专用 case（独立目录，免得与正常路径互相干扰时间目录）：细网格让求解
+    // 跑到分钟级，取消窗口才稳（粗算例 6 秒就跑完，探针还没走完就结束了）。
+    // 单份细算例的内存开销很小；把虚拟机压爆的是**多个求解并发**，不是单元数。
+    let cancel_mesh = meshing::generate(
+        &mesh_tri,
+        &meshing::VolumeMeshParams {
+            refinement: None,
+            target_size: CANCEL_TARGET_SIZE_MM,
+        },
+    )
+    .expect("取消用例的网格生成失败");
+    let cancel_case_dir = workspace.join("cases").join("e2e-cancel");
+    moldingfoam::generate_case(
+        &cancel_case_dir,
+        &moldingfoam::CaseInputs {
+            mesh: &cancel_mesh,
+            material: &material::builtin_materials()[0],
+            process: &test_process(0.4),
+            stage: &AnalysisStage::Fill,
+            cores: SOLVE_CORES as usize,
+            gates: &[],
+            channels: &[],
+        },
+    )
+    .expect("取消用例的 case 生成失败");
+    (
+        case_dir,
+        cancel_case_dir,
+        volume.nodes.len(),
+        volume.tets.len(),
+    )
 }
 
 /// case 该有的东西：求解器要读的三个目录 + polyMesh 四件套 + 初始场。
@@ -208,7 +245,7 @@ fn poll_until_exit(
 }
 
 /// L2 主体：case 进 VM → 脱离会话求解 → 等退出码 → 结果回传 → 宿主侧扫描与读场。
-fn l2_solve_and_collect(case_dir: &Path, workspace: &Path) {
+fn l2_solve_and_collect(case_dir: &Path, cancel_case_dir: &Path, workspace: &Path) {
     let runner = runner();
     require_vm_ready(&runner);
     let case_dir_text = case_dir.to_string_lossy().to_string();
@@ -313,8 +350,104 @@ fn l2_solve_and_collect(case_dir: &Path, workspace: &Path) {
         "失败原因必须可归因（强特征优先），实际：{reason}\n{broken_text}"
     );
 
-    // 7. 清理 VM 内的 case 暂存（宿主 case 目录保留，便于人工查看）
-    let cleanup = format!("rm -rf '{}'", vm_logic::bash_single_quote(&vm_case));
+    // 7. 取消路径：求解跑到一半整组终止（core 的 solver_stop_command，桌面端 cancel_job 同一处）。
+    //    上一步把 VM 内 case 改坏了，这里重新 stage 一份干净的。
+    let cancel_case_text = cancel_case_dir.to_string_lossy().to_string();
+    let vm_case =
+        vm_run::stage_case(&runner, &archive, &cancel_case_text).expect("取消用例 stage 失败");
+    let _ = std::fs::remove_file(&archive);
+    // 先删掉上一次留下的 sid：它在本次求解启动时由脚本重写，因此「sid 出现」就是
+    // 「本次求解已经跑起来」的确定信号（等第一个时间步行会撞上短算例的正常结束）。
+    let clear_sid = format!(
+        "rm -f '{}'",
+        vm_logic::bash_single_quote(&vm_logic::solve_sid_path(&vm_case))
+    );
+    runner
+        .run(
+            &HostCommand::new(vm_logic::bash_script_args(
+                VmProviderKind::Multipass,
+                &clear_sid,
+            )),
+            "清理上一次的会话 id",
+        )
+        .expect("清理会话 id 失败");
+    let cancel_launch =
+        vm_logic::detached_launch_command(&vm_case, &vm_logic::solve_script(&vm_case, SOLVE_CORES));
+    // 启动与取消必须落在**同一次 multipass 往返**里：实测一次往返 1~2 秒，而这个算例的
+    // 墙钟只有几秒，分成两次调用会把取消挤到「求解已结束」之后（症状：退出码 0、进程已消失）。
+    // 两条命令都由产品代码构造（detached_launch_command + solver_stop_command），
+    // 这里只是把「用户点取消」的时机固定成启动后 2 秒。
+    // 启动命令自身以 `&` 结尾（后台化），拼接处用换行而不是 `;`（`& ;` 是语法错误）。
+    let cancel_script = format!(
+        "{}\nsleep 2; {}",
+        cancel_launch,
+        vm_logic::solver_stop_command(&vm_case)
+    );
+    runner
+        .run(
+            &HostCommand::new(vm_logic::bash_script_args(
+                VmProviderKind::Multipass,
+                &cancel_script,
+            )),
+            "启动求解并在 2 秒后取消",
+        )
+        .expect("启动 / 取消命令本身应当成功");
+    let (cancel_code, _tail) = poll_until_exit(&runner, &vm_case, 60);
+    assert!(
+        cancel_code.is_some(),
+        "取消后应很快写出退出码（写出即代表进程真的被终止了）"
+    );
+    let sid_path = vm_logic::solve_sid_path(&vm_case);
+    let sid_report = runner
+        .capture(
+            &HostCommand::new(vm_logic::bash_script_args(
+                VmProviderKind::Multipass,
+                &format!(
+                    "printf 'sid=%s alive=%s log=%s\\n' \"$(cat '{}' 2>/dev/null)\" \"$(ps -o stat= -p \"$(cat '{}' 2>/dev/null)\" 2>/dev/null | tr -d ' ')\" \"$(wc -l < '{}/kairos-solve.log' 2>/dev/null)\"",
+                    vm_logic::bash_single_quote(&sid_path),
+                    vm_logic::bash_single_quote(&sid_path),
+                    vm_logic::bash_single_quote(&vm_case)
+                ),
+            )),
+            "读取取消现场",
+        )
+        .unwrap_or_default();
+    assert_ne!(
+        cancel_code,
+        Some(0),
+        "被取消的求解不该以退出码 0 结束（现场：{}）",
+        sid_report.trim()
+    );
+    // 日志不再增长：求解进程确实停了（否则后面的时间步还会写进来）
+    let stopped = vm_run::poll_log_once(&runner, &vm_case, 0).expect("回读完整日志");
+    thread::sleep(Duration::from_secs(3));
+    let after = vm_run::poll_log_once(&runner, &vm_case, stopped.offset).expect("回读增量日志");
+    // 只认「有内容的行」：日志末尾的空行 / 哨兵切分残留不是增长。
+    let grew: Vec<&String> = after
+        .lines
+        .iter()
+        .filter(|line| !line.trim().is_empty())
+        .collect();
+    assert!(
+        grew.is_empty(),
+        "取消之后日志仍在增长，说明求解没被终止：{grew:?}"
+    );
+    // 取消不是求解器错误：日志里不该有错误标记，否则界面会把「已取消」报成「失败」
+    let abort_line = stopped
+        .lines
+        .iter()
+        .find(|line| moldingfoam::is_abort_line(line));
+    assert!(
+        abort_line.is_none(),
+        "取消不应留下求解器错误标记（作业会因此被判失败而不是已取消）：{abort_line:?}"
+    );
+
+    // 8. 清理 VM 内的 case 暂存（宿主 case 目录保留，便于人工查看）
+    let cleanup = format!(
+        "rm -rf '{}' '{}'",
+        vm_logic::bash_single_quote(&vm_case),
+        vm_logic::bash_single_quote(&vm_logic::vm_case_dir(&cancel_case_text))
+    );
     runner
         .run(
             &HostCommand::new(vm_logic::bash_script_args(
@@ -331,7 +464,7 @@ fn l2_solve_and_collect(case_dir: &Path, workspace: &Path) {
 fn normal_usage_flow_geometry_mesh_case_solve_results() {
     let workspace = scratch_workspace();
     std::fs::create_dir_all(&workspace).expect("创建工作区失败");
-    let (case_dir, nodes, tets) = l1_build_case(&workspace);
+    let (case_dir, cancel_case_dir, nodes, tets) = l1_build_case(&workspace);
     assert_case_layout(&case_dir);
     l1_scan_initial_time(&case_dir);
     println!(
@@ -348,7 +481,7 @@ fn normal_usage_flow_geometry_mesh_case_solve_results() {
         let _ = std::fs::remove_dir_all(&workspace);
         return;
     }
-    l2_solve_and_collect(&case_dir, &workspace);
+    l2_solve_and_collect(&case_dir, &cancel_case_dir, &workspace);
     println!(
         "L2 通过：求解与结果回传完成，case 在 {}",
         case_dir.display()
