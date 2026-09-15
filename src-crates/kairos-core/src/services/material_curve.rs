@@ -4,7 +4,7 @@ use csv::StringRecord;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{KairosError, Result};
-use crate::models::material::CrossWlf;
+use crate::models::material::{CrossWlf, Tait};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct PvtPoint {
@@ -28,6 +28,76 @@ pub struct ResidualSummary {
     pub rmse_pa_s: f64,
     pub max_absolute_log10: f64,
     pub rmse_log10: f64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PvtResidualSummary {
+    pub count: usize,
+    pub max_absolute_m3_per_kg: f64,
+    pub max_relative: f64,
+    pub rmse_m3_per_kg: f64,
+}
+
+/// 计算 Kairos Tait 参数的比容预测（m³/kg）。
+///
+/// `b1` 与 `b2` 是相对于 `b5` 的线性温度项，`b3` 为压力对数项，`b4` 为压力尺度。
+/// 温度低于转变温度使用固态参数，否则使用熔态参数。
+pub fn tait_specific_volume(
+    model: &Tait,
+    pressure_pa_value: f64,
+    temperature_k: f64,
+) -> Result<f64> {
+    if !pressure_pa_value.is_finite() || pressure_pa_value < 0.0 {
+        return Err(KairosError::validation("Tait 压力必须为非负有限数值。"));
+    }
+    if !temperature_k.is_finite() || temperature_k <= 0.0 {
+        return Err(KairosError::validation("Tait 温度必须为正有限数值。"));
+    }
+    let (b1, b2, b4) = if temperature_k < model.b5 {
+        (model.b1s, model.b2s, model.b4s)
+    } else {
+        (model.b1m, model.b2m, model.b4m)
+    };
+    if b4 <= 0.0 || model.b3 <= 0.0 {
+        return Err(KairosError::validation("Tait 压力参数必须为正数。"));
+    }
+    let thermal = b1 + b2 * (temperature_k - model.b5);
+    let pressure = 1.0 - model.b3 * (1.0 + pressure_pa_value / b4).ln();
+    let specific_volume = thermal * pressure;
+    if !specific_volume.is_finite() || specific_volume <= 0.0 {
+        return Err(KairosError::validation("Tait 计算结果必须为正有限数值。"));
+    }
+    Ok(specific_volume)
+}
+
+pub fn evaluate_tait(model: &Tait, points: &[PvtPoint]) -> Result<PvtResidualSummary> {
+    if points.is_empty() {
+        return Err(KairosError::validation("Tait 残差评估至少需要一个数据点。"));
+    }
+    let mut max_absolute_m3_per_kg: f64 = 0.0;
+    let mut max_relative: f64 = 0.0;
+    let mut sum_squared = 0.0;
+    for point in points {
+        if !point.specific_volume_m3_per_kg.is_finite() || point.specific_volume_m3_per_kg <= 0.0 {
+            return Err(KairosError::validation(
+                "残差评估中的实测比容必须为正有限数值。",
+            ));
+        }
+        let predicted = tait_specific_volume(model, point.pressure_pa, point.temperature_k)?;
+        let absolute = (predicted - point.specific_volume_m3_per_kg).abs();
+        let relative = absolute / point.specific_volume_m3_per_kg;
+        max_absolute_m3_per_kg = max_absolute_m3_per_kg.max(absolute);
+        max_relative = max_relative.max(relative);
+        sum_squared += absolute * absolute;
+    }
+    let count = points.len();
+    Ok(PvtResidualSummary {
+        count,
+        max_absolute_m3_per_kg,
+        max_relative,
+        rmse_m3_per_kg: (sum_squared / count as f64).sqrt(),
+    })
 }
 
 /// 使用 Cross-WLF 参数计算零压力下的表观黏度（Pa·s）。
@@ -486,5 +556,60 @@ mod tests {
             viscosity_pa_s: f64::NAN,
         }];
         assert!(evaluate_cross_wlf(&model, &invalid_point).is_err());
+    }
+
+    #[test]
+    fn tait_prediction_covers_solid_melt_and_residuals() {
+        let model = Tait {
+            b1m: 1.0,
+            b1s: 0.9,
+            b2m: 0.0001,
+            b2s: 0.00005,
+            b3: 0.01,
+            b4m: 1.0e8,
+            b4s: 1.0e8,
+            b5: 400.0,
+        };
+        let solid = tait_specific_volume(&model, 1.0e6, 350.0).unwrap();
+        let melt = tait_specific_volume(&model, 1.0e6, 450.0).unwrap();
+        assert!(solid > 0.0 && melt > 0.0);
+        let points = vec![PvtPoint {
+            pressure_pa: 1.0e6,
+            temperature_k: 450.0,
+            specific_volume_m3_per_kg: melt,
+        }];
+        let summary = evaluate_tait(&model, &points).unwrap();
+        assert_eq!(summary.count, 1);
+        assert!(summary.max_absolute_m3_per_kg.abs() < 1e-12);
+        assert!(summary.max_relative.abs() < 1e-12);
+    }
+
+    #[test]
+    fn tait_rejects_invalid_inputs_and_empty_residuals() {
+        let model = Tait {
+            b1m: 1.0,
+            b1s: 0.9,
+            b2m: 0.0,
+            b2s: 0.0,
+            b3: 0.01,
+            b4m: 1.0,
+            b4s: 1.0,
+            b5: 400.0,
+        };
+        assert!(tait_specific_volume(&model, -1.0, 400.0).is_err());
+        assert!(tait_specific_volume(&model, 0.0, 0.0).is_err());
+        let mut bad_pressure = model.clone();
+        bad_pressure.b4m = 0.0;
+        assert!(tait_specific_volume(&bad_pressure, 1.0, 450.0).is_err());
+        let mut negative_result = model.clone();
+        negative_result.b3 = 100.0;
+        assert!(tait_specific_volume(&negative_result, 1.0, 450.0).is_err());
+        assert!(evaluate_tait(&model, &[]).is_err());
+        let invalid_point = [PvtPoint {
+            pressure_pa: 1.0,
+            temperature_k: 400.0,
+            specific_volume_m3_per_kg: f64::NAN,
+        }];
+        assert!(evaluate_tait(&model, &invalid_point).is_err());
     }
 }
