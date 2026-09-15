@@ -97,6 +97,7 @@
 | T86 | [T86-special-process-modules-done.md](T86-special-process-modules-done.md)                 | 扩展工艺模块规划（GAIM / 双色多组分 / 微发泡）                                  |
 | T87 | [T87-multiphysics-coupling-done.md](T87-multiphysics-coupling-done.md)                     | 多物理场耦合规划（纤维取向 / 流固耦合）                                         |
 | T88 | [T88-e3-optimization-planning-done.md](T88-e3-optimization-planning-done.md)               | 优化与自动化规划（DOE 编排 / 工艺参数寻优）                                     |
+| T92 | [T92-doe-orchestration.md](T92-doe-orchestration.md)                                       | DOE / 正交试验编排（矩阵、串行运行、汇总与失败标记）                            |
 | T96 | [T96-full-flow-e2e-done.md](T96-full-flow-e2e-done.md)                                     | 全流程集成测试（正常使用：几何 → 网格 → case → 求解 → 结果）                    |
 
 ## 循环任务（不进待办清单）
@@ -125,7 +126,6 @@
 | T82 | [T82-dualdomain-midplane-solve-consumption.md](T82-dualdomain-midplane-solve-consumption.md) | 双域 / 中面网格的求解消费                       | 求解侧消费（双域/中面），依赖上游降维能力                                                                                  |
 | T83 | [T83-multi-cavity-runner-fill.md](T83-multi-cavity-runner-fill.md)                           | 多型腔与流道系统参与填充                        | 流道体进网格 + 多腔分配，依赖 T29 闭环                                                                                     |
 | T89 | [T89-gaim-integration.md](T89-gaim-integration.md)                                           | 气体辅助注塑（GAIM）集成                        | 进行中：第一步气体介质数据位与 DTO 契约已完成；第二步等上游三相 / 气芯场                                                   |
-| T92 | [T92-doe-orchestration.md](T92-doe-orchestration.md)                                         | DOE / 正交试验编排                              | 等 T29 求解闭环稳定                                                                                                        |
 | T93 | [T93-process-optimization.md](T93-process-optimization.md)                                   | 工艺参数自动寻优                                | 等 T92 汇总表                                                                                                              |
 | T94 | [T94-gui-e2e-verification.md](T94-gui-e2e-verification.md)                                   | GUI 端到端验证（提交 → 回传 → VM 自动关闭）     | 待开工；需人在界面展开求解面板后跑（AX 拿不到折叠面板的输入框）；求解链路本身先走 CLI 通道                                 |
 | T95 | [T95-dependency-audit.md](T95-dependency-audit.md)                                           | 依赖取向审查：用现成库 vs 自造轮子              | 进行中：P1-a/P1-b/P2-a/P2-b/P2-c/P3-b/P3-c/P3-d 已完成；P3-a 图表替换待视觉对照；标题栏与 storage 保留产品语义             |
@@ -150,20 +150,18 @@ T98 的本机测试不替代 T94/T96 的 Windows/WSL、Linux 与真实 VM 验收
 1. **T95 P2-a**（P2）：已完成可复用收编；标题栏和 storage 需保留自定义语义，下一批转入 P3 对照评估。
 2. **T95 P3**（P2/P3）：按决策表逐项做视觉/性能对照，不直接替换 XY 图表、几何数学或解压路径。
 3. **T97**（P1）：求解环境库重复守卫与部署前清理；优先于新求解功能。
-4. **T89 第一步**（P3）：材料库「气体介质」数据位 + `RunnerElement.medium`（双端镜像 + 契约测试），
-   文件明确「第一步可先行」；第二步等上游三相 / 气芯能力。
-5. **T83 多型腔与流道参与填充**（P1）：文件依赖 T07/T61 均已满足（README 原先写的「依赖 T29 闭环」
+4. **T83 多型腔与流道参与填充**（P1）：文件依赖 T07/T61 均已满足（README 原先写的「依赖 T29 闭环」
    与文件不符，已改正）；验收在 VM 跑两腔填充，v0.2.5 通道已验证可用。
-6. **T60 PPTX 报告导出**（P4）：纯 Rust 侧离线生成，开工第一步核候选库许可与中文排版覆盖。
-7. **T33 可做部分**（P3）：updater 插件接入 + `style-src 'unsafe-inline'` 改造（nonce / 文件化）；
+5. **T60 PPTX 报告导出**（P4）：纯 Rust 侧离线生成，开工第一步核候选库许可与中文排版覆盖。
+6. **T33 可做部分**（P3）：updater 插件接入 + `style-src 'unsafe-inline'` 改造（nonce / 文件化）；
    真机回归与三平台签名属档 B。
-8. **T94**（P1）：GUI 端到端验证；需人在界面展开求解面板后跑。
+7. **T94**（P1）：GUI 端到端验证；需人在界面展开求解面板后跑。
 
 **档 B · 等外部条件**：T29 剩余（上游 046 发版后复测 np=4）、T82（上游降维支持口径）、
 T91 剩余（上游取向求解）、T89 第二步（上游三相 / 气芯）、T48（三端真机 WebView）、
 T33 收尾（真机回归 + 签名证书密钥）、T94（需人展开求解面板一次）。
 
-**档 C · 被未完成内部任务阻塞**：T92（等 T29 闭环稳定）、T93（等 T92）。
+**档 C · 被未完成内部任务阻塞**：T93（等 T92 汇总表与优化目标口径）。
 
 ## 2026-09-13 收口批次（本轮完成）
 
