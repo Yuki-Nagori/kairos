@@ -5,9 +5,7 @@
  * 视口渲染器、图表画布等有状态组件不因切换阶段而重建。
  * 左右列可折叠（useLayout），中列视口恒驻。
  */
-import { computed } from "vue";
 import type { Component } from "vue";
-import { useAppStore } from "./stores/app";
 import { useLayout } from "./composables/useLayout";
 import { STAGES } from "./components/stage-tabs/useStageTabs";
 import MenuBar from "./components/menu-bar/MenuBar.vue";
@@ -41,8 +39,8 @@ interface PanelConfig {
   stages: Stage[];
 }
 
-const app = useAppStore();
-const { leftCollapsed, rightCollapsed, toggleLeft, toggleRight } = useLayout();
+const { leftCollapsed, rightCollapsed, toggleLeft, toggleRight, gridClass, stageVisible } =
+  useLayout();
 
 const ALL_STAGES: Stage[] = STAGES.map(([stage]) => stage);
 
@@ -65,24 +63,6 @@ const RIGHT_PANELS: PanelConfig[] = [
   { component: ReportPanel, stages: ["home", "results", "report"] },
   { component: JobsPanel, stages: ["home", "solve", "results"] },
 ];
-
-function stageVisible(stages: Stage[]): boolean {
-  return stages.includes(app.stage);
-}
-
-/** 三列网格列宽随折叠状态切换（Tailwind 任意值类需整串出现在源码中）。 */
-const gridClass = computed(() => {
-  if (leftCollapsed.value && rightCollapsed.value) {
-    return "grid-cols-[0px_minmax(0,1fr)_0px]";
-  }
-  if (leftCollapsed.value) {
-    return "grid-cols-[0px_minmax(0,1fr)_320px]";
-  }
-  if (rightCollapsed.value) {
-    return "grid-cols-[280px_minmax(0,1fr)_0px]";
-  }
-  return "grid-cols-[280px_minmax(0,1fr)_320px]";
-});
 </script>
 <template>
   <!-- 整页锁定不滚动，只有左右列与视口内部各自伸缩 -->

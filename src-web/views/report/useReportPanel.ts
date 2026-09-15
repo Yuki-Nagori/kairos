@@ -8,13 +8,11 @@ import { useResultsStore } from "../../stores/results";
 import { buildReportHtml, type ReportOptions } from "../../utils/report";
 import { minMax } from "../../utils/stats";
 import { getSnapshotDataUrl } from "../../render/snapshot";
-import {
-  saveReportPptxToWorkspace,
-  saveReportToWorkspace,
-  type ReportSlidePayload,
-} from "../../api/project";
-import { useAppStore } from "../../stores/app";
+import type { ReportSlidePayload } from "../../api/project";
+import { downloadTextFile } from "../../utils/download";
 import { fixed, significant } from "../../utils/format";
+import { findMaterial } from "../../utils/materials";
+import { geometryHealthy } from "../../utils/study-tasks";
 
 export function useReportPanel() {
   const project = useProjectStore();
@@ -41,13 +39,7 @@ export function useReportPanel() {
 
   /** 散装工程回退：浏览器下载（工作区不可用时的保底通路）。 */
   function downloadReport(studyId: string, html: string): void {
-    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `kairos-report-${studyId}.html`;
-    anchor.click();
-    URL.revokeObjectURL(url);
+    downloadTextFile(`kairos-report-${studyId}.html`, html, "text/html;charset=utf-8");
   }
 
   async function generateReport(): Promise<void> {
@@ -59,11 +51,9 @@ export function useReportPanel() {
       status.value = "请先创建项目与方案。";
       return;
     }
-    const material = study.materialId
-      ? [...materialsLib.builtin, ...materialsLib.custom].find((m) => m.id === study.materialId)
-      : undefined;
+    const material = findMaterial(materialsLib, study.materialId);
     const rows: Array<[string, string]> = [
-      ["材料", material ? `${material.manufacturer} · ${material.name}` : "未登记"],
+      ["材料", material !== null ? `${material.manufacturer} · ${material.name}` : "未登记"],
       ["熔体温度", study.process ? `${study.process.meltTempC} °C` : "未设置"],
       ["模具温度", study.process ? `${study.process.moldTempC} °C` : "未设置"],
       ["注射时间", study.process ? `${study.process.injectionTimeS} s` : "未设置"],
@@ -90,11 +80,6 @@ export function useReportPanel() {
     const geometrySummary = geometry.geometries[0];
     if (geometrySummary !== undefined) {
       const issues = geometrySummary.issues;
-      const healthy =
-        issues.degenerate === 0 &&
-        issues.openEdges === 0 &&
-        issues.nonManifoldEdges === 0 &&
-        issues.normalInconsistentEdges === 0;
       geometryRows.push(
         ["三角形数", String(geometrySummary.triangleCount)],
         [
@@ -103,7 +88,7 @@ export function useReportPanel() {
         ],
         [
           "网格健康",
-          healthy
+          geometryHealthy(geometrySummary)
             ? "健康"
             : `退化 ${issues.degenerate} / 开放边 ${issues.openEdges} / 非流形 ${issues.nonManifoldEdges}`,
         ],
@@ -157,20 +142,13 @@ export function useReportPanel() {
       },
       options,
     );
-    // 工作区工程：默认写进 <工作区>/reports/（自包含，随工程拷走）；
-    // 散装工程回退浏览器下载。
-    const app = useAppStore();
-    const projectPath = project.projectPath;
     const fileName = `kairos-report-${study.name}.html`;
-    if (projectPath !== null && project.workspaceRoot !== null) {
-      try {
-        const path = await saveReportToWorkspace(projectPath, fileName, html);
-        status.value = `报告已保存：${path}`;
-        return;
-      } catch (error) {
-        // 写入失败（目录只读等）→ 回退下载，保证报告一定能拿到
-        app.setError(error);
-      }
+    // 工作区工程：默认写进 <工作区>/reports/（自包含，随工程拷走）；
+    // 散装工程或写入失败（目录只读等）回退浏览器下载，保证报告一定能拿到。
+    const savedPath = await project.saveReport(fileName, html);
+    if (savedPath !== null) {
+      status.value = `报告已保存：${savedPath}`;
+      return;
     }
     downloadReport(study.id, html);
     status.value = "报告已生成并下载";
@@ -228,16 +206,12 @@ export function useReportPanel() {
     if (labels.length > 0) {
       slides.push({ title: "快照", bullets: labels, images: snapshots });
     }
-    try {
-      const path = await saveReportPptxToWorkspace(
-        project.projectPath,
-        `${currentProject.name}-报告`,
-        template.title.trim() || `${currentProject.name} 仿真报告`,
-        slides,
-      );
+    const path = await project.saveReportPptx(
+      template.title.trim() || `${currentProject.name} 仿真报告`,
+      slides,
+    );
+    if (path !== null) {
       status.value = `已导出 PPTX：${path}`;
-    } catch (error) {
-      useAppStore().setError(error);
     }
   }
 

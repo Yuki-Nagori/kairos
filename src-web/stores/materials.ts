@@ -12,6 +12,7 @@ import { pickExportJsonPath, pickOpenMaterialsPath } from "../api/dialog";
 /** 自定义材料 id 的会话内序列号：同一毫秒连续复制也不撞 id（与 project store 同策略）。 */
 let customMaterialSeq = 0;
 import type { Material, MaterialLibrary } from "../types";
+import { findMaterial } from "../utils/materials";
 import { useAppStore } from "./app";
 import { useProjectStore } from "./project";
 
@@ -76,8 +77,8 @@ export const useMaterialsStore = defineStore("materials", {
     /** 复制任一材料为自定义材料（新 id + 「副本」后缀）。 */
     async copyMaterialToCustom(id: string): Promise<void> {
       const app = useAppStore();
-      const source = [...this.materials.builtin, ...this.materials.custom].find((m) => m.id === id);
-      if (!source) {
+      const source = findMaterial(this.materials, id);
+      if (source === null) {
         app.setError("未找到要复制的材料。");
         return;
       }
@@ -101,10 +102,7 @@ export const useMaterialsStore = defineStore("materials", {
         app.setError("请先创建或选择一个方案。");
         return;
       }
-      const exists = [...this.materials.builtin, ...this.materials.custom].some(
-        (m) => m.id === materialId,
-      );
-      if (!exists) {
+      if (findMaterial(this.materials, materialId) === null) {
         app.setError("材料不存在。");
         return;
       }

@@ -39,7 +39,7 @@ const {
     </div>
     <UiButton
       variant="primary"
-      :disabled="project.activeStudy === null || app.busy !== null"
+      :disabled="project.activeStudy === null || app.working"
       @click="applyProcess"
     >
       校验并应用到方案

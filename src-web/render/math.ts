@@ -133,6 +133,26 @@ export function mat4RotateX(radians: number): Mat4 {
   return new Float32Array([1, 0, 0, 0, 0, c, s, 0, 0, -s, c, 0, 0, 0, 0, 1]);
 }
 
+/** 逐轴包围盒（扁平顶点集，长度 = 3 × 顶点数）；空集返回 ±Infinity。
+ *  两个渲染后端与 fitCameraToBounds 共用同一份扫描——它按顶点数线性，
+ *  调用方应在网格上传时算一次并缓存，不要每次读都重算。 */
+export function boundsOf(positions: ArrayLike<number>): { min: Vec3; max: Vec3 } {
+  const min: Vec3 = [Infinity, Infinity, Infinity];
+  const max: Vec3 = [-Infinity, -Infinity, -Infinity];
+  for (let i = 0; i < positions.length; i += 3) {
+    for (let axis = 0; axis < 3; axis += 1) {
+      const value = positions[i + axis] as number;
+      if (value < (min[axis] as number)) {
+        min[axis] = value;
+      }
+      if (value > (max[axis] as number)) {
+        max[axis] = value;
+      }
+    }
+  }
+  return { min, max };
+}
+
 /** 视口适配：从网格包围盒（逐轴）计算轨道相机距离、注视点与剖切偏移。
  *  distance 取最大轴跨度 × 2.5；注视点为逐轴中点——此前三轴共用同一
  *  min/max，网格不居中时视口会瞄错位置（回归测试锁定）。 */

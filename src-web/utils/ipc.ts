@@ -1,5 +1,5 @@
 /** IPC 网关：统一运行时探测与错误归类，前端只捕获 IpcUnavailableError / CommandError。 */
-import { invoke } from "@tauri-apps/api/core";
+import { Channel, invoke } from "@tauri-apps/api/core";
 import { isTauriRuntime } from "./environment";
 
 /** 浏览器预览（无 Tauri 运行时）时抛出：属于预期内的环境提示，而非故障。 */
@@ -53,4 +53,16 @@ export async function invokeCommand<T>(
   } catch (rejection) {
     throw normalize(rejection);
   }
+}
+
+/**
+ * 建一个把每条消息转发给回调的 Channel。
+ *
+ * 日志 / 进度回传都是「Rust 侧流式推、前端逐条消费」这同一形态，各 api 模块
+ * 各写一遍 `new Channel` + 赋 onmessage 只会让这个约定漂移。
+ */
+export function forwardingChannel<T>(onMessage: (message: T) => void): Channel<T> {
+  const channel = new Channel<T>();
+  channel.onmessage = onMessage;
+  return channel;
 }

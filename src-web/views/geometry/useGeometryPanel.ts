@@ -17,6 +17,7 @@ import type {
   RepairReport,
 } from "../../types";
 import { fixed, significant } from "../../utils/format";
+import { geometryHealthy } from "../../utils/study-tasks";
 
 /** 目标尺寸输入的估算防抖：连续编辑只在停顿后请求一次估算。 */
 const ESTIMATE_DEBOUNCE_MS = 300;
@@ -25,7 +26,7 @@ export function useGeometryPanel() {
   const app = useAppStore();
   const geometry = useGeometryStore();
 
-  const working = computed(() => app.busy !== null);
+  const working = computed(() => app.working);
 
   // 每几何行的表单状态（目标尺寸 + 引擎），几何首次出现时以建议尺寸初始化，
   // 之后用户编辑独立于渲染保留（列表重建不回填默认值）。
@@ -161,14 +162,9 @@ export function useGeometryPanel() {
     return parts.length > 0 ? parts.join("，") : "网格健康";
   }
 
-  function isClean(geometry: GeometrySummary): boolean {
-    const issues = geometry.issues;
-    return (
-      issues.degenerate === 0 &&
-      issues.openEdges === 0 &&
-      issues.nonManifoldEdges === 0 &&
-      issues.normalInconsistentEdges === 0
-    );
+  /** 可否修复：健康几何无需修复；判据与任务序列 / 报告同一份（utils/study-tasks）。 */
+  function isClean(item: GeometrySummary): boolean {
+    return geometryHealthy(item);
   }
 
   function statsText(geometry: GeometrySummary): string {

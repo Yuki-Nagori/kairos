@@ -3,6 +3,7 @@ import { defineStore } from "pinia";
 import { defaultCaseDir } from "../api/project";
 import { generateMoldingfoamCase } from "../api/solver";
 import type { AnalysisStage } from "../types";
+import { findMaterial } from "../utils/materials";
 import { useAppStore } from "./app";
 import { useGeometryStore } from "./geometry";
 import { useJobsStore } from "./jobs";
@@ -22,11 +23,7 @@ export const usePipelineStore = defineStore("pipeline", {
       const materialsStore = useMaterialsStore();
       const geometry = geometryStore.geometries[0] ?? null;
       const study = projectStore.activeStudy;
-      const material = study?.materialId
-        ? ([...materialsStore.materials.builtin, ...materialsStore.materials.custom].find(
-            (m) => m.id === study.materialId,
-          ) ?? null)
-        : null;
+      const material = findMaterial(materialsStore.materials, study?.materialId ?? null);
       const meshed =
         geometry !== null && geometryStore.meshReports[geometry.geometryId] !== undefined;
 

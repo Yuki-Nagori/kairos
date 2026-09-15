@@ -6,31 +6,46 @@
 
 ## 职责边界划分
 
-| 内容                 | 放哪                    | Kairos 落点                                                            |
-| -------------------- | ----------------------- | ---------------------------------------------------------------------- |
-| 模板、样式、动画     | `.vue`                  | `views/<module>/Xxx.vue`、`components/**/Xxx.vue`                      |
-| 事件绑定、v-model    | `.vue`                  | 同上（绑定的处理函数来自 composable 返回值）                           |
-| 响应式状态、计算属性 | `useXxx.ts`             | `views/<module>/useXxxPanel.ts`、`components/<comp>/useXxx.ts`         |
-| 接口请求、参数组装   | `api/*.ts`              | Tauri invoke 封装，薄适配层，不含业务判断                              |
-| 数据转换、格式化     | `utils` / store action  | `utils/`（chart/stats/report 等纯函数）、展示型格式化就近放 composable |
-| 跨组件共享状态       | `stores`                | 按领域一个 defineStore，禁止新建「公共 store」收容杂物                 |
-| 纯业务算法、校验     | 领域 `.ts`，无 Vue 依赖 | `utils/`（如 pipeline 前置校验）、`render/`（图形算法）                |
+| 内容                       | 放哪                    | Kairos 落点                                                                |
+| -------------------------- | ----------------------- | -------------------------------------------------------------------------- |
+| 模板、样式、动画           | `.vue`                  | `views/<module>/Xxx.vue`、`components/**/Xxx.vue`                          |
+| 事件绑定、v-model          | `.vue`                  | 同上（绑定的处理函数来自 composable 返回值）                               |
+| 视图组装（面板清单、插槽） | `.vue`                  | 如 `App.vue` 的左右列面板配置——是视图结构，不是业务判断                    |
+| 响应式状态、计算属性       | `useXxx.ts`             | `views/<module>/useXxxPanel.ts`、`components/<comp>/useXxx.ts`             |
+| 接口请求、参数组装         | `api/*.ts`              | Tauri invoke 封装，薄适配层，不含业务判断                                  |
+| 数据转换、格式化           | `utils` / store action  | `utils/`（chart/stats/report 等纯函数）、展示型格式化就近放 composable     |
+| 跨组件共享状态             | `stores`                | 按领域一个 defineStore，禁止新建「公共 store」收容杂物                     |
+| 纯业务算法、校验           | 领域 `.ts`，无 Vue 依赖 | `utils/`（如 pipeline 前置校验、`materials` 查找、`study-tasks` 任务评估） |
+| 类型定义                   | `types/`                | `types/index.ts` 统一出口，前后端契约以 contract 测试锁定                  |
+| 开发期基准脚本             | 顶层 `bench/`           | `src-web/bench/*.ts`（tinybench，直接引用 `render/` 压测渲染器）           |
 
-> **先于上表判断**：**计算密集 / 数值 / 几何 / 场处理逻辑一律优先 Rust
-> `kairos-core`**——TS 大部分场景性能不如 Rust，前端以 UI 编排为主。TS 侧
-> 的领域 `.ts` 只收「UI 状态聚合 + 展示型格式化」这类与渲染强耦合、数据量
-> 小的逻辑；完整判断口诀见
+> **先于上表判断**：**计算密集 / 数值 / 几何 / 场处理逻辑一律优先 Rust `kairos-core`**——
+> TS 大部分场景性能不如 Rust，前端以 UI 编排为主。TS 侧的领域 `.ts` 只收「UI 状态聚合 +
+> 展示型格式化」这类与渲染强耦合、数据量小的逻辑；完整判断口诀见
 > [ARCHITECTURE.md §1.1](ARCHITECTURE.md#11-逻辑归属判断rust-优先原则的落地)。
-> | 类型定义 | `types/` | `types/index.ts` 统一出口，前后端契约以 contract 测试锁定 |
 
 图标组件统一放 `components/ui/icons/`，设计语言、双轨分类（Mono 按钮
 图标 / Art 彩色图示）与强制参数见 [icon-design.md](icon-design.md)；
 **不引入第三方图标素材**（项目不使用第三方专有代码或数据，自绘可同时
 免除署名与再分发合规负担）。
 
+## 命名与落点
+
+| 位置                 | 命名                              | 什么时候放这里                                                              |
+| -------------------- | --------------------------------- | --------------------------------------------------------------------------- |
+| `views/<模块>/`      | `XxxPanel.vue` + `useXxxPanel.ts` | 工作台里的一个面板：一个 `.vue` 配一个同名 composable                       |
+| `components/<组件>/` | `Xxx.vue` + `useXxx.ts`           | 可复用的 UI 单元（面板之间共享）                                            |
+| `components/ui/`     | `UiXxx.vue`（+ `useUiXxx.ts`）    | 与领域无关的基础控件（按钮 / 卡片 / 输入框）                                |
+| `composables/`（根） | `useXxx.ts`                       | **跨面板**共享的非 store 逻辑（布局骨架、主题）；只服务单个面板的一律就近放 |
+
+判断是否要上提到根 `composables/`：同一个 `useXxxPanel.ts` 里出现与单一面板无关的通用逻辑
+（第二个面板也要用），或该逻辑依赖稳定不变的全局量（如 `useLayout` 的模块级折叠态、`useTheme`
+的主题广播）。**跨组件共享的「状态」不放 composable 而放 store**——模块级 `ref` 单例只允许
+用于「纯 UI 开关 + 持久化偏好」这类没有领域语义的量（布局折叠、对话框开合），领域状态一律 store。
+
 ## 判断标准
 
-- 这段代码**去掉 Vue 还能独立测试和运行** → 放 `.ts`（utils / api / render）；
+- 这段代码**去掉 Vue 还能独立测试和运行** → 放 `.ts`（utils / api / render / bench）；
 - **必须依赖 `ref`、`onMounted` 这类 Vue API** 才能工作 → 放 composable（useXxx.ts）；
 - **只描述 DOM 结构和样式** → 留 `.vue`。
 
@@ -53,11 +68,20 @@ flowchart LR
 ```
 
 依赖只能向下，禁止反向与跨层（如 composable 绕过 store 直接 import api）。
+两条容易踩的细则：
+
+- **`utils` 与 `render` 平级**：`render` 可以用 `utils`（如 `utils/theme` 的主题常量、
+  `utils/error` 的错误归一化），**`utils` 不许用 `render`**，更不许反向依赖
+  `composables`——`render/renderer.ts` 曾 import `composables/useTheme` 取事件名，
+  等于把 Vue 拖进渲染底座，已改为把主题核心下沉 `utils/theme`。要共享的常量 / 纯函数
+  放 `utils`，不要在 composable 里定义再被下层反向引用。
+- **`bench/` 是唯一例外**：顶层 `src-web/bench/` 是开发期基准脚本，本来就为压测
+  `render/` 而存在，允许反向引用，且不计入覆盖率口径。
 
 ## 通信与解耦约定
 
 1. **composable 返回「绑定 + 方法」**，`.vue` 直接解构使用：模板需要的每个名字都在返回对象里，
-   `.vue` 的 script setup 只剩导入与解构。
+   `.vue` 的 script setup 只剩导入 / 实例化 store / 解构 / 视图组装常量。
 2. **props / emit 只传数据和事件**，不向子组件传操作函数（插槽场景除外）。子组件要触发业务动作，
    emit 事件由父层处理，或子组件自行使用 store。
 3. **领域逻辑不 import Vue**。`utils/`、`render/`、`api/` 保持纯 TS——这正是它们能脱离组件
@@ -65,16 +89,38 @@ flowchart LR
 4. **错误处理分层各司其职**：`api/` 把失败归一为带 `code/message` 的错误对象抛出（含 IPC 不可用
    的环境提示）；store action 统一接住并转入 `app.setError` / `beginBusy`，busy 前后置用
    `beginBusy/endBusy` 配对；composable 与 `.vue` **不自行 try/catch**，只消费成功后的状态。
+   composable 需要「先尝试 A、失败再走 B」时，把 A 收成返回 `T | null` 的 store action
+   （错误已在 action 内入全局错误），不要在 composable 里写 try/catch。
 5. **类型集中管理**：`types/index.ts` 是唯一出口，`.vue` 与纯 TS 共同引用；跨层传递的领域结构
    （Project / MeshingReport 等）不得在组件里重新声明形状。
-6. **命令式图形是例外而非反模式**：canvas 2D / WebGL 的绘制由 composable 调用 `render/` 与
-   `utils/chart` 的绘制函数完成——DOM 负责挂载体（`<canvas>` 元素），像素操作归图形层。
+6. **命令式图形是例外而非反模式**：canvas 2D / WebGL / WebGPU 的绘制由 composable 调用 `render/`
+   与 `utils/chart` 的绘制函数完成——DOM 负责挂载体（`<canvas>` 元素），像素操作归图形层。
+7. **有生命周期的资源谁创建谁销毁**：渲染器 / 定时器 / `window` 监听在创建处登记、
+   在 `onUnmounted` 或对应的销毁路径释放。视口的四分格切换会反复创建副视口渲染器，
+   不显式 `dispose()` 就是几个对着脱离文档画布空转的 RAF 循环；`window` 上的监听必须留成
+   类字段 / 具名函数，匿名闭包在 dispose 时摘不掉。
+
+## 禁止重复实现
+
+同一语义只写一处，第二处出现就上提。前端已经收口过的几处（新增代码请复用，不要再写一遍）：
+
+| 语义                               | 唯一落点                                            |
+| ---------------------------------- | --------------------------------------------------- |
+| 「有动作进行中」                   | `app store` 的 `working` getter                     |
+| 错误 → 可展示文本                  | `utils/error` 的 `errorMessage`                     |
+| 作业状态 → 中文标签                | `stores/jobs` 的 `jobStatusLabel`                   |
+| 材料库按 id 查找                   | `utils/materials` 的 `findMaterial`                 |
+| 几何健康判据（四类问题全零）       | `utils/study-tasks` 的 `geometryHealthy`            |
+| 主题 CSS 变量读取 / `#rrggbb` 解析 | `utils/theme` 的 `themeVar` / `themeRgb`            |
+| 命令日志 / 进度 Channel 转发       | `utils/ipc` 的 `forwardingChannel`                  |
+| 浏览器下载文本文件                 | `utils/download` 的 `downloadTextFile`              |
+| 网格包围盒扫描                     | `render/math` 的 `boundsOf`（在上传时算一次并缓存） |
 
 ## 常见反模式
 
 | 反模式                                   | 后果与纠正                                                                    |
 | ---------------------------------------- | ----------------------------------------------------------------------------- |
-| `.vue` 里堆几百行 script，业务和 UI 混写 | 抽 useXxx.ts；`.vue` 的 script 超过「导入 + 解构 + 一行说明」即算超标         |
+| `.vue` 里堆几百行 script，业务和 UI 混写 | 抽 useXxx.ts；`.vue` 的 script 出现判断 / 计算 / 数据拼装即算超标             |
 | composable 直接操作 DOM                  | 结构归 `.vue`；图形绘制走 `render/` / `utils/chart`，不摸 querySelector/style |
 | 领域 `.ts` 里 import `ref` 等 Vue API    | 污染纯逻辑层，破坏无 Vue 单测；发现即下沉回 composable                        |
 | 什么都往同一个 store 塞                  | store 变成上帝对象；严格按领域拆（app/project/geometry/…），新领域建新文件    |
@@ -82,6 +128,18 @@ flowchart LR
 | 组件里重复声明后端返回的数据形状         | 以 `types/` 为准，形状漂移由 contract 测试拦截                                |
 | 在 TS 里重写 core 已有的数值计算         | 性能与数值一致性双输；core 是唯一事实源，TS 只消费其 DTO                      |
 | 把重计算放前端跑（万级元素逐值运算等）   | TS 性能大部分场景不如 Rust；数值流水线在 Rust 一次算完，大数组走二进制通道    |
+| 防御分支写在没有调用路径的地方           | 不可达的判空 / 兜底会变成「假未覆盖」；确认可达才留，否则删掉（见覆盖率写法） |
+
+## 大数组与热路径
+
+结果场是 10⁶ 量级，动画节拍（400ms）会反复经过云图与图例：
+
+- 逐面值展开、包围盒扫描、值域统计这类全量运算，**按输入身份算一次并缓存**，不要在槽位循环里
+  逐实例重算（四视口就是 4 倍重复）；
+- 别在 computed / 每帧路径里做整数组拷贝（`[...values]`、`slice()`）或新建大 `TypedArray`；
+- 多实例同步是**单向下发**：程序化的 `setOrbit` 不允许回报 onView，否则两个实例互相同步
+  会递归到栈溢出；
+- 模板里 `v-for` 内调用函数 = 每次渲染重算；能预算的派生量放 composable 的 computed。
 
 ## 大型 / 多人协作演进方向
 

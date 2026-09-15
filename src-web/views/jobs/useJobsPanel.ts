@@ -2,7 +2,7 @@
  *  环境「已下载新版本但 VM 未部署」时展示提醒横幅。 */
 import { computed, onScopeDispose, ref, watch } from "vue";
 import { useAppStore } from "../../stores/app";
-import { useJobsStore } from "../../stores/jobs";
+import { jobStatusLabel, useJobsStore } from "../../stores/jobs";
 import { useDependenciesStore } from "../../stores/dependencies";
 import { useVmStore } from "../../stores/vm";
 import { isPendingDeploy } from "../../utils/deploy";
@@ -13,13 +13,8 @@ import type { Job } from "../../types";
 const JOB_POLL_MS = 1500;
 
 export function useJobsPanel() {
-  const STATUS_LABEL: Record<Job["status"], string> = {
-    queued: "排队中",
-    running: "运行中",
-    done: "已完成",
-    failed: "失败",
-    cancelled: "已取消",
-  };
+  /** 状态标签与配色：标签的单一来源在 jobs store（与方案摘要共用）。 */
+  const statusLabel = jobStatusLabel;
 
   const STATUS_CLASS: Record<Job["status"], string> = {
     queued: "text-zinc-400",
@@ -100,8 +95,9 @@ export function useJobsPanel() {
     return check.moldingfoam && check.solver ? "text-emerald-400" : "text-amber-400";
   });
 
-  function jobLogsTail(jobId: string): string[] {
-    return jobsStore.jobLogs[jobId] ?? [];
+  /** 作业日志尾部：环形缓冲最后 8 行拼成文本（模板只做展示，不再自己切片拼接）。 */
+  function jobLogTail(jobId: string): string {
+    return (jobsStore.jobLogs[jobId] ?? []).slice(-8).join("\n");
   }
 
   return {
@@ -113,8 +109,8 @@ export function useJobsPanel() {
     submitJob,
     envHint,
     envClass,
-    STATUS_LABEL,
+    statusLabel,
     STATUS_CLASS,
-    jobLogsTail,
+    jobLogTail,
   };
 }

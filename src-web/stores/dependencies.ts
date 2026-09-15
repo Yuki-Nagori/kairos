@@ -18,6 +18,7 @@ import type {
   SavedDownload,
   UpdateCheck,
 } from "../types";
+import { errorMessage } from "../utils/error";
 import { useAppStore } from "./app";
 
 /** SavedDownload → 跨会话清单条目（下载完成时刻即落盘时刻）。 */
@@ -126,7 +127,7 @@ export const useDependenciesStore = defineStore("dependencies", {
         this.updateChecks = nextChecks;
         this.setStage(componentId, null);
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = errorMessage(error);
         this.setStage(componentId, { stage: "failed", error: `下载失败：${message}` });
       }
     },

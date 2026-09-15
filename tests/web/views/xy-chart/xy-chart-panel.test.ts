@@ -7,7 +7,7 @@ import XyChartPanel from "../../../../src-web/views/xy-chart/XyChartPanel.vue";
 import { useXyChartPanel } from "../../../../src-web/views/xy-chart/useXyChartPanel";
 import { useAppStore } from "../../../../src-web/stores/app";
 import { useResultsStore } from "../../../../src-web/stores/results";
-import { THEME_CHANGED_EVENT } from "../../../../src-web/composables/useTheme";
+import { THEME_CHANGED_EVENT } from "../../../../src-web/utils/theme";
 import { loadResultField } from "../../../../src-web/api/results";
 import type { ScalarField } from "../../../../src-web/types";
 

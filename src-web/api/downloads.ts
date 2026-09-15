@@ -1,6 +1,5 @@
 /** 受管下载 IPC：单文件直链下载（进度经 Channel 回传）与跨会话已下载清单。 */
-import { Channel } from "@tauri-apps/api/core";
-import { invokeCommand } from "../utils/ipc";
+import { forwardingChannel, invokeCommand } from "../utils/ipc";
 import type { DownloadedEntry, SavedDownload } from "../types";
 
 /** 下载组件到受管目录（应用数据 downloads/），进度百分比经 Channel 回传；
@@ -10,9 +9,11 @@ export function downloadComponentFile(
   url: string,
   onProgress: (percent: number) => void,
 ): Promise<SavedDownload> {
-  const channel = new Channel<number>();
-  channel.onmessage = onProgress;
-  return invokeCommand("download_file", { componentId, url, progress: channel });
+  return invokeCommand("download_file", {
+    componentId,
+    url,
+    progress: forwardingChannel(onProgress),
+  });
 }
 
 /** 跨会话的已下载清单（manifest.json）。 */

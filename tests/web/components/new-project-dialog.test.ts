@@ -111,6 +111,17 @@ describe("NewProjectDialog", () => {
     expect(wrapper.text()).toContain("/Volumes/Work/kairos/控制器支架/控制器支架.kairos");
   });
 
+  it("目录选择器失败时记全局错误且不改工作区", async () => {
+    const app = (await import("../../../src-web/stores/app")).useAppStore();
+    const { workspace } = useNewProjectDialog();
+    workspace.value = "/Volumes/Work";
+    vi.mocked(pickWorkspaceDir).mockRejectedValueOnce(new Error("对话框不可用"));
+
+    await useNewProjectDialog().browseWorkspace();
+    expect(app.error?.message).toBe("对话框不可用");
+    expect(workspace.value).toBe("/Volumes/Work");
+  });
+
   it("「选择…」用系统目录选择器改工作区；取消保持原值", async () => {
     const wrapper = mount(NewProjectDialog, {
       global: { plugins: [pinia], stubs: { teleport: true } },

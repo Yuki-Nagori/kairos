@@ -1,9 +1,9 @@
 /** 体渲染基准（验收协议）：确定性体素场上度量光线步进的
  * 上传耗时 / 首帧 / FPS（96 步 × 视口分辨率）。
  * 需要 GPU 后端的运行环境（Tauri WebView / 浏览器）。
- * 运行：bun src-web/utils/bench/volume-render.ts
+ * 运行：bun src-web/bench/volume-render.ts
  */
-import { VolumeRaymarcher } from "../../render/webgpu/volume";
+import { VolumeRaymarcher } from "../render/webgpu/volume";
 
 const DIMS = 128;
 const FRAME_SAMPLES = 120;

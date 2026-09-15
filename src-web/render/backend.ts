@@ -53,9 +53,9 @@ export interface ViewportBackend {
   dispose(): void;
 }
 
-type BackendKind = "webgpu" | "webgl2";
-
-/** 创建视口后端：WebGPU 适配器可用即用之，否则回退 WebGL2；全败返回 null。 */
+/** 创建视口后端：WebGPU 适配器可用即用之，否则回退 WebGL2；全败返回 null。
+ *  实际生效的后端类型由 render/capability 探测（面板据此给回退说明），
+ *  这里不再回传一遍——两处各报一次只会让口径漂移。 */
 export async function createViewportRenderer(
   canvas: HTMLCanvasElement,
   onFps?: (fps: number) => void,
@@ -68,14 +68,10 @@ export async function createViewportRenderer(
     distance: number;
   }) => void,
   onError?: (message: string) => void,
-): Promise<{ backend: ViewportBackend; kind: BackendKind } | null> {
-  const gpu = await WebGPURenderer.create(canvas, onFps, undefined, onError);
+): Promise<ViewportBackend | null> {
+  const gpu = await WebGPURenderer.create(canvas, onFps, onView, onError);
   if (gpu !== null) {
-    return { backend: gpu, kind: "webgpu" };
+    return gpu;
   }
-  const gl = ViewportRenderer.create(canvas, onFps, onView);
-  if (gl !== null) {
-    return { backend: gl, kind: "webgl2" };
-  }
-  return null;
+  return ViewportRenderer.create(canvas, onFps, onView);
 }

@@ -1,10 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
-import { CommandError, invokeCommand } from "../../../src-web/utils/ipc";
+import { CommandError, forwardingChannel, invokeCommand } from "../../../src-web/utils/ipc";
 
 const { invokeMock } = vi.hoisted(() => ({ invokeMock: vi.fn() }));
 
 vi.mock("../../../src-web/utils/environment", () => ({ isTauriRuntime: () => true }));
-vi.mock("@tauri-apps/api/core", () => ({ invoke: invokeMock }));
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: invokeMock,
+  // Channel 只是 Rust 侧回传通道的句柄，测试里给出可赋值 onmessage 的最小替身。
+  Channel: class<T> {
+    onmessage: ((message: T) => void) | null = null;
+  },
+}));
 
 describe("invokeCommand", () => {
   it("restores structured KairosError rejections into CommandError", async () => {
@@ -56,5 +62,15 @@ describe("invokeCommand", () => {
       expect(error.code).toBe(code);
       expect(error.message).toBe(`msg-${code}`);
     }
+  });
+});
+
+describe("forwardingChannel", () => {
+  it("把 Channel 收到的每条消息转给回调", () => {
+    const received: string[] = [];
+    const channel = forwardingChannel<string>((line) => received.push(line));
+    channel.onmessage?.("第 1 行");
+    channel.onmessage?.("第 2 行");
+    expect(received).toEqual(["第 1 行", "第 2 行"]);
   });
 });

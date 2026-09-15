@@ -10,9 +10,15 @@ import {
   listRecentProjects,
   loadProjectFile,
   saveProjectFile,
+  saveReportPptxToWorkspace,
+  saveReportToWorkspace,
 } from "../../../src-web/api/project";
 import { listBuiltinMaterials, listCustomMaterials } from "../../../src-web/api/materials";
-import { pickOpenProjectPath, pickSaveProjectPath } from "../../../src-web/api/dialog";
+import {
+  pickOpenProjectPath,
+  pickSaveProjectPath,
+  pickWorkspaceDir,
+} from "../../../src-web/api/dialog";
 import { checkMoldNetwork } from "../../../src-web/api/mold";
 import type { CoolingChannel, Project, RunnerElement, Study } from "../../../src-web/types";
 
@@ -20,6 +26,8 @@ vi.mock("../../../src-web/api/system", () => ({ getSystemInfo: vi.fn() }));
 vi.mock("../../../src-web/api/project", () => ({
   createProject: vi.fn(),
   defaultWorkspacePath: vi.fn(async () => "/home/u/Documents/kairos"),
+  saveReportToWorkspace: vi.fn(),
+  saveReportPptxToWorkspace: vi.fn(),
   projectPath: vi.fn(
     async (workspace: string, name: string) => `${workspace}/${name}/${name}.kairos`,
   ),
@@ -44,6 +52,7 @@ vi.mock("../../../src-web/api/materials", () => ({
 vi.mock("../../../src-web/api/dialog", () => ({
   pickOpenProjectPath: vi.fn(),
   pickSaveProjectPath: vi.fn(),
+  pickWorkspaceDir: vi.fn(),
   pickOpenJsonPath: vi.fn(),
   pickExportJsonPath: vi.fn(),
   pickStlPath: vi.fn(),
@@ -715,5 +724,92 @@ describe("工作区：打开工程恢复与根目录刷新", () => {
     project.upsertGeometryRef({ id: "g-1", fileName: "a2.stl", relativePath: "geometry/a2.stl" });
     expect(project.project?.geometries.map((entry) => entry.fileName)).toEqual(["a2.stl", "b.stl"]);
     expect(project.project?.geometries.map((entry) => entry.id)).toEqual(["g-1", "g-2"]);
+  });
+});
+
+describe("报告落盘", () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    vi.mocked(saveReportToWorkspace).mockReset();
+    vi.mocked(saveReportPptxToWorkspace).mockReset();
+    vi.mocked(pickWorkspaceDir).mockReset();
+  });
+
+  it("有工作区时写入并回传路径", async () => {
+    const project = useProjectStore();
+    project.projectPath = "/w/p/p.kairos";
+    project.workspaceRoot = "/w/p";
+    vi.mocked(saveReportToWorkspace).mockResolvedValue("/w/p/reports/r.html");
+    await expect(project.saveReport("r.html", "<html>")).resolves.toBe("/w/p/reports/r.html");
+    expect(saveReportToWorkspace).toHaveBeenCalledWith("/w/p/p.kairos", "r.html", "<html>");
+    expect(useAppStore().error).toBeNull();
+  });
+
+  it("无工作区时不动手也不报错（由调用方回退下载）", async () => {
+    const project = useProjectStore();
+    project.projectPath = "/tmp/loose.kairos";
+    project.workspaceRoot = null;
+    await expect(project.saveReport("r.html", "<html>")).resolves.toBeNull();
+    expect(saveReportToWorkspace).not.toHaveBeenCalled();
+    expect(useAppStore().error).toBeNull();
+  });
+
+  it("写入失败记全局错误并回传 null", async () => {
+    const project = useProjectStore();
+    project.projectPath = "/w/p/p.kairos";
+    project.workspaceRoot = "/w/p";
+    vi.mocked(saveReportToWorkspace).mockRejectedValue(new Error("目录只读"));
+    await expect(project.saveReport("r.html", "<html>")).resolves.toBeNull();
+    expect(useAppStore().error?.message).toBe("目录只读");
+  });
+
+  it("PPTX：散装工程直接报错返回，不调命令层", async () => {
+    const project = useProjectStore();
+    await expect(project.saveReportPptx("标题", [])).resolves.toBeNull();
+    expect(saveReportPptxToWorkspace).not.toHaveBeenCalled();
+    expect(useAppStore().error?.message).toContain("散装工程");
+  });
+
+  it("PPTX：命令层失败记全局错误并回传 null", async () => {
+    const project = useProjectStore();
+    project.project = makeProject();
+    project.projectPath = "/w/p/p.kairos";
+    vi.mocked(saveReportPptxToWorkspace).mockRejectedValue(new Error("工作区只读"));
+    await expect(project.saveReportPptx("标题", [])).resolves.toBeNull();
+    expect(useAppStore().error?.message).toBe("工作区只读");
+  });
+
+  it("PPTX：成功时回传路径，文件名带工程名", async () => {
+    const project = useProjectStore();
+    project.project = makeProject();
+    project.projectPath = "/w/p/p.kairos";
+    vi.mocked(saveReportPptxToWorkspace).mockResolvedValue("/w/p/reports/x.pptx");
+    await expect(project.saveReportPptx("标题", [])).resolves.toBe("/w/p/reports/x.pptx");
+    expect(saveReportPptxToWorkspace).toHaveBeenCalledWith(
+      "/w/p/p.kairos",
+      expect.stringContaining("-报告"),
+      "标题",
+      [],
+    );
+  });
+
+  it("选工作区目录：取消返回 null 且不报错；选择器失败记全局错误", async () => {
+    const project = useProjectStore();
+    vi.mocked(pickWorkspaceDir).mockResolvedValueOnce(null);
+    await expect(project.chooseWorkspaceDir("/w")).resolves.toBeNull();
+    expect(useAppStore().error).toBeNull();
+    expect(pickWorkspaceDir).toHaveBeenCalledWith("/w");
+
+    vi.mocked(pickWorkspaceDir).mockRejectedValueOnce(new Error("对话框不可用"));
+    await expect(project.chooseWorkspaceDir("/w")).resolves.toBeNull();
+    expect(useAppStore().error?.message).toBe("对话框不可用");
+  });
+
+  it("默认工作区根取不到时静默回 null（浏览器预览不弹环境提示）", async () => {
+    const project = useProjectStore();
+    const { defaultWorkspacePath } = await import("../../../src-web/api/project");
+    vi.mocked(defaultWorkspacePath).mockRejectedValueOnce(new Error("IPC 不可用"));
+    await expect(project.defaultWorkspace()).resolves.toBeNull();
+    expect(useAppStore().error).toBeNull();
   });
 });

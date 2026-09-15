@@ -24,6 +24,7 @@ const {
   clipAxis,
   clipPosition,
   clipInvert,
+  viewTools,
   applyClip,
   title,
   centerText,
@@ -35,18 +36,7 @@ const {
   deformPending,
   toggleDeform,
   applyDeformation,
-  resetView,
-  zoomBy,
-  fitView,
 } = useViewportPanel();
-
-/** 悬浮视图工具条：自上而下 放大 / 缩小 / 适应视图 / 复位视角。 */
-const VIEW_TOOLS = [
-  { id: "zoom-in", icon: "＋", title: "放大", run: () => zoomBy(0.8) },
-  { id: "zoom-out", icon: "－", title: "缩小", run: () => zoomBy(1.25) },
-  { id: "fit", icon: "⤢", title: "适应视图", run: () => fitView() },
-  { id: "reset", icon: "⌂", title: "复位视角", run: () => resetView() },
-];
 </script>
 
 <template>
@@ -111,7 +101,7 @@ const VIEW_TOOLS = [
             class="absolute top-1/2 right-3 z-10 flex -translate-y-1/2 flex-col gap-0.5 rounded-lg border border-zinc-800 bg-zinc-900/85 p-1"
           >
             <button
-              v-for="tool in VIEW_TOOLS"
+              v-for="tool in viewTools"
               :key="tool.id"
               type="button"
               class="grid size-6.5 place-items-center rounded-md text-xs text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-100"

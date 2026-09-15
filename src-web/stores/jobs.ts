@@ -10,6 +10,20 @@ import { useProjectStore } from "./project";
 /** 每作业日志的环形上限：超出后丢弃最旧行，避免长作业撑爆内存。 */
 const JOB_LOG_LIMIT = 200;
 
+/** 作业状态的中文标签（作业面板与方案摘要共用一份，避免两处各写一遍后漂移）。
+ *  用 `Record<Job["status"], string>`：新增状态时这里编译报错，不会漏配。 */
+const JOB_STATUS_LABEL: Record<Job["status"], string> = {
+  queued: "排队中",
+  running: "运行中",
+  done: "已完成",
+  failed: "失败",
+  cancelled: "已取消",
+};
+
+export function jobStatusLabel(status: Job["status"]): string {
+  return JOB_STATUS_LABEL[status];
+}
+
 export const useJobsStore = defineStore("jobs", {
   state: () => ({
     /** 求解作业列表（调度器持有的快照）。 */

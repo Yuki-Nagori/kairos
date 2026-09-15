@@ -64,6 +64,16 @@ export function useViewportPanel() {
     }
   }
 
+  /** 释放实例渲染器并复位就绪态。
+   *  副视口画布被 v-for 摘掉时渲染器不会自己停：它的 requestAnimationFrame
+   *  循环对着已脱离文档的画布继续画，四分格来回切几次就攒下几个空转渲染器。 */
+  function releaseSlot(slot: ViewportSlot): void {
+    slot.renderer?.dispose();
+    slot.renderer = null;
+    slot.renderMesh = null;
+    slot.loaded = false;
+  }
+
   // 空态提示：载入网格前主视口不应是一片空白；探测备注动态替换。
   const emptyText = ref(
     "导入几何并生成网格后，点击「载入网格到视口」查看 3D 模型（WebGPU 可用时自动启用）",
@@ -75,16 +85,28 @@ export function useViewportPanel() {
   const legendValues = ref<number[] | null>(null);
   const legendVisible = computed(() => legendValues.value !== null);
 
-  function updateLegend(field: { values: number[] } | null): void {
+  let statsCache: { field: ScalarField; min: number; max: number; mid: number } | null = null;
+
+  /** 值域与中值：min/max 一次线性扫描，中值用 quickselect（O(n) 平均）。
+   *  按场对象身份缓存——图例与云图各读一次同一个场，10⁶ 量级的场不值得扫两遍。 */
+  function fieldStats(field: ScalarField): { min: number; max: number; mid: number } {
+    const cached = statsCache;
+    if (cached !== null && cached.field === field) {
+      return cached;
+    }
+    const { min, max } = minMax(field.values);
+    const mid = quickselect([...field.values], Math.floor(field.values.length / 2));
+    const stats = { field, min, max, mid };
+    statsCache = stats;
+    return stats;
+  }
+
+  function updateLegend(field: ScalarField | null): void {
     if (field === null || field.values.length === 0) {
       legendValues.value = null;
       return;
     }
-    const values = field.values;
-    // min/max 线性扫描；中值 quickselect（O(n) 平均），大场动画逐帧调用
-    // 时不做 O(n log n) 全量排序。
-    const { min, max } = minMax(values);
-    const mid = quickselect([...values], Math.floor(values.length / 2));
+    const { min, max, mid } = fieldStats(field);
     legendValues.value = [max, mid, min];
   }
 
@@ -142,10 +164,11 @@ export function useViewportPanel() {
         indices: mesh.indices,
         faceCells: mesh.faceCells,
       });
-      // 顶点位置变了：云图逐面色值与剖切面都要按新位置重算
-      applyField(results.loadedField);
-      applyClip();
     }
+    // 顶点位置变了：云图逐面色值与剖切面都要按新位置重算。
+    // 两件事各自会遍历全部实例，放在循环外各做一次（循环内做就是 O(实例数²)）。
+    applyField(results.loadedField);
+    applyClip();
   }
 
   function toggleDeform(): void {
@@ -170,11 +193,7 @@ export function useViewportPanel() {
     return Math.round(value * 1000) / 1000;
   }
 
-  function attachPointerHandlers(slot: ViewportSlot): void {
-    const el = slot.el;
-    if (el === null) {
-      return;
-    }
+  function attachPointerHandlers(slot: ViewportSlot, el: HTMLCanvasElement): void {
     let down: { x: number; y: number } | null = null;
     el.addEventListener("pointerdown", (event) => {
       down = { x: event.clientX, y: event.clientY };
@@ -296,6 +315,14 @@ export function useViewportPanel() {
     applyClip();
   }
 
+  /** 悬浮视图工具条：自上而下 放大 / 缩小 / 适应视图 / 复位视角。 */
+  const viewTools = [
+    { id: "zoom-in", icon: "＋", title: "放大", run: () => zoomBy(0.8) },
+    { id: "zoom-out", icon: "－", title: "缩小", run: () => zoomBy(1.25) },
+    { id: "fit", icon: "⤢", title: "适应视图", run: () => fitView() },
+    { id: "reset", icon: "⌂", title: "复位视角", run: () => resetView() },
+  ];
+
   function resetView(): void {
     for (const slot of slots) {
       slot.renderer?.resetView();
@@ -313,6 +340,8 @@ export function useViewportPanel() {
     for (const slot of slots) {
       slot.renderer?.fitView();
     }
+    // 适配后注视点变了：读数要跟上（各实例的适配结果一致，取主视口为准）。
+    syncOrbitFrom(slots[0]!);
   }
 
   /** 幂等创建实例渲染器（并发去重）；创建失败时主视口给出环境不支持提示。 */
@@ -325,15 +354,15 @@ export function useViewportPanel() {
       return inFlight;
     }
     const task = (async () => {
-      const created = await createViewportRenderer(
+      const backend = await createViewportRenderer(
         slot.el!,
         slot.id === 0
           ? (fps) => {
               fpsText.value = `FPS: ${fps}`;
             }
           : undefined,
-        (state) => {
-          viewCenter.value = state;
+        // 交互回调只带注视点意义：读数与联动都从该实例的轨道相机取，避免两处各写一遍。
+        () => {
           syncOrbitFrom(slot);
         },
         // 渲染器主动上报绘制失败：网格载入后画布空白是最难自查的情况，有原因就
@@ -344,15 +373,20 @@ export function useViewportPanel() {
           emptyError.value = true;
         },
       );
-      if (created === null) {
+      if (backend === null) {
         if (slot.id === 0) {
           emptyText.value = "当前环境不支持 WebGL2 / WebGPU，无法渲染视口。";
           emptyError.value = true;
         }
         return;
       }
-      slot.renderer = created.backend;
-      attachPointerHandlers(slot);
+      // 创建期间画布被摘掉（切回单视口）：立刻销毁，不留对着脱离文档画布空转的渲染器。
+      if (slot.el === null) {
+        backend.dispose();
+        return;
+      }
+      slot.renderer = backend;
+      attachPointerHandlers(slot, slot.el);
     })();
     creating.set(slot.id, task);
     void task.finally(() => {
@@ -464,18 +498,23 @@ export function useViewportPanel() {
     if (field === null || field.values.length === 0) {
       return;
     }
+    const { min, max } = fieldStats(field);
+    // 各实例共用同一份网格（sharedMesh）→ 逐面值只展开一次，四分格时省掉
+    // 3/4 的重复分配与拷贝；值域也一样，不必逐槽重扫。
+    const mesh = sharedMesh;
+    if (mesh === null) {
+      return;
+    }
+    const perFace = new Float32Array(mesh.faceCells.length);
+    for (let face = 0; face < mesh.faceCells.length; face += 1) {
+      // face < faceCells.length ⇒ 索引必在界内（不变量，按非空处理）
+      perFace[face] = field.values[mesh.faceCells[face] as number] ?? 0;
+    }
     for (const slot of slots) {
-      if (slot.renderer === null || slot.renderMesh === null) {
+      if (slot.renderer === null) {
         continue;
       }
-      const faceCells = slot.renderMesh.faceCells;
-      const perFace = new Float32Array(faceCells.length);
-      for (let face = 0; face < faceCells.length; face += 1) {
-        // face < faceCells.length ⇒ 索引必在界内（不变量，按非空处理）
-        perFace[face] = field.values[faceCells[face] as number] ?? 0;
-      }
       slot.renderer.setFaceValues(perFace);
-      const { min, max } = minMax(field.values);
       slot.renderer.setFieldRange(min, max);
     }
   }
@@ -488,10 +527,15 @@ export function useViewportPanel() {
     },
   );
 
-  // 布局切换后：四分格新增实例补建（共享网格已缓存），时间轴 / 云图 / 图层自动就绪。
+  // 布局切换后：四分格新增实例补建（共享网格已缓存），退出布局的实例销毁渲染器，
+  // 时间轴 / 云图 / 图层自动就绪。
   watch(layout, () => {
     for (const slot of slots) {
-      void setupSlot(slot);
+      if (slotIds.value.includes(slot.id)) {
+        void setupSlot(slot);
+      } else {
+        releaseSlot(slot);
+      }
     }
   });
 
@@ -502,7 +546,12 @@ export function useViewportPanel() {
       }
     });
   });
-  onUnmounted(stopPlay);
+  onUnmounted(() => {
+    stopPlay();
+    for (const slot of slots) {
+      releaseSlot(slot);
+    }
+  });
 
   return {
     layout,
@@ -534,6 +583,7 @@ export function useViewportPanel() {
     loadMesh,
     togglePlay,
     toggleClip,
+    viewTools,
     applyClip,
     resetView,
     zoomBy,

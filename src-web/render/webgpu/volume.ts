@@ -39,6 +39,12 @@ export class VolumeRaymarcher {
   private lastReportAt = performance.now();
   private valueMax = 1;
   private onFps?: (fps: number) => void;
+  /** 左键拖拽中（mouseup 在 window 上收尾，故状态存字段）。 */
+  private dragging = false;
+  /** window 监听留成类字段：闭包里的匿名监听在 dispose 时摘不掉。 */
+  private readonly onWindowMouseUp = (): void => {
+    this.dragging = false;
+  };
 
   private constructor(
     canvas: HTMLCanvasElement,
@@ -187,17 +193,14 @@ export class VolumeRaymarcher {
   }
 
   private attachControls(): void {
-    let dragging = false;
     this.canvas.addEventListener("mousedown", (event) => {
       if (event.button === 0) {
-        dragging = true;
+        this.dragging = true;
       }
     });
-    window.addEventListener("mouseup", () => {
-      dragging = false;
-    });
+    window.addEventListener("mouseup", this.onWindowMouseUp);
     this.canvas.addEventListener("mousemove", (event) => {
-      if (!dragging) {
+      if (!this.dragging) {
         return;
       }
       this.yaw -= event.movementX * 0.005;
@@ -219,6 +222,7 @@ export class VolumeRaymarcher {
   dispose(): void {
     this.disposed = true;
     cancelAnimationFrame(this.rafHandle);
+    window.removeEventListener("mouseup", this.onWindowMouseUp);
     this.device.destroy();
   }
 }

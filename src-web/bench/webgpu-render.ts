@@ -2,10 +2,10 @@
  * 上传耗时 / 首帧 / 稳定 FPS / 剖切切换延迟。
  * 需要 GPU 后端的运行环境（Tauri WebView / 浏览器）；bun 直跑时
  * WebGPU 不可用会打印不支持提示而非伪造数字。
- * 运行：bun src-web/utils/bench/webgpu-render.ts
+ * 运行：bun src-web/bench/webgpu-render.ts
  */
-import { WebGPURenderer } from "../../render/webgpu/renderer";
-import { deterministicGridMesh } from "../../render/webgpu/mesh-asset";
+import { WebGPURenderer } from "../render/webgpu/renderer";
+import { deterministicGridMesh } from "../render/webgpu/mesh-asset";
 
 const FRAME_SAMPLES = 120;
 

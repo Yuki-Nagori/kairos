@@ -6,14 +6,11 @@
  * 状态栏按 code 给出处置提示，禁止对 message 做文本匹配。
  */
 import { defineStore } from "pinia";
+import { errorMessage } from "../utils/error";
 import { CommandError, IpcUnavailableError } from "../utils/ipc";
 import type { Stage, SystemInfo } from "../types";
 
 let errorTimer: ReturnType<typeof setTimeout> | undefined;
-
-function toMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
 
 export const useAppStore = defineStore("app", {
   state: () => ({
@@ -22,9 +19,13 @@ export const useAppStore = defineStore("app", {
     busy: null as string | null,
     error: null as { message: string; info: boolean; code: string | null } | null,
   }),
+  getters: {
+    /** 「有动作在进行中」的唯一判据：各面板的禁用态都读它，不各自写 busy !== null。 */
+    working: (state): boolean => state.busy !== null,
+  },
   actions: {
     setError(error: unknown): void {
-      const message = toMessage(error);
+      const message = errorMessage(error);
       const info = error instanceof IpcUnavailableError;
       const code = error instanceof CommandError ? error.code : null;
       if (errorTimer !== undefined) {

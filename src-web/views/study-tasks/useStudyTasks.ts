@@ -56,9 +56,9 @@ export function useStudyTasks() {
   });
   const submitDisabled = computed(() => {
     if (selectedGateLocation.value) {
-      return !gateLocationReady.value || app.busy !== null;
+      return !gateLocationReady.value || app.working;
     }
-    return !prerequisitesReady(tasks.value) || app.busy !== null;
+    return !prerequisitesReady(tasks.value) || app.working;
   });
   const submitLabel = computed(() =>
     selectedGateLocation.value ? "运行浇口位置分析" : "提交求解作业",

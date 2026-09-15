@@ -4,7 +4,7 @@ import { useAppStore } from "../../stores/app";
 import { useResultsStore } from "../../stores/results";
 import type { ScalarField } from "../../types";
 import { drawLineChart } from "../../utils/chart";
-import { THEME_CHANGED_EVENT } from "../../composables/useTheme";
+import { THEME_CHANGED_EVENT } from "../../utils/theme";
 import { registerSnapshot } from "../../render/snapshot";
 import { fixed } from "../../utils/format";
 
@@ -16,7 +16,7 @@ export function useXyChartPanel() {
   // 解构返回会触发 noUnusedLocals）。
   const canvasRef = useTemplateRef<HTMLCanvasElement>("canvasRef");
   const nodeInput = ref("");
-  const working = computed(() => app.busy !== null);
+  const working = computed(() => app.working);
 
   // 图表模式：空间分布（全场按节点序号）/ 探针时间曲线（探针值随时间步）。
   const mode = ref<"spatial" | "time">("spatial");

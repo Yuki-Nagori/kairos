@@ -5,7 +5,7 @@
   "scripts": {
     "analyze": "ANALYZE=1 vite build",
     "bench": "bun run bench:web && cargo bench",
-    "bench:web": "bun src-web/utils/bench/state.ts",
+    "bench:web": "bun src-web/bench/state.ts",
     "build": "bun run typecheck && vite build",
     "coverage:rust": "bun scripts/coverage-rust.mts -p kairos-core --lib --summary-only --fail-under-lines 100",
     "dev": "vite",

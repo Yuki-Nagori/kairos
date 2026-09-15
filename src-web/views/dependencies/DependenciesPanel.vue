@@ -31,9 +31,9 @@ const {
     <template #icon>
       <ShellIcon class="h-4 w-4 text-emerald-400" />
     </template>
-    <UiButton :disabled="app.busy !== null" @click="openDownloadsDir()">打开下载目录</UiButton>
+    <UiButton :disabled="app.working" @click="openDownloadsDir()">打开下载目录</UiButton>
     <p class="text-xs text-zinc-500">下载目录：{{ downloadsDir }}</p>
-    <UiButton :disabled="app.busy !== null" @click="deps.refreshDependencies()">重新探测</UiButton>
+    <UiButton :disabled="app.working" @click="deps.refreshDependencies()">重新探测</UiButton>
     <p
       v-for="hint in nativeHints"
       :key="hint"

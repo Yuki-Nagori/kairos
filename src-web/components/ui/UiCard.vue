@@ -4,9 +4,8 @@
  * 「探测 → 反馈」模式：statusHint 显示状态，提供 refreshLabel 则在正文顶部渲染刷新按钮。
  * 可折叠卡片的标题栏按按钮暴露（role=button + 回车/空格），键盘与读屏可达。
  */
-import { ref } from "vue";
 import UiButton from "./UiButton.vue";
-import { storageGet, storageKey, storageSet } from "../../utils/storage";
+import { useCollapsibleCard } from "./useUiCard";
 
 const props = withDefaults(
   defineProps<{
@@ -21,17 +20,7 @@ const props = withDefaults(
 
 defineEmits<{ refresh: [] }>();
 
-const collapsed = ref(
-  props.collapsible ? storageGet(storageKey("panel", props.title), false) : false,
-);
-
-function toggleCollapse(): void {
-  if (!props.collapsible) {
-    return;
-  }
-  collapsed.value = !collapsed.value;
-  storageSet(storageKey("panel", props.title), collapsed.value);
-}
+const { collapsed, toggle: toggleCollapse } = useCollapsibleCard(props);
 </script>
 
 <template>

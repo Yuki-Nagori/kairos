@@ -34,7 +34,7 @@ const { createMock, backends, capabilityMock, baseCreate } = vi.hoisted(() => {
     onFps?: (fps: number) => void,
     onView?: (state: unknown) => void,
     onError?: (message: string) => void,
-  ): Promise<{ backend: ViewportBackend; kind: "webgpu" } | null> => {
+  ): Promise<ViewportBackend | null> => {
     const backend = {
       uploadMesh: vi.fn(),
       setFaceValues: vi.fn(),
@@ -62,7 +62,7 @@ const { createMock, backends, capabilityMock, baseCreate } = vi.hoisted(() => {
       callbacks: { onFps, onView, onError },
     } as Backend;
     backends.push(backend);
-    return { backend: backend as unknown as ViewportBackend, kind: "webgpu" as const };
+    return backend as unknown as ViewportBackend;
   };
   const createMock = vi.fn(baseCreate);
   const capabilityMock = vi.fn(async () => ({ backend: "webgpu", note: "WebGPU 后端" }));
@@ -482,6 +482,42 @@ describe("useViewportPanel：多视口联动与相机", () => {
     panel.unmount();
   });
 
+  it("悬浮视图工具条四个动作分别落到缩放 / 适配 / 复位", async () => {
+    const { panel } = await mountLoaded();
+    const backend = backends[0]!;
+    const tool = (id: string) => panel.viewTools.find((item) => item.id === id)!;
+
+    tool("zoom-in").run();
+    expect(backend.zoomBy).toHaveBeenLastCalledWith(0.8);
+    tool("zoom-out").run();
+    expect(backend.zoomBy).toHaveBeenLastCalledWith(1.25);
+    tool("fit").run();
+    expect(backend.fitView).toHaveBeenCalled();
+    tool("reset").run();
+    expect(backend.resetView).toHaveBeenCalled();
+
+    expect(panel.viewTools.map((item) => item.title)).toEqual([
+      "放大",
+      "缩小",
+      "适应视图",
+      "复位视角",
+    ]);
+    panel.unmount();
+  });
+
+  it("未载入网格时下发场数据为空转（无共享网格分支）", async () => {
+    const { panel } = mountPanel();
+    const results = useResultsStore();
+    panel.attachCanvas(0, canvas());
+    await flushPromises();
+    // 有场、无网格：applyField 的逐面值展开没有网格可依，不应触碰后端
+    results.loadedField = makeField([1, 2, 3]);
+    await nextTick();
+    expect(backends[0]!.setFaceValues).not.toHaveBeenCalled();
+    expect(panel.legendValues).toEqual([3, 2, 1]);
+    panel.unmount();
+  });
+
   it("主视口 FPS 回调写读数", async () => {
     const { panel } = mountPanel();
     panel.attachCanvas(0, canvas());
@@ -737,6 +773,44 @@ describe("useViewportPanel：网格载入边界", () => {
     await flushPromises();
     expect(createMock).toHaveBeenCalledTimes(1);
     panel.unmount();
+  });
+
+  it("退出四分格销毁副视口渲染器：不能留下对着脱离文档画布空转的 RAF 循环", async () => {
+    const { panel } = await mountLoaded();
+    const viewport = useViewportStore();
+    viewport.setLayout("quad");
+    await nextTick();
+    for (const id of [1, 2, 3]) {
+      panel.attachCanvas(id, canvas());
+    }
+    await flushPromises();
+    const secondaries = [1, 2, 3].map((id) => backends[id]!);
+    for (const backend of secondaries) {
+      expect(backend.dispose).not.toHaveBeenCalled();
+    }
+
+    viewport.setLayout("single");
+    await nextTick();
+    for (const backend of secondaries) {
+      expect(backend.dispose).toHaveBeenCalledTimes(1);
+    }
+    // 主视口保留：切回单视口不该重建主渲染器
+    expect(backends[0]!.dispose).not.toHaveBeenCalled();
+    expect(createMock).toHaveBeenCalledTimes(4);
+
+    // 再切回四分格：副视口重新挂载画布即重新建渲染器
+    viewport.setLayout("quad");
+    await nextTick();
+    for (const id of [1, 2, 3]) {
+      panel.attachCanvas(id, canvas());
+    }
+    await flushPromises();
+    expect(createMock).toHaveBeenCalledTimes(7);
+    panel.unmount();
+    // 卸载后所有实例都被销毁（组件级收尾）
+    for (const backend of backends) {
+      expect(backend.dispose).toHaveBeenCalled();
+    }
   });
 });
 

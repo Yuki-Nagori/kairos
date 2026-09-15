@@ -3,21 +3,12 @@
  * 新建项目对话框：工作区路径（默认「文档 / kairos」，可改 / 可选目录）与项目名；
  * 工程文件与项目名同名。逻辑见 useNewProjectDialog。
  */
-import { computed, toRef } from "vue";
 import { useNewProjectDialog } from "./useNewProjectDialog";
 import TextInput from "../ui/UiTextInput.vue";
 import UiButton from "../ui/UiButton.vue";
 
-const { open, workspace, name, error, hide, browseWorkspace, submit } = useNewProjectDialog();
-const workspaceText = toRef(() => workspace.value.trim().replace(/[/\\]+$/, ""));
-const nameText = toRef(() => name.value.trim());
-
-/** 落点预览：工作区 + 项目名 → 工程目录与工程文件。 */
-const placement = computed(() => {
-  const base = workspaceText.value === "" ? "<工作区>" : workspaceText.value;
-  const project = nameText.value === "" ? "<项目名>" : nameText.value;
-  return `${base}/${project}/${project}.kairos`;
-});
+const { open, workspace, name, error, placement, hide, browseWorkspace, submit } =
+  useNewProjectDialog();
 </script>
 
 <template>

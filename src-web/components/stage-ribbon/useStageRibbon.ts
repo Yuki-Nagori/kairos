@@ -41,7 +41,7 @@ export function useStageRibbon() {
   const results = useResultsStore();
 
   const groups = computed<RibbonGroup[]>(() => {
-    const busy = (): boolean => app.busy !== null;
+    const busy = (): boolean => app.working;
     switch (app.stage) {
       case "home":
         return [

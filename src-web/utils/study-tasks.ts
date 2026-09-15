@@ -7,6 +7,7 @@
  */
 import type { GeometrySummary, Job, Material, Project, ResultCatalog } from "../types";
 import type { Stage } from "../types";
+import { findMaterial } from "./materials";
 
 interface MeshingReportLike {
   elementCount: number;
@@ -42,8 +43,9 @@ export interface StudyTask {
   stage: Stage;
 }
 
-/** 几何健康检查是否通过（开放边 / 退化 / 非流形 / 法向不一致任一非零即异常）。 */
-function geometryHealthy(geometry: GeometrySummary): boolean {
+/** 几何健康检查是否通过（开放边 / 退化 / 非流形 / 法向不一致任一非零即异常）。
+ *  几何面板的「可否修复」、报告的健康行、任务序列的告警都按这一条判据，只此一份。 */
+export function geometryHealthy(geometry: GeometrySummary): boolean {
   const issues = geometry.issues;
   return (
     issues.degenerate === 0 &&
@@ -81,11 +83,7 @@ export function evaluateStudyTasks(input: StudyTasksInput): StudyTask[] {
   const meshReport = geometry !== null ? input.meshReports[geometry.geometryId] : undefined;
   const healthy = geometry !== null && geometryHealthy(geometry);
   const study = input.project?.studies.find((s) => s.id === input.activeStudyId) ?? null;
-  const allMaterials = [...input.materials.builtin, ...input.materials.custom];
-  const material =
-    study?.materialId != null
-      ? (allMaterials.find((m) => m.id === study.materialId) ?? null)
-      : null;
+  const material = findMaterial(input.materials, study?.materialId ?? null);
   const jobState = analysisJobState(input.jobs, input.activeStudyId);
   const analysisBlocked = jobState === "failed";
   const resultBlocked = jobState === "failed" || jobState === "running" || jobState === "queued";

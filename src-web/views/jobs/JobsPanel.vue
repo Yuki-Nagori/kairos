@@ -15,9 +15,9 @@ const {
   submitJob,
   envHint,
   envClass,
-  STATUS_LABEL,
+  statusLabel,
   STATUS_CLASS,
-  jobLogsTail,
+  jobLogTail,
 } = useJobsPanel();
 </script>
 
@@ -39,10 +39,8 @@ const {
         class="flex-1 min-w-48"
       />
       <TextInput v-model="cores" type="number" placeholder="2" class="w-20" min="1" />
-      <UiButton variant="primary" :disabled="app.busy !== null" @click="submitJob">
-        提交作业
-      </UiButton>
-      <UiButton :disabled="app.busy !== null" @click="jobsStore.refreshJobs()">刷新</UiButton>
+      <UiButton variant="primary" :disabled="app.working" @click="submitJob"> 提交作业 </UiButton>
+      <UiButton :disabled="app.working" @click="jobsStore.refreshJobs()">刷新</UiButton>
     </div>
     <div class="space-y-2">
       <p v-if="jobsStore.jobs.length === 0" class="text-xs text-zinc-500">暂无作业。</p>
@@ -54,7 +52,7 @@ const {
             <span class="font-mono text-zinc-300">{{ job.id }}</span>
             <!-- 状态行只渲染文字，无状态圆点（有意省略）。 -->
             <span class="flex items-center gap-1.5" :class="STATUS_CLASS[job.status]">
-              {{ STATUS_LABEL[job.status] }}
+              {{ statusLabel(job.status) }}
             </span>
             <span class="truncate text-zinc-500">{{ job.caseDir }}</span>
             <span class="text-zinc-500">
@@ -62,7 +60,7 @@ const {
             </span>
             <UiButton
               variant="danger"
-              :disabled="app.busy !== null || (job.status !== 'queued' && job.status !== 'running')"
+              :disabled="app.working || (job.status !== 'queued' && job.status !== 'running')"
               @click="jobsStore.cancelJob(job.id)"
             >
               取消
@@ -74,9 +72,9 @@ const {
           </div>
           <!-- 求解日志尾部（环形缓冲的最后 8 行），运行中与结束后都可查看。 -->
           <pre
-            v-if="jobLogsTail(job.id).length > 0"
+            v-if="jobLogTail(job.id) !== ''"
             class="max-h-32 overflow-y-auto whitespace-pre-wrap break-all rounded border border-zinc-800 bg-zinc-950 px-2 py-1 text-[10px] leading-4 text-zinc-500"
-            >{{ jobLogsTail(job.id).slice(-8).join("\n") }}</pre>
+            >{{ jobLogTail(job.id) }}</pre>
         </template>
       </template>
     </div>

@@ -1,12 +1,19 @@
-/** WebGPU 渲染后端 POC：与 WebGL2 主后端同一 RenderMesh / 场值 /
- * 剖切平面语义的自研实现，验证自研 WebGPU 主路径的可行性。
+/** WebGPU 渲染后端：与 WebGL2 主后端同一 RenderMesh / 场值 / 剖切平面语义的
+ * 自研实现，是视口的主路径（适配器不可用时才回退 WebGL2）。
  *
- * POC 边界：
- * - 冷热配色与背景色取规范常量，未接主题 CSS 变量；
- * - 相机平移（右键拖拽）未实现，旋转 / 缩放 / 视角重置可用。
+ * 边界：相机平移（右键拖拽）未实现，旋转 / 缩放 / 视角重置可用。
  */
-import { mat4Identity, mat4LookAt, mat4Multiply, mat4Perspective, type Vec3 } from "../math";
+import {
+  boundsOf,
+  mat4Identity,
+  mat4LookAt,
+  mat4Multiply,
+  mat4Perspective,
+  type Vec3,
+} from "../math";
 import { computeVertexNormals } from "../normals";
+import { THEME_CHANGED_EVENT, themeRgb } from "../../utils/theme";
+import { errorMessage } from "../../utils/error";
 import {
   LINE_FRAGMENT_SHADER,
   LINE_VERTEX_SHADER,
@@ -34,7 +41,8 @@ const FAR = 100;
 const UNIFORM_FLOATS = 28;
 /** 线段 uniform：64(mvp) + 16(color) = 80 字节。 */
 const LINE_UNIFORM_BYTES = 80;
-const CLEAR_COLOR: readonly [number, number, number] = [0.035, 0.035, 0.043];
+/** 视口清屏色的深色缺省（主题变量缺失时的兜底）。 */
+const FALLBACK_CLEAR: [number, number, number] = [0.035, 0.035, 0.043];
 
 export class WebGPURenderer {
   private readonly canvas: HTMLCanvasElement;
@@ -82,13 +90,16 @@ export class WebGPURenderer {
   >();
   private overlayVisible = new Map<string, boolean>();
 
-  private positions: Float32Array = new Float32Array(0);
+  /** 最后上传网格的包围盒（上传时算一次；剖切滑块与 fitView 都读它）。 */
+  private meshBounds: { min: Vec3; max: Vec3 } | null = null;
   private useField = 0;
   private valueMin = 0;
   private valueMax = 1;
   private clipEnabled = 0;
   private clipNormal: Vec3 = [0, 1, 0];
   private clipOffset = 0;
+  /** 清屏色取主题变量；主题切换后由 onThemeChanged 重取。 */
+  private clearColor: [number, number, number] = FALLBACK_CLEAR;
 
   private yaw = 0.6;
   private pitch = 0.4;
@@ -99,6 +110,15 @@ export class WebGPURenderer {
   private disposed = false;
   private depthWidth = 0;
   private depthHeight = 0;
+  /** 左键拖拽中（mouseup 在 window 上收尾，故状态存字段）。 */
+  private dragging = false;
+  /** window 监听一律留成类字段：闭包里的匿名监听在 dispose 时摘不掉。 */
+  private readonly onWindowMouseUp = (): void => {
+    this.dragging = false;
+  };
+  private readonly onThemeChanged = (): void => {
+    this.clearColor = themeRgb("--c-viewport-bg", FALLBACK_CLEAR);
+  };
 
   private constructor(
     canvas: HTMLCanvasElement,
@@ -130,6 +150,8 @@ export class WebGPURenderer {
       size: UNIFORM_FLOATS * 4,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
+    this.onThemeChanged();
+    window.addEventListener(THEME_CHANGED_EVENT, this.onThemeChanged);
     this.attachControls();
     this.startLoop();
   }
@@ -213,7 +235,7 @@ export class WebGPURenderer {
 
   /** 上传渲染网格：位置 / 法向 / 值 / 索引四个缓冲（法向在 CPU 侧重建）。 */
   uploadMesh(mesh: WebGPURenderMesh): void {
-    this.positions = mesh.positions;
+    this.meshBounds = boundsOf(mesh.positions);
     this.replaceVertexBuffer(0, mesh.positions);
     this.replaceVertexBuffer(1, computeVertexNormals(mesh.positions, mesh.indices));
     this.replaceVertexBuffer(2, new Float32Array(mesh.positions.length / 3));
@@ -291,24 +313,9 @@ export class WebGPURenderer {
     };
   }
 
+  /** 网格包围盒（剖切位置滑块的世界坐标映射）；未载入网格返回 null。 */
   getMeshBounds(): { min: Vec3; max: Vec3 } | null {
-    if (this.positions.length === 0) {
-      return null;
-    }
-    const min: Vec3 = [Infinity, Infinity, Infinity];
-    const max: Vec3 = [-Infinity, -Infinity, -Infinity];
-    for (let i = 0; i < this.positions.length; i += 3) {
-      for (let axis = 0; axis < 3; axis += 1) {
-        const value = this.positions[i + axis] as number;
-        if (value < (min[axis] as number)) {
-          min[axis] = value;
-        }
-        if (value > (max[axis] as number)) {
-          max[axis] = value;
-        }
-      }
-    }
-    return { min, max };
+    return this.meshBounds;
   }
 
   resetView(): void {
@@ -341,6 +348,9 @@ export class WebGPURenderer {
     };
   }
 
+  /** 复刻轨道相机（多视口联动）。这里刻意**不**回报 onView：联动是单向下发，
+   *  一旦回报就会变成「A 同步给 B → B 回报 → B 又同步给 A」的相互递归，
+   *  四分格下第一次拖动相机会直接栈溢出。 */
   setOrbit(orbit: {
     x: number;
     y: number;
@@ -353,7 +363,6 @@ export class WebGPURenderer {
     this.yaw = orbit.yaw;
     this.pitch = orbit.pitch;
     this.distance = orbit.distance;
-    this.onView?.(this.getOrbit());
   }
 
   fitView(): void {
@@ -376,6 +385,8 @@ export class WebGPURenderer {
   dispose(): void {
     this.disposed = true;
     cancelAnimationFrame(this.rafHandle);
+    window.removeEventListener(THEME_CHANGED_EVENT, this.onThemeChanged);
+    window.removeEventListener("mouseup", this.onWindowMouseUp);
     this.device.destroy();
   }
 
@@ -437,7 +448,7 @@ export class WebGPURenderer {
       } catch (error) {
         // 单帧失败不终止循环：把原因留存并**主动上报**（面板据此显示提示），
         // 下一帧继续尝试，布局或尺寸恢复后画面能自己回来。
-        const message = error instanceof Error ? error.message : String(error);
+        const message = errorMessage(error);
         if (message !== this.frameError) {
           this.frameError = message;
           this.onError?.(message);
@@ -489,7 +500,12 @@ export class WebGPURenderer {
       colorAttachments: [
         {
           view: this.context.getCurrentTexture().createView(),
-          clearValue: { r: CLEAR_COLOR[0], g: CLEAR_COLOR[1], b: CLEAR_COLOR[2], a: 1 },
+          clearValue: {
+            r: this.clearColor[0],
+            g: this.clearColor[1],
+            b: this.clearColor[2],
+            a: 1,
+          },
           loadOp: "clear",
           storeOp: "store",
         },
@@ -547,17 +563,14 @@ export class WebGPURenderer {
   }
 
   private attachControls(): void {
-    let dragging = false;
     this.canvas.addEventListener("mousedown", (event) => {
       if (event.button === 0) {
-        dragging = true;
+        this.dragging = true;
       }
     });
-    window.addEventListener("mouseup", () => {
-      dragging = false;
-    });
+    window.addEventListener("mouseup", this.onWindowMouseUp);
     this.canvas.addEventListener("mousemove", (event) => {
-      if (!dragging) {
+      if (!this.dragging) {
         return;
       }
       this.yaw -= event.movementX * 0.005;
@@ -572,6 +585,8 @@ export class WebGPURenderer {
       (event) => {
         event.preventDefault();
         this.zoomBy(event.deltaY > 0 ? 1.1 : 0.9);
+        // zoomBy 是程序化命令（联动也会调它），用户滚轮这一路才回报。
+        this.onView?.(this.getOrbit());
       },
       { passive: false },
     );

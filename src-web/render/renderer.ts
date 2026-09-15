@@ -1,4 +1,5 @@
 import {
+  boundsOf,
   fitCameraToBounds,
   mat4Identity,
   mat4LookAt,
@@ -9,24 +10,14 @@ import {
 } from "./math";
 import { computeVertexNormals } from "./normals";
 import type { CameraSnapshot } from "./picking";
+import type { OverlayLayer } from "./overlays";
+import { THEME_CHANGED_EVENT, themeRgb } from "../utils/theme";
 
 /** 垂直视场角：渲染循环与拾取共用同一常量。 */
 const FOV_Y = Math.PI / 4;
-import type { OverlayLayer } from "./overlays";
-import { THEME_CHANGED_EVENT } from "../composables/useTheme";
 
-/** 视口清屏色的深色缺省（CSS 变量缺失时的兜底）。 */
+/** 视口清屏色的深色缺省（主题变量缺失时的兜底）。 */
 const FALLBACK_CLEAR: [number, number, number] = [0.06, 0.07, 0.09];
-
-/** 把 #rrggbb 形式的 CSS 颜色解析为 0..1 的 RGB 分量。 */
-function hexToRgb(hex: string): [number, number, number] | null {
-  const match = /^#([0-9a-f]{6})$/i.exec(hex.trim());
-  if (match === null || match[1] === undefined) {
-    return null;
-  }
-  const int = parseInt(match[1], 16);
-  return [((int >> 16) & 0xff) / 255, ((int >> 8) & 0xff) / 255, (int & 0xff) / 255];
-}
 
 /** 渲染网格数据：扁平化顶点与三角形索引（可选每面标量值用于云图）。 */
 interface RenderMesh {
@@ -47,24 +38,6 @@ interface ViewState {
   yaw: number;
   pitch: number;
   distance: number;
-}
-
-/** 逐轴包围盒（渲染网格顶点集）。 */
-function boundsOf(positions: Float32Array): { min: Vec3; max: Vec3 } {
-  const min: Vec3 = [Infinity, Infinity, Infinity];
-  const max: Vec3 = [-Infinity, -Infinity, -Infinity];
-  for (let i = 0; i < positions.length; i += 3) {
-    for (let axis = 0; axis < 3; axis += 1) {
-      const value = positions[i + axis] as number;
-      if (value < (min[axis] as number)) {
-        min[axis] = value;
-      }
-      if (value > (max[axis] as number)) {
-        max[axis] = value;
-      }
-    }
-  }
-  return { min, max };
 }
 
 const VERTEX_SHADER = `#version 300 es
@@ -180,6 +153,14 @@ export class ViewportRenderer {
   private clearColor: [number, number, number] = FALLBACK_CLEAR;
   /** 最后一次上传的网格：上下文恢复时全部 GL 资源需按它重建。 */
   private lastMesh: RenderMesh | null = null;
+  /** 最后上传网格的包围盒（上传时算一次；剖切滑块与 fitView 都读它）。 */
+  private meshBounds: { min: Vec3; max: Vec3 } | null = null;
+  /** 拖拽模式：左键旋转 / 右键平移。mouseup 在 window 上收尾，故模式存字段，
+   *  处理器留成类字段——闭包里的匿名 window 监听在 dispose 时摘不掉。 */
+  private dragMode: "orbit" | "pan" | null = null;
+  private readonly onWindowMouseUp = (): void => {
+    this.dragMode = null;
+  };
   private contextLost = false;
   private readonly onThemeChanged = (): void => {
     this.refreshClearColor();
@@ -239,7 +220,8 @@ export class ViewportRenderer {
     return new ViewportRenderer(canvas, gl, onFps, onView);
   }
 
-  /** 相机变化后回报注视点（模型坐标）。 */
+  /** 相机变化后回报注视点（模型坐标）。只由用户交互路径调用——程序化设置
+   *  （setOrbit / resetView / zoomBy / fitView）不回报，见 setOrbit 的说明。 */
   private emitViewState(): void {
     const orbit = this.getOrbit();
     this.onView?.(orbit);
@@ -257,12 +239,14 @@ export class ViewportRenderer {
     };
   }
 
+  /** 复刻轨道相机（多视口联动）。这里刻意**不**回报 onView：联动是单向下发，
+   *  一旦回报就会变成「A 同步给 B → B 回报 → B 又同步给 A」的相互递归，
+   *  四分格下第一次拖动相机会直接栈溢出。 */
   setOrbit(orbit: ViewState): void {
     this.target = [orbit.x, orbit.y, orbit.z];
     this.yaw = orbit.yaw;
     this.pitch = orbit.pitch;
     this.distance = orbit.distance;
-    this.emitViewState();
   }
 
   private buildProgram(): WebGLProgram {
@@ -453,11 +437,6 @@ export class ViewportRenderer {
     gl.bufferSubData(gl.ARRAY_BUFFER, 0, perFaceValues);
   }
 
-  /** 关闭云图着色。 */
-  clearField(): void {
-    this.useField = 0;
-  }
-
   /** 剖切：丢弃 dot(p, normal) > offset 的片段（normal 取 ±单位轴向量）。 */
   setClipPlane(enabled: boolean, normal: Vec3, offset: number): void {
     this.clipEnabled = enabled ? 1 : 0;
@@ -465,25 +444,21 @@ export class ViewportRenderer {
     this.clipOffset = offset;
   }
 
-  /** 网格包围盒（剖切位置滑块的世界坐标映射）；未载入网格返回 null。 */
+  /** 网格包围盒（剖切位置滑块的世界坐标映射）；未载入网格返回 null。
+   *  按上传时算一次缓存：滑块每拖一格都读它，全量扫顶点撑不住。 */
   getMeshBounds(): { min: Vec3; max: Vec3 } | null {
-    if (this.lastMesh === null) {
-      return null;
-    }
-    return boundsOf(this.lastMesh.positions);
+    return this.meshBounds;
   }
 
   resetView(): void {
     this.yaw = 0.6;
     this.pitch = 0.4;
     this.distance = 3;
-    this.emitViewState();
   }
 
   /** 以注视点为中心缩放（factor < 1 拉近，> 1 推远），距离夹在有效区间。 */
   zoomBy(factor: number): void {
     this.distance = Math.min(Math.max(this.distance * factor, 0.1), 500);
-    this.emitViewState();
   }
 
   /** 重新适配最后上传的网格（无网格时不动）。 */
@@ -491,10 +466,8 @@ export class ViewportRenderer {
     if (this.lastMesh !== null) {
       this.fitToMesh(this.lastMesh.positions);
     }
-    this.emitViewState();
   }
 
-  /** 停止渲染循环（面板卸载时调用）。 */
   /** 相机快照：供点击拾取把指针坐标换算为世界射线。 */
   getCamera(): CameraSnapshot {
     const eye: Vec3 = [
@@ -512,10 +485,12 @@ export class ViewportRenderer {
     };
   }
 
+  /** 停止渲染循环并释放资源（面板卸载时调用）。 */
   dispose(): void {
     this.disposed = true;
     cancelAnimationFrame(this.rafHandle);
     window.removeEventListener(THEME_CHANGED_EVENT, this.onThemeChanged);
+    window.removeEventListener("mouseup", this.onWindowMouseUp);
     this.canvas.removeEventListener("webglcontextlost", this.onContextLost);
     this.canvas.removeEventListener("webglcontextrestored", this.onContextRestored);
     // 全量释放 GL 资源：四分格切换会反复创建/销毁渲染器，
@@ -540,31 +515,22 @@ export class ViewportRenderer {
 
   /** 清屏色取主题变量 --c-viewport-bg；变量缺失时保留深色兜底。 */
   private refreshClearColor(): void {
-    if (typeof getComputedStyle !== "function") {
-      return;
-    }
-    const raw = getComputedStyle(document.documentElement).getPropertyValue("--c-viewport-bg");
-    const rgb = hexToRgb(raw);
-    if (rgb !== null) {
-      this.clearColor = rgb;
-    }
+    this.clearColor = themeRgb("--c-viewport-bg", FALLBACK_CLEAR);
   }
 
   private attachControls(): void {
-    let dragMode: "orbit" | "pan" | null = null;
     let lastX = 0;
     let lastY = 0;
 
     this.canvas.addEventListener("mousedown", (event) => {
-      dragMode = event.button === 2 ? "pan" : "orbit";
+      this.dragMode = event.button === 2 ? "pan" : "orbit";
       lastX = event.clientX;
       lastY = event.clientY;
     });
-    window.addEventListener("mouseup", () => {
-      dragMode = null;
-    });
+    window.addEventListener("mouseup", this.onWindowMouseUp);
     this.canvas.addEventListener("contextmenu", (event) => event.preventDefault());
     this.canvas.addEventListener("mousemove", (event) => {
+      const dragMode = this.dragMode;
       if (dragMode === null) {
         return;
       }
@@ -728,7 +694,9 @@ export class ViewportRenderer {
   }
 
   private fitToMesh(positions: Float32Array): void {
-    const fit = fitCameraToBounds(boundsOf(positions), this.clipNormal);
+    const bounds = boundsOf(positions);
+    this.meshBounds = bounds;
+    const fit = fitCameraToBounds(bounds, this.clipNormal);
     this.distance = fit.distance;
     this.target = fit.target;
     // 视角重置后剖切面回到过包围盒中心（沿当前剖切法向）。

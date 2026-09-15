@@ -3,13 +3,17 @@ import { defineStore } from "pinia";
 import { getSystemInfo } from "../api/system";
 import {
   createProject,
+  defaultWorkspacePath,
   listRecentProjects,
   loadProjectFile,
   projectPath,
   saveProjectFile,
+  saveReportPptxToWorkspace,
+  saveReportToWorkspace,
   workspaceRootOf,
+  type ReportSlidePayload,
 } from "../api/project";
-import { pickOpenProjectPath, pickSaveProjectPath } from "../api/dialog";
+import { pickOpenProjectPath, pickSaveProjectPath, pickWorkspaceDir } from "../api/dialog";
 import { checkMoldNetwork } from "../api/mold";
 import type { Project, RunnerKind, Study, GeometryRef } from "../types";
 import { useDebounceFn } from "@vueuse/core";
@@ -321,6 +325,55 @@ export const useProjectStore = defineStore("project", {
         this.moldIssues = await checkMoldNetwork(study.runnerElements, study.coolingChannels);
       } catch (error) {
         app.setError(error);
+      }
+    },
+    /** 平台默认工作区根（`<文档目录>/kairos`）；取不到返回 null。
+     *  浏览器预览等 IPC 不可用属预期内场景：对话框保留上次值让用户手填，
+     *  不报错（否则一开对话框就弹环境提示）。 */
+    async defaultWorkspace(): Promise<string | null> {
+      try {
+        return await defaultWorkspacePath();
+      } catch {
+        return null;
+      }
+    },
+    /** 用系统目录选择器改工作区落点（取消返回 null）。 */
+    async chooseWorkspaceDir(initial: string): Promise<string | null> {
+      try {
+        return await pickWorkspaceDir(initial);
+      } catch (error) {
+        useAppStore().setError(error);
+        return null;
+      }
+    },
+    /** 报告 HTML 写入工作区 reports/：返回落盘路径；没有工作区或写入失败返回 null
+     *  （失败原因进全局错误）。调用方据此回退浏览器下载——无论工作区是否可写，
+     *  报告都必须拿得到。 */
+    async saveReport(fileName: string, html: string): Promise<string | null> {
+      const projectPath = this.projectPath;
+      if (projectPath === null || this.workspaceRoot === null) {
+        return null;
+      }
+      try {
+        return await saveReportToWorkspace(projectPath, fileName, html);
+      } catch (error) {
+        useAppStore().setError(error);
+        return null;
+      }
+    },
+    /** 报告 PPTX 写入工作区 reports/：返回落盘路径；散装工程 / 写入失败返回 null。 */
+    async saveReportPptx(title: string, slides: ReportSlidePayload[]): Promise<string | null> {
+      const projectPath = this.projectPath;
+      const project = this.project;
+      if (projectPath === null || project === null) {
+        useAppStore().setError("散装工程请先保存到工作区，再导出 PPTX。");
+        return null;
+      }
+      try {
+        return await saveReportPptxToWorkspace(projectPath, `${project.name}-报告`, title, slides);
+      } catch (error) {
+        useAppStore().setError(error);
+        return null;
       }
     },
   },

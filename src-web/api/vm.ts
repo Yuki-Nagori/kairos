@@ -1,6 +1,5 @@
 /** 虚拟机 IPC：状态探测、安装 / 启动 / 停止、应用内 Shell 与 bundle 部署。 */
-import { invokeCommand } from "../utils/ipc";
-import { Channel } from "@tauri-apps/api/core";
+import { forwardingChannel, invokeCommand } from "../utils/ipc";
 import type { VmStatus } from "../types";
 
 /** 探测虚拟机运行时状态（provider 随平台固定：macOS → multipass，Windows → wsl）。 */
@@ -10,23 +9,17 @@ export function getVmStatus(): Promise<VmStatus> {
 
 /** 一键安装运行时（macOS：brew cask；Windows：UAC 提权 wsl --install）。 */
 export function installVm(onLog: (line: string) => void): Promise<string> {
-  const channel = new Channel<string>();
-  channel.onmessage = onLog;
-  return invokeCommand("vm_install", { progress: channel });
+  return invokeCommand("vm_install", { progress: forwardingChannel(onLog) });
 }
 
 /** 确保受管实例就绪（缺则创建，停则启动；首次创建需下载镜像）。 */
 export function startVm(onLog: (line: string) => void): Promise<string> {
-  const channel = new Channel<string>();
-  channel.onmessage = onLog;
-  return invokeCommand("vm_start", { progress: channel });
+  return invokeCommand("vm_start", { progress: forwardingChannel(onLog) });
 }
 
 /** 开启应用内 Shell：输出行经 Channel 持续回传（会话在 Rust 侧长驻）。 */
 export function vmShellStart(onLog: (line: string) => void): Promise<void> {
-  const channel = new Channel<string>();
-  channel.onmessage = onLog;
-  return invokeCommand("vm_shell_start", { log: channel });
+  return invokeCommand("vm_shell_start", { log: forwardingChannel(onLog) });
 }
 
 /** 向 Shell 会话发送一行命令。 */
@@ -46,9 +39,7 @@ export function stopVm(): Promise<string> {
 
 /** 部署求解环境：把受管 bundle 传输进虚拟机并解压（multipass 平台）。 */
 export function deployVmBundle(onLog: (line: string) => void): Promise<string> {
-  const channel = new Channel<string>();
-  channel.onmessage = onLog;
-  return invokeCommand("vm_deploy_bundle", { progress: channel });
+  return invokeCommand("vm_deploy_bundle", { progress: forwardingChannel(onLog) });
 }
 
 /** 读取已部署的求解环境版本标签（VM 内 / 本机原生；未知 → null）。 */

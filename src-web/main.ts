@@ -6,7 +6,7 @@ import App from "./App.vue";
 import { setupMenuActions } from "./menu-actions";
 import { setupGlobalShortcuts } from "./global-shortcuts";
 import { activateWindowDecoration } from "./window-decoration";
-import { initTheme } from "./composables/useTheme";
+import { initTheme } from "./utils/theme";
 import { useProjectStore } from "./stores/project";
 
 const root = document.querySelector<HTMLDivElement>("#app");

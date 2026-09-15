@@ -8,21 +8,19 @@ import { useAppStore } from "../../stores/app";
 import { useMaterialsStore } from "../../stores/materials";
 import type { Material, PropertyTable } from "../../types";
 import { fixed } from "../../utils/format";
+import { findMaterial } from "../../utils/materials";
 
 export function useMaterialsPanel() {
   const app = useAppStore();
   const materials = useMaterialsStore();
 
-  const working = computed(() => app.busy !== null);
+  const working = computed(() => app.working);
 
   const selectedId = ref<string | null>(null);
 
   // 目标材料：按选中 id 查找，未命中（初始 / 删除后）回退首个内置材料。
   const selected = computed<Material | undefined>(
-    () =>
-      [...materials.materials.builtin, ...materials.materials.custom].find(
-        (m) => m.id === selectedId.value,
-      ) ?? materials.materials.builtin[0],
+    () => findMaterial(materials.materials, selectedId.value) ?? materials.materials.builtin[0],
   );
 
   // 回退结果同步回选中 id：动作按钮与高亮都以 selectedId 为准。

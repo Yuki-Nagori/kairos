@@ -10,7 +10,7 @@ export function useResultsPanel() {
   const results = useResultsStore();
 
   const dirPath = ref("");
-  const working = computed(() => app.busy !== null);
+  const working = computed(() => app.working);
   const catalog = computed(() => results.resultCatalog);
   const loadedField = computed(() => results.loadedField);
 
@@ -105,38 +105,37 @@ export function useResultsPanel() {
     };
   });
 
-  /** 加载张量场：时间步与矢量场同一取法（当前已加载场 → 最后一个时间步）。 */
-  function loadTensor(): void {
+  /** 目标时间步：沿用当前已加载场的时间步，没有就用最后一个（张量 / 矢量同一取法）。 */
+  function targetTimeDir(): string | null {
     const catalog = results.resultCatalog;
     if (catalog === null || catalog.times.length === 0) {
-      return;
+      return null;
     }
     const loadedTime = results.loadedField?.timeDir;
-    const timeDir =
+    return (
       catalog.times.find((step) => step.dirName === loadedTime)?.dirName ??
-      catalog.times.at(-1)!.dirName;
-    void results.loadTensorComponents(
-      catalog.caseDir,
-      timeDir,
-      tensorFieldName.value.trim() || "sigma",
+      catalog.times.at(-1)!.dirName
     );
   }
 
-  /** 加载矢量场：时间步取当前已加载场（没有就用最后一个时间步）。 */
-  function loadVector(): void {
-    const catalog = results.resultCatalog;
-    if (catalog === null || catalog.times.length === 0) {
+  /** 加载张量场（残余应力 / 取向张量）。 */
+  function loadTensor(): void {
+    const caseDir = results.resultCatalog?.caseDir;
+    const timeDir = targetTimeDir();
+    if (caseDir === undefined || timeDir === null) {
       return;
     }
-    const loadedTime = results.loadedField?.timeDir;
-    const timeDir =
-      catalog.times.find((step) => step.dirName === loadedTime)?.dirName ??
-      catalog.times.at(-1)!.dirName;
-    void results.loadVectorComponents(
-      catalog.caseDir,
-      timeDir,
-      vectorFieldName.value.trim() || "D",
-    );
+    void results.loadTensorComponents(caseDir, timeDir, tensorFieldName.value.trim() || "sigma");
+  }
+
+  /** 加载矢量场（位移 / 速度三分量）。 */
+  function loadVector(): void {
+    const caseDir = results.resultCatalog?.caseDir;
+    const timeDir = targetTimeDir();
+    if (caseDir === undefined || timeDir === null) {
+      return;
+    }
+    void results.loadVectorComponents(caseDir, timeDir, vectorFieldName.value.trim() || "D");
   }
 
   return {

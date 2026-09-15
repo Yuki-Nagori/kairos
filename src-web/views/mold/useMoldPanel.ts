@@ -35,7 +35,7 @@ export function useMoldPanel() {
   const viewport = useViewportStore();
   const results = useResultsStore();
 
-  const working = computed(() => app.busy !== null);
+  const working = computed(() => app.working);
 
   const study = computed(() => project.activeStudy);
 
@@ -145,7 +145,7 @@ export function useMoldPanel() {
   const geometryStore = useGeometryStore();
   const fillPreview = computed(() => results.fillPreview);
   const fillPreviewDisabled = computed(() => {
-    if (app.busy !== null) {
+    if (app.working) {
       return true;
     }
     const study = project.activeStudy;

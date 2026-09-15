@@ -4,20 +4,11 @@
  * 让当前方案的配置在任意阶段一眼可查；编辑仍走各阶段的面板。
  */
 import { computed } from "vue";
-import { useJobsStore } from "../../stores/jobs";
 import { useMaterialsStore } from "../../stores/materials";
 import { useProjectStore } from "../../stores/project";
-import type { Job } from "../../types";
+import { jobStatusLabel, useJobsStore } from "../../stores/jobs";
 import { fixed } from "../../utils/format";
-
-/** 作业状态的展示文案（与作业面板口径一致）。 */
-const JOB_STATUS_LABEL: Record<Job["status"], string> = {
-  queued: "排队中",
-  running: "运行中",
-  done: "已完成",
-  failed: "失败",
-  cancelled: "已取消",
-};
+import { findMaterial } from "../../utils/materials";
 
 interface SummaryRow {
   k: string;
@@ -37,10 +28,8 @@ export function useStudySummary() {
     if (materialId == null) {
       return null;
     }
-    const material = [...materials.materials.builtin, ...materials.materials.custom].find(
-      (m) => m.id === materialId,
-    );
-    if (material === undefined) {
+    const material = findMaterial(materials.materials, materialId);
+    if (material === null) {
       return null;
     }
     return [
@@ -73,7 +62,7 @@ export function useStudySummary() {
       return null;
     }
     const rows: SummaryRow[] = [
-      { k: "状态", v: JOB_STATUS_LABEL[job.status] },
+      { k: "状态", v: jobStatusLabel(job.status) },
       { k: "并行核数", v: `${job.cores}` },
     ];
     if (job.status === "running" && job.lastTimeS !== null) {
