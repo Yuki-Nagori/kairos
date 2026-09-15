@@ -915,6 +915,18 @@ mod tests {
         assert!(json.contains("maxAbsolutePaS"));
         assert!(viscosity_residual_summary_csv(&viscosity).starts_with("count,"));
         assert!(pvt_residual_summary_csv(&pvt).contains("maxAbsoluteM3PerKg"));
+
+        struct FailingSerialize;
+        impl serde::Serialize for FailingSerialize {
+            fn serialize<S>(&self, _serializer: S) -> std::result::Result<S::Ok, S::Error>
+            where
+                S: serde::Serializer,
+            {
+                Err(serde::ser::Error::custom("synthetic serialization failure"))
+            }
+        }
+        assert!(residual_rows_json(&[FailingSerialize]).is_err());
+        assert!(residual_summary_json(&FailingSerialize).is_err());
     }
 
     #[test]
@@ -962,6 +974,17 @@ mod tests {
         )
         .unwrap();
         assert!(fitted_tait.b1m > tait.b1m);
+        let solid_pv = tait_specific_volume(&tait, 1.0e6, 350.0).unwrap();
+        let (fitted_solid, _) = fit_tait_b1(
+            &tait,
+            &[PvtPoint {
+                pressure_pa: 1.0e6,
+                temperature_k: 350.0,
+                specific_volume_m3_per_kg: solid_pv * 1.2,
+            }],
+        )
+        .unwrap();
+        assert!(fitted_solid.b1s > tait.b1s);
     }
 
     #[test]
@@ -1012,6 +1035,74 @@ mod tests {
     }
 
     #[test]
+    fn residual_rows_and_fits_reject_invalid_or_empty_observations() {
+        let cross = CrossWlf {
+            n: 0.3,
+            tau_star: 10_000.0,
+            d1: 1_000.0,
+            d2: 263.15,
+            d3: 0.0,
+            a1: 30.0,
+            a2: 50.0,
+        };
+        let point = ViscosityPoint {
+            temperature_k: 493.15,
+            shear_rate_per_s: 10.0,
+            viscosity_pa_s: 0.0,
+        };
+        assert!(cross_wlf_residual_rows(&cross, std::slice::from_ref(&point)).is_err());
+        assert!(fit_cross_wlf_d1(&cross, &[]).is_err());
+        assert!(fit_cross_wlf_d1(&cross, &[point]).is_err());
+        let tait = Tait {
+            b1m: 1.0,
+            b1s: 0.9,
+            b2m: 0.0001,
+            b2s: 0.00005,
+            b3: 1.0e8,
+            b4m: 0.003,
+            b4s: 0.0015,
+            b5: 400.0,
+            b3s: None,
+            b6: 0.0,
+            c: 0.0894,
+            smooth_band: 1.0,
+        };
+        let p = PvtPoint {
+            pressure_pa: 1.0e6,
+            temperature_k: 450.0,
+            specific_volume_m3_per_kg: 0.0,
+        };
+        assert!(tait_residual_rows(&tait, std::slice::from_ref(&p)).is_err());
+        assert!(fit_tait_b1(&tait, &[]).is_err());
+        assert!(fit_tait_b1(&tait, &[p]).is_err());
+    }
+
+    #[test]
+    fn tait_smooth_transition_and_invalid_bulk_pressure_are_checked() {
+        let model = Tait {
+            b1m: 1.0,
+            b1s: 0.9,
+            b2m: 0.0001,
+            b2s: 0.00005,
+            b3: 1.0e8,
+            b4m: 0.003,
+            b4s: 0.0015,
+            b5: 400.0,
+            b3s: None,
+            b6: 0.0,
+            c: 0.0894,
+            smooth_band: 10.0,
+        };
+        let smooth = tait_specific_volume(&model, 1.0e6, 405.0).unwrap();
+        let solid = tait_specific_volume(&model, 1.0e6, 350.0).unwrap();
+        let melt = tait_specific_volume(&model, 1.0e6, 450.0).unwrap();
+        assert!(smooth > solid.min(melt) && smooth < solid.max(melt));
+        let mut invalid = model;
+        invalid.b3 = f64::INFINITY;
+        assert!(tait_specific_volume(&invalid, 1.0, 450.0).is_err());
+    }
+
+    #[test]
     fn golden_points_pin_runtime_reference_values() {
         let cross = CrossWlf {
             n: 0.3,
@@ -1044,13 +1135,37 @@ mod tests {
 
     #[test]
     fn parses_sectioned_material_text_without_external_conversion() {
-        let pvt = "P=0[MPa]\n0 25 1.1\nP=50[MPa]\n0 25 1.0\n";
+        let pvt = "\nP=0[MPa]\n0 25 1.1\n\nP=50[MPa]\n0 25 1.0\n";
         let pvt_points = parse_pvt_text(pvt).unwrap();
         assert_eq!(pvt_points.len(), 2);
         assert_eq!(pvt_points[0].pressure_pa, 0.0);
-        let viscosity = "T=180[C]\n0 1 2104.6\nT=220[C]\n0 10 100.0\n";
+        let viscosity = "\nT=180[C]\n0 1 2104.6\n\nT=220[C]\n0 10 100.0\n";
         let viscosity_points = parse_viscosity_text(viscosity).unwrap();
         assert_eq!(viscosity_points.len(), 2);
         assert_eq!(viscosity_points[1].shear_rate_per_s, 10.0);
+    }
+
+    #[test]
+    fn sectioned_text_reports_each_structural_error() {
+        assert!(parse_pvt_text("0 25 1.0").is_err());
+        assert!(parse_pvt_text("P=bad[MPa]").is_err());
+        assert!(parse_pvt_text("P=1[MPa]\nshort").is_err());
+        assert!(parse_pvt_text("P=1[MPa]\n0 bad 1.0").is_err());
+        assert!(parse_pvt_text("P=1[MPa]\n0 25 bad").is_err());
+        assert!(parse_viscosity_text("0 1 1").is_err());
+        assert!(parse_viscosity_text("T=bad[C]").is_err());
+        assert!(parse_viscosity_text("T=220[C]\nshort").is_err());
+        assert!(parse_viscosity_text("T=220[C]\n0 bad 1").is_err());
+        assert!(parse_viscosity_text("T=220[C]\n0 1 bad").is_err());
+    }
+
+    #[test]
+    fn csv_curves_report_non_finite_and_negative_pressure() {
+        let pvt = "pressure,pressureUnit,temperature,temperatureUnit,specificVolume,specificVolumeUnit\n-1,Pa,25,C,1,cm3/g\n";
+        assert!(parse_pvt_csv(pvt).is_err());
+        let non_finite = "pressure,pressureUnit,temperature,temperatureUnit,specificVolume,specificVolumeUnit\nNaN,Pa,25,C,1,cm3/g\n";
+        assert!(parse_pvt_csv(non_finite).is_err());
+        let viscosity = "temperature,temperatureUnit,shearRate,shearRateUnit,viscosity,viscosityUnit\n220,C,1,1/s,NaN,Pa.s\n";
+        assert!(parse_viscosity_csv(viscosity).is_err());
     }
 }

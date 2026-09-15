@@ -422,6 +422,34 @@ mod tests {
     }
 
     #[test]
+    fn validate_rejects_invalid_tait_solid_parameters() {
+        let mut material = valid_material();
+        material.pvt.b3s = Some(0.0);
+        assert!(
+            validate(&material)
+                .unwrap_err()
+                .to_string()
+                .contains("固态 B(T)")
+        );
+        material.pvt.b3s = None;
+        material.pvt.c = 0.0;
+        assert!(
+            validate(&material)
+                .unwrap_err()
+                .to_string()
+                .contains("固态 B(T)")
+        );
+        material.pvt.c = 0.0894;
+        material.pvt.smooth_band = 0.0;
+        assert!(
+            validate(&material)
+                .unwrap_err()
+                .to_string()
+                .contains("固态 B(T)")
+        );
+    }
+
+    #[test]
     fn parse_custom_accepts_single_and_array() {
         let material = valid_material();
         let single = serde_json::to_string(&material).unwrap();
@@ -474,6 +502,7 @@ mod tests {
         fs::write(&unknown, "x").unwrap();
         assert!(read_custom_material_file(&unknown).is_err());
         assert!(read_custom_material_file(Path::new("material")).is_err());
+        assert!(read_custom_material_file(&path.with_file_name("does-not-exist.json")).is_err());
         fs::remove_file(path).ok();
         fs::remove_file(unknown).ok();
     }

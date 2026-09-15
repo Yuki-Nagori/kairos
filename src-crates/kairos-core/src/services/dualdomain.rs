@@ -936,6 +936,9 @@ mod tests {
         let mut bad = valid.clone();
         bad.thickness[0] = 0.0;
         assert!(validate_solver_topology(&bad).is_err());
+        bad = valid.clone();
+        bad.thickness.clear();
+        assert!(validate_solver_topology(&bad).is_err());
         bad = valid;
         bad.triangles[0][2] = 9;
         assert!(validate_solver_topology(&bad).is_err());
