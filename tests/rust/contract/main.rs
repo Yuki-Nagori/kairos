@@ -443,6 +443,17 @@ fn dual_domain_fixture_round_trips_for_upstream_consumers() {
     assert_eq!(input.thickness.len(), input.triangles.len());
 }
 
+#[test]
+fn volume_mesh_fixture_has_versioned_solver_shape() {
+    let text = include_str!("../../fixtures/volume-mesh-v1.mug.json");
+    let value: serde_json::Value = serde_json::from_str(text).unwrap();
+    assert_eq!(value["schemaVersion"], "volume-mesh/v1");
+    assert_eq!(value["lengthUnit"], "mm");
+    assert_eq!(value["nodes"].as_array().unwrap().len(), 15_868);
+    assert_eq!(value["tets"].as_array().unwrap().len(), 48_605);
+    assert!(!value["surfaceFaces"].as_array().unwrap().is_empty());
+}
+
 /// MidplaneReport 的形状：统计字段 camelCase，前端几何面板与之对应。
 #[test]
 fn midplane_report_serializes_with_camel_case() {

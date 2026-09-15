@@ -63,6 +63,8 @@ cargo run -p kairos-cli -- dual-domain export \
 
 该命令会读取 Mug STL，输出节点、三角形、厚度和梁耦合数据；不再接受 `--sample-box`。
 
+同一 Mug 也生成了三维体网格 fixture `tests/fixtures/volume-mesh-v1.mug.json`（15,868 节点 / 48,605 四面体），manifest 的 `volumeMesh` 字段指向它，供上游同时验证两种输入。
+
 ## 路线确认（2026-09-16）
 
 moldingFoam v1.1.0 当前求解器通过 `foamRun` 消费三维 OpenFOAM 体网格（`polyMesh`、体心场和体单元离散），源码没有壳单元、Dual Domain 双面节点或中面厚度场的输入契约。现有 `DualDomainMesh` 是 Kairos 前处理产物，不能直接写成现有 `physicalProperties`/`polyMesh` 并声称等价。

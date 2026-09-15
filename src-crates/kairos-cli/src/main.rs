@@ -262,6 +262,9 @@ enum MeshAction {
         engine: String,
         #[arg(long, default_value_t = 1.0)]
         target_size: f64,
+        /// 可选：导出版本化三维体网格 JSON（供上游 solver 测试）
+        #[arg(long)]
+        out: Option<String>,
     },
 }
 
@@ -615,6 +618,7 @@ fn run_mesh(action: MeshAction, json: bool) -> kairos_core::error::Result<()> {
             stl,
             engine,
             target_size,
+            out,
         } => {
             let mesh = geometry::parse_stl_file(Path::new(&stl))?;
             let volume = if engine == "gmsh" {
@@ -634,6 +638,21 @@ fn run_mesh(action: MeshAction, json: bool) -> kairos_core::error::Result<()> {
                 params.validate()?;
                 meshing::generate(&mesh, &params)?
             };
+            if let Some(out) = out {
+                let payload = serde_json::json!({
+                    "schemaVersion": "volume-mesh/v1",
+                    "lengthUnit": "mm",
+                    "nodes": &volume.nodes,
+                    "tets": &volume.tets,
+                    "surfaceFaces": &volume.surface_faces,
+                });
+                let bytes = serde_json::to_vec_pretty(&payload).map_err(|error| {
+                    KairosError::internal(format!("体积网格序列化失败：{error}"))
+                })?;
+                fs::write(&out, bytes).map_err(|error| {
+                    KairosError::io(format!("写入体积网格失败：{out}: {error}"))
+                })?;
+            }
             if json {
                 emit_json(&serde_json::json!({
                     "nodes": volume.nodes.len(),

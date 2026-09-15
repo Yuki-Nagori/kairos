@@ -29,5 +29,13 @@
     "pressure": "MPa",
     "temperature": "C",
     "time": "s"
+  },
+  "volumeMesh": {
+    "schemaVersion": "volume-mesh/v1",
+    "fixture": "volume-mesh-v1.mug.json",
+    "lengthUnit": "mm",
+    "nodeCount": 15868,
+    "tetCount": 48605,
+    "source": "mug-stl-generated"
   }
 }
