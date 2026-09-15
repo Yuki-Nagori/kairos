@@ -150,24 +150,13 @@ cargo run -p kairos-cli -- doe run --plan full \
   --cores 5 \
   --injection-time 5.5 \
   --packing-pressure-mpa 27.6282 \
-  --packing-time-s 20 \
+  --packing-time-s 315.0797 \
   --out-dir /private/tmp/kairos-mug-baseline \
   --batch mug-baseline-220c-50c-5p5s-5c \
   --solve --vm --json
 ```
 
-对应参考输入：熔体 `220 °C`、模具 `50 °C`、注射 `5.5 s`、保压 `27.6282 MPa / 20 s`、冷却参考 `20 s`。当前 CLI case 的求解终止时间由生成器控制，完整 Mug 结果以原始 `log.foamRun`、时间目录和 CLI JSON 汇总为准。网格仍是 Kairos 体积网格，不能与参考 Dual Domain 结果宣称逐点等价。
-
-与临时五核命令的差异：
-
-| 项目 | 临时命令 | 最终命令 |
-| --- | --- | --- |
-| 材料 | 显式传入本地拟合 JSON | 使用仓库内置 `PP-REF-01` |
-| 因子 | 熔体温度、注射时间 | 另固定模具温度 50°C |
-| 输出目录 | `/private/tmp/t100-mug-full-5c` | `/private/tmp/kairos-mug-baseline` |
-| 批次名 | `mug-baseline-full-5c` | `mug-baseline-220c-50c-5p5s-5c` |
-
-两条命令的几何、注射时间、保压压力和五核 VM 设置相同；最终命令用于仓库文档复现。
+对应参考输入：熔体 `220 °C`、模具 `50 °C`、注射 `5.5 s`。命令将保压时长设为参考曲线的 `315.0797 s`，压力参数使用曲线高位 `27.6282 MPa`。Moldflow 的初始 `0.9229 MPa`、0.2 s 压力爬升和独立 `20 s` 冷却段目前尚未由 CLI 单独表达，报告不得将这部分写成完全一致。当前 CLI case 的求解终止时间由生成器控制，完整 Mug 结果以原始 `log.foamRun`、时间目录和 CLI JSON 汇总为准。网格仍是 Kairos 体积网格，不能与参考 Dual Domain 结果宣称逐点等价。
 
 ### moldingFoam 实验结果摘要（2026-09-15）
 
