@@ -443,6 +443,12 @@ fn run_material(action: MaterialAction, json: bool) -> kairos_core::error::Resul
             fitted.rheology = rheology;
             fitted.pvt = pvt;
             services::material::write_custom_file(Path::new(&output), &[fitted.clone()])?;
+            let solver_material_report = format!("{output}.moldingfoam");
+            fs::write(
+                &solver_material_report,
+                services::material::serialize_moldingfoam_material(&fitted)?,
+            )
+            .map_err(|error| KairosError::io(format!("写入 moldingFoam 材料字典失败：{error}")))?;
             let viscosity_report = format!("{output}.viscosity-residual.json");
             let pvt_report = format!("{output}.pvt-residual.json");
             fs::write(
@@ -460,6 +466,7 @@ fn run_material(action: MaterialAction, json: bool) -> kairos_core::error::Resul
                     "pvtResidual": pvt_residual,
                     "viscosityReport": viscosity_report,
                     "pvtReport": pvt_report,
+                    "solverMaterial": solver_material_report,
                 }));
             } else {
                 println!("材料拟合完成：{}", output);

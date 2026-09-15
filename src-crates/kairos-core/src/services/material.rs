@@ -331,6 +331,36 @@ pub fn serialize_custom(materials: &[Material]) -> Result<String> {
     Ok(serde_json::to_string_pretty(materials).expect("材料库序列化失败"))
 }
 
+/// 生成 moldingFoam 材料字典片段；数值保持 SI，供 case 生成器写入 thermophysicalProperties。
+pub fn serialize_moldingfoam_material(material: &Material) -> Result<String> {
+    validate(material)?;
+    let r = &material.rheology;
+    let t = &material.pvt;
+    let b3s = t.b3s.unwrap_or(t.b3);
+    Ok(format!(
+        "mixture\n{{\n    equationOfState\n    {{\n        b1m         {b1m:.17e};\n        b2m         {b2m:.17e};\n        b1s         {b1s:.17e};\n        b2s         {b2s:.17e};\n        b3          {b3:.17e};\n        b4m         {b4m:.17e};\n        b3s         {b3s:.17e};\n        b4s         {b4s:.17e};\n        b5          {b5:.17e};\n        b6          {b6:.17e};\n        C           {c:.17e};\n        smoothBand  {smooth_band:.17e};\n    }}\n    CrossWlfCoeffs\n    {{\n        n           {n:.17e};\n        tauStar     {tau_star:.17e};\n        D1          {d1:.17e};\n        D2          {d2:.17e};\n        D3          {d3:.17e};\n        A1          {a1:.17e};\n        A2          {a2:.17e};\n    }}\n}}\n",
+        b1m = t.b1m,
+        b2m = t.b2m,
+        b1s = t.b1s,
+        b2s = t.b2s,
+        b3 = t.b3,
+        b4m = t.b4m,
+        b3s = b3s,
+        b4s = t.b4s,
+        b5 = t.b5,
+        b6 = t.b6,
+        c = t.c,
+        smooth_band = t.smooth_band,
+        n = r.n,
+        tau_star = r.tau_star,
+        d1 = r.d1,
+        d2 = r.d2,
+        d3 = r.d3,
+        a1 = r.a1,
+        a2 = r.a2,
+    ))
+}
+
 /// 把导入的材料合并进既有材料库：同 id 覆盖，同名同厂商提示冲突由调用方决定（此处按覆盖）。
 pub fn merge_custom(existing: Vec<Material>, incoming: Vec<Material>) -> Vec<Material> {
     let mut merged = existing;
@@ -446,6 +476,16 @@ mod tests {
         assert!(read_custom_material_file(Path::new("material")).is_err());
         fs::remove_file(path).ok();
         fs::remove_file(unknown).ok();
+    }
+
+    #[test]
+    fn moldingfoam_material_export_keeps_solver_keys_and_si_values() {
+        let material = valid_material();
+        let text = serialize_moldingfoam_material(&material).unwrap();
+        assert!(text.contains("equationOfState"));
+        assert!(text.contains("CrossWlfCoeffs"));
+        assert!(text.contains("smoothBand"));
+        assert!(text.contains("tauStar"));
     }
 
     #[test]
