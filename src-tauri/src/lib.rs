@@ -98,6 +98,7 @@ pub fn run() {
             commands::results::export_result_field_csv,
             commands::results::summarize_result_field,
             commands::results::summarize_vector_field,
+            commands::results::summarize_tensor_field,
             commands::results::load_vector_field_binary,
             commands::results::deform_render_mesh,
             commands::results::load_tensor_field,

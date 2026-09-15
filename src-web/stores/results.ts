@@ -13,6 +13,7 @@ import {
   exportResultFieldCsv,
   summarizeResultField,
   summarizeVectorField,
+  summarizeTensorField,
 } from "../api/results";
 import type {
   DeriveRequest,
@@ -59,6 +60,7 @@ export const useResultsStore = defineStore("results", {
     vectorFieldStats: null as FieldStats | null,
     /** 最近一次加载的对称张量场（null = 未加载）。 */
     tensorField: null as TensorField | null,
+    tensorFieldStats: null as FieldStats | null,
   }),
   actions: {
     /** 运行浇口位置分析（轻量启发式，不经求解器）：适合度场直接作为当前场
@@ -84,6 +86,7 @@ export const useResultsStore = defineStore("results", {
       await app.withBusy("正在加载张量场…", async () => {
         const tensor = await loadTensorField(caseDir, timeDir, field);
         this.tensorField = tensor;
+        this.tensorFieldStats = await summarizeTensorField(caseDir, timeDir, field);
         this.loadedField = {
           field: tensor.field,
           timeDir: tensor.timeDir,

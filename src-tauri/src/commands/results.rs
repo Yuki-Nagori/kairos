@@ -251,6 +251,21 @@ pub async fn summarize_vector_field(
     .map_err(|e| KairosError::internal(format!("矢量统计任务失败：{e}")))?
 }
 
+#[tauri::command]
+pub async fn summarize_tensor_field(
+    case_dir: String,
+    time_dir: String,
+    field: String,
+) -> Result<kairos_core::models::results::FieldStats> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let loaded =
+            results::read_tensor_field(std::path::Path::new(&case_dir), &time_dir, &field)?;
+        Ok(results::field_stats(&loaded.magnitudes))
+    })
+    .await
+    .map_err(|e| KairosError::internal(format!("张量统计任务失败：{e}")))?
+}
+
 /// 矢量场三分量通道：[magic][meta JSON][f32 值区 ×3]（每单元 x/y/z 顺序平铺）。
 /// 供变形显示与矢量派生消费；标量模量仍走 load_result_field_binary。
 #[tauri::command]

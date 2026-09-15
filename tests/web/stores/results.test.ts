@@ -16,6 +16,7 @@ import {
   exportResultFieldCsv,
   summarizeResultField,
   summarizeVectorField,
+  summarizeTensorField,
 } from "../../../src-web/api/results";
 import { analyzeGateLocation, previewFill } from "../../../src-web/api/geometry";
 import type {
@@ -37,6 +38,7 @@ vi.mock("../../../src-web/api/results", () => ({
   exportResultFieldCsv: vi.fn(),
   summarizeResultField: vi.fn(),
   summarizeVectorField: vi.fn(),
+  summarizeTensorField: vi.fn(),
 }));
 vi.mock("../../../src-web/api/geometry", () => ({
   analyzeGateLocation: vi.fn(),
@@ -67,6 +69,7 @@ describe("results store", () => {
     vi.resetAllMocks();
     vi.mocked(summarizeResultField).mockResolvedValue({ count: 3, min: 1, max: 3 });
     vi.mocked(summarizeVectorField).mockResolvedValue({ count: 2, min: 0, max: 1 });
+    vi.mocked(summarizeTensorField).mockResolvedValue({ count: 2, min: 0, max: 1 });
   });
 
   afterEach(() => {

@@ -103,10 +103,11 @@ export function useResultsPanel() {
     if (field === null || field.magnitudes.length === 0) {
       return null;
     }
-    const { min, max } = minMax(field.magnitudes);
+    const remote = results.tensorFieldStats;
+    const { min, max } = remote ?? minMax(field.magnitudes);
     const axis = field.principalAxes[0] as [number, number, number];
     return {
-      line: `张量 ${field.field} @ ${field.timeDir}：${field.magnitudes.length} 个单元 · |σ| ${significant(min)} ~ ${significant(max)} · 首单元主轴 (${axis.map((value) => significant(value)).join(", ")})`,
+      line: `张量 ${field.field} @ ${field.timeDir}：${remote?.count ?? field.magnitudes.length} 个单元 · |σ| ${significant(min)} ~ ${significant(max)} · 首单元主轴 (${axis.map((value) => significant(value)).join(", ")})`,
       complete: field.complete,
     };
   });
