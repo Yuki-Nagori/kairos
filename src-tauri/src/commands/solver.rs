@@ -10,6 +10,7 @@ use kairos_core::models::mesh::VolumeMesh;
 use kairos_core::models::process::ProcessSettings;
 use kairos_core::models::runners::{CoolingChannel, RunnerElement};
 use kairos_core::models::solver::AnalysisStage;
+use kairos_core::services::dependencies as dependencies_service;
 use kairos_core::services::moldingfoam;
 use serde::Serialize;
 use tauri::State;
@@ -55,14 +56,8 @@ pub fn probe_moldingfoam() -> Result<EnvironmentCheck> {
             .unwrap_or(false)
     };
     let (moldingfoam, solver) = (check("blockMesh"), check("foamRun"));
-    let hint = if moldingfoam && solver {
-        "求解环境已就绪（foamRun 模块化求解器可用）。".into()
-    } else if !moldingfoam {
-        "未检测到求解环境（moldingFoam bundle，基于 OpenFOAM 14）。可在依赖面板下载官方预编译包。"
-            .into()
-    } else {
-        "求解环境版本过旧：缺少 foamRun 模块化运行器，请更新到 OpenFOAM 11+ 口径的 bundle。".into()
-    };
+    // 就绪判定与用户文案在 core（唯一出处），这里只负责探。
+    let hint = dependencies_service::environment_hint(moldingfoam, solver);
     Ok(EnvironmentCheck {
         moldingfoam,
         solver,
@@ -87,7 +82,8 @@ pub async fn generate_moldingfoam_case(
     runner_elements: Vec<RunnerElement>,
     cooling_channels: Vec<CoolingChannel>,
 ) -> Result<CaseOutcome> {
-    let cores = cores.clamp(1, 64) as usize;
+    // 核数夹取在 core（面板没有上界，这里是唯一把关处的调用点）。
+    let cores = moldingfoam::clamp_cores(cores);
     let gates = moldingfoam::gate_portals(&runner_elements);
     // 锁只用于取网格快照；polyMesh 与场文件的写入在锁外、阻塞线程池中进行。
     let volume_mesh: VolumeMesh = {

@@ -10,6 +10,7 @@ use std::time::{Duration, Instant};
 
 use kairos_core::error::{KairosError, Result};
 use kairos_core::models::vm::{VmProviderKind, VmState, VmStatus};
+use kairos_core::services::host;
 use kairos_core::services::vm as vm_logic;
 use kairos_core::services::vm_run;
 use kairos_core::utils::fs::write_atomic;
@@ -132,7 +133,7 @@ fn detect_host_resources() -> vm_logic::VmResources {
     vm_logic::plan_resources(cpus, memory_gib)
 }
 
-/// 宿主物理内存总量（GiB，向下取整）。
+/// 宿主物理内存总量（GiB，向下取整）。取数与解析分开：解析在 core（三端都能测）。
 #[cfg(target_os = "macos")]
 fn detect_memory_gib() -> Option<u32> {
     // 绝对路径：GUI 进程的精简 PATH 不含 /usr/sbin。
@@ -141,19 +142,13 @@ fn detect_memory_gib() -> Option<u32> {
         .arg("hw.memsize")
         .output()
         .ok()?;
-    let bytes: u64 = String::from_utf8_lossy(&output.stdout)
-        .trim()
-        .parse()
-        .ok()?;
-    Some((bytes / (1024 * 1024 * 1024)) as u32)
+    host::memory_gib_from_bytes(&String::from_utf8_lossy(&output.stdout))
 }
 
 #[cfg(target_os = "linux")]
 fn detect_memory_gib() -> Option<u32> {
     let text = std::fs::read_to_string("/proc/meminfo").ok()?;
-    let line = text.lines().find(|line| line.starts_with("MemTotal:"))?;
-    let kb: u64 = line.split_whitespace().nth(1)?.parse().ok()?;
-    Some((kb / (1024 * 1024)) as u32)
+    host::memory_gib_from_meminfo(&text)
 }
 
 #[cfg(target_os = "windows")]
@@ -167,11 +162,7 @@ fn detect_memory_gib() -> Option<u32> {
         ])
         .output()
         .ok()?;
-    let bytes: u64 = String::from_utf8_lossy(&output.stdout)
-        .trim()
-        .parse()
-        .ok()?;
-    Some((bytes / (1024 * 1024 * 1024)) as u32)
+    host::memory_gib_from_bytes(&String::from_utf8_lossy(&output.stdout))
 }
 
 /// 从探测输出解析实例状态；命令失败 / 超时视为实例不存在。
@@ -297,8 +288,8 @@ fn host_timezone() -> String {
         // /etc/localtime → .../zoneinfo/Asia/Shanghai：取 zoneinfo 之后的完整路径段。
         if let Ok(target) = std::fs::read_link("/etc/localtime") {
             let text = target.to_string_lossy();
-            if let Some(pos) = text.find("zoneinfo/") {
-                return text[pos + "zoneinfo/".len()..].to_string();
+            if let Some(zone) = host::zoneinfo_name(&text) {
+                return zone;
             }
         }
     }

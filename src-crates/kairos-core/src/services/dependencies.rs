@@ -23,6 +23,24 @@ fn source_download(url: &str) -> Option<DownloadSpec> {
     })
 }
 
+/// 求解环境就绪提示（面板文案的唯一出处）。
+///
+/// 环境工具链（以 `blockMesh` 为代表）与模块化求解器（`foamRun`，OpenFOAM 11+ 才有）
+/// 两者齐备才算就绪；缺环境给下载指引，只有环境缺求解器则说明 bundle 版本过旧。
+pub fn environment_hint(moldingfoam: bool, solver: bool) -> String {
+    match (moldingfoam, solver) {
+        (true, true) => "求解环境已就绪（foamRun 模块化求解器可用）。".to_string(),
+        (false, _) => {
+            "未检测到求解环境（moldingFoam bundle，基于 OpenFOAM 14）。可在依赖面板下载官方预编译包。"
+                .to_string()
+        }
+        (true, false) => {
+            "求解环境版本过旧：缺少 foamRun 模块化运行器，请更新到 OpenFOAM 11+ 口径的 bundle。"
+                .to_string()
+        }
+    }
+}
+
 /// 组件是否来自可在线检查更新的 release 流（`releases/latest` 直链）。
 /// 静态直链组件（如 Gmsh 固定版本文件）没有可查询的版本源，不支持。
 pub fn is_release_updatable(dep: &RuntimeDependency) -> bool {
@@ -98,6 +116,23 @@ pub fn catalog() -> Vec<RuntimeDependency> {
 mod tests {
     use super::*;
     use crate::models::dependencies::{InstallStrategy, LicenseKind};
+
+    #[test]
+    fn environment_hint_covers_all_three_states() {
+        let ready = environment_hint(true, true);
+        assert!(ready.contains("已就绪"));
+
+        // 缺环境（blockMesh）：给下载指引，且不管膜具求解器在不在
+        let missing = environment_hint(false, false);
+        assert!(missing.contains("未检测到求解环境"));
+        assert!(missing.contains("依赖面板"));
+        assert_eq!(environment_hint(false, true), missing);
+
+        // 有环境但缺 foamRun：版本过旧
+        let stale = environment_hint(true, false);
+        assert!(stale.contains("版本过旧"));
+        assert!(stale.contains("OpenFOAM 11+"));
+    }
 
     #[test]
     fn solver_chain_dependency_is_required_and_gpl() {

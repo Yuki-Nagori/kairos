@@ -10,6 +10,7 @@ pub mod fill_preview;
 pub mod gate_location;
 pub mod geometry;
 pub mod gmsh;
+pub mod host;
 pub mod iges;
 pub mod jobs;
 pub mod material;

@@ -818,6 +818,17 @@ fn write(path: &Path, content: &str) -> Result<()> {
     fs::write(path, content).map_err(|e| KairosError::io(format!("写入 {path:?} 失败：{e}")))
 }
 
+/// 并行核数上限：`decomposeParDict` 的子域数与 `mpirun -np` 共用这个值，而面板只给了
+/// `min="1"`、没有上界，故这里是对外的唯一把关处。
+pub const MAX_CORES: u32 = 64;
+
+/// 把请求核数夹进可用区间。
+///
+/// 下界取 1：0 会让 `decomposePar` / `mpirun -np` 直接失败；上界见 [`MAX_CORES`]。
+pub fn clamp_cores(cores: u32) -> usize {
+    cores.clamp(1, MAX_CORES) as usize
+}
+
 /// 求解命令（不含 cd 与环境 source）：分解网格后以 mpirun 拉起并行 foamRun，
 /// 最后重建 case 级结果目录。
 ///
@@ -1355,6 +1366,18 @@ mod tests {
             command,
             "decomposePar -force && mpirun -np 6 foamRun -parallel; reconstructPar"
         );
+    }
+
+    #[test]
+    fn clamp_cores_bounds_both_ends() {
+        // 0 会让 decomposePar / mpirun -np 直接失败，抬到 1
+        assert_eq!(clamp_cores(0), 1);
+        assert_eq!(clamp_cores(1), 1);
+        assert_eq!(clamp_cores(8), 8);
+        assert_eq!(clamp_cores(MAX_CORES), MAX_CORES as usize);
+        // 面板没有上界，超出部分在这里夹住
+        assert_eq!(clamp_cores(MAX_CORES + 1), MAX_CORES as usize);
+        assert_eq!(clamp_cores(u32::MAX), MAX_CORES as usize);
     }
 
     #[test]
