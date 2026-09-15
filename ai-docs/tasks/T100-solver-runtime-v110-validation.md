@@ -26,6 +26,16 @@ cargo run -p kairos-cli -- doe run \
   --sample-box --out-dir <workspace> --solve
 ```
 
+macOS 上 GUI 将 bundle 部署在 Multipass 的 `kairos` 虚拟机中；CLI 需显式复用该环境：
+
+```bash
+cargo run -p kairos-cli -- doe run \
+  --factor '熔体温度=...' --factor '注射时间=...' \
+  --sample-box --out-dir <workspace> --solve --vm
+```
+
+不带 `--vm` 时 CLI 只使用宿主机 PATH，不能看到 GUI 部署在虚拟机内的工具。
+
 真实零件使用 `--stl <path>` 替换 `--sample-box`。运行前记录 `kairos-cli --version`、运行时版本、操作系统、架构和提交号。
 
 ## 当前边界

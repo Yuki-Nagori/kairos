@@ -9,7 +9,7 @@ use kairos_core::error::KairosError;
 use kairos_core::models::process::ProcessSettings;
 use kairos_core::models::solver::AnalysisStage;
 use kairos_core::services::{
-    self, doe, geometry, meshing, moldingfoam, optimize, project, results,
+    self, doe, geometry, meshing, moldingfoam, optimize, project, results, vm as vm_logic, vm_run,
 };
 use kairos_core::utils::shell;
 use kairos_core::utils::time::now_ms;
@@ -134,6 +134,9 @@ enum DoeAction {
         /// 实际调用求解器（缺环境时逐次记为失败，批次继续）
         #[arg(long)]
         solve: bool,
+        /// 使用 GUI 部署的 Multipass kairos 虚拟机运行求解器
+        #[arg(long)]
+        vm: bool,
     },
 }
 
@@ -205,6 +208,9 @@ enum SolveAction {
         case_dir: String,
         #[arg(long, default_value_t = 4)]
         cores: u32,
+        /// 使用 GUI 部署的 Multipass kairos 虚拟机运行求解器
+        #[arg(long)]
+        vm: bool,
     },
 }
 
@@ -484,6 +490,7 @@ fn run_doe(action: DoeAction, json: bool) -> kairos_core::error::Result<()> {
             injection_time_s,
             batch,
             solve,
+            vm,
         } => run_doe_batch(
             &factors,
             &plan,
@@ -495,6 +502,7 @@ fn run_doe(action: DoeAction, json: bool) -> kairos_core::error::Result<()> {
             injection_time_s,
             batch,
             solve,
+            vm,
             json,
         ),
         DoeAction::Matrix {
@@ -539,6 +547,7 @@ fn run_doe_batch(
     injection_time_s: f64,
     batch: Option<String>,
     solve: bool,
+    vm: bool,
     json: bool,
 ) -> kairos_core::error::Result<()> {
     let parsed = parse_doe_factors(factor_specs)?;
@@ -575,7 +584,7 @@ fn run_doe_batch(
         let settings = doe::apply_factors(&base_process, &runs[index])?;
         let started = std::time::Instant::now();
         write_run_timestamp(&case_dir, "started-at-ms", now_ms())?;
-        match run_doe_case(&case_dir, &volume, &material, &settings, cores, solve) {
+        match run_doe_case(&case_dir, &volume, &material, &settings, cores, solve, vm) {
             Err(error) => doe::mark_failed(
                 &mut runs[index],
                 error.message(),
@@ -656,6 +665,7 @@ fn run_doe_case(
     process: &ProcessSettings,
     cores: u32,
     solve: bool,
+    vm: bool,
 ) -> kairos_core::error::Result<Option<std::collections::BTreeMap<String, f64>>> {
     moldingfoam::generate_case(
         case_dir,
@@ -673,7 +683,7 @@ fn run_doe_case(
         return Ok(None);
     }
     let case_text = case_dir.to_string_lossy().to_string();
-    run_solver(&case_text, cores)?;
+    run_solver(&case_text, cores, vm)?;
     let log = std::fs::read_to_string(case_dir.join("log.foamRun")).unwrap_or_default();
     Ok(Some(moldingfoam::parse_metrics(&log)))
 }
@@ -682,7 +692,10 @@ fn run_doe_case(
 const DOE_STUDY_ID: &str = "doe";
 
 /// 跑一次求解并把完整输出留到 `log.foamRun`（DOE 逐次读它取指标）。
-fn run_solver(case_dir: &str, cores: u32) -> kairos_core::error::Result<()> {
+fn run_solver(case_dir: &str, cores: u32, vm: bool) -> kairos_core::error::Result<()> {
+    if vm {
+        return run_solver_in_vm(case_dir, cores);
+    }
     let dir = Path::new(case_dir);
     if !dir.join("system/controlDict").exists() {
         return Err(KairosError::not_found(
@@ -712,6 +725,41 @@ fn run_solver(case_dir: &str, cores: u32) -> kairos_core::error::Result<()> {
         }));
     }
     Ok(())
+}
+
+/// 复用 GUI 已部署的 Multipass 环境运行一次 case，并把日志与结果回传宿主。
+fn run_solver_in_vm(case_dir: &str, cores: u32) -> kairos_core::error::Result<()> {
+    let runner = vm_run::ProcessRunner::new(None, vm_run::ProcessRunner::DEFAULT_TIMEOUT_S);
+    let archive = std::env::temp_dir().join(format!("kairos-cli-{}-case.tgz", now_ms()));
+    let vm_case = vm_run::stage_case(&runner, &archive, case_dir)?;
+    let solve = moldingfoam::solve_command(cores);
+    let script = format!(
+        "{}; cd '{}' && ( {} ) > log.foamRun 2>&1",
+        vm_logic::env_source_command(),
+        shell::bash_single_quote(&vm_case),
+        solve
+    );
+    let command = vm_run::HostCommand::new(vm_logic::bash_script_args(
+        kairos_core::models::vm::VmProviderKind::Multipass,
+        &script,
+    ));
+    let solve_result = vm_run::HostRunner::run(&runner, &command, "虚拟机求解");
+    let log_command = vm_run::HostCommand::new(vm_logic::bash_script_args(
+        kairos_core::models::vm::VmProviderKind::Multipass,
+        &format!(
+            "cat '{}/log.foamRun' 2>/dev/null",
+            shell::bash_single_quote(&vm_case)
+        ),
+    ));
+    if let Ok(log) = vm_run::HostRunner::capture(&runner, &log_command, "回读虚拟机求解日志")
+    {
+        std::fs::write(Path::new(case_dir).join("log.foamRun"), log)
+            .map_err(|e| KairosError::io(format!("写入求解日志失败：{e}")))?;
+    }
+    let result = solve_result
+        .and_then(|()| vm_run::copy_results(&runner, &archive, case_dir, &vm_case).map(|_| ()));
+    let _ = std::fs::remove_file(&archive);
+    result
 }
 
 /// 解析 DOE 因子参数：`名称=值1,值2,…`（空列表或坏数字明确报错）。
@@ -787,13 +835,17 @@ fn parse_doe_factors(specs: &[String]) -> kairos_core::error::Result<Vec<doe::Do
 
 fn run_solve(action: SolveAction, json: bool) -> kairos_core::error::Result<()> {
     match action {
-        SolveAction::Submit { case_dir, cores } => {
+        SolveAction::Submit {
+            case_dir,
+            cores,
+            vm,
+        } => {
             if json {
-                run_solver(&case_dir, cores)?;
+                run_solver(&case_dir, cores, vm)?;
                 emit_json(&serde_json::json!({ "caseDir": case_dir, "ok": true }));
                 return Ok(());
             }
-            run_solver(&case_dir, cores)?;
+            run_solver(&case_dir, cores, vm)?;
             println!("求解完成：{case_dir}");
             Ok(())
         }
@@ -952,6 +1004,7 @@ fn run_pipeline(
             SolveAction::Submit {
                 case_dir: case_dir_text.clone(),
                 cores,
+                vm: false,
             },
             json,
         );
