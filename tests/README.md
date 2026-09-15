@@ -45,11 +45,11 @@ KAIROS_E2E_VM=1 KAIROS_E2E_KEEP=1 cargo test -p kairos-tests --test e2e # 保留
 
 **发版前手动门禁**：发布候选版本时跑一次上面的 L2（CI 的三端托管 runner 没有 multipass 与 120MB 求解环境，
 跑不了这一层），把输出与 case 路径记入当次发布记录。层级与剩余范围见
-[T96](../ai-docs/tasks/T96-full-flow-e2e.md)。
+[T96](../ai-docs/tasks/T96-full-flow-e2e-done.md)。
 
 ## 原则
 
-- 接缝靠集成层守：单元测试盯不住「命令怎么拼、分步怎么排、成败怎么判」，全流程链路按 [T96](../ai-docs/tasks/T96-full-flow-e2e.md) 的分层跑（L1 进 CI，L2 真机）；shell 命令的**语法**用 `bash -n` 做契约用例（引号失衡只会在真机上报错）。
+- 接缝靠集成层守：单元测试盯不住「命令怎么拼、分步怎么排、成败怎么判」，全流程链路按 [T96](../ai-docs/tasks/T96-full-flow-e2e-done.md) 的分层跑（L1 进 CI，L2 真机）；shell 命令的**语法**用 `bash -n` 做契约用例（引号失衡只会在真机上报错）。
 
 - 前端测试与源码分离（本目录）；Rust 单元测试与源码同文件（语言惯例），集成测试归集于此；
 - 测试不写业务逻辑——被测逻辑一律住 `kairos-core`；
