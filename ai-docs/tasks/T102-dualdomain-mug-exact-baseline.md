@@ -49,6 +49,7 @@
 
 ## 当前实现进度
 - CLI 已新增 `dual-domain export`，可从 STL 或 sample-box 生成 `dual-domain/v1` JSON，供上游 moldingFoam 集成测试。
+- 上游联调顺序和字段定义已记录在 [T102 Dual Domain 上游联调契约](../reviews/t102-dualdomain-contract.md)。
 
 示例：
 

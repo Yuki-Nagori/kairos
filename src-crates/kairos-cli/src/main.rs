@@ -971,6 +971,7 @@ fn write_run_timestamp(
 
 /// 执行一次 DOE case：生成 case，可选启动求解并解析日志指标。
 /// 优化器回填复用此函数，避免再复制一套求解与指标解析链。
+#[allow(clippy::too_many_arguments)]
 fn run_doe_case(
     case_dir: &Path,
     volume: &kairos_core::models::mesh::VolumeMesh,
