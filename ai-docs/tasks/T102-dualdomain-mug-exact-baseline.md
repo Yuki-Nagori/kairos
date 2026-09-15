@@ -2,7 +2,7 @@
 
 - 阶段：E3（求解器一致性与验证）
 - 依赖：T29、T82、T100、T101
-- 状态：**进行中：CLI FillPackCool 与双域拓扑前置校验已接入，solver 消费待实现**
+- 状态：**分阶段：三维体网格已可生成并供 moldingFoam 运行；Dual Domain 输入契约已完成，solver 消费等待上游降维模块**
 - 目标：在 Kairos 中导入或重建与参考结果相同的 Dual Domain 中面网格，使用同一拓扑、厚度、边界、材料和工艺参数，完成 Mug 的可审计基线对照。
 
 ## 冻结基线参数
@@ -51,7 +51,7 @@
 
 - CLI 已新增 `dual-domain export`，只接受真实零件 STL，生成 `dual-domain/v1` JSON；Dual Domain 不再提供闭合方盒样例，避免把 `sum(area × thickness)` 误当作实体体积。
 - 上游联调顺序和字段定义已记录在 [T102 Dual Domain 上游联调契约](../reviews/t102-dualdomain-contract.md)。
-- 仓库保留 `tests/fixtures/dual-domain-v1.sample.json` 作为纯 DTO 拓扑契约 fixture（不是物理几何或基线结果），完整 Mug 导出必须使用本地 `report/mug-moldflow/mug.stl`；实验 manifest 已指向生成的 `report/mug-moldflow/mug-dual-domain-v1.json`。
+- `tests/fixtures/dual-domain-v1.sample.json` 是 Mug STL 生成的 Dual Domain 样例；`tests/fixtures/volume-mesh-v1.mug.json` 是同一 Mug 的三维体网格样例。两者均只用于输入契约和上游联调，不替代 moldingFoam 的真实求解结果。
 
 示例：
 
@@ -63,7 +63,7 @@ cargo run -p kairos-cli -- dual-domain export \
 
 该命令会读取 Mug STL，输出节点、三角形、厚度和梁耦合数据；不再接受 `--sample-box`。
 
-同一 Mug 也生成了三维体网格 fixture `tests/fixtures/volume-mesh-v1.mug.json`（15,868 节点 / 48,605 四面体），manifest 的 `volumeMesh` 字段指向它，供上游同时验证两种输入。
+同一 Mug 也生成了三维体网格 fixture `tests/fixtures/volume-mesh-v1.mug.json`（15,868 节点 / 48,605 四面体），实验 manifest 同时记录两种输入。
 
 ## 路线确认（2026-09-16）
 
@@ -74,7 +74,7 @@ T102 后续采用两步路线：
 1. 先定义稳定的 `DualDomainSolverInput`（中面节点、三角形、厚度、双面匹配、边界和积分规则）及契约/golden 测试。
 2. 在 moldingFoam 增加显式降维求解模块后，再由 Kairos 写出该模块的 case；在此之前只允许拓扑前置校验和报告导出，禁止静默回退到 3D 体网格。
 
-因此，当前 Mug 命令已经做到工艺参数一致，但 Dual Domain 网格与 solver 消费仍未完成；报告中的数值结果不得标记为完全一致。
+因此，当前 Mug 的三维体网格路线可以直接进入 moldingFoam 求解；Dual Domain 仅完成前处理和输入契约，必须等上游显式降维 solver 后才能进行结果对照。
 
 - CLI 已支持 `fill-pack-cool` 完整工艺阶段。
 - `dualdomain::validate_solver_topology` 已阻止未配对厚度、越界三角形和非法拓扑进入未来 solver 适配层。

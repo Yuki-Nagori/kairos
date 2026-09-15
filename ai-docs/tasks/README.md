@@ -130,7 +130,7 @@
 | T99  | [T99-runtime-and-result-hardening.md](T99-runtime-and-result-hardening.md)                   | 运行生命周期与大结果处理优化                    | 进行中：生命周期、缓存、统计、并发与基准已完成；T93 回填闭环仍为阻塞项                                  |
 | T100 | [T100-solver-runtime-v110-validation.md](T100-solver-runtime-v110-validation.md)             | 求解器运行时 v1.1.0 真实 CLI 验证与原始留档     | 进行中：VM 真实 DOE 与 moldingFoam v1.1.0 已验证；完整 Mug 对照与单点入口待补                           |
 | T101 | [T101-generic-pp-material-fit.md](T101-generic-pp-material-fit.md)                           | Generic PP 自定义材料拟合与 Mug baseline        | 核心闭环完成：曲线拟合、残差、默认 PP 模板与 moldingFoam VM 验证已完成；GUI 材料面板后续补齐            |
-| T102 | [T102-dualdomain-mug-exact-baseline.md](T102-dualdomain-mug-exact-baseline.md)               | Dual Domain Mug 完全一致基线                    | 待开工：统一中面网格、双面厚度积分、拓扑边界、材料工艺和指标口径                                        |
+| T102 | [T102-dualdomain-mug-exact-baseline.md](T102-dualdomain-mug-exact-baseline.md)               | Dual Domain Mug 完全一致基线                    | 三维体网格可进入 moldingFoam；Dual Domain 契约与样例已完成，等待上游降维 solver                         |
 | T94  | [T94-gui-e2e-verification.md](T94-gui-e2e-verification.md)                                   | GUI 端到端验证（提交 → 回传 → VM 自动关闭）     | 待开工；需人在界面展开求解面板后跑（AX 拿不到折叠面板的输入框）；求解链路本身先走 CLI 通道              |
 | T95  | [T95-dependency-audit.md](T95-dependency-audit.md)                                           | 依赖取向审查：用现成库 vs 自造轮子              | 进行中：repair 向量与色标基础收编已完成；剩图表/前端数学评估、摘要展示与证据补齐                        |
 | T97  | [T97-solver-lib-duplication-guard.md](T97-solver-lib-duplication-guard.md)                   | 求解环境库重复守卫 + 部署前清理                 | 进行中：部署清理与 core/原生库探测已完成；真实 VM 坏状态验收待下一批                                    |
