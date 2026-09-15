@@ -422,16 +422,30 @@ fn run_material(action: MaterialAction, json: bool) -> kairos_core::error::Resul
             let (rheology, viscosity_residual) =
                 material_curve::fit_cross_wlf_d1(&material.rheology, &viscosity_points)?;
             let (pvt, pvt_residual) = material_curve::fit_tait_b1(&material.pvt, &pvt_points)?;
+            let viscosity_rows =
+                material_curve::cross_wlf_residual_rows(&rheology, &viscosity_points)?;
+            let pvt_rows = material_curve::tait_residual_rows(&pvt, &pvt_points)?;
             let mut fitted = material;
             fitted.rheology = rheology;
             fitted.pvt = pvt;
             services::material::write_custom_file(Path::new(&output), &[fitted.clone()])?;
+            let viscosity_report = format!("{output}.viscosity-residual.json");
+            let pvt_report = format!("{output}.pvt-residual.json");
+            fs::write(
+                &viscosity_report,
+                material_curve::residual_rows_json(&viscosity_rows)?,
+            )
+            .map_err(|error| KairosError::io(format!("写入黏度残差报告失败：{error}")))?;
+            fs::write(&pvt_report, material_curve::residual_rows_json(&pvt_rows)?)
+                .map_err(|error| KairosError::io(format!("写入 PVT 残差报告失败：{error}")))?;
             if json {
                 emit_json(&serde_json::json!({
                     "output": output,
                     "material": fitted,
                     "viscosityResidual": viscosity_residual,
                     "pvtResidual": pvt_residual,
+                    "viscosityReport": viscosity_report,
+                    "pvtReport": pvt_report,
                 }));
             } else {
                 println!("材料拟合完成：{}", output);

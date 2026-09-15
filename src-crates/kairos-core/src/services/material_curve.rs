@@ -39,6 +39,81 @@ pub struct PvtResidualSummary {
     pub rmse_m3_per_kg: f64,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ViscosityResidualRow {
+    pub temperature_k: f64,
+    pub shear_rate_per_s: f64,
+    pub measured_pa_s: f64,
+    pub predicted_pa_s: f64,
+    pub absolute_pa_s: f64,
+    pub absolute_log10: f64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PvtResidualRow {
+    pub pressure_pa: f64,
+    pub temperature_k: f64,
+    pub measured_m3_per_kg: f64,
+    pub predicted_m3_per_kg: f64,
+    pub absolute_m3_per_kg: f64,
+    pub relative: f64,
+}
+
+pub fn cross_wlf_residual_rows(
+    model: &CrossWlf,
+    points: &[ViscosityPoint],
+) -> Result<Vec<ViscosityResidualRow>> {
+    points
+        .iter()
+        .map(|point| {
+            let predicted =
+                cross_wlf_viscosity(model, point.temperature_k, point.shear_rate_per_s)?;
+            if point.viscosity_pa_s <= 0.0 || !point.viscosity_pa_s.is_finite() {
+                return Err(KairosError::validation("逐点黏度必须为正有限数值。"));
+            }
+            let absolute = (predicted - point.viscosity_pa_s).abs();
+            Ok(ViscosityResidualRow {
+                temperature_k: point.temperature_k,
+                shear_rate_per_s: point.shear_rate_per_s,
+                measured_pa_s: point.viscosity_pa_s,
+                predicted_pa_s: predicted,
+                absolute_pa_s: absolute,
+                absolute_log10: (predicted.log10() - point.viscosity_pa_s.log10()).abs(),
+            })
+        })
+        .collect()
+}
+
+pub fn tait_residual_rows(model: &Tait, points: &[PvtPoint]) -> Result<Vec<PvtResidualRow>> {
+    points
+        .iter()
+        .map(|point| {
+            let predicted = tait_specific_volume(model, point.pressure_pa, point.temperature_k)?;
+            if point.specific_volume_m3_per_kg <= 0.0
+                || !point.specific_volume_m3_per_kg.is_finite()
+            {
+                return Err(KairosError::validation("逐点比容必须为正有限数值。"));
+            }
+            let absolute = (predicted - point.specific_volume_m3_per_kg).abs();
+            Ok(PvtResidualRow {
+                pressure_pa: point.pressure_pa,
+                temperature_k: point.temperature_k,
+                measured_m3_per_kg: point.specific_volume_m3_per_kg,
+                predicted_m3_per_kg: predicted,
+                absolute_m3_per_kg: absolute,
+                relative: absolute / point.specific_volume_m3_per_kg,
+            })
+        })
+        .collect()
+}
+
+pub fn residual_rows_json<T: Serialize>(rows: &[T]) -> Result<String> {
+    serde_json::to_string_pretty(rows)
+        .map_err(|error| KairosError::internal(format!("逐点残差 JSON 序列化失败：{error}")))
+}
+
 pub fn residual_summary_json<T: Serialize>(summary: &T) -> Result<String> {
     serde_json::to_string_pretty(summary)
         .map_err(|error| KairosError::internal(format!("残差摘要 JSON 序列化失败：{error}")))
@@ -765,5 +840,48 @@ mod tests {
         )
         .unwrap();
         assert!(fitted_tait.b1m > tait.b1m);
+    }
+
+    #[test]
+    fn residual_rows_preserve_input_coordinates_and_export_json() {
+        let model = CrossWlf {
+            n: 0.3,
+            tau_star: 10_000.0,
+            d1: 1_000.0,
+            d2: 263.15,
+            d3: 0.0,
+            a1: 30.0,
+            a2: 50.0,
+        };
+        let point = ViscosityPoint {
+            temperature_k: 493.15,
+            shear_rate_per_s: 10.0,
+            viscosity_pa_s: 1.0,
+        };
+        let rows = cross_wlf_residual_rows(&model, &[point]).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].shear_rate_per_s, 10.0);
+        assert!(residual_rows_json(&rows).unwrap().contains("predictedPaS"));
+        let tait = Tait {
+            b1m: 1.0,
+            b1s: 0.9,
+            b2m: 0.0001,
+            b2s: 0.00005,
+            b3: 0.01,
+            b4m: 1.0e8,
+            b4s: 1.0e8,
+            b5: 400.0,
+        };
+        let pv = tait_specific_volume(&tait, 1.0e6, 450.0).unwrap();
+        let pvt_rows = tait_residual_rows(
+            &tait,
+            &[PvtPoint {
+                pressure_pa: 1.0e6,
+                temperature_k: 450.0,
+                specific_volume_m3_per_kg: pv,
+            }],
+        )
+        .unwrap();
+        assert_eq!(pvt_rows[0].pressure_pa, 1.0e6);
     }
 }
