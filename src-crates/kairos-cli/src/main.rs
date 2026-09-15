@@ -128,6 +128,12 @@ enum DoeAction {
         /// 基准注射时间（s）；被因子「注射时间」覆盖时以因子为准
         #[arg(long = "injection-time", default_value_t = 1.0)]
         injection_time_s: f64,
+        /// 保压曲线起点压力（MPa）；用于复现固定工艺基线
+        #[arg(long)]
+        packing_pressure_mpa: Option<f64>,
+        /// 保压时间（s）；用于复现固定工艺基线
+        #[arg(long)]
+        packing_time_s: Option<f64>,
         /// 批次名（缺省 = 因子名以短横连接）
         #[arg(long)]
         batch: Option<String>,
@@ -488,6 +494,8 @@ fn run_doe(action: DoeAction, json: bool) -> kairos_core::error::Result<()> {
             cores,
             target_size,
             injection_time_s,
+            packing_pressure_mpa,
+            packing_time_s,
             batch,
             solve,
             vm,
@@ -500,6 +508,8 @@ fn run_doe(action: DoeAction, json: bool) -> kairos_core::error::Result<()> {
             cores,
             target_size,
             injection_time_s,
+            packing_pressure_mpa,
+            packing_time_s,
             batch,
             solve,
             vm,
@@ -545,6 +555,8 @@ fn run_doe_batch(
     cores: u32,
     target_size: f64,
     injection_time_s: f64,
+    packing_pressure_mpa: Option<f64>,
+    packing_time_s: Option<f64>,
     batch: Option<String>,
     solve: bool,
     vm: bool,
@@ -576,7 +588,13 @@ fn run_doe_batch(
         },
     )?;
     let material = services::material::builtin_materials()[0].clone();
-    let base_process = default_process_with(injection_time_s);
+    let mut base_process = default_process_with(injection_time_s);
+    if let Some(pressure) = packing_pressure_mpa {
+        base_process.packing_pressure_mpa_curve = vec![(0.0, pressure)];
+    }
+    if let Some(time) = packing_time_s {
+        base_process.packing_time_s = time;
+    }
 
     let total = runs.len();
     for index in 0..total {

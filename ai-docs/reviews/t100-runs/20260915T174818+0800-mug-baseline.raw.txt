@@ -1,0 +1,11 @@
+   Compiling kairos-cli v0.1.0 (/Users/yuki/eit/kairos/src-crates/kairos-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.84s
+     Running `target/debug/kairos-cli doe run --plan full --factor '熔体温度=220' --factor '模具温度=50' --factor '注射时间=5.5' --stl report/mug-moldflow/mug.stl --target-size 2.0 --packing-pressure 0.9229 --packing-time 315.0797 --out-dir /private/tmp/mug-baseline-20260915T174818+0800 --batch mug-baseline-20260915T174818+0800 --solve --vm`
+error: unexpected argument '--packing-pressure' found
+
+  tip: a similar argument exists: '--packing-pressure-mpa'
+
+Usage: kairos-cli doe run --factor <FACTORS> --plan <PLAN> --stl <STL> --target-size <TARGET_SIZE> --packing-pressure-mpa <PACKING_PRESSURE_MPA>
+
+For more information, try '--help'.
+exit_code=2

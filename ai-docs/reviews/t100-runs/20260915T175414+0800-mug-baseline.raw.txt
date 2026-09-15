@@ -1,0 +1,8 @@
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.37s
+     Running `target/debug/kairos-cli doe run --plan full --factor '熔体温度=220' --factor '模具温度=50' --factor '注射时间=5.5' --stl report/mug-moldflow/mug.stl --target-size 4.0 --packing-pressure-mpa 0.9229 --packing-time-s 315.0797 --cores 1 --out-dir /private/tmp/mug-baseline-20260915T175414+0800 --batch mug-baseline-20260915T175414+0800 --solve --vm`
+[1] 运行 1/1：模具温度=50 注射时间=5.5 熔体温度=220 → failed（虚拟机求解失败：退出状态 exit status: 255）
+批次「mug-baseline-20260915T175414+0800」完成：1 次运行，汇总表在 /private/tmp/mug-baseline-20260915T175414+0800/doe/mug-baseline-20260915T175414+0800
+run,模具温度,注射时间,熔体温度,status,reason,elapsed_s
+1,50,5.5,220,failed,虚拟机求解失败：退出状态 exit status: 255,438.948657
+{"code":"solver","message":"DOE 批次包含 1/1 个失败运行；汇总表已保留"}
+exit_code=1
