@@ -78,6 +78,7 @@ const {
     </ol>
     <!-- 任务右键菜单：定位在指针处，点击任意处 / Esc 关闭（监听在 composable） -->
     <div
+      ref="menuRoot"
       v-if="menu"
       class="fixed z-50 min-w-36 rounded-lg border border-zinc-700 bg-zinc-900 py-1 shadow-xl"
       :style="{ left: `${menu.x}px`, top: `${menu.y}px` }"

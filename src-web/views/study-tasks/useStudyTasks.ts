@@ -6,7 +6,8 @@
  * 任务序列本身来自共享快照 composables/useStudyTasksSnapshot（与阶段选项
  * 卡角标共用），本 composable 只补窗格自身的交互与提交表单。
  */
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, ref } from "vue";
+import { onClickOutside, onKeyStroke } from "@vueuse/core";
 import { useAppStore } from "../../stores/app";
 import { useJobsStore } from "../../stores/jobs";
 import { usePipelineStore } from "../../stores/pipeline";
@@ -84,6 +85,7 @@ export function useStudyTasks() {
 
   // —— 右键菜单（任务右键常用命令）——
   const menu = ref<{ task: StudyTask; x: number; y: number } | null>(null);
+  const menuRoot = ref<HTMLElement | null>(null);
 
   function openMenu(task: StudyTask, event: MouseEvent): void {
     // 视口右缘 / 下缘夹取，避免菜单溢出屏幕
@@ -117,19 +119,8 @@ export function useStudyTasks() {
     return items;
   }
 
-  function onKeydown(event: KeyboardEvent): void {
-    if (event.key === "Escape") {
-      closeMenu();
-    }
-  }
-  onMounted(() => {
-    window.addEventListener("click", closeMenu);
-    window.addEventListener("keydown", onKeydown);
-  });
-  onUnmounted(() => {
-    window.removeEventListener("click", closeMenu);
-    window.removeEventListener("keydown", onKeydown);
-  });
+  onClickOutside(menuRoot, closeMenu);
+  onKeyStroke("Escape", closeMenu);
 
   return {
     tasks,
@@ -140,6 +131,7 @@ export function useStudyTasks() {
     cores,
     submitLabel,
     menu,
+    menuRoot,
     openMenu,
     closeMenu,
     taskMenuCommands,

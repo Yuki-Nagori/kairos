@@ -128,7 +128,7 @@
 | T92 | [T92-doe-orchestration.md](T92-doe-orchestration.md)                                         | DOE / 正交试验编排                              | 等 T29 求解闭环稳定                                                                                                                                                                                     |
 | T93 | [T93-process-optimization.md](T93-process-optimization.md)                                   | 工艺参数自动寻优                                | 等 T92 汇总表                                                                                                                                                                                           |
 | T94 | [T94-gui-e2e-verification.md](T94-gui-e2e-verification.md)                                   | GUI 端到端验证（提交 → 回传 → VM 自动关闭）     | 待开工；需人在界面展开求解面板后跑（AX 拿不到折叠面板的输入框）；求解链路本身先走 CLI 通道                                                                                                              |
-| T95 | [T95-dependency-audit.md](T95-dependency-audit.md)                                           | 依赖取向审查：用现成库 vs 自造轮子              | 进行中：P1-a/P1-b/P2-b/P2-c 已完成；P2-a（VueUse 收编）与 P3（图表 / 数学 / 二进制 / 解压）待逐项评估                                                                                                   |
+| T95 | [T95-dependency-audit.md](T95-dependency-audit.md)                                           | 依赖取向审查：用现成库 vs 自造轮子              | 进行中：P1-a/P1-b/P2-b/P2-c 已完成；P2-a 已完成可复用部分，标题栏与 storage 保留产品语义；P3（图表 / 数学 / 二进制 / 解压）待逐项评估                                                                   |
 | T97 | [T97-solver-lib-duplication-guard.md](T97-solver-lib-duplication-guard.md)                   | 求解环境库重复守卫 + 部署前清理                 | 待开工（P1，无外部依赖）；037 退出崩溃的根因是库被加载两次（[核对报告](../reviews/solver-lib-duplication-report.md)）——就绪探测按「每个 dlopen 名字只能有一个实体可达」把关，并把部署改成「先清后解压」 |
 
 ## 整体评审闭环（2026-09-15）
@@ -147,7 +147,7 @@ T98 的本机测试不替代 T94/T96 的 Windows/WSL、Linux 与真实 VM 验收
 
 **档 A · 现在就能开工（无外部条件）**——按建议顺序：
 
-1. **T95 P2-a**（P2）：VueUse 收编剩余防抖、点击外部和 storage 网关；每块独立提交与回归。
+1. **T95 P2-a**（P2）：已完成可复用收编；标题栏和 storage 需保留自定义语义，下一批转入 P3 对照评估。
 2. **T95 P3**（P2/P3）：按决策表逐项做视觉/性能对照，不直接替换 XY 图表、几何数学或解压路径。
 3. **T97**（P1）：求解环境库重复守卫与部署前清理；优先于新求解功能。
 4. **T89 第一步**（P3）：材料库「气体介质」数据位 + `RunnerElement.medium`（双端镜像 + 契约测试），

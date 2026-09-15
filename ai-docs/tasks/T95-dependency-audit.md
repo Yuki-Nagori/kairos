@@ -141,7 +141,7 @@ WebGL2 / WebGPU 双后端、剖切、体积光线步进）、`utils/field-binary
   带四条单测。**剩余**：①上游 release 未发布校验值（`gh release view` 确认只发归档），需向上游提
   「发布 SHA256SUMS」；②摘要目前只在清单里，依赖面板尚未展示（前端 DTO 改动需同步 fixtures，单独一批做）。
 - **P1-b 材料 CSV 导入引 `csv`**（2026-09-14 完成）：已换库，新增 BOM / CRLF / 引号内逗号 / 双引号转义 / 未闭合引号 / 损坏表头 6 类用例，既有 5 条文案口径不变；消融 3/3 红。
-- **P2-a `@vueuse/core` 收编**：防抖、点击外部、storage 网关三块，逐个替换 + 既有测试全绿。
+- **P2-a `@vueuse/core` 收编**：`useDebounceFn` 已用于工程自动保存；方案任务右键菜单已改用 `onClickOutside` / `onKeyStroke`。标题栏菜单保留自定义全局监听（根节点覆盖整条标题栏，VueUse 的 outside 判定无法表达“标题栏内点击不关闭”）；storage 网关保留自定义索引协议（`useStorage` 无法表达跨域键控集合）。剩余工作只需评估，不应机械替换。
 - **P2-b 统一数值 / 单位 formatter**：新建 `utils/format.ts` + 单测，替换 45 处散落调用（分批提交）。
 - **P2-c CSV 导出加引号 / BOM、前端 ID 改用平台 CSPRNG**（2026-09-15 完成）：CSV 输出统一 RFC 4180 的引号 / CRLF / UTF-8 BOM；工程、流道、水路和自定义材料 ID 优先使用 `crypto.randomUUID()`，旧 WebView 使用单调回退序列。
 - **P3-a XY 图表换 uPlot**：先出视觉对照（评审记录）再替换。
