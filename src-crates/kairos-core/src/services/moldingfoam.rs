@@ -1389,8 +1389,8 @@ mod tests {
         assert!(dict.contains("(0.0000 6.000000e7)"));
         assert!(dict.contains("(8.0000 4.000000e7)"));
         assert!(dict.contains("ejectionTemperature  363.15"));
-        // 冻死短射守卫：无流温度取 Tait 转变温度 b5（内置 PP 为 418 K）
-        assert!(dict.contains("freezeOffTemperature  418.0000"), "{dict}");
+        // 冻死短射守卫：无流温度取 Tait 转变温度 b5（内置 PP 为 400 K）
+        assert!(dict.contains("freezeOffTemperature  400.0000"), "{dict}");
         assert!(dict.contains("freezeOffFraction  0.0100"));
         // 保压斜坡：注射 1 s × 0.96 → 0.048 夹到下限 0.05，避免切换瞬间单步阶跃
         assert!(dict.contains("pressureRamp  0.0500"), "{dict}");
