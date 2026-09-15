@@ -48,6 +48,16 @@
    - 报告逐项给出参考值、Kairos 值、绝对差、相对差和误差来源分类。
 
 ## 当前实现进度
+- CLI 已新增 `dual-domain export`，可从 STL 或 sample-box 生成 `dual-domain/v1` JSON，供上游 moldingFoam 集成测试。
+
+示例：
+
+```bash
+cargo run -p kairos-cli -- dual-domain export \
+  --stl report/mug-moldflow/mug.stl \
+  --out /private/tmp/mug-dual-domain-v1.json --json
+```
+
 ## 路线确认（2026-09-16）
 
 moldingFoam v1.1.0 当前求解器通过 `foamRun` 消费三维 OpenFOAM 体网格（`polyMesh`、体心场和体单元离散），源码没有壳单元、Dual Domain 双面节点或中面厚度场的输入契约。现有 `DualDomainMesh` 是 Kairos 前处理产物，不能直接写成现有 `physicalProperties`/`polyMesh` 并声称等价。

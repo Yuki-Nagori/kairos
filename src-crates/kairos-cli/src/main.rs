@@ -44,6 +44,11 @@ enum Commands {
         #[command(subcommand)]
         action: MeshAction,
     },
+    /// 双域/中面网格契约导出
+    DualDomain {
+        #[command(subcommand)]
+        action: DualDomainAction,
+    },
     /// 求解（本机 foamRun；虚拟机执行属桌面端能力）
     Solve {
         #[command(subcommand)]
@@ -93,6 +98,19 @@ enum MaterialAction {
         pvt: String,
         #[arg(long)]
         output: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum DualDomainAction {
+    /// 从 STL 生成并导出 dual-domain/v1 输入 JSON
+    Export {
+        #[arg(long)]
+        stl: Option<String>,
+        #[arg(long)]
+        sample_box: bool,
+        #[arg(long)]
+        out: String,
     },
 }
 
@@ -350,6 +368,7 @@ fn run(command: Commands, json: bool) -> kairos_core::error::Result<()> {
     match command {
         Commands::Project { action } => run_project(action, json),
         Commands::Mesh { action } => run_mesh(action, json),
+        Commands::DualDomain { action } => run_dual_domain(action, json),
         Commands::Solve { action } => run_solve(action, json),
         Commands::Results { action } => run_results(action, json),
         Commands::Doe { action } => run_doe(action, json),
@@ -626,6 +645,55 @@ fn run_mesh(action: MeshAction, json: bool) -> kairos_core::error::Result<()> {
                     "网格完成（{engine}）：{} 节点 / {} 四面体",
                     volume.nodes.len(),
                     volume.tets.len()
+                );
+            }
+            Ok(())
+        }
+    }
+}
+
+fn run_dual_domain(action: DualDomainAction, json: bool) -> kairos_core::error::Result<()> {
+    match action {
+        DualDomainAction::Export {
+            stl,
+            sample_box,
+            out,
+        } => {
+            let mesh = match (sample_box, stl) {
+                (true, _) => kairos_core::models::geometry::TriangleMesh::sample_box(10.0),
+                (false, Some(path)) => geometry::parse_stl_file(Path::new(&path))?,
+                (false, None) => {
+                    return Err(KairosError::validation(
+                        "必须指定 --sample-box 或 --stl <路径>。",
+                    ));
+                }
+            };
+            let dual = services::dualdomain::generate(
+                &mesh,
+                &[],
+                &services::dualdomain::DualDomainParams::default(),
+            )?;
+            let input = services::dualdomain::solver_input(&dual)?;
+            let bytes = serde_json::to_vec_pretty(&input)
+                .map_err(|error| KairosError::internal(format!("双域输入序列化失败：{error}")))?;
+            fs::write(&out, bytes)
+                .map_err(|error| KairosError::io(format!("写入双域输入失败：{out}: {error}")))?;
+            if json {
+                println!(
+                    "{}",
+                    serde_json::json!({
+                        "path": out,
+                        "schemaVersion": input.schema_version,
+                        "nodeCount": input.nodes.len(),
+                        "triangleCount": input.triangles.len(),
+                    })
+                );
+            } else {
+                println!(
+                    "双域输入已写入：{}（{} 节点 / {} 三角形）",
+                    out,
+                    input.nodes.len(),
+                    input.triangles.len()
                 );
             }
             Ok(())

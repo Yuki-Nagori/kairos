@@ -570,3 +570,5 @@
 - 2026-09-16 00:50 | T102 路线确认 | 核对 moldingFoam v1.1.0 仅消费三维体网格；冻结 DualDomainSolverInput 契约与显式降维 solver 扩展路线，禁止静默回退。
 
 - 2026-09-16 01:00 | T102 输入契约 | 新增版本化 `DualDomainSolverInput` DTO、单位字段、拓扑转换和 Rust/IPC 契约测试，供上游 moldingFoam 降维模块消费。
+
+- 2026-09-16 01:20 | T102 上游输入导出 | CLI 新增 `dual-domain export`，可从 STL 生成版本化 `dual-domain/v1` JSON，供 moldingFoam 上游模块直接联调。
