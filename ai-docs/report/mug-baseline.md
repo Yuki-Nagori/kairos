@@ -99,3 +99,4 @@ assessment:
 | --- | --- | --- |
 | 2026-09-15 | 建立报告骨架，冻结 Mug 参考工况与实验对照矩阵 | 等待 T101 材料闭环和 T100 有效 baseline |
 | 2026-09-15 | 本地受控曲线插入测试：250 个 PVT 点、200 个黏度点完成解析；原始内置 Tait 模板因压力尺度不兼容被拒绝，随后用明确标注的合成 Tait 模板验证 `material fit` 输出链路 | 插入链路通过；不能把合成模板结果当作 Generic PP 材料结论 |
+| 2026-09-15 | 使用本地拟合材料生成未求解 moldingFoam case，核对 `physicalProperties.melt` 与 `momentumTransport` 的 Cross-WLF/Tait 键和值；记录两个字典 SHA-256 | case 配置接线通过，尚未代表 solver 运行时数值通过 |
