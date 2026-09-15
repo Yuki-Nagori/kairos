@@ -155,7 +155,7 @@ describe("MaterialsPanel", () => {
     // 性质表行（键值 + 单位）。
     expect(text).toContain("τ*");
     expect(text).toContain("20000 Pa");
-    expect(text).toContain("0.0013871717802908978 m³/kg");
+    expect(text).toContain("0.00128 m³/kg");
     expect(text).toContain("418 K");
     expect(text).toContain("300 K");
     expect(text).toContain("1900 J/(kg·K)");
