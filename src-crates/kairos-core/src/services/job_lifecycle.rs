@@ -105,12 +105,17 @@ impl JobLifecycle {
             }
             (Cancelling, CancelConfirmed) => self.phase = Cancelled,
             (Unknown, RemoteRecovered) => self.phase = Running,
+            (Unknown, RequestCancel) => self.phase = Cancelling,
             (Unknown, CancelConfirmed) => self.phase = Cancelled,
             (Unknown, Failed(message)) => {
                 self.phase = FailedPhase;
                 self.message = Some(message);
             }
-            (Preparing, Failed(message)) | (Starting, Failed(message)) => {
+            (Preparing, Failed(message)) => {
+                self.phase = FailedPhase;
+                self.message = Some(message);
+            }
+            (Starting, Failed(message)) => {
                 self.phase = FailedPhase;
                 self.message = Some(message);
             }
@@ -189,6 +194,12 @@ mod tests {
             .apply(RunEvent::Failed("准备失败".into()))
             .unwrap();
         assert_eq!(preparing.phase(), RunPhase::Failed);
+
+        let mut starting = JobLifecycle::new();
+        starting.apply(RunEvent::BeginPreparation).unwrap();
+        starting.apply(RunEvent::Prepared).unwrap();
+        starting.apply(RunEvent::Failed("启动失败".into())).unwrap();
+        assert_eq!(starting.phase(), RunPhase::Failed);
     }
 
     #[test]
@@ -215,6 +226,10 @@ mod tests {
         confirmed
             .apply(RunEvent::RemoteUnknown("再次断联".into()))
             .unwrap();
+        let mut direct_confirm = confirmed.clone();
+        direct_confirm.apply(RunEvent::CancelConfirmed).unwrap();
+        assert_eq!(direct_confirm.phase(), RunPhase::Cancelled);
+        confirmed.apply(RunEvent::RequestCancel).unwrap();
         confirmed.apply(RunEvent::CancelConfirmed).unwrap();
         assert_eq!(confirmed.phase(), RunPhase::Cancelled);
     }

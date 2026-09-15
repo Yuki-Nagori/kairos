@@ -16,6 +16,7 @@ use std::thread;
 use kairos_core::error::{KairosError, Result};
 use kairos_core::models::jobs::Job;
 use kairos_core::models::vm::{VmProviderKind, VmState};
+use kairos_core::services::job_lifecycle::{JobLifecycle, RunEvent};
 use kairos_core::services::jobs as job_logic;
 use kairos_core::services::jobs::SchedulerLimits;
 use kairos_core::services::moldingfoam;
@@ -37,6 +38,8 @@ const VM_READY_INTERVAL_S: u64 = 2;
 
 struct Inner {
     jobs: Vec<Job>,
+    /// 与 UI 的粗粒度 JobStatus 并行保存 runner 细节，便于区分「取消请求」与「已确认退出」。
+    lifecycles: HashMap<String, JobLifecycle>,
     cancellations: HashMap<String, Arc<AtomicBool>>,
     channels: HashMap<String, Channel<String>>,
     limits: SchedulerLimits,
@@ -60,6 +63,7 @@ impl Default for JobScheduler {
             managed_path: None,
             inner: Arc::new(Mutex::new(Inner {
                 jobs: Vec::new(),
+                lifecycles: HashMap::new(),
                 cancellations: HashMap::new(),
                 channels: HashMap::new(),
                 limits: SchedulerLimits::new(2, job_logic::MAX_JOB_CORES),
@@ -403,6 +407,17 @@ impl JobScheduler {
         Arc::clone(&self.inner)
     }
 
+    fn lifecycle_event(inner: &Arc<Mutex<Inner>>, job_id: &str, event: RunEvent) -> Result<()> {
+        let mut guard = inner
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let lifecycle = guard
+            .lifecycles
+            .get_mut(job_id)
+            .ok_or_else(|| KairosError::not_found(format!("作业生命周期不存在：{job_id}")))?;
+        lifecycle.apply(event)
+    }
+
     /// 提升排队作业并为其生成运行线程。作业线程内先做 VM tar 复制（可能耗时
     /// 数分钟）再拉起求解进程。提升过程只登记状态与线程，准备和求解不占用调度锁。
     fn promote_and_spawn(&self, now: u64) {
@@ -414,6 +429,9 @@ impl JobScheduler {
                 inner
                     .cancellations
                     .insert(id.clone(), Arc::new(AtomicBool::new(false)));
+                if let Some(lifecycle) = inner.lifecycles.get_mut(id) {
+                    let _ = lifecycle.apply(RunEvent::BeginPreparation);
+                }
             }
             started
         };
@@ -441,6 +459,12 @@ impl JobScheduler {
                         .and_then(|()| copy_case_into_vm(&case_dir, context.vm_shell.as_deref()));
                     match staged {
                         Ok(Some(vm_case)) => {
+                            if let Err(error) =
+                                JobScheduler::lifecycle_event(&inner, &job_id, RunEvent::Prepared)
+                            {
+                                fail_and_promote(inner, job_id, error.message(), context);
+                                return;
+                            }
                             run_job_detached(inner, job_id, &vm_case, cores, case_dir, context)
                         }
                         Ok(None) => fail_and_promote(
@@ -457,6 +481,7 @@ impl JobScheduler {
                     .and_then(|()| copy_case_into_vm(&case_dir, context.vm_shell.as_deref()))
                     .and_then(|vm_case| {
                         check_cancelled(&inner, &job_id)?;
+                        JobScheduler::lifecycle_event(&inner, &job_id, RunEvent::Prepared)?;
                         spawn_run_script(NativeRun {
                             case_dir: &case_dir,
                             vm_case: vm_case.as_deref(),
@@ -467,6 +492,12 @@ impl JobScheduler {
                     });
                 match staged {
                     Ok((child, vm_case)) => {
+                        if let Err(error) =
+                            JobScheduler::lifecycle_event(&inner, &job_id, RunEvent::Started)
+                        {
+                            fail_and_promote(inner, job_id, error.message(), context);
+                            return;
+                        }
                         run_job_body(inner, job_id, child, case_dir, vm_case, context)
                     }
                     Err(e) => fail_and_promote(inner, job_id, e.message(), context),
@@ -485,8 +516,14 @@ fn fail_and_promote(inner: Arc<Mutex<Inner>>, job_id: String, message: &str, con
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         if cancelled(&guard, &job_id) {
+            if let Some(lifecycle) = guard.lifecycles.get_mut(&job_id) {
+                let _ = lifecycle.apply(RunEvent::CancelConfirmed);
+            }
             let _ = job_logic::cancel(&mut guard.jobs, &job_id, now);
         } else {
+            if let Some(lifecycle) = guard.lifecycles.get_mut(&job_id) {
+                let _ = lifecycle.apply(RunEvent::Failed(message.to_string()));
+            }
             let _ = job_logic::mark_failed(&mut guard.jobs, &job_id, message, now);
         }
         guard.cancellations.remove(&job_id);
@@ -724,6 +761,10 @@ fn run_job_detached(
         fail_and_promote(inner, job_id, e.message(), context);
         return;
     }
+    if let Err(error) = JobScheduler::lifecycle_event(&inner, &job_id, RunEvent::Started) {
+        fail_and_promote(inner, job_id, error.message(), context);
+        return;
+    }
     let mut solver_aborted = false;
     let mut offset = 0u64;
     let mut exit_code: Option<i32> = None;
@@ -755,6 +796,11 @@ fn run_job_detached(
                     &format!("── 日志回读失败（{failures}/3）：{}", e.message()),
                 );
                 if failures >= 3 {
+                    let _ = JobScheduler::lifecycle_event(
+                        &inner,
+                        &job_id,
+                        RunEvent::RemoteUnknown(e.message().to_string()),
+                    );
                     fail_and_promote(
                         inner,
                         job_id,
@@ -839,13 +885,22 @@ fn finish_job(
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         if cancelled(&guard, &job_id) {
+            if let Some(lifecycle) = guard.lifecycles.get_mut(&job_id) {
+                let _ = lifecycle.apply(RunEvent::CancelConfirmed);
+            }
             let _ = job_logic::cancel(&mut guard.jobs, &job_id, now);
         } else {
             match &failure {
                 None => {
+                    if let Some(lifecycle) = guard.lifecycles.get_mut(&job_id) {
+                        let _ = lifecycle.apply(RunEvent::Succeeded);
+                    }
                     let _ = job_logic::mark_done(&mut guard.jobs, &job_id, now);
                 }
                 Some(message) => {
+                    if let Some(lifecycle) = guard.lifecycles.get_mut(&job_id) {
+                        let _ = lifecycle.apply(RunEvent::Failed(message.clone()));
+                    }
                     let _ = job_logic::mark_failed(&mut guard.jobs, &job_id, message, now);
                 }
             }
@@ -896,6 +951,7 @@ pub fn submit_job(
             return Err(KairosError::validation("该目录已有排队或运行中的作业。"));
         }
         job_logic::submit(&mut inner.jobs, id.clone(), study_id, case_dir, cores, now)?;
+        inner.lifecycles.insert(id.clone(), JobLifecycle::new());
         inner.channels.insert(id.clone(), progress);
         // 提升只发生在 promote_and_spawn 里（提升与起线程必须同一处）：
         // 在这里先提升会把作业置成 Running 却不带线程，随后 promote_and_spawn
@@ -922,8 +978,14 @@ pub fn cancel_job(scheduler: State<'_, JobScheduler>, job_id: String) -> Result<
         .ok_or_else(|| KairosError::not_found("作业不存在。"))?
         .status;
     if status == kairos_core::models::jobs::JobStatus::Running {
+        if let Some(lifecycle) = inner.lifecycles.get_mut(&job_id) {
+            lifecycle.apply(RunEvent::RequestCancel)?;
+        }
         inner.cancellations[&job_id].store(true, Ordering::SeqCst);
         return Ok(());
+    }
+    if let Some(lifecycle) = inner.lifecycles.get_mut(&job_id) {
+        lifecycle.apply(RunEvent::RequestCancel)?;
     }
     job_logic::cancel(&mut inner.jobs, &job_id, now_ms())?;
     inner.channels.remove(&job_id);
