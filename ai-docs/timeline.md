@@ -549,3 +549,4 @@
 - 2026-09-15 22:00 | T101 Tait 平滑过渡 | 参考 CAE Specification 增加固/熔态 smoothstep 过渡，避免转变温度附近比容不连续；golden 与异常输入测试通过。
 - 2026-09-15 22:15 | T101 solver 字典导出 | `material fit` 额外生成 moldingFoam SI 材料字典，固定 `equationOfState` 与 `CrossWlfCoeffs` 键名，供 case 生成器和跨语言 golden 对照使用。
 - 2026-09-15 22:30 | T101 case 参数接线 | moldingFoam case 生成器改用材料 DTO 的 `b3s/b4m/b4s/b6/C/smoothBand`，移除原先硬编码的 `b4/b6/C/smoothBand`，并通过 moldingfoam 测试。
+- 2026-09-15 22:45 | T101 VM 版本阻塞 | 新 case 在 Multipass VM 被旧版 solver 以缺少 `b4` 拒绝；不添加兼容键，要求先升级 GUI/VM 的 moldingFoam 部署后再做运行时 golden 验收。

@@ -36,6 +36,7 @@
 - 两端必须共享参数命名、单位和公式说明，并用固定参数的 golden 点测试校核黏度/比容结果，防止参考实现与运行时实现漂移。
 - 当前 core 已固定 Cross-WLF/Tait golden 点；moldingFoam 运行时对照和 Mug 实际回归仍待完成。
 - case 生成器已改为写出 `b3s/b4m/b4s/b6/C/smoothBand`，不再把 Tait 固态参数或压力项硬编码为常量。
+- 当前 GUI/Multipass VM 仍运行旧版 Tait 实现并要求 `b4`，与规范字典不兼容；按要求不保留兼容键，必须先升级 VM 部署再进行 solver golden 验收。
 - 本地受控曲线插入测试已验证解析和输出链路；原始内置 Tait 模板不兼容时会明确失败，避免静默生成伪拟合结果。
 
 ### Tait solver parity audit
