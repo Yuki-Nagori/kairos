@@ -1,8 +1,10 @@
 //! 通用材料曲线输入：CSV 解析、单位归一和数据质量校验。
 
 use csv::StringRecord;
+use serde::{Deserialize, Serialize};
 
 use crate::error::{KairosError, Result};
+use crate::models::material::CrossWlf;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct PvtPoint {
@@ -16,6 +18,85 @@ pub struct ViscosityPoint {
     pub temperature_k: f64,
     pub shear_rate_per_s: f64,
     pub viscosity_pa_s: f64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResidualSummary {
+    pub count: usize,
+    pub max_absolute_pa_s: f64,
+    pub rmse_pa_s: f64,
+    pub max_absolute_log10: f64,
+    pub rmse_log10: f64,
+}
+
+/// 使用 Cross-WLF 参数计算零压力下的表观黏度（Pa·s）。
+pub fn cross_wlf_viscosity(
+    model: &CrossWlf,
+    temperature_k: f64,
+    shear_rate_per_s: f64,
+) -> Result<f64> {
+    if !temperature_k.is_finite() || temperature_k <= 0.0 {
+        return Err(KairosError::validation("Cross-WLF 温度必须为正有限数值。"));
+    }
+    if !shear_rate_per_s.is_finite() || shear_rate_per_s <= 0.0 {
+        return Err(KairosError::validation(
+            "Cross-WLF 剪切速率必须为正有限数值。",
+        ));
+    }
+    let denominator = model.a2 + temperature_k - model.d2;
+    if !denominator.is_finite() || denominator.abs() < f64::EPSILON {
+        return Err(KairosError::validation("Cross-WLF 温度移位分母不能为零。"));
+    }
+    let shift = (-model.a1 * (temperature_k - model.d2) / denominator).exp();
+    let zero_shear = model.d1 * shift;
+    if !zero_shear.is_finite() || zero_shear <= 0.0 {
+        return Err(KairosError::validation(
+            "Cross-WLF 零剪切黏度必须为正有限数值。",
+        ));
+    }
+    let ratio = zero_shear * shear_rate_per_s / model.tau_star;
+    let viscosity = zero_shear / (1.0 + ratio.powf(1.0 - model.n));
+    if !viscosity.is_finite() || viscosity <= 0.0 {
+        return Err(KairosError::validation(
+            "Cross-WLF 计算结果必须为正有限数值。",
+        ));
+    }
+    Ok(viscosity)
+}
+
+pub fn evaluate_cross_wlf(model: &CrossWlf, points: &[ViscosityPoint]) -> Result<ResidualSummary> {
+    if points.is_empty() {
+        return Err(KairosError::validation(
+            "Cross-WLF 残差评估至少需要一个数据点。",
+        ));
+    }
+    let mut max_absolute_pa_s: f64 = 0.0;
+    let mut sum_squared = 0.0;
+    let mut max_absolute_log10: f64 = 0.0;
+    let mut sum_squared_log10 = 0.0;
+    for point in points {
+        if !point.viscosity_pa_s.is_finite() || point.viscosity_pa_s <= 0.0 {
+            return Err(KairosError::validation(
+                "残差评估中的实测黏度必须为正有限数值。",
+            ));
+        }
+        let predicted = cross_wlf_viscosity(model, point.temperature_k, point.shear_rate_per_s)?;
+        let absolute = (predicted - point.viscosity_pa_s).abs();
+        let log10_error = (predicted.log10() - point.viscosity_pa_s.log10()).abs();
+        max_absolute_pa_s = max_absolute_pa_s.max(absolute);
+        max_absolute_log10 = max_absolute_log10.max(log10_error);
+        sum_squared += absolute * absolute;
+        sum_squared_log10 += log10_error * log10_error;
+    }
+    let count = points.len();
+    Ok(ResidualSummary {
+        count,
+        max_absolute_pa_s,
+        rmse_pa_s: (sum_squared / count as f64).sqrt(),
+        max_absolute_log10,
+        rmse_log10: (sum_squared_log10 / count as f64).sqrt(),
+    })
 }
 
 const PVT_HEADER: [&str; 6] = [
@@ -352,5 +433,58 @@ mod tests {
             },
         ];
         assert!(validate_viscosity(&mut duplicate_viscosity).is_err());
+    }
+
+    #[test]
+    fn cross_wlf_prediction_and_residual_summary_are_deterministic() {
+        let model = CrossWlf {
+            n: 0.3,
+            tau_star: 10_000.0,
+            d1: 1_000.0,
+            d2: 263.15,
+            d3: 0.0,
+            a1: 30.0,
+            a2: 50.0,
+        };
+        let predicted = cross_wlf_viscosity(&model, 493.15, 10.0).unwrap();
+        assert!(predicted.is_finite() && predicted > 0.0);
+        let points = vec![ViscosityPoint {
+            temperature_k: 493.15,
+            shear_rate_per_s: 10.0,
+            viscosity_pa_s: predicted,
+        }];
+        let summary = evaluate_cross_wlf(&model, &points).unwrap();
+        assert_eq!(summary.count, 1);
+        assert!(summary.max_absolute_pa_s.abs() < 1e-12);
+        assert!(summary.rmse_log10.abs() < 1e-12);
+    }
+
+    #[test]
+    fn cross_wlf_rejects_invalid_inputs_and_empty_residuals() {
+        let model = CrossWlf {
+            n: 0.3,
+            tau_star: 1.0,
+            d1: 1.0,
+            d2: 1.0,
+            d3: 0.0,
+            a1: 1.0,
+            a2: -1.0,
+        };
+        assert!(cross_wlf_viscosity(&model, 0.0, 1.0).is_err());
+        assert!(cross_wlf_viscosity(&model, 2.0, 0.0).is_err());
+        assert!(cross_wlf_viscosity(&model, 2.0, 1.0).is_err());
+        let mut non_finite_zero_shear = model.clone();
+        non_finite_zero_shear.d1 = f64::INFINITY;
+        assert!(cross_wlf_viscosity(&non_finite_zero_shear, 3.0, 1.0).is_err());
+        let mut non_finite_result = model.clone();
+        non_finite_result.tau_star = -1.0;
+        assert!(cross_wlf_viscosity(&non_finite_result, 3.0, 1.0).is_err());
+        assert!(evaluate_cross_wlf(&model, &[]).is_err());
+        let invalid_point = [ViscosityPoint {
+            temperature_k: 300.0,
+            shear_rate_per_s: 1.0,
+            viscosity_pa_s: f64::NAN,
+        }];
+        assert!(evaluate_cross_wlf(&model, &invalid_point).is_err());
     }
 }
