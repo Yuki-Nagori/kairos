@@ -37,13 +37,25 @@ export function useGeometryPanel() {
   }
   const meshForms = reactive<Record<string, MeshFormState>>({});
 
+  /**
+   * 建议网格目标尺寸（mm）：几何最大边 ÷ 20，**下限截到 2.0mm**。
+   *
+   * 下限的来源是实测：内置样例（10mm 立方体）按 ÷20 得到 0.5mm ≈ 4 万四面体，
+   * 虚拟机里单次求解 20 分钟量级——首轮试用要的是分钟内的反馈。40mm 以上的
+   * 真实件建议值本就 ≥2mm，完全不受影响。
+   */
+  const MIN_SUGGESTED_SIZE_MM = 2.0;
+  function suggestedSize(geometry: GeometrySummary): string {
+    return Math.max(Math.max(...geometry.size) / 20, MIN_SUGGESTED_SIZE_MM).toPrecision(3);
+  }
+
   watch(
     () => geometry.geometries,
     (geometries) => {
       for (const geometry of geometries) {
         if (meshForms[geometry.geometryId] === undefined) {
           meshForms[geometry.geometryId] = {
-            size: (Math.max(...geometry.size) / 20).toPrecision(3),
+            size: suggestedSize(geometry),
             engine: "voxel",
             boundaryLayers: "",
           };
@@ -59,7 +71,7 @@ export function useGeometryPanel() {
       return existing;
     }
     const created: MeshFormState = {
-      size: (Math.max(...geometry.size) / 20).toPrecision(3),
+      size: suggestedSize(geometry),
       engine: "voxel",
       boundaryLayers: "",
     };

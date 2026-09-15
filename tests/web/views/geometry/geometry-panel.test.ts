@@ -126,8 +126,9 @@ describe("GeometryPanel", () => {
     expect(wrapper.text()).toContain("12 三角形 · 10.00 × 20.00 × 30.00 mm");
     expect(wrapper.text()).toContain("网格健康");
     expect(wrapper.find("p.text-emerald-400").exists()).toBe(true);
-    // 表单初始值：max(10,20,30) / 20 = 1.5 → "1.50"。
-    expect(wrapper.find("input").element.getAttribute("value")).toBe("1.50");
+    // 表单初始值：max(10,20,30) / 20 = 1.5，但建议尺寸有 2.0mm 下限 → "2.00"
+    // （下限是为了让样例这类小件第一轮求解落在秒级，见 useGeometryPanel 的说明）。
+    expect(wrapper.find("input").element.getAttribute("value")).toBe("2.00");
     // 未生成网格时报告行给出引导语。
     expect(wrapper.text()).toContain("划分体积网格供求解使用。");
   });
@@ -317,7 +318,7 @@ describe("GeometryPanel", () => {
     await findButton(wrapper, "生成体积网格").trigger("click");
     await flushPromises();
 
-    expect(generateVolumeMesh).toHaveBeenCalledWith("geo-1", 1.5, {
+    expect(generateVolumeMesh).toHaveBeenCalledWith("geo-1", 2, {
       mode: "boundaryLayers",
       layers: 2,
       ratio: 0.5,
@@ -334,7 +335,7 @@ describe("GeometryPanel", () => {
     await findButton(wrapper, "生成体积网格").trigger("click");
     await flushPromises();
 
-    expect(generateGmshMesh).toHaveBeenCalledWith("geo-1", 1.5);
+    expect(generateGmshMesh).toHaveBeenCalledWith("geo-1", 2);
     expect(generateVolumeMesh).not.toHaveBeenCalled();
   });
 
@@ -455,7 +456,7 @@ describe("GeometryPanel", () => {
     expect(estimateVolumeMesh).not.toHaveBeenCalled();
 
     await vi.advanceTimersByTimeAsync(300);
-    expect(estimateVolumeMesh).toHaveBeenCalledWith("geo-1", 1.5, undefined, "voxel");
+    expect(estimateVolumeMesh).toHaveBeenCalledWith("geo-1", 2, undefined, "voxel");
     expect(wrapper.text()).toContain("约 40 单元（包围盒上限）");
 
     // 连续编辑只保留最后一次：防抖窗口内再改，计时器被清掉，只发一次末次尺寸的请求。
@@ -497,7 +498,7 @@ describe("GeometryPanel", () => {
     vi.mocked(estimateVolumeMesh).mockClear();
     await wrapper.find("select").setValue("gmsh");
     await vi.advanceTimersByTimeAsync(300);
-    expect(estimateVolumeMesh).toHaveBeenCalledWith("geo-1", 1.5, undefined, "gmsh");
+    expect(estimateVolumeMesh).toHaveBeenCalledWith("geo-1", 2, undefined, "gmsh");
     await nextTick();
     expect(wrapper.text()).toContain("约 40 单元（体积粗估）");
 
@@ -509,7 +510,7 @@ describe("GeometryPanel", () => {
     await vi.advanceTimersByTimeAsync(300);
     expect(estimateVolumeMesh).toHaveBeenLastCalledWith(
       "geo-1",
-      1.5,
+      2,
       {
         mode: "boundaryLayers",
         layers: 2,
@@ -542,8 +543,12 @@ describe("GeometryPanel", () => {
     // 直接调用 composable：挂载前 watch(immediate) 遇到空列表不建表。
     const panel = useGeometryPanel();
     geometry.geometries = [geometryFixture()]; // 同步赋值，watcher 尚未 flush
-    // rows 首次求值时 watch 还没跑 → meshForm 现场建表（建议尺寸）。
-    expect(panel.rows.value[0]?.form.size).toBe("1.50");
+    // rows 首次求值时 watch 还没跑 → meshForm 现场建表（建议尺寸：÷20 后受 2.0mm 下限约束）。
+    expect(panel.rows.value[0]?.form.size).toBe("2.00");
+    // 大件不受下限影响：100mm 的最大边 → 100/20 = 5.00
+    geometry.geometries = [{ ...geometryFixture(), geometryId: "geo-big", size: [100, 60, 40] }];
+    expect(panel.rows.value[0]?.form.size).toBe("5.00");
+    geometry.geometries = [geometryFixture()];
     expect(panel.rows.value[0]?.form.engine).toBe("voxel");
     // 列表重建（新数组引用）→ rows 重算 → meshForm 复用既有表单（用户编辑不回填）。
     panel.rows.value[0]!.form.size = "9";
