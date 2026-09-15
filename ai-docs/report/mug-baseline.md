@@ -139,3 +139,19 @@ assessment:
 ### moldingFoam 实验结果摘要（2026-09-15）
 
 Kairos 生成的 `PP-REF-01` case 已在 moldingFoam v1.1.0 arm64 / OpenFOAM 14 VM 中真实运行：日志选择 `CrossWlf` 与 `Tait`，时间推进到 `2 s`，以 `End` 收尾，退出码为 `0`。该实验验证了默认 PP 材料、Tait 字典和 solver 的运行链路；由于当前 case 是 Kairos sample-box 工况，不能把它当作 Moldflow Mug 的逐点数值结论。
+
+### Mug STL 单点实验命令（运行中）
+
+```bash
+cargo run -p kairos-cli -- doe run --plan full \
+  --factor '熔体温度=220' --factor '注射时间=5.5' \
+  --stl report/mug-moldflow/mug.stl \
+  --target-size 5.0 --cores 1 \
+  --injection-time 5.5 \
+  --packing-pressure-mpa 27.6282 --packing-time-s 20 \
+  --out-dir /private/tmp/t100-mug-full \
+  --batch mug-baseline-full --solve --vm \
+  --material report/mug-moldflow/material-input/generic-pp-fitted-v3.json --json
+```
+
+该命令使用 `full` 计划执行单点（`orthogonal` 计划要求每个因子三个水平），GUI 同源 Multipass VM 中的 moldingFoam v1.1.0 负责实际求解。case 的 `endTime=11 s`；截至记录时物理时间约 `1.45 s`、墙钟约 `235 s`，当前运行预计总耗时约 27 分钟。完成后补写退出码、填充时间、压力和质量预算结果。
