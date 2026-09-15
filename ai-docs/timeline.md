@@ -528,3 +528,4 @@
 - 2026-09-15 17:50 | T100 GUI/CLI 环境统一 | CLI 新增 `doe run --solve --vm`，复用 GUI 已部署的 Multipass `kairos:~/moldingfoam-env`，完成打包、传输、求解和结果回传编排；本机复验因 Multipass socket 权限阻塞并留档。
 - 2026-09-15 17:42 | T93/T100 真实回填 | 在已部署的 Multipass `kairos` VM 中以 moldingFoam v1.1.0 完成 9/9 个 DOE 参数点真实求解，成功回传结果与时间戳；T93 剩余自动寻优迭代与失败点惩罚汇总。
 - 2026-09-15 18:02 | T100 Mug baseline 口径 | 从 `report/mug-moldflow` 固定模型、工艺、参考指标与材料字段，补充 Generic PP 公开典型值的合理性检查；4 mm 体积网格试跑推进至 0.838 s 后因成本停止，原始日志留档，不计入对比通过。
+- 2026-09-15 18:15 | T101 立项 | 新增 Generic PP 自定义材料任务：留档用户 PVT/黏度原始曲线，拟合并回代验证 Tait 与 Cross-WLF 参数，独立导入材料后重新生成 Mug baseline。

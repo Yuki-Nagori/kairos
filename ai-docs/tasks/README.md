@@ -129,6 +129,7 @@
 | T93  | [T93-process-optimization.md](T93-process-optimization.md)                                   | 工艺参数自动寻优                                | 进行中：core 优化器与 `optimize plan` 已完成；真实求解回填循环待实现                                    |
 | T99  | [T99-runtime-and-result-hardening.md](T99-runtime-and-result-hardening.md)                   | 运行生命周期与大结果处理优化                    | 进行中：生命周期、缓存、统计、并发与基准已完成；T93 回填闭环仍为阻塞项                                  |
 | T100 | [T100-solver-runtime-v110-validation.md](T100-solver-runtime-v110-validation.md)             | 求解器运行时 v1.1.0 真实 CLI 验证与原始留档     | 进行中：每次运行保留原始输出与毫秒时间戳，参考结果对照待执行                                            |
+| T101 | [T101-generic-pp-material-fit.md](T101-generic-pp-material-fit.md)                           | Generic PP 自定义材料拟合与 Mug baseline        | 待开工：PVT/Tait、Cross-WLF 拟合验证与 Mug 真实 baseline 重跑                                           |
 | T94  | [T94-gui-e2e-verification.md](T94-gui-e2e-verification.md)                                   | GUI 端到端验证（提交 → 回传 → VM 自动关闭）     | 待开工；需人在界面展开求解面板后跑（AX 拿不到折叠面板的输入框）；求解链路本身先走 CLI 通道              |
 | T95  | [T95-dependency-audit.md](T95-dependency-audit.md)                                           | 依赖取向审查：用现成库 vs 自造轮子              | 进行中：repair 向量与色标基础收编已完成；剩图表/前端数学评估、摘要展示与证据补齐                        |
 | T97  | [T97-solver-lib-duplication-guard.md](T97-solver-lib-duplication-guard.md)                   | 求解环境库重复守卫 + 部署前清理                 | 进行中：部署清理与 core/原生库探测已完成；真实 VM 坏状态验收待下一批                                    |
