@@ -126,14 +126,14 @@ cargo run -p kairos-cli -- doe run --plan full \
   --stl report/mug-moldflow/mug.stl \
   --target-size 5.0 --cores 5 \
   --injection-time 5.5 \
-  --packing-pressure-mpa 27.6282 \
-  --packing-time-s 315.0797 \
+  --packing-pressure-curve '0=0.9229,0.2=27.6282,315.0797=27.6282' \
+  --cooling-time-s 20 \
   --out-dir /private/tmp/kairos-mug-baseline \
   --batch mug-baseline-220c-50c-5p5s-5c \
   --solve --vm --json
 ```
 
-`setting.txt` 中的初始保压 `0.9229 MPa`、0.2 s 压力爬升和独立 20 s 冷却段目前没有对应 CLI 参数；在这些参数接入前，结果只能标记为工艺近似，不能称为完全对齐。Kairos 使用体积网格，参考结果使用 Dual Domain，也不能逐点等价。
+CLI 现已支持完整保压曲线和独立冷却时间，命令与 `setting.txt` 的温度、注射、保压曲线和冷却时间输入一致。Kairos 使用体积网格，参考结果使用 Dual Domain；网格和边界仍不同，结果不能逐点等价。
 
 ## 7. 已执行运行
 

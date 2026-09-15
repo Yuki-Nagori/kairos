@@ -158,9 +158,15 @@ enum DoeAction {
         /// 保压曲线起点压力（MPa）；用于复现固定工艺基线
         #[arg(long)]
         packing_pressure_mpa: Option<f64>,
+        /// 完整保压曲线，形如 `0=0.9229,0.2=27.6282,315.0797=27.6282`（s=MPa）
+        #[arg(long)]
+        packing_pressure_curve: Option<String>,
         /// 保压时间（s）；用于复现固定工艺基线
         #[arg(long)]
         packing_time_s: Option<f64>,
+        /// 冷却时间（s）
+        #[arg(long)]
+        cooling_time_s: Option<f64>,
         /// 批次名（缺省 = 因子名以短横连接）
         #[arg(long)]
         batch: Option<String>,
@@ -636,7 +642,9 @@ fn run_doe(action: DoeAction, json: bool) -> kairos_core::error::Result<()> {
             target_size,
             injection_time_s,
             packing_pressure_mpa,
+            packing_pressure_curve,
             packing_time_s,
+            cooling_time_s,
             batch,
             solve,
             vm,
@@ -651,7 +659,9 @@ fn run_doe(action: DoeAction, json: bool) -> kairos_core::error::Result<()> {
             target_size,
             injection_time_s,
             packing_pressure_mpa,
+            packing_pressure_curve,
             packing_time_s,
+            cooling_time_s,
             batch,
             solve,
             vm,
@@ -706,6 +716,35 @@ fn load_material(
     }
 }
 
+fn parse_pressure_curve(raw: &str) -> kairos_core::error::Result<Vec<(f64, f64)>> {
+    let mut points = Vec::new();
+    for item in raw.split(',') {
+        let (time, pressure) = item
+            .split_once('=')
+            .ok_or_else(|| KairosError::validation("保压曲线点必须使用 time=pressure 格式。"))?;
+        let time = time
+            .trim()
+            .parse::<f64>()
+            .map_err(|_| KairosError::validation("保压曲线时间不是有效数字。"))?;
+        let pressure = pressure
+            .trim()
+            .parse::<f64>()
+            .map_err(|_| KairosError::validation("保压曲线压力不是有效数字。"))?;
+        points.push((time, pressure));
+    }
+    if points.is_empty()
+        || points.iter().any(|(time, pressure)| {
+            !time.is_finite() || !pressure.is_finite() || *time < 0.0 || *pressure < 0.0
+        })
+        || points.windows(2).any(|pair| pair[1].0 <= pair[0].0)
+    {
+        return Err(KairosError::validation(
+            "保压曲线必须包含非负有限值，时间必须严格递增。",
+        ));
+    }
+    Ok(points)
+}
+
 #[allow(clippy::too_many_arguments)]
 fn run_doe_batch(
     factor_specs: &[String],
@@ -717,7 +756,9 @@ fn run_doe_batch(
     target_size: f64,
     injection_time_s: f64,
     packing_pressure_mpa: Option<f64>,
+    packing_pressure_curve: Option<String>,
     packing_time_s: Option<f64>,
+    cooling_time_s: Option<f64>,
     batch: Option<String>,
     solve: bool,
     vm: bool,
@@ -751,11 +792,26 @@ fn run_doe_batch(
     )?;
     let material = load_material(material_path.as_deref())?;
     let mut base_process = default_process_with(injection_time_s);
-    if let Some(pressure) = packing_pressure_mpa {
+    if packing_pressure_mpa.is_some() && packing_pressure_curve.is_some() {
+        return Err(KairosError::validation(
+            "--packing-pressure-mpa 与 --packing-pressure-curve 不能同时使用。",
+        ));
+    }
+    if let Some(curve) = packing_pressure_curve {
+        base_process.packing_pressure_mpa_curve = parse_pressure_curve(&curve)?;
+    } else if let Some(pressure) = packing_pressure_mpa {
         base_process.packing_pressure_mpa_curve = vec![(0.0, pressure)];
     }
     if let Some(time) = packing_time_s {
         base_process.packing_time_s = time;
+    }
+    if let Some(time) = cooling_time_s {
+        if !time.is_finite() || time < 0.0 {
+            return Err(KairosError::validation(
+                "--cooling-time-s 必须是非负有限数值。",
+            ));
+        }
+        base_process.cooling_time_s = time;
     }
 
     let total = runs.len();
@@ -1195,7 +1251,7 @@ fn run_pipeline(
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_optimize_factor, write_run_timestamp};
+    use super::{parse_optimize_factor, parse_pressure_curve, write_run_timestamp};
 
     #[test]
     fn optimize_factor_parser_accepts_named_range() {
@@ -1222,5 +1278,20 @@ mod tests {
             "1725000000123"
         );
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn pressure_curve_parser_keeps_ordered_points() {
+        assert_eq!(
+            parse_pressure_curve("0=0.9229,0.2=27.6282,315.0797=27.6282").unwrap(),
+            vec![(0.0, 0.9229), (0.2, 27.6282), (315.0797, 27.6282)]
+        );
+    }
+
+    #[test]
+    fn pressure_curve_parser_rejects_unordered_or_negative_points() {
+        assert!(parse_pressure_curve("0=1,0=2").is_err());
+        assert!(parse_pressure_curve("-1=1,2=3").is_err());
+        assert!(parse_pressure_curve("0=1,broken").is_err());
     }
 }
