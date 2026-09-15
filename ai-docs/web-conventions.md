@@ -94,7 +94,7 @@ flowchart LR
 5. **类型集中管理**：`types/index.ts` 是唯一出口，`.vue` 与纯 TS 共同引用；跨层传递的领域结构
    （Project / MeshingReport 等）不得在组件里重新声明形状。
 6. **命令式图形是例外而非反模式**：canvas 2D / WebGL / WebGPU 的绘制由 composable 调用 `render/`
-   与 `utils/chart` 的绘制函数完成——DOM 负责挂载体（`<canvas>` 元素），像素操作归图形层。
+   与 `render/uplot-runtime` 的绘制函数完成——DOM 负责挂载体，图表像素操作归渲染层。
 7. **有生命周期的资源谁创建谁销毁**：渲染器 / 定时器 / `window` 监听在创建处登记、
    在 `onUnmounted` 或对应的销毁路径释放。视口的四分格切换会反复创建副视口渲染器，
    不显式 `dispose()` 就是几个对着脱离文档画布空转的 RAF 循环；`window` 上的监听必须留成
@@ -121,7 +121,7 @@ flowchart LR
 | 反模式                                   | 后果与纠正                                                                    |
 | ---------------------------------------- | ----------------------------------------------------------------------------- |
 | `.vue` 里堆几百行 script，业务和 UI 混写 | 抽 useXxx.ts；`.vue` 的 script 出现判断 / 计算 / 数据拼装即算超标             |
-| composable 直接操作 DOM                  | 结构归 `.vue`；图形绘制走 `render/` / `utils/chart`，不摸 querySelector/style |
+| composable 直接操作 DOM                  | 结构归 `.vue`；图形绘制走 `render/`，不摸 querySelector/style                 |
 | 领域 `.ts` 里 import `ref` 等 Vue API    | 污染纯逻辑层，破坏无 Vue 单测；发现即下沉回 composable                        |
 | 什么都往同一个 store 塞                  | store 变成上帝对象；严格按领域拆（app/project/geometry/…），新领域建新文件    |
 | props 传函数回调                         | 破坏单向数据流；改为 emit 事件，或让子组件直接使用 store                      |

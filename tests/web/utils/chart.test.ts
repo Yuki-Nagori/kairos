@@ -1,12 +1,11 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { chartRange, drawLineChart, downsampleSeries, toCsv } from "../../../src-web/utils/chart";
+import { describe, expect, it } from "vitest";
+import { chartRange, downsampleSeries, toCsv } from "../../../src-web/utils/chart";
 
 describe("chartRange", () => {
   it("returns the shared range and expands flat data", () => {
     expect(chartRange([{ values: [2, -1, 4] }])).toEqual({ min: -1, max: 4 });
     expect(chartRange([{ values: [5, 5] }])).toEqual({ min: 4, max: 6 });
   });
-
   it("returns null when no finite values exist", () => {
     expect(chartRange([{ values: [] }, { values: [Number.NaN] }])).toBeNull();
   });
@@ -65,118 +64,5 @@ describe("toCsv", () => {
         ],
       ),
     ).toBe('\uFEFFname,value\r\n"a,b","say ""hi"""\r\n"line\nbreak",2\r\n');
-  });
-});
-
-/** 录制调用的假 2D 上下文：属性可写，方法调用记入 calls。 */
-function fakeCtx(): CanvasRenderingContext2D & { calls: string[] } {
-  const calls: string[] = [];
-  return new Proxy(
-    {},
-    {
-      get(_target, prop) {
-        if (prop === "calls") {
-          return calls;
-        }
-        return (...args: unknown[]) => {
-          void args;
-          calls.push(String(prop));
-        };
-      },
-      set() {
-        return true;
-      },
-    },
-  ) as CanvasRenderingContext2D & { calls: string[] };
-}
-
-describe("drawLineChart", () => {
-  it("空序列只铺背景，返回 0", () => {
-    const ctx = fakeCtx();
-    const drawn = drawLineChart(ctx, [], { width: 200, height: 100 });
-    expect(drawn).toBe(0);
-    expect(ctx.calls).toContain("fillRect");
-    expect(ctx.calls).not.toContain("stroke");
-  });
-
-  it("绘制曲线：描边、网格与坐标轴文字都发生", () => {
-    const ctx = fakeCtx();
-    const values = Array.from({ length: 50 }, (_, i) => Math.sin(i / 5));
-    const drawn = drawLineChart(ctx, [{ values, color: "#34d399", label: "p" }], {
-      width: 400,
-      height: 200,
-      xLabel: "x",
-      yLabel: "y",
-    });
-    expect(drawn).toBeGreaterThan(0);
-    expect(ctx.calls).toContain("stroke");
-    expect(ctx.calls).toContain("fillText");
-  });
-
-  it("cssVar 缺失时使用回退色（不抛错）", () => {
-    const ctx = fakeCtx();
-    expect(() =>
-      drawLineChart(ctx, [{ values: [1, 2], color: "#fff", label: "" }], {
-        width: 100,
-        height: 80,
-      }),
-    ).not.toThrow();
-  });
-});
-
-describe("drawLineChart 与 downsampleSeries 的边界", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
-  it("downsampleSeries：值数不超过桶数两倍时原样返回", () => {
-    // 早退分支：值太密不需要降采样
-    const values = [1, 2];
-    expect(downsampleSeries(values, 3)).toEqual([1, 2]);
-  });
-
-  it("drawLineChart：命中 CSS 变量时使用变量值", () => {
-    vi.stubGlobal("getComputedStyle", () => ({
-      getPropertyValue: (name: string) => (name === "--c-bg-input" ? "#abcdef" : ""),
-    }));
-    const ctx = fakeCtx();
-    const drawn = drawLineChart(ctx, [{ values: [1, 2], color: "#fff", label: "" }], {
-      width: 100,
-      height: 80,
-    });
-    expect(drawn).toBeGreaterThan(0);
-  });
-
-  it("drawLineChart：cssVar 不可用时用回退色不抛错", () => {
-    vi.stubGlobal("getComputedStyle", undefined);
-    const ctx = fakeCtx();
-    expect(() =>
-      drawLineChart(ctx, [{ values: [1, 2], color: "#fff", label: "" }], {
-        width: 100,
-        height: 80,
-      }),
-    ).not.toThrow();
-  });
-
-  it("drawLineChart：平坦序列自动扩展示宽范围", () => {
-    const ctx = fakeCtx();
-    const drawn = drawLineChart(ctx, [{ values: [5, 5, 5], color: "#fff", label: "" }], {
-      width: 200,
-      height: 100,
-    });
-    expect(drawn).toBeGreaterThan(0);
-  });
-
-  it("drawLineChart：跳过空序列项", () => {
-    const ctx = fakeCtx();
-    const drawn = drawLineChart(
-      ctx,
-      [
-        { values: [], color: "#fff", label: "空" },
-        { values: [1, 2, 3], color: "#fff", label: "有" },
-      ],
-      { width: 200, height: 100 },
-    );
-    expect(drawn).toBeGreaterThan(0);
   });
 });

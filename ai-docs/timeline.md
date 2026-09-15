@@ -504,3 +504,4 @@
 - **15:40** feat(web): uPlot 主题联动 —— 坐标轴与网格颜色改从 `--c-text-muted` / `--c-grid` 读取；主题事件销毁并重建 plot，使深浅主题切换不残留旧颜色。图表容器背景继续沿用面板主题。
 - **16:00** feat(web): uPlot 缩放复位 —— XY 面板新增「重置缩放」，同时清除 x / y 两轴的 uPlot scale，回到全场或全时间范围；不触碰结果数据与探针状态。
 - **16:20** docs(bench): T95 uPlot 准入证据补齐 —— `uplot@1.6.32`（MIT）已进入直接依赖；`bun run build` 实测 JS 595.24 kB / gzip 197.07 kB、CSS 64.27 kB / gzip 15.15 kB。Vite 提示 JS chunk 超过 500 kB，记录为后续代码分割优化点。
+- **17:05** cleanup(web): T95 移除旧 Canvas 自绘 —— uPlot 已覆盖 XY 绘制、探针、主题、缩放、快照与自适应尺寸，删除 `utils/chart.ts::drawLineChart` 及其专用 fake Canvas 测试；`utils/chart.ts` 只保留值域 / 降采样数据工具与 CSV 导出，文档同步改为渲染层走 `render/uplot-runtime`。
