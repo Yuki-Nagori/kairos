@@ -572,3 +572,5 @@
 - 2026-09-16 01:00 | T102 输入契约 | 新增版本化 `DualDomainSolverInput` DTO、单位字段、拓扑转换和 Rust/IPC 契约测试，供上游 moldingFoam 降维模块消费。
 
 - 2026-09-16 01:20 | T102 上游输入导出 | CLI 新增 `dual-domain export`，可从 STL 生成版本化 `dual-domain/v1` JSON，供 moldingFoam 上游模块直接联调。
+
+- 2026-09-16 01:35 | T102 联调 fixture | 提交 `dual-domain/v1` sample-box JSON fixture 与 round-trip 契约测试，上游可先完成无专有资产的读取实验。

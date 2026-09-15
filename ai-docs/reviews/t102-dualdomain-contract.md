@@ -25,7 +25,7 @@ cargo run -p kairos-cli -- dual-domain export \
 ## 上游验收顺序
 
 1. 先验证 JSON schema、单位、索引和厚度数组长度。
-2. 用 sample-box fixture 完成单元测试，不依赖 Mug 专有网格。
+2. 用仓库内 `tests/fixtures/dual-domain-v1.sample.json` fixture 完成单元测试，不依赖 Mug 专有网格。
 3. 用 Mug 导出的 JSON 做网格摘要和读取 smoke test。
 4. solver 模块确认能够读取中面节点、三角形、厚度和耦合关系后，再接入材料与工艺字典。
 5. 最后执行 `fill-pack-cool` Mug 实验，并保留原始日志、输入 JSON、网格摘要和时间戳。

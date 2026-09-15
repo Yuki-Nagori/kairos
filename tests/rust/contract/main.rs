@@ -430,6 +430,19 @@ fn dual_domain_solver_input_serializes_with_schema_and_units() {
     assert_eq!(json["thicknessUnit"], "mm");
 }
 
+#[test]
+fn dual_domain_fixture_round_trips_for_upstream_consumers() {
+    let text = include_str!("../../fixtures/dual-domain-v1.sample.json");
+    let input: kairos_core::models::mesh::DualDomainSolverInput =
+        serde_json::from_str(text).unwrap();
+    assert_eq!(input.schema_version, "dual-domain/v1");
+    assert_eq!(input.length_unit, "mm");
+    assert_eq!(input.thickness_unit, "mm");
+    assert_eq!(input.nodes.len(), 8);
+    assert_eq!(input.triangles.len(), 12);
+    assert_eq!(input.thickness.len(), input.triangles.len());
+}
+
 /// MidplaneReport 的形状：统计字段 camelCase，前端几何面板与之对应。
 #[test]
 fn midplane_report_serializes_with_camel_case() {
