@@ -505,3 +505,4 @@
 - **16:00** feat(web): uPlot 缩放复位 —— XY 面板新增「重置缩放」，同时清除 x / y 两轴的 uPlot scale，回到全场或全时间范围；不触碰结果数据与探针状态。
 - **16:20** docs(bench): T95 uPlot 准入证据补齐 —— `uplot@1.6.32`（MIT）已进入直接依赖；`bun run build` 实测 JS 595.24 kB / gzip 197.07 kB、CSS 64.27 kB / gzip 15.15 kB。Vite 提示 JS chunk 超过 500 kB，记录为后续代码分割优化点。
 - **17:05** cleanup(web): T95 移除旧 Canvas 自绘 —— uPlot 已覆盖 XY 绘制、探针、主题、缩放、快照与自适应尺寸，删除 `utils/chart.ts::drawLineChart` 及其专用 fake Canvas 测试；`utils/chart.ts` 只保留值域 / 降采样数据工具与 CSV 导出，文档同步改为渲染层走 `render/uplot-runtime`。
+- **17:30** fix(ci)+build: 修复 Windows / Ubuntu CI 并消除 Vite 大 chunk 警告 —— Windows `ProcessRunner` 测试改用 `cmd /C` 可识别的 `exit /b` 语法；Ubuntu CI 设置 `RUST_TEST_THREADS=1`，规避 wgpu GLES 软件适配器并行测试的 adapter context deadlock。Vite 按 KaTeX / uPlot / Vue vendor 拆包，主入口从 595 kB 降至 205 kB，构建不再提示超过 500 kB。

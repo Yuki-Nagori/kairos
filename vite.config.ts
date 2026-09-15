@@ -26,5 +26,22 @@ export default defineConfig({
     minify: "esbuild",
     // 发布产物不随包分发 sourcemap：安装包体积优先；排障用 dev 模式复现。
     sourcemap: false,
+    rollupOptions: {
+      output: {
+        // 将稳定的大型运行时拆出主入口，避免报告公式和图表依赖拖大首屏 chunk。
+        manualChunks(id) {
+          if (id.includes("node_modules/katex")) {
+            return "katex";
+          }
+          if (id.includes("node_modules/uplot")) {
+            return "uplot";
+          }
+          if (id.includes("node_modules/vue") || id.includes("node_modules/@vue/")) {
+            return "vue-vendor";
+          }
+          return undefined;
+        },
+      },
+    },
   },
 });

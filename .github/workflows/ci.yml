@@ -42,6 +42,9 @@ jobs:
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-llvm-cov
+      - name: Ubuntu GPU 测试串行化
+        if: matrix.os == 'ubuntu-latest'
+        run: echo "RUST_TEST_THREADS=1" >> "$GITHUB_ENV"
       - name: 全量门禁（typecheck / lint / format / test / 覆盖率 / knip / Rust 同链）
         run: bun run verify
       - name: 依赖漏洞审计

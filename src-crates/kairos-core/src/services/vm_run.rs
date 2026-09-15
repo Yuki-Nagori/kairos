@@ -380,6 +380,14 @@ mod tests {
     const SLOW: &str = "sleep 5";
     #[cfg(windows)]
     const SLOW: &str = "ping -n 6 127.0.0.1 > NUL";
+    #[cfg(unix)]
+    const FAIL: &str = "echo 'transfer failed: instance is stopped' >&2; exit 3";
+    #[cfg(windows)]
+    const FAIL: &str = "echo transfer failed: instance is stopped 1>&2 & exit /b 3";
+    #[cfg(unix)]
+    const SILENT_FAIL: &str = "exit 7";
+    #[cfg(windows)]
+    const SILENT_FAIL: &str = "exit /b 7";
 
     /// 生产 runner 的判定：退出码 0 即成功（哪怕 stderr 有警告），非 0 报 stderr 首行，
     /// 超时杀掉并给出超时原因，启动失败单独报——四种形态各一条，跨平台跑。
@@ -391,12 +399,7 @@ mod tests {
             .expect("退出码 0 的命令即使 stderr 有输出也算成功");
 
         let failed = runner
-            .run(
-                &HostCommand::new(shell(
-                    "echo 'transfer failed: instance is stopped' >&2; exit 3",
-                )),
-                "命令",
-            )
+            .run(&HostCommand::new(shell(FAIL)), "命令")
             .expect_err("非零退出码必须判失败");
         let message = failed.message().to_string();
         assert!(
@@ -405,7 +408,7 @@ mod tests {
         );
 
         let silent = runner
-            .run(&HostCommand::new(shell("exit 7")), "命令")
+            .run(&HostCommand::new(shell(SILENT_FAIL)), "命令")
             .expect_err("无 stderr 的非零退出码也要报失败");
         let message = silent.message().to_string();
         assert!(
