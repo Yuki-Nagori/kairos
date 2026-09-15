@@ -517,3 +517,4 @@
 - 2026-09-15 17:45 | T99 第七批 | 新增 core `FieldStats` 与 `summarize_result_field` IPC/API，结果场统计可在 Rust 单次扫描完成，保留前端面板接线待办。
 - 2026-09-15 18:02 | T99 第八批 | 矢量模量统计下沉 core，新增 `summarize_vector_field`，store 与结果面板改用 Rust 统计并保留首单元分量展示。
 - 2026-09-15 18:16 | T99 第九批 | 对称张量模量统计下沉 core，新增 `summarize_tensor_field`，张量结果面板改用 Rust 统计。
+- 2026-09-15 18:29 | T99 第十批 | 补充不完整结果不入缓存、文件更新后重新读取的故障回归，锁定求解中途写文件不会复用旧场。

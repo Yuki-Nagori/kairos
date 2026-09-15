@@ -538,4 +538,31 @@ mod tests {
         assert_eq!(slots.primary_request, second);
         assert_ne!(slots.primary_request, first);
     }
+
+    #[test]
+    fn incomplete_result_is_not_cached_and_refreshes_after_file_update() {
+        let root = std::env::temp_dir().join(kairos_core::services::project::new_id("incomplete"));
+        let path = root.join("1").join("p");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let write = |values: &str| {
+            std::fs::write(
+                &path,
+                format!(
+                    "FoamFile\n{{\nclass volScalarField;\nobject p;\n}}\ninternalField nonuniform List<scalar>\n2\n(\n{values}\n)\n;\n"
+                ),
+            )
+            .unwrap();
+        };
+        write("1");
+        let session = ResultSession::default();
+        let case_dir = root.to_str().unwrap();
+        let first = load_into_slot(&session, case_dir, "1", "p", false).unwrap();
+        assert!(!first.complete);
+        write("1\n2");
+        let second = load_into_slot(&session, case_dir, "1", "p", false).unwrap();
+        assert!(second.complete);
+        assert_eq!(second.values, vec![1.0, 2.0]);
+        assert_eq!(session.lock().cache.stats(), (0, 2));
+        std::fs::remove_dir_all(root).unwrap();
+    }
 }
