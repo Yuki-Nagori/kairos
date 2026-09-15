@@ -16,6 +16,7 @@ Kairos：注塑成型 CAE 仿真软件，对标行业领先的同类产品（自
 | 预研与可行性（DOE、多物理场、特殊工艺）                           | [ai-docs/research/README.md](ai-docs/research/README.md)   |
 | 已定型的架构决策（GPL 隔离、运行时分发、Gmsh 选型）               | [ai-docs/decisions/README.md](ai-docs/decisions/README.md) |
 | 测试地图：全部测试的位置、分类与跑法                              | [tests/README.md](tests/README.md)                         |
+| 求解器（moldingFoam）逐版本性能与收敛记录                         | [ai-docs/moldingfoam-perf.md](ai-docs/moldingfoam-perf.md) |
 | 面向人的项目简介、环境要求、快速开始、常用命令                    | [README.md](README.md)                                     |
 
 ## 不可违反的约定（速查）
