@@ -679,6 +679,7 @@ fn run_optimize_batch(
                 continue;
             }
             let started = std::time::Instant::now();
+            write_run_timestamp(&case_dir, "started-at-ms", now_ms())?;
             let mut attempts = 0;
             let mut metrics = None;
             let mut failure = None;
@@ -717,6 +718,7 @@ fn run_optimize_batch(
                 fs::write(case_dir.join("failure.txt"), reason)
                     .map_err(|error| KairosError::io(error.to_string()))?;
             }
+            write_run_timestamp(&case_dir, "finished-at-ms", now_ms())?;
             let _ = started;
             if aborted.is_some() {
                 break;
