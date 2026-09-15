@@ -10,9 +10,9 @@ import { describe, expect, it } from "vitest";
 // vitest 以仓库根为 cwd 运行
 const ROOT = process.cwd();
 
-/** 从 lib.rs 提取原生菜单引用的动作 id（action("<id>", ...) 调用点）。 */
+/** 从原生菜单模块提取引用的动作 id（action("<id>", ...) 调用点）。 */
 function rustMenuIds(): string[] {
-  const source = readFileSync(join(ROOT, "src-tauri/src/lib.rs"), "utf8");
+  const source = readFileSync(join(ROOT, "src-tauri/src/commands/menu.rs"), "utf8");
   return [...source.matchAll(/action\(\s*"([^"]+)"/g)].map((match) => match[1]!);
 }
 

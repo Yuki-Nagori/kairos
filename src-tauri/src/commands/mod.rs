@@ -7,6 +7,10 @@ pub mod gpu;
 pub mod gpu_ops;
 pub mod jobs;
 pub mod material;
+// 原生菜单只做 macOS：无边框窗口上原生菜单不渲染，Windows / Linux 用标题栏里的
+// web 菜单（MenuBar.vue），故整个模块按平台裁剪。
+#[cfg(target_os = "macos")]
+pub mod menu;
 pub mod mold;
 pub mod process;
 pub mod project;
