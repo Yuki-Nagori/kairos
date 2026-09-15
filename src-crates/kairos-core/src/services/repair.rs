@@ -5,6 +5,7 @@ use std::collections::HashMap;
 
 use crate::error::{KairosError, Result};
 use crate::models::geometry::{Triangle, TriangleMesh};
+use crate::services::vec3;
 
 pub use crate::models::repair::RepairReport;
 
@@ -281,46 +282,33 @@ fn triangles_intersect(
     q1: &[f64; 3],
     q2: &[f64; 3],
 ) -> bool {
-    fn sub(a: &[f64; 3], b: &[f64; 3]) -> [f64; 3] {
-        [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
-    }
-    fn cross(a: &[f64; 3], b: &[f64; 3]) -> [f64; 3] {
-        [
-            a[1] * b[2] - a[2] * b[1],
-            a[2] * b[0] - a[0] * b[2],
-            a[0] * b[1] - a[1] * b[0],
-        ]
-    }
-    fn dot(a: &[f64; 3], b: &[f64; 3]) -> f64 {
-        a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
-    }
     // P 三顶点相对 Q 平面的带符号距离。
-    let q_normal = cross(&sub(q1, q0), &sub(q2, q0));
+    let q_normal = vec3::cross(vec3::sub(*q1, *q0), vec3::sub(*q2, *q0));
     let distances = [
-        dot(&q_normal, &sub(p0, q0)),
-        dot(&q_normal, &sub(p1, q0)),
-        dot(&q_normal, &sub(p2, q0)),
+        vec3::dot(q_normal, vec3::sub(*p0, *q0)),
+        vec3::dot(q_normal, vec3::sub(*p1, *q0)),
+        vec3::dot(q_normal, vec3::sub(*p2, *q0)),
     ];
     if distances.iter().all(|d| *d > 0.0) || distances.iter().all(|d| *d < 0.0) {
         return false;
     }
-    let p_normal = cross(&sub(p1, p0), &sub(p2, p0));
+    let p_normal = vec3::cross(vec3::sub(*p1, *p0), vec3::sub(*p2, *p0));
     let p_distances = [
-        dot(&p_normal, &sub(q0, p0)),
-        dot(&p_normal, &sub(q1, p0)),
-        dot(&p_normal, &sub(q2, p0)),
+        vec3::dot(p_normal, vec3::sub(*q0, *p0)),
+        vec3::dot(p_normal, vec3::sub(*q1, *p0)),
+        vec3::dot(p_normal, vec3::sub(*q2, *p0)),
     ];
     if p_distances.iter().all(|d| *d > 0.0) || p_distances.iter().all(|d| *d < 0.0) {
         return false;
     }
     // 两三角形分别与相交线构成区间；区间在共享直线上投影重叠即相交。
-    let direction = cross(&p_normal, &q_normal);
+    let direction = vec3::cross(p_normal, q_normal);
     fn interval(
         triangle: &[[f64; 3]; 3],
         distances: &[f64; 3],
         direction: &[f64; 3],
     ) -> (f64, f64) {
-        let projection = |vertex: &[f64; 3]| dot(direction, vertex);
+        let projection = |vertex: &[f64; 3]| vec3::dot(*direction, *vertex);
         let mut low = f64::INFINITY;
         let mut high = f64::NEG_INFINITY;
         for (index, vertex) in triangle.iter().enumerate() {
