@@ -11,7 +11,9 @@ use std::collections::HashMap;
 
 use crate::error::{KairosError, Result};
 use crate::models::geometry::TriangleMesh;
-use crate::models::mesh::{BeamCoupling, DualDomainMesh, DualDomainReport, ShellBeam};
+use crate::models::mesh::{
+    BeamCoupling, DualDomainMesh, DualDomainReport, DualDomainSolverInput, ShellBeam,
+};
 use crate::models::runners::RunnerElement;
 
 type Point = [f64; 3];
@@ -242,6 +244,21 @@ pub fn validate_solver_topology(mesh: &DualDomainMesh) -> Result<()> {
         ));
     }
     Ok(())
+}
+
+/// 将经过拓扑校验的双域前处理结果转换为版本化 solver 输入。
+pub fn solver_input(mesh: &DualDomainMesh) -> Result<DualDomainSolverInput> {
+    validate_solver_topology(mesh)?;
+    Ok(DualDomainSolverInput {
+        schema_version: "dual-domain/v1".to_string(),
+        length_unit: "mm".to_string(),
+        thickness_unit: "mm".to_string(),
+        nodes: mesh.nodes.clone(),
+        triangles: mesh.triangles.clone(),
+        thickness: mesh.thickness.clone(),
+        beams: mesh.beams.clone(),
+        couplings: mesh.couplings.clone(),
+    })
 }
 
 /// 单位化三角形法向；退化（零长度叉积）返回 None。
@@ -922,5 +939,22 @@ mod tests {
         bad = valid;
         bad.triangles[0][2] = 9;
         assert!(validate_solver_topology(&bad).is_err());
+    }
+
+    #[test]
+    fn solver_input_is_versioned_and_uses_explicit_units() {
+        let mesh = DualDomainMesh {
+            nodes: vec![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+            triangles: vec![[0, 1, 2]],
+            thickness: vec![0.1],
+            ..Default::default()
+        };
+        let input = solver_input(&mesh).unwrap();
+        assert_eq!(input.schema_version, "dual-domain/v1");
+        assert_eq!(input.length_unit, "mm");
+        assert_eq!(input.thickness_unit, "mm");
+        let json = serde_json::to_string(&input).unwrap();
+        assert!(json.contains("schemaVersion"));
+        assert!(json.contains("thicknessUnit"));
     }
 }

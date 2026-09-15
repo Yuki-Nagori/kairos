@@ -32,7 +32,7 @@ pub struct DualDomainMesh {
 }
 
 /// 壳网格梁单元（双域 / 中面共用）：两端节点索引、圆截面直径与单元类型。
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ShellBeam {
     pub nodes: [usize; 2],
     pub diameter: f64,
@@ -40,7 +40,7 @@ pub struct ShellBeam {
 }
 
 /// 梁端点与表面节点的耦合：捕捉距离用于诊断贴合质量。
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BeamCoupling {
     /// 梁单元序号（beams 下标）。
     pub beam: usize,
@@ -49,6 +49,22 @@ pub struct BeamCoupling {
     /// 被捕捉到的表面节点索引。
     pub node: usize,
     pub distance: f64,
+}
+
+/// 交给降维 solver 的稳定输入契约。
+///
+/// 与内部 `DualDomainMesh` 分开，避免 solver schema 随前处理实现细节漂移。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DualDomainSolverInput {
+    pub schema_version: String,
+    pub length_unit: String,
+    pub thickness_unit: String,
+    pub nodes: Vec<[f64; 3]>,
+    pub triangles: Vec<[usize; 3]>,
+    pub thickness: Vec<f64>,
+    pub beams: Vec<ShellBeam>,
+    pub couplings: Vec<BeamCoupling>,
 }
 
 /// 中面网格：顶点配对法产物（1D/2.5D 快速分析路线）。

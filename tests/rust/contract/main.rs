@@ -9,8 +9,8 @@ use serde_json::json;
 
 use kairos_core::models::material::{BlowingGroup, Material};
 use kairos_core::models::mesh::{
-    DualDomainReport, MeshEstimate, MeshQuality, MeshRefinement, MeshingReport, MidplaneReport,
-    RefineRegion,
+    DualDomainReport, DualDomainSolverInput, MeshEstimate, MeshQuality, MeshRefinement,
+    MeshingReport, MidplaneReport, RefineRegion,
 };
 use kairos_core::models::project::{GeometryRef, Project, Study};
 use kairos_core::models::results::{
@@ -410,6 +410,24 @@ fn dual_domain_report_serializes_with_camel_case() {
             "thicknessAvg": 2.0,
         })
     );
+}
+
+#[test]
+fn dual_domain_solver_input_serializes_with_schema_and_units() {
+    let input = DualDomainSolverInput {
+        schema_version: "dual-domain/v1".into(),
+        length_unit: "mm".into(),
+        thickness_unit: "mm".into(),
+        nodes: vec![[0.0, 0.0, 0.0]],
+        triangles: vec![],
+        thickness: vec![],
+        beams: vec![],
+        couplings: vec![],
+    };
+    let json = serde_json::to_value(input).unwrap();
+    assert_eq!(json["schemaVersion"], "dual-domain/v1");
+    assert_eq!(json["lengthUnit"], "mm");
+    assert_eq!(json["thicknessUnit"], "mm");
 }
 
 /// MidplaneReport 的形状：统计字段 camelCase，前端几何面板与之对应。
