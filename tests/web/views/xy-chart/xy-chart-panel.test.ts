@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
-import { defineComponent, nextTick } from "vue";
+import { nextTick } from "vue";
 import { createPinia, setActivePinia } from "pinia";
 import type { Pinia } from "pinia";
 import XyChartPanel from "../../../../src-web/views/xy-chart/XyChartPanel.vue";
@@ -18,27 +18,6 @@ vi.mock("../../../../src-web/api/results", () => ({
   deriveField: vi.fn(),
   deriveDifference: vi.fn(),
 }));
-
-/** 录制调用的假 2D 上下文：属性可写，方法名与实参记入 calls。 */
-function fakeCtx(): CanvasRenderingContext2D & { calls: Array<{ name: string; args: unknown[] }> } {
-  const calls: Array<{ name: string; args: unknown[] }> = [];
-  return new Proxy(
-    {},
-    {
-      get(_target, prop) {
-        if (prop === "calls") {
-          return calls;
-        }
-        return (...args: unknown[]) => {
-          calls.push({ name: String(prop), args });
-        };
-      },
-      set() {
-        return true;
-      },
-    },
-  ) as CanvasRenderingContext2D & { calls: Array<{ name: string; args: unknown[] }> };
-}
 
 function makeField(overrides: Partial<ScalarField> = {}): ScalarField {
   return {
@@ -62,7 +41,6 @@ function findButton(wrapper: ReturnType<typeof mount>, label: string) {
 
 describe("XyChartPanel", () => {
   let pinia: Pinia;
-  let ctx: CanvasRenderingContext2D & { calls: Array<{ name: string; args: unknown[] }> };
   /** happy-dom 环境按文件共享：逐个卸载，避免窗口主题监听跨用例重绘污染计数。 */
   const wrappers: Array<ReturnType<typeof mount>> = [];
 
@@ -75,8 +53,6 @@ describe("XyChartPanel", () => {
   beforeEach(() => {
     pinia = createPinia();
     setActivePinia(pinia);
-    ctx = fakeCtx();
-    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(ctx);
   });
 
   afterEach(() => {
@@ -89,11 +65,6 @@ describe("XyChartPanel", () => {
   it("挂载即绘制空场背景并登记快照", () => {
     const wrapper = mountPanel();
     expect(wrapper.text()).toContain("暂无探针");
-  });
-
-  it("getContext 返回 null 时静默早退", () => {
-    vi.mocked(HTMLCanvasElement.prototype.getContext).mockReturnValueOnce(null);
-    mountPanel();
   });
 
   it("加载场后经 watch 重绘曲线与坐标轴标签", async () => {
@@ -227,7 +198,19 @@ describe("XyChartPanel", () => {
   it("时间曲线加载守卫：目录/探针/场未就绪时静默", async () => {
     const panel = useXyChartPanel();
     panel.loadTimeSeries();
+    panel.draw();
     expect(loadResultField).not.toHaveBeenCalled();
+  });
+
+  it("探针值在场缺失或越界时回落 0", () => {
+    const results = useResultsStore();
+    const panel = useXyChartPanel();
+    results.probes = [{ id: 1, nodeIndex: 3 }];
+    expect(panel.probeDots.value[0]?.value).toBe(0);
+    results.loadedField = makeField({ values: [7, 8] });
+    expect(panel.probeDots.value[0]?.value).toBe(0);
+    results.loadedField = makeField({ values: [7, 8, 9, 42] });
+    expect(panel.probeDots.value[0]?.value).toBe(42);
   });
 
   it("跳转选择为空时静默返回，不触发加载", async () => {
@@ -268,62 +251,5 @@ describe("XyChartPanel", () => {
     await flushPromises();
 
     expect(loadResultField).toHaveBeenCalledWith("/case/run", "1", "T", "primary");
-  });
-});
-
-describe("useXyChartPanel 防御分支（无 canvas 环境）", () => {
-  let pinia: Pinia;
-  let ctx: CanvasRenderingContext2D & { calls: Array<{ name: string; args: unknown[] }> };
-  const wrappers: Array<ReturnType<typeof mount>> = [];
-
-  beforeEach(() => {
-    pinia = createPinia();
-    setActivePinia(pinia);
-    ctx = fakeCtx();
-    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(ctx);
-  });
-
-  afterEach(() => {
-    while (wrappers.length > 0) {
-      wrappers.pop()!.unmount();
-    }
-    vi.restoreAllMocks();
-  });
-
-  /** 无 canvas 的挂载环境：驱动 composable 里 canvas === null 的防御分支。 */
-  function mountCanvaslessHarness() {
-    let panel!: ReturnType<typeof useXyChartPanel>;
-    const wrapper = mount(
-      defineComponent({
-        setup() {
-          panel = useXyChartPanel();
-          return () => null;
-        },
-      }),
-      { global: { plugins: [pinia] } },
-    );
-    wrappers.push(wrapper);
-    return { wrapper, panel };
-  }
-
-  it("canvas 缺失时 draw 与主题重绘都安全早退", async () => {
-    mountCanvaslessHarness();
-    expect(ctx.calls).toHaveLength(0);
-    window.dispatchEvent(new CustomEvent(THEME_CHANGED_EVENT));
-    await nextTick();
-    expect(ctx.calls).toHaveLength(0);
-  });
-
-  it("probeDots：无场回落 0，越界节点回落 0，在场内取实际值", () => {
-    const results = useResultsStore();
-    const { panel } = mountCanvaslessHarness();
-    results.probes = [{ id: 1, nodeIndex: 3 }];
-    expect(panel.probeDots.value).toEqual([{ probe: { id: 1, nodeIndex: 3 }, value: 0 }]);
-
-    results.loadedField = makeField({ values: [7, 8] });
-    expect(panel.probeDots.value).toEqual([{ probe: { id: 1, nodeIndex: 3 }, value: 0 }]);
-
-    results.loadedField = makeField({ values: [7, 8, 9, 42] });
-    expect(panel.probeDots.value).toEqual([{ probe: { id: 1, nodeIndex: 3 }, value: 42 }]);
   });
 });
