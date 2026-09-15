@@ -2,9 +2,12 @@
   "schemaVersion": "dual-domain-experiment/v1",
   "mesh": {
     "schemaVersion": "dual-domain/v1",
-    "fixture": "dual-domain-v1.sample.json",
+    "fixture": "report/mug-moldflow/mug-dual-domain-v1.json",
     "lengthUnit": "mm",
-    "thicknessUnit": "mm"
+    "thicknessUnit": "mm",
+    "source": "local-user-generated",
+    "nodeCount": 4417,
+    "triangleCount": 8834
   },
   "material": {
     "id": "PP-REF-01",

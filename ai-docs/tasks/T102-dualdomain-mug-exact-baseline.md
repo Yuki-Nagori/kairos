@@ -51,7 +51,7 @@
 
 - CLI 已新增 `dual-domain export`，只接受真实零件 STL，生成 `dual-domain/v1` JSON；Dual Domain 不再提供闭合方盒样例，避免把 `sum(area × thickness)` 误当作实体体积。
 - 上游联调顺序和字段定义已记录在 [T102 Dual Domain 上游联调契约](../reviews/t102-dualdomain-contract.md)。
-- 仓库保留 `tests/fixtures/dual-domain-v1.sample.json` 作为纯 DTO 拓扑契约 fixture（不是物理几何或基线结果），完整 Mug 导出必须使用本地 `report/mug-moldflow/mug.stl`。
+- 仓库保留 `tests/fixtures/dual-domain-v1.sample.json` 作为纯 DTO 拓扑契约 fixture（不是物理几何或基线结果），完整 Mug 导出必须使用本地 `report/mug-moldflow/mug.stl`；实验 manifest 已指向生成的 `report/mug-moldflow/mug-dual-domain-v1.json`。
 
 示例：
 
