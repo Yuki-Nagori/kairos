@@ -41,7 +41,19 @@ describe("toCsv", () => {
         [2, 301.5],
       ],
     );
-    expect(csv).toBe("node,T\n1,300\n2,301.5");
+    expect(csv).toBe("\uFEFFnode,T\r\n1,300\r\n2,301.5\r\n");
+  });
+
+  it("quotes commas, quotes, and line breaks", () => {
+    expect(
+      toCsv(
+        ["name", "value"],
+        [
+          ["a,b", 'say "hi"'],
+          ["line\nbreak", 2],
+        ],
+      ),
+    ).toBe('\uFEFFname,value\r\n"a,b","say ""hi"""\r\n"line\nbreak",2\r\n');
   });
 });
 

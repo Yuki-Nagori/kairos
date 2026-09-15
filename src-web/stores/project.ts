@@ -24,9 +24,7 @@ import { useGeometryStore } from "./geometry";
 import { useResultsStore } from "./results";
 import { useProcessStore } from "./process";
 import { useViewportStore } from "./viewport";
-
-let studySeq = 0;
-let elementSeq = 0;
+import { newId } from "../utils/id";
 
 /** 方案配置（材料 / 工艺 / 杆系）与几何引用编辑后防抖自动保存：
  *  这些编辑不落盘的话，关掉再打开工程就全丢了。显式保存 / 另存为仍走 writeProject。 */
@@ -239,7 +237,7 @@ export const useProjectStore = defineStore("project", {
         return;
       }
       const study: Study = {
-        id: `study-${Date.now()}-${++studySeq}`,
+        id: newId("study"),
         name: trimmed,
         createdMs: Date.now(),
         runnerElements: [],
@@ -317,7 +315,7 @@ export const useProjectStore = defineStore("project", {
     ): void {
       this.touchActiveStudy((study) => {
         study.runnerElements.push({
-          id: `re-${Date.now()}-${++elementSeq}`,
+          id: newId("re"),
           kind,
           diameterMm,
           start,
@@ -341,7 +339,7 @@ export const useProjectStore = defineStore("project", {
     ): void {
       this.touchActiveStudy((study) => {
         study.coolingChannels.push({
-          id: `cc-${Date.now()}-${++elementSeq}`,
+          id: newId("cc"),
           diameterMm,
           start,
           end,

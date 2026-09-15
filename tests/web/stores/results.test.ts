@@ -242,7 +242,7 @@ describe("results store", () => {
       expect(downloadTextFile).toHaveBeenCalledTimes(1);
       expect(downloadTextFile).toHaveBeenCalledWith(
         "p-0.100.csv",
-        "node,p (magnitude)\n0,1\n1,2\n2,3",
+        "\uFEFFnode,p (magnitude)\r\n0,1\r\n1,2\r\n2,3\r\n",
       );
       expect(app.error).toBeNull();
     });
@@ -252,7 +252,10 @@ describe("results store", () => {
       results.loadedField = makeField({ field: "T", isMagnitude: false });
       results.exportFieldCsv();
 
-      expect(downloadTextFile).toHaveBeenCalledWith("T-0.100.csv", "node,T\n0,1\n1,2\n2,3");
+      expect(downloadTextFile).toHaveBeenCalledWith(
+        "T-0.100.csv",
+        "\uFEFFnode,T\r\n0,1\r\n1,2\r\n2,3\r\n",
+      );
     });
   });
 
