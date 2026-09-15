@@ -4,6 +4,7 @@
 import UiButton from "../../components/ui/UiButton.vue";
 import { useViewportPanel } from "./useViewportPanel";
 import { fixed } from "../../utils/format";
+import { FIELD_LEGEND_STYLE } from "../../render/palette";
 
 const {
   layout,
@@ -88,10 +89,7 @@ const {
             v-show="legendVisible"
             class="absolute top-3 left-3 z-10 flex items-center gap-2 rounded-md border border-zinc-800 bg-zinc-950/80 px-2 py-1.5"
           >
-            <div
-              class="h-16 w-2 rounded-sm"
-              style="background: linear-gradient(180deg, #f59e0b, #22c55e, #3b82f6)"
-            />
+            <div class="h-16 w-2 rounded-sm" :style="{ background: FIELD_LEGEND_STYLE }" />
             <div class="flex h-16 flex-col justify-between font-mono text-[10px] text-zinc-400">
               <span v-for="(value, index) in legendValues" :key="index">{{ fixed(value, 2) }}</span>
             </div>

@@ -1,3 +1,5 @@
+import { FIELD_COLD_RGB, FIELD_HOT_RGB, wgslFieldColor } from "../palette";
+
 /** WebGPU POC 着色器：与 WebGL2 主后端同一套视觉语义
  * （云图冷热映射 + 平行光漫反射 + 平面剖切丢弃）。 */
 
@@ -62,7 +64,7 @@ fn fs(in: VSOut) -> @location(0) vec4<f32> {
   let n = normalize(in.normal);
   let diff = max(dot(n, normalize(u.light_dir)), 0.0);
   let t = clamp((in.value - u.value_min) / max(u.value_max - u.value_min, 1e-6), 0.0, 1.0);
-  let field = mix(vec3<f32>(0.05, 0.33, 0.66), vec3<f32>(0.94, 0.33, 0.13), t);
+  let field = mix(${wgslFieldColor(FIELD_COLD_RGB)}, ${wgslFieldColor(FIELD_HOT_RGB)}, t);
   let base = select(vec3<f32>(0.55, 0.58, 0.62), field, u.use_field > 0.5);
   return vec4<f32>(base * (0.35 + 0.65 * diff), 1.0);
 }

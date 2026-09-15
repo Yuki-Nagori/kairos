@@ -12,6 +12,7 @@ import { computeVertexNormals } from "./normals";
 import type { CameraSnapshot } from "./picking";
 import type { OverlayLayer } from "./overlays";
 import { THEME_CHANGED_EVENT, themeRgb } from "../utils/theme";
+import { FIELD_COLD_RGB, FIELD_HOT_RGB } from "./palette";
 
 /** 垂直视场角：渲染循环与拾取共用同一常量。 */
 const FOV_Y = Math.PI / 4;
@@ -632,8 +633,8 @@ export class ViewportRenderer {
     gl.useProgram(this.program);
     gl.uniformMatrix4fv(this.locOf(this.meshUniforms, this.program, "u_mvp"), false, mvp);
     gl.uniform3f(this.locOf(this.meshUniforms, this.program, "u_lightDir"), 0.4, 0.8, 0.6);
-    gl.uniform3f(this.locOf(this.meshUniforms, this.program, "u_colorCold"), 0.15, 0.35, 0.85);
-    gl.uniform3f(this.locOf(this.meshUniforms, this.program, "u_colorHot"), 0.95, 0.4, 0.1);
+    gl.uniform3f(this.locOf(this.meshUniforms, this.program, "u_colorCold"), ...FIELD_COLD_RGB);
+    gl.uniform3f(this.locOf(this.meshUniforms, this.program, "u_colorHot"), ...FIELD_HOT_RGB);
     gl.uniform1f(this.locOf(this.meshUniforms, this.program, "u_valueMin"), this.valueMin);
     gl.uniform1f(this.locOf(this.meshUniforms, this.program, "u_valueMax"), this.valueMax);
     gl.uniform1i(this.locOf(this.meshUniforms, this.program, "u_useField"), this.useField);

@@ -495,3 +495,4 @@
 - **13:57** docs(tasks): 核对 T60 文档与实现：导入日志、Rust PPTX 生成、报告面板接线和视口/曲线快照均已落地，现从待办表移入已实现，避免重复评估候选库。
 - **13:57** docs(tasks): 逐项核对 T95 与当前源码、锁文件和基准：修正 CSV/摘要/VueUse/原子写现状与已完成收编清单，作废 dualdomain/midplane 重复项，补回 gl-matrix 评估、色标不一致、repair 局部向量与摘要展示待办；限定官方摘要校验范围，区分历史性能记录和可复现证据，同步任务索引，未改运行时行为。
 - **14:06** refactor(core): T95 P3-b 补漏完成：`repair::triangles_intersect` 移除局部 sub/cross/dot，统一复用 `services::vec3`；保留 Möller 区间相交算法与容差语义，repair 10 项回归全部通过。
+- **14:10** refactor(web): T95 色标基础收编：新增 `render/palette.ts`，WebGL/WebGPU 云图端点与视口图例共用蓝橙色标；不引入 d3，保留桌面截图回归作为剩余验收。
