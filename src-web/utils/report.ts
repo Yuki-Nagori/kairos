@@ -23,7 +23,7 @@ interface ReportInput {
 }
 
 /** 报告分区开关：模板化自定义报告的分区选择。 */
-interface ReportSections {
+export interface ReportSections {
   parameters: boolean;
   geometry: boolean;
   fieldStats: boolean;
@@ -33,7 +33,7 @@ interface ReportSections {
 }
 
 /** 报告模板选项：自定义标题 / 备注 / 分区开关；缺省 = 默认标题 + 全部分区。 */
-interface ReportOptions {
+export interface ReportOptions {
   title?: string;
   notes?: string | null;
   sections?: Partial<ReportSections>;
