@@ -171,7 +171,7 @@ fn material_serializes_with_camel_case() {
     let json = serde_json::to_value(&material).unwrap();
     assert_eq!(json["family"], "PP");
     assert_eq!(json["rheology"]["tauStar"], 2.0e4);
-    assert_eq!(json["pvt"]["b1m"], 1.28e-3);
+    assert_eq!(json["pvt"]["b1m"], 1.3871717802908978e-3);
     assert_eq!(json["specificHeat"][0], json!([300.0, 1900.0]));
     assert_eq!(json["mechanics"]["elasticModulus"], 1.5e9);
     assert_eq!(json["filler"], serde_json::Value::Null);

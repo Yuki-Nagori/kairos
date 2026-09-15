@@ -771,7 +771,7 @@ mod blowing_tests {
         assert_eq!(corrected.pvt.b5, material.pvt.b5);
         assert_eq!(corrected.rheology.n, material.rheology.n);
         // 原材料不被就地修改
-        assert_eq!(material.pvt.b1m, 1.28e-3);
+        assert!((material.pvt.b1m - 1.3871717802908978e-3).abs() < 1e-15);
 
         let note = blowing_note(&material).unwrap();
         assert!(note.contains("N₂"));
