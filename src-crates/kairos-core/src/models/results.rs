@@ -37,6 +37,15 @@ pub struct ScalarField {
     pub complete: bool,
 }
 
+/// 大结果场的常用统计，避免调用方为展示再次扫描完整值区。
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FieldStats {
+    pub count: usize,
+    pub min: f64,
+    pub max: f64,
+}
+
 /// 已加载的矢量场（三分量）：与标量场同域，供变形显示与矢量派生使用。
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]

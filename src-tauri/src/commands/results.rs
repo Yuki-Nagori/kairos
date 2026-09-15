@@ -13,6 +13,12 @@ use tauri::ipc::Response;
 pub struct ResultSlots {
     /// 当前槽位所属算例目录；每个算例目录对应一次运行结果。
     pub case_dir: Option<String>,
+    /// 算例作用域代际；切换算例后旧异步请求不得回写。
+    generation: u64,
+    /// 槽位请求序号；同一算例内只接受最后一次请求的乱序返回。
+    request_seq: u64,
+    primary_request: u64,
+    compare_request: u64,
     /// 主场：普通加载 / 展示 / 单场派生的数据源。
     pub primary: Option<ScalarField>,
     /// 对比场：两场差值派生的减数。
@@ -30,6 +36,10 @@ impl Default for ResultSession {
     fn default() -> Self {
         Self(Arc::new(Mutex::new(ResultSlots {
             case_dir: None,
+            generation: 0,
+            request_seq: 0,
+            primary_request: 0,
+            compare_request: 0,
             primary: None,
             compare: None,
             cache: FieldCache::new(8).expect("默认容量在合法区间"),
@@ -40,19 +50,37 @@ impl Default for ResultSession {
 
 impl ResultSession {
     /// 切换算例时原子清空所有结果槽位，避免旧运行的场参与新运行混用。
-    fn begin_case(&self, case_dir: &str) {
+    fn begin_case(&self, case_dir: &str) -> u64 {
         let scope = std::path::Path::new(case_dir)
             .to_string_lossy()
             .into_owned();
         let mut slots = self.lock();
         if slots.case_dir.as_deref() == Some(scope.as_str()) {
-            return;
+            return slots.generation;
         }
         slots.case_dir = Some(scope);
+        slots.generation = slots.generation.wrapping_add(1);
+        slots.request_seq = 0;
+        slots.primary_request = 0;
+        slots.compare_request = 0;
         slots.primary = None;
         slots.compare = None;
         slots.vectors = None;
         slots.cache.clear();
+        slots.generation
+    }
+
+    fn begin_load(&self, case_dir: &str, compare: bool) -> (u64, u64) {
+        let generation = self.begin_case(case_dir);
+        let mut slots = self.lock();
+        slots.request_seq = slots.request_seq.wrapping_add(1);
+        let request = slots.request_seq;
+        if compare {
+            slots.compare_request = request;
+        } else {
+            slots.primary_request = request;
+        }
+        (generation, request)
     }
 
     pub fn reset(&self) {
@@ -115,7 +143,7 @@ fn load_into_slot(
     field: &str,
     compare: bool,
 ) -> Result<ScalarField> {
-    session.begin_case(case_dir);
+    let (generation, request) = session.begin_load(case_dir, compare);
     let key = cache_key(case_dir, time_dir, field)?;
     let cached = session.lock().cache.get(&key).cloned();
     let loaded = match cached {
@@ -123,6 +151,14 @@ fn load_into_slot(
         None => results::read_field(std::path::Path::new(case_dir), time_dir, field)?,
     };
     let mut slots = session.lock();
+    let current_request = if compare {
+        slots.compare_request
+    } else {
+        slots.primary_request
+    };
+    if slots.generation != generation || current_request != request {
+        return Ok(loaded);
+    }
     if loaded.complete {
         slots.cache.put(key, loaded.clone());
     }
@@ -183,6 +219,21 @@ pub async fn export_result_field_csv(
     })
     .await
     .map_err(|e| KairosError::internal(format!("结果 CSV 导出任务失败：{e}")))?
+}
+
+/// 在 core 侧完成结果统计，避免前端再次扫描大数组。
+#[tauri::command]
+pub async fn summarize_result_field(
+    case_dir: String,
+    time_dir: String,
+    field: String,
+) -> Result<kairos_core::models::results::FieldStats> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let loaded = results::read_field(std::path::Path::new(&case_dir), &time_dir, &field)?;
+        Ok(results::field_stats(&loaded.values))
+    })
+    .await
+    .map_err(|e| KairosError::internal(format!("结果统计任务失败：{e}")))?
 }
 
 /// 矢量场三分量通道：[magic][meta JSON][f32 值区 ×3]（每单元 x/y/z 顺序平铺）。
@@ -442,5 +493,19 @@ mod tests {
         assert!(slots.compare.is_none());
         assert!(slots.vectors.is_none());
         assert!(slots.cache.get("first").is_none());
+    }
+
+    #[test]
+    fn newer_slot_request_supersedes_older_request_token() {
+        let session = ResultSession::default();
+        let case = std::env::temp_dir().join(kairos_core::services::project::new_id("request"));
+        let case = case.to_str().unwrap();
+        let (generation, first) = session.begin_load(case, false);
+        let (_, second) = session.begin_load(case, false);
+        let slots = session.lock();
+        assert_eq!(slots.generation, generation);
+        assert!(second > first);
+        assert_eq!(slots.primary_request, second);
+        assert_ne!(slots.primary_request, first);
     }
 }

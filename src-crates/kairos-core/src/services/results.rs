@@ -5,7 +5,9 @@ use std::io::Read;
 use std::path::Path;
 
 use crate::error::{KairosError, Result};
-use crate::models::results::{ResultCatalog, ScalarField, TensorField, TimeStepMeta, VectorField};
+use crate::models::results::{
+    FieldStats, ResultCatalog, ScalarField, TensorField, TimeStepMeta, VectorField,
+};
 
 /// 场类型：由 FoamFile 头的 `class` 行判定（不靠场名猜——求解侧的场名会随
 /// 契约扩展，如位移 `D`、等效应力 `sigmaEq`）。
@@ -246,6 +248,21 @@ pub fn scalar_field_csv(field: &ScalarField) -> String {
         csv.push_str(&format!("{index},{value}\r\n"));
     }
     csv
+}
+
+/// 在 core 侧单次扫描场值，供结果面板和报告复用。
+pub fn field_stats(values: &[f64]) -> FieldStats {
+    let mut min = f64::INFINITY;
+    let mut max = f64::NEG_INFINITY;
+    for &value in values {
+        min = min.min(value);
+        max = max.max(value);
+    }
+    FieldStats {
+        count: values.len(),
+        min,
+        max,
+    }
 }
 
 /// 解析 internalField 为对称张量分量（每 6 个标量一组，(xx, xy, xz, yy, yz, zz)）。
@@ -522,6 +539,26 @@ boundaryField
             complete: true,
         };
         assert_eq!(scalar_field_csv(&plain), "\u{feff}node,T\r\n0,3\r\n");
+    }
+
+    #[test]
+    fn field_stats_scans_values_once_and_preserves_empty_shape() {
+        assert_eq!(
+            field_stats(&[3.0, -1.0, 2.0]),
+            FieldStats {
+                count: 3,
+                min: -1.0,
+                max: 3.0
+            }
+        );
+        assert_eq!(
+            field_stats(&[]),
+            FieldStats {
+                count: 0,
+                min: f64::INFINITY,
+                max: f64::NEG_INFINITY
+            }
+        );
     }
 
     const SCALAR_NONUNIFORM: &str = r#"FoamFile
