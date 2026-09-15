@@ -1,6 +1,12 @@
 {
   "$schema": "./node_modules/knip/schema.json",
-  "entry": ["index.html", "tests/web/**/*.test.ts", "src-web/bench/*.ts"],
+  "entry": [
+    "index.html",
+    "tests/web/**/*.test.ts",
+    "src-web/bench/*.ts",
+    "src-web/render/snapshot.ts",
+    "src-web/utils/report.ts"
+  ],
   "project": ["src-web/**/*.ts", "src-web/**/*.vue"],
   "ignoreDependencies": ["tailwindcss"]
 }
