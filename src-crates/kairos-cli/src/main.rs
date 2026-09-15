@@ -1,6 +1,7 @@
 //! Kairos 无头 CLI：复用 kairos-core 的纯函数服务，零 Tauri 依赖。
 //! 错误一律以 `{code, message}` 结构化输出（与 IPC 契约同形），--json 供脚本消费。
 
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 use std::process::Command;
@@ -126,6 +127,29 @@ enum OptimizeAction {
         /// 总评估预算
         #[arg(long, default_value_t = 64)]
         budget: usize,
+    },
+    /// 执行候选、回填指标并按 core 优化器继续细化
+    Run {
+        #[arg(long = "factor", required = true)]
+        factors: Vec<String>,
+        #[arg(long, default_value = "fill-time")]
+        objective: String,
+        #[arg(long, default_value_t = 16)]
+        budget: usize,
+        #[arg(long)]
+        sample_box: bool,
+        #[arg(long)]
+        stl: Option<String>,
+        #[arg(long, default_value = "workspace")]
+        out_dir: String,
+        #[arg(long, default_value_t = 1.0)]
+        target_size: f64,
+        #[arg(long)]
+        solve: bool,
+        #[arg(long)]
+        vm: bool,
+        #[arg(long)]
+        material: Option<String>,
     },
 }
 
@@ -548,7 +572,174 @@ fn run_optimize(action: OptimizeAction, json: bool) -> kairos_core::error::Resul
             }
             Ok(())
         }
+        OptimizeAction::Run {
+            factors,
+            objective,
+            budget,
+            sample_box,
+            stl,
+            out_dir,
+            target_size,
+            solve,
+            vm,
+            material,
+        } => run_optimize_batch(
+            &factors,
+            &objective,
+            budget,
+            sample_box,
+            stl,
+            &out_dir,
+            target_size,
+            solve,
+            vm,
+            material,
+            json,
+        ),
     }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn run_optimize_batch(
+    factors: &[String],
+    objective_name: &str,
+    budget: usize,
+    sample_box: bool,
+    stl: Option<String>,
+    out_dir: &str,
+    target_size: f64,
+    solve: bool,
+    vm: bool,
+    material_path: Option<String>,
+    json: bool,
+) -> kairos_core::error::Result<()> {
+    let ranges = factors
+        .iter()
+        .map(|spec| parse_optimize_factor(spec))
+        .collect::<kairos_core::error::Result<Vec<_>>>()?;
+    let objective = match objective_name {
+        "fill-time" => optimize::Objective::MinFillTime,
+        "injection-pressure" => optimize::Objective::MinInjectionPressure,
+        other => {
+            return Err(KairosError::validation(format!(
+                "未知寻优目标「{other}」，可用 fill-time 或 injection-pressure。"
+            )));
+        }
+    };
+    let mut planner = optimize::Optimizer::new(ranges, objective, budget)?;
+    let mesh = match (sample_box, stl) {
+        (true, _) => kairos_core::models::geometry::TriangleMesh::sample_box(10.0),
+        (false, Some(path)) => services::geometry::parse_stl_file(Path::new(&path))?,
+        (false, None) => {
+            return Err(KairosError::validation(
+                "必须指定 --sample-box 或 --stl <路径>。",
+            ));
+        }
+    };
+    let volume = services::meshing::generate(
+        &mesh,
+        &services::meshing::VolumeMeshParams {
+            target_size,
+            refinement: None,
+        },
+    )?;
+    let material = load_material(material_path.as_deref())?;
+    let base = default_process_with(1.0);
+    let root = Path::new(out_dir).join("optimize");
+    fs::create_dir_all(&root).map_err(|error| KairosError::io(error.to_string()))?;
+    let mut next_index = 0usize;
+    let mut aborted = None;
+    loop {
+        let candidates = planner.next_candidates();
+        if candidates.is_empty() {
+            break;
+        }
+        for candidate in candidates {
+            if planner.used() >= budget {
+                break;
+            }
+            next_index += 1;
+            let case_dir = root.join(format!("run-{next_index:03}"));
+            let run = doe::DoeRun {
+                index: next_index,
+                parameters: candidate.clone(),
+                status: doe::DoeStatus::Pending,
+                metrics: BTreeMap::new(),
+                elapsed_s: None,
+            };
+            let settings = doe::apply_factors(&base, &run)?;
+            let started = std::time::Instant::now();
+            let mut attempts = 0;
+            let mut metrics = None;
+            let mut failure = None;
+            while attempts < optimize::MAX_ATTEMPTS && metrics.is_none() {
+                attempts += 1;
+                match run_doe_case(
+                    &case_dir,
+                    &volume,
+                    &material,
+                    &settings,
+                    AnalysisStage::Fill,
+                    1,
+                    solve,
+                    vm,
+                ) {
+                    Ok(value) => metrics = value,
+                    Err(error) => failure = Some(error.message().to_string()),
+                }
+            }
+            let score = metrics
+                .as_ref()
+                .and_then(|values| optimize::score_of(objective, values));
+            let evaluation = optimize::Evaluation {
+                parameters: candidate,
+                score,
+                violations: Vec::new(),
+                attempts,
+            };
+            aborted = planner.record(evaluation).or(aborted);
+            if let Some(reason) = failure {
+                fs::write(case_dir.join("failure.txt"), reason)
+                    .map_err(|error| KairosError::io(error.to_string()))?;
+            }
+            let _ = started;
+            if aborted.is_some() {
+                break;
+            }
+        }
+        if aborted.is_some() {
+            break;
+        }
+    }
+    let best = planner.best().map(|item| {
+        serde_json::json!({
+            "parameters": item.parameters,
+            "score": item.score,
+            "attempts": item.attempts,
+        })
+    });
+    let output = serde_json::json!({
+        "objective": objective.metric_name(),
+        "budget": budget,
+        "evaluations": planner.history(),
+        "best": best,
+        "aborted": aborted,
+    });
+    fs::write(
+        root.join("summary.json"),
+        serde_json::to_vec_pretty(&output).unwrap(),
+    )
+    .map_err(|error| KairosError::io(error.to_string()))?;
+    if json {
+        emit_json(&output);
+    } else {
+        println!(
+            "优化完成：{} 次评估，汇总 {}",
+            planner.used(),
+            root.display()
+        );
+    }
+    Ok(())
 }
 
 fn parse_optimize_factor(spec: &str) -> kairos_core::error::Result<optimize::FactorRange> {

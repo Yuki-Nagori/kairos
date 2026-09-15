@@ -584,3 +584,5 @@
 - 2026-09-16 02:55 | T95 收尾清理 | 移除快照导出和报告类型的未使用导出，knip 与 ESLint 通过；保留报告生成和快照注册实际消费的最小 API。
 
 - 2026-09-15 20:35 | T93 smoke | 执行单点 DOE 求解回填 smoke；本机缺少 `decomposePar`，结果按契约标记 failed 并保留原因/耗时，验证失败点可见性。
+
+- 2026-09-15 21:05 | T93 CLI 回填循环 | 新增 `optimize run`：候选执行、失败重试、指标回填、连续失败中止与 `optimize/summary.json` 汇总；sample-box smoke 已验证失败历史可见。

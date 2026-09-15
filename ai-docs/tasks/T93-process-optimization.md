@@ -3,7 +3,7 @@
 - 阶段：E3（优化与自动化）
 - 依赖：T92（DOE 汇总表）、T62/T74/T59（约束与预筛）
 - 优先级：P3（等 T92）
-- 状态：**进行中**（core 优化器、CLI `optimize plan`、DOE 单批真实求解回填已完成；自动寻优候选迭代与失败点惩罚汇总待做）
+- 状态：**进行中**（core 优化器与 CLI `optimize run` 自适应循环已完成；真实 VM 指标回填与约束字段接入待验收）
 - 来源：[优化可行性](../research/optimization-feasibility.md)
 
 ## 目标
@@ -26,7 +26,7 @@
 
 - `kairos-cli optimize plan` 复用 core 优化器生成粗搜候选，支持 `--json` 脚本输出。
 - 因子格式固定为 `名称=min:max:levels`，目标支持 `fill-time` / `injection-pressure`。
-- 该命令只规划参数，不启动求解器；真实 case 执行与结果回填保留在下一批。
+- CLI `optimize run` 已执行候选、按 `MAX_ATTEMPTS=2` 重试、回填指标并在连续 3 次失败后中止；汇总写入 `optimize/summary.json`。
 - DOE 的 case 生成 / 可选求解 / 指标解析已收成 CLI 唯一函数，后续优化回填直接复用。
 - 已用 GUI 部署的 Multipass `kairos` / moldingFoam v1.1.0 完成 9 点真实 DOE 回填；原始输出与时间戳归档见 [T100 批次清单](../reviews/t100-runs/20260915T174242+0800-vm-manifest.md)。
 

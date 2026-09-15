@@ -8,6 +8,7 @@
 //! 失败处置（任务要求）：非物理 / 无指标的结果按**高惩罚**参与比较但不算可行；
 //! 同一候选重试一次；连续 3 次失败即中止并报出失败参数点。
 
+use serde::Serialize;
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 
@@ -46,7 +47,7 @@ pub struct FactorRange {
 ///
 /// `score` 为 None 表示这一跑没有可用指标（求解失败 / 结果非物理）——它仍进入
 /// 历史（用于失败计数），但不参与「最优」评选。
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Evaluation {
     pub parameters: BTreeMap<String, f64>,
     pub score: Option<f64>,
