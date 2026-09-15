@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "dual-domain-experiment/v1",
+  "mesh": {
+    "schemaVersion": "dual-domain/v1",
+    "fixture": "dual-domain-v1.sample.json",
+    "lengthUnit": "mm",
+    "thicknessUnit": "mm"
+  },
+  "material": {
+    "id": "PP-REF-01",
+    "source": "kairos-builtin"
+  },
+  "stage": "fill-pack-cool",
+  "process": {
+    "meltTemperatureC": 220.0,
+    "moldTemperatureC": 50.0,
+    "injectionTimeS": 5.5,
+    "packingPressureCurveMpa": [
+      [0.0, 0.9229],
+      [0.2, 27.6282],
+      [315.0797, 27.6282]
+    ],
+    "coolingTimeS": 20.0
+  },
+  "expectedUnits": {
+    "pressure": "MPa",
+    "temperature": "C",
+    "time": "s"
+  }
+}

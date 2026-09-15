@@ -574,3 +574,5 @@
 - 2026-09-16 01:20 | T102 上游输入导出 | CLI 新增 `dual-domain export`，可从 STL 生成版本化 `dual-domain/v1` JSON，供 moldingFoam 上游模块直接联调。
 
 - 2026-09-16 01:35 | T102 联调 fixture | 提交 `dual-domain/v1` sample-box JSON fixture 与 round-trip 契约测试，上游可先完成无专有资产的读取实验。
+
+- 2026-09-16 01:50 | T102 实验 manifest | 新增 Dual Domain 网格、PP-REF-01 和 fill-pack-cool 工艺参数的机器可读实验 manifest，上游更新后可直接执行完整 smoke test。

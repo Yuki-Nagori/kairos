@@ -36,3 +36,7 @@ cargo run -p kairos-cli -- dual-domain export \
 - 不改变单位或把厚度从三角形数组改成隐式默认值。
 - 不把缺失厚度、越界索引或未匹配面当作零值继续运行。
 - 不将参考报告中的专有原始网格或材料文件提交到任一仓库。
+
+## 完整实验 fixture
+
+`tests/fixtures/dual-domain-v1-experiment-manifest.json` 将网格 fixture、`PP-REF-01`、`fill-pack-cool` 阶段和 Mug 冻结工艺参数组合在一起。上游更新后可以先用该 manifest 做无专有资产的完整 case smoke test，再换成本地 Mug 导出 JSON。
