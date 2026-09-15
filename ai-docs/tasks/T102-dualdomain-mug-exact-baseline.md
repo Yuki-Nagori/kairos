@@ -51,7 +51,7 @@
 
 - CLI 已新增 `dual-domain export`，只接受真实零件 STL，生成 `dual-domain/v1` JSON；Dual Domain 不再提供闭合方盒样例，避免把 `sum(area × thickness)` 误当作实体体积。
 - 上游联调顺序和字段定义已记录在 [T102 Dual Domain 上游联调契约](../reviews/t102-dualdomain-contract.md)。
-- `tests/fixtures/dual-domain-v1.sample.json` 是 Mug STL 生成的 Dual Domain 样例；`tests/fixtures/volume-mesh-v1.mug.json` 是同一 Mug 的三维体网格样例。两者均只用于输入契约和上游联调，不替代 moldingFoam 的真实求解结果。
+- `tests/fixtures/dual-domain-v1.sample.json` 采用上游更新后的最小 Dual Domain 输入样例（4 节点 / 2 三角形），只用于读取契约和上游 smoke test。Mug 的完整 JSON 留在本地 report，不纳入仓库。
 
 示例：
 
@@ -63,7 +63,7 @@ cargo run -p kairos-cli -- dual-domain export \
 
 该命令会读取 Mug STL，输出节点、三角形、厚度和梁耦合数据；不再接受 `--sample-box`。
 
-同一 Mug 也生成了三维体网格 fixture `tests/fixtures/volume-mesh-v1.mug.json`（15,868 节点 / 48,605 四面体），实验 manifest 同时记录两种输入。
+三维体网格仍由 CLI 从 Mug STL 生成，真实求解使用体网格 case，不要求上游复制大体网格 JSON。
 
 ## 路线确认（2026-09-16）
 

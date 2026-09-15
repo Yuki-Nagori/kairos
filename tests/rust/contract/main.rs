@@ -438,8 +438,8 @@ fn dual_domain_fixture_round_trips_for_upstream_consumers() {
     assert_eq!(input.schema_version, "dual-domain/v1");
     assert_eq!(input.length_unit, "mm");
     assert_eq!(input.thickness_unit, "mm");
-    assert_eq!(input.nodes.len(), 4417);
-    assert_eq!(input.triangles.len(), 8834);
+    assert_eq!(input.nodes.len(), 4);
+    assert_eq!(input.triangles.len(), 2);
     assert_eq!(input.thickness.len(), input.triangles.len());
 }
 
