@@ -129,6 +129,28 @@ pub fn parse_custom(content: &str) -> Result<Vec<Material>> {
     }
 }
 
+/// 从用户指定文件读取自定义材料；格式由扩展名决定，返回的材料逐项校验。
+pub fn read_custom_material_file(path: &Path) -> Result<Vec<Material>> {
+    let extension = path
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(str::to_ascii_lowercase)
+        .ok_or_else(|| KairosError::validation("自定义材料文件必须带 .json 或 .csv 扩展名。"))?;
+    let content = fs::read_to_string(path).map_err(|error| {
+        KairosError::io(format!(
+            "读取自定义材料文件失败（{}）：{error}",
+            path.display()
+        ))
+    })?;
+    match extension.as_str() {
+        "json" => parse_custom(&content),
+        "csv" => parse_custom_csv(&content),
+        _ => Err(KairosError::validation(
+            "自定义材料文件格式不支持，仅支持 JSON 或 CSV。",
+        )),
+    }
+}
+
 /// CSV 批量导入的约定表头（列序固定；比热 / 导热为「温度:值」分号表，
 /// filler 列为「类型:质量分数:长径比:备注」且可留空；字段内不得包含逗号）。
 const CSV_HEADER: [&str; 21] = [
@@ -398,6 +420,23 @@ mod tests {
         fs::write(&path, "垃圾内容").unwrap();
         assert!(read_custom_file(&path).is_empty());
         fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn read_custom_material_file_dispatches_format() {
+        let path = std::env::temp_dir().join("kairos-material-dispatch.json");
+        let materials = builtin_materials();
+        write_custom_file(&path, &materials).unwrap();
+        assert_eq!(
+            read_custom_material_file(&path).unwrap().len(),
+            materials.len()
+        );
+        let unknown = path.with_extension("txt");
+        fs::write(&unknown, "x").unwrap();
+        assert!(read_custom_material_file(&unknown).is_err());
+        assert!(read_custom_material_file(Path::new("material")).is_err());
+        fs::remove_file(path).ok();
+        fs::remove_file(unknown).ok();
     }
 
     #[test]
