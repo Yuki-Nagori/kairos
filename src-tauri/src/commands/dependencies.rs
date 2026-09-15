@@ -11,6 +11,7 @@ use std::os::windows::process::CommandExt;
 use kairos_core::error::{KairosError, Result};
 use kairos_core::models::dependencies::RuntimeDependency;
 use kairos_core::services::dependencies as dependencies_service;
+use kairos_core::utils::fs::find_file_bounded;
 use serde::Serialize;
 use tauri::AppHandle;
 
@@ -56,40 +57,30 @@ pub fn list_runtime_dependencies(app: AppHandle) -> Result<Vec<DependencyStatus>
 /// 在受管组件目录中查找可执行文件（gmsh SDK 解压后位于 bin/ 子目录）。
 /// Windows 匹配 <binary>.exe；Unix 额外要求可执行位。
 fn find_managed_executable(dir: &Path, binary: &str) -> Option<PathBuf> {
-    find_executable(dir, binary, 0)
+    // 深度上限 4 与遍历骨架（读目录失败即停、目录优先下探）由 core 的公共遍历提供。
+    // 可执行位用 `symlink_metadata` 判定，与 DirEntry::metadata 一样**不跟随**符号链接。
+    find_file_bounded(dir, 4, &mut |path| is_executable_named(path, binary))
 }
 
-fn find_executable(dir: &Path, binary: &str, depth: u8) -> Option<PathBuf> {
-    if depth > 4 {
-        return None;
+/// 文件名等于 `binary`（或 Windows 的 `<binary>.exe`）且具备可执行位。
+fn is_executable_named(path: &Path, binary: &str) -> bool {
+    let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+        return false;
+    };
+    if name != binary && name != format!("{binary}.exe") {
+        return false;
     }
-    for entry in std::fs::read_dir(dir).ok()?.flatten() {
-        let path = entry.path();
-        if path.is_dir() {
-            if let Some(found) = find_executable(&path, binary, depth + 1) {
-                return Some(found);
-            }
-            continue;
-        }
-        let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
-            continue;
-        };
-        let stem_matches = name == binary || name == format!("{binary}.exe");
-        #[cfg(unix)]
-        let executable = {
-            use std::os::unix::fs::PermissionsExt;
-            entry
-                .metadata()
-                .map(|m| m.permissions().mode() & 0o111 != 0)
-                .unwrap_or(false)
-        };
-        #[cfg(not(unix))]
-        let executable = true;
-        if stem_matches && executable {
-            return Some(path);
-        }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        path.symlink_metadata()
+            .map(|meta| meta.permissions().mode() & 0o111 != 0)
+            .unwrap_or(false)
     }
-    None
+    #[cfg(not(unix))]
+    {
+        true
+    }
 }
 
 /// 在线检查组件更新：比对受管清单记录的 release 标签与线上最新标签。

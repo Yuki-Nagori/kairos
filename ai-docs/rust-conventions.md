@@ -199,20 +199,24 @@ src-tauri/src/
 
 ### `utils/fs`
 
-| 需求                          | 函数                                                               |
-| ----------------------------- | ------------------------------------------------------------------ |
-| 原子写入（临时文件 + rename） | `write_atomic(path, content) -> Result<()>`                        |
-| 有界深度遍历目录              | `walk_dirs_bounded(root, max_depth, visit: &mut dyn FnMut(&Path))` |
-| 有界深度找文件                | `find_file_bounded(root, max_depth, predicate) -> Option<PathBuf>` |
-| 读文本 + 归一 IO 错误         | `read_to_string(path, what) -> Result<String>`                     |
+| 需求                          | 函数                                                                                           |
+| ----------------------------- | ---------------------------------------------------------------------------------------------- |
+| 原子写入（临时文件 + rename） | `write_atomic(path, content, what) -> Result<()>`                                              |
+| 有界深度遍历目录              | `walk_dirs_bounded(root, max_depth, visit: &mut dyn FnMut(&Path) -> bool)`（返回是否继续下探） |
+| 有界深度找文件                | `find_file_bounded(root, max_depth, predicate) -> Option<PathBuf>`                             |
+| 读文本 + 归一 IO 错误         | `read_to_string(path, what) -> Result<String>`                                                 |
 
 约定要点：
 
-- **原子写入必须同目录**：临时文件放目标同目录（`with_extension` 派生），跨目录 rename 不是
-  原子操作；rename 失败要清理临时文件，否则失败一次留一个 `.tmp`。
+- **原子写入必须同目录**：临时文件放目标同目录，跨目录 rename 不是原子操作；rename 失败要
+  清理临时文件，否则失败一次留一个 `.tmp`。临时文件在文件名后**追加** `.tmp`（`a.stl` →
+  `a.stl.tmp`）而不是用 `with_extension` 替换扩展名——后者会让同目录下的 `a.stl` 与 `a.step`
+  争用同一个 `a.tmp`。
 - **遍历接口取 `&mut dyn FnMut`，不取泛型**：泛型会按每个调用方的闭包类型各单态化一份，
   同一源码行登记多次，其中未被走到的实例会被报成未覆盖。这正是
   [ARCHITECTURE.md §6](ARCHITECTURE.md) 「多份单态实例」那条的应对方式。
+- **遍历的「命中即停」靠回调返回值**：`visit` 返回 `false` 表示把该目录当叶子不再下探
+  （如「找到环境根目录就不再往里找」），不要为此另写一份递归。
 - 遍历**只读不删**：需要删除 / 覆盖的调用方自己做，工具不隐藏破坏性操作。
 - `read_to_string` 的 `what` 是**动作描述**（如「读取场文件」），用于拼出可读的中文错误
   （`读取场文件失败：…`），避免每个调用点手写同一句 `map_err`。

@@ -9,7 +9,7 @@ use std::process::Command;
 
 use kairos_core::error::{KairosError, Result};
 use kairos_core::services::digest;
-use kairos_core::utils::fs::write_atomic;
+use kairos_core::utils::fs::{walk_dirs_bounded, write_atomic};
 use kairos_core::utils::time::now_ms;
 use serde::Serialize;
 use tauri::ipc::Channel;
@@ -414,43 +414,25 @@ fn extract_archive(archive: &Path, dest: &Path) -> Result<()> {
 pub fn native_env_root(app: &AppHandle) -> Option<PathBuf> {
     let dir = downloads_dir(app).ok()?.join("moldingfoam");
     let mut found: Option<(std::time::SystemTime, PathBuf)> = None;
-    collect_env_roots(&dir, 0, 4, &mut found);
+    walk_dirs_bounded(&dir, 4, &mut |path| {
+        let bashrc = kairos_core::services::vm::native_env_bashrc(path);
+        if !bashrc.exists() {
+            return true;
+        }
+        // 命中即把这个目录当叶子：再往里找没有意义（环境根只有一层）。
+        let modified = bashrc
+            .metadata()
+            .and_then(|meta| meta.modified())
+            .unwrap_or(std::time::UNIX_EPOCH);
+        if found
+            .as_ref()
+            .is_none_or(|(current, _)| modified > *current)
+        {
+            found = Some((modified, path.to_path_buf()));
+        }
+        false
+    });
     found.map(|(_, path)| path)
-}
-
-fn collect_env_roots(
-    dir: &Path,
-    depth: u8,
-    max_depth: u8,
-    found: &mut Option<(std::time::SystemTime, PathBuf)>,
-) {
-    if depth > max_depth {
-        return;
-    }
-    let Ok(entries) = fs::read_dir(dir) else {
-        return;
-    };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if !path.is_dir() {
-            continue;
-        }
-        let bashrc = kairos_core::services::vm::native_env_bashrc(&path);
-        if bashrc.exists() {
-            let modified = bashrc
-                .metadata()
-                .and_then(|meta| meta.modified())
-                .unwrap_or(std::time::UNIX_EPOCH);
-            if found
-                .as_ref()
-                .is_none_or(|(current, _)| modified > *current)
-            {
-                *found = Some((modified, path));
-            }
-            continue;
-        }
-        collect_env_roots(&path, depth + 1, max_depth, found);
-    }
 }
 
 /// 收集受管目录下的 bin 目录（求解器运行 / 网格生成的 PATH 前缀）。
@@ -460,28 +442,14 @@ pub fn managed_bin_dirs(app: &AppHandle) -> Vec<PathBuf> {
         return out;
     };
     for component in ["moldingfoam", "gmsh"] {
-        collect_bin_dirs(&dir.join(component), 0, 4, &mut out);
+        walk_dirs_bounded(&dir.join(component), 4, &mut |path| {
+            if path.file_name().and_then(|name| name.to_str()) == Some("bin") {
+                out.push(path.to_path_buf());
+            }
+            true
+        });
     }
     out
-}
-
-fn collect_bin_dirs(dir: &Path, depth: u8, max_depth: u8, out: &mut Vec<PathBuf>) {
-    if depth > max_depth {
-        return;
-    }
-    let Ok(entries) = fs::read_dir(dir) else {
-        return;
-    };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if !path.is_dir() {
-            continue;
-        }
-        if path.file_name().and_then(|n| n.to_str()) == Some("bin") {
-            out.push(path.clone());
-        }
-        collect_bin_dirs(&path, depth + 1, max_depth, out);
-    }
 }
 
 /// 返回下载目录路径（前端展示「文件存放在哪里」）。

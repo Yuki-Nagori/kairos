@@ -44,7 +44,10 @@ pub fn read_to_string(path: &Path, what: &str) -> Result<String> {
 /// 遍历 `root` 下深度不超过 `max_depth` 的子目录，逐个调用 `visit`（**不含**
 /// `root` 自身）。`root` 不是目录、不可读或不存在时静默返回——调用方按「没找到」
 /// 处理，不必为探测路径单独判存在性。
-pub fn walk_dirs_bounded(root: &Path, max_depth: usize, visit: &mut dyn FnMut(&Path)) {
+///
+/// `visit` 返回**是否继续下探**该目录：返回 `false` 即把它当作叶子（「命中即停」的
+/// 遍历靠这个表达，如「找到环境根目录就不再往里找」）。
+pub fn walk_dirs_bounded(root: &Path, max_depth: usize, visit: &mut dyn FnMut(&Path) -> bool) {
     collect_dirs(root, 1, max_depth, visit);
 }
 
@@ -69,7 +72,7 @@ fn temporary_path(path: &Path) -> PathBuf {
     path.with_file_name(name)
 }
 
-fn collect_dirs(dir: &Path, depth: usize, max_depth: usize, visit: &mut dyn FnMut(&Path)) {
+fn collect_dirs(dir: &Path, depth: usize, max_depth: usize, visit: &mut dyn FnMut(&Path) -> bool) {
     if depth > max_depth {
         return;
     }
@@ -81,8 +84,9 @@ fn collect_dirs(dir: &Path, depth: usize, max_depth: usize, visit: &mut dyn FnMu
         if !path.is_dir() {
             continue;
         }
-        visit(&path);
-        collect_dirs(&path, depth + 1, max_depth, visit);
+        if visit(&path) {
+            collect_dirs(&path, depth + 1, max_depth, visit);
+        }
     }
 }
 
@@ -141,8 +145,12 @@ mod tests {
 
     /// 目录收集器：**多个用例共用同一份实现**。内容完全相同的闭包会被优化器合并，
     /// 覆盖率按「多份单态实例」记账时其中一份计数为 0，整行被报成未覆盖。
-    fn path_collector(seen: &mut Vec<PathBuf>) -> impl FnMut(&Path) + '_ {
-        move |path| seen.push(path.to_path_buf())
+    /// 始终返回 `true`（继续下探）。
+    fn path_collector(seen: &mut Vec<PathBuf>) -> impl FnMut(&Path) -> bool + '_ {
+        move |path| {
+            seen.push(path.to_path_buf());
+            true
+        }
     }
 
     /// 扩展名匹配谓词：同上，只写一处。
@@ -302,6 +310,29 @@ mod tests {
         // 传文件而非目录：读目录失败即静默返回
         walk_dirs_bounded(&file, 4, &mut path_collector(&mut seen));
         assert!(seen.is_empty());
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn walk_stops_descending_when_visit_returns_false() {
+        let dir = scratch("walk-prune");
+        fs::create_dir_all(dir.join("matched/deeper/even-deeper")).unwrap();
+        fs::create_dir_all(dir.join("other/deeper")).unwrap();
+        let mut seen = Vec::new();
+        // 命中 matched 后不再下探：它下面的两层都不应出现，other 仍照常下探
+        walk_dirs_bounded(&dir, 4, &mut |path| {
+            seen.push(path.to_path_buf());
+            path.file_name() != Some(OsStr::new("matched"))
+        });
+        seen.sort();
+        assert_eq!(
+            seen,
+            vec![
+                dir.join("matched"),
+                dir.join("other"),
+                dir.join("other/deeper")
+            ]
+        );
         fs::remove_dir_all(&dir).ok();
     }
 
