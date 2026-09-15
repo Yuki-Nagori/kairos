@@ -17,6 +17,7 @@ use kairos_core::services::jobs::SchedulerLimits;
 use kairos_core::services::moldingfoam;
 use kairos_core::services::paths;
 use kairos_core::services::project::new_id;
+use kairos_core::utils::time::now_ms;
 // VM 通道（macOS/Windows 的 env source）与原生环境（Linux 的 source 行）都用它，
 // 因此导入**不带 cfg**——只在 cfg 块里引用会让 Linux 构建找不到符号。
 use kairos_core::services::vm as vm_logic;
@@ -135,13 +136,6 @@ pub fn detect_vm_shell() -> Option<String> {
 /// 在 macOS 上也能测——Unix 解析不出 `Component::Prefix`，实现里两种形态都认）。
 fn to_wsl_path(path: &str) -> String {
     paths::wsl_path(path).unwrap_or_else(|| path.to_string())
-}
-
-fn now_ms() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis() as u64
 }
 
 /// 往作业日志通道写一行（VM 生命周期提示走同一通道，用户能在作业日志里看到）。
@@ -342,7 +336,7 @@ fn script_case_dir(os: &str, case_dir: &str, vm_case: Option<&str>) -> String {
         "windows" => &to_wsl_path(case_dir),
         _ => case_dir,
     };
-    dir.replace('\'', "'\\''")
+    vm_logic::bash_single_quote(dir)
 }
 
 /// 运行期上下文：受管 bin 目录前缀 + 执行通道（VM shell / 原生环境）。

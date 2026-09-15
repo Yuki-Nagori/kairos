@@ -578,10 +578,8 @@ pub fn native_env_probe_command(env_root: &Path) -> String {
     )
 }
 
-/// 单引号内的字面量转义：`'` → `'\''`（shell 单引号串里唯一的转义形式）。
-pub fn bash_single_quote(value: &str) -> String {
-    value.replace('\'', "'\\''")
-}
+/// 单引号内的字面量转义：`'` → `'\''`。实现在 [`crate::utils::shell`]。
+pub use crate::utils::shell::bash_single_quote;
 
 /// 原生依赖处置提示：OpenMPI 是 foamRun 的动态链接依赖（libmpi.so.40）。
 /// 返回空 = 无需提示；`env_ready` = bundle 已解压且 bashrc 就位。

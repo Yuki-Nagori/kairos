@@ -1,20 +1,14 @@
 //! 工程文件持久化：`.kairos` = 带版本号的 JSON，原子写入防损坏。
 
 use std::collections::HashSet;
-use std::fs;
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::error::{KairosError, Result};
 use crate::models::project::{Project, RecentProject, SCHEMA_VERSION};
 
-pub fn now_ms() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis() as u64
-}
+/// 当前 Unix 毫秒时间戳；实现在 [`crate::utils::time`]（同类语义只留一处）。
+pub use crate::utils::time::now_ms;
 
 /// 会话内唯一 ID（进程内自增 + 毫秒时间戳）。
 pub fn new_id(prefix: &str) -> String {
@@ -90,16 +84,12 @@ pub fn parse(content: &str) -> Result<Project> {
     }
 }
 
-/// 原子写入：先写同目录临时文件再改名覆盖；Windows 的 rename 不能覆盖既有目标，先移除。
+/// 原子写入工程文件：实现在 [`crate::utils::fs::write_atomic`]。
+///
+/// 保留本入口是为了让 `services::project` 的使用方（材料库、适配层、CLI）不必各自
+/// 拼动作描述——`what` 固定为「工程文件」。
 pub fn write_atomic(path: &Path, content: &str) -> Result<()> {
-    let tmp = path.with_extension("kairos.tmp");
-    fs::write(&tmp, content).map_err(|e| KairosError::io(format!("写入临时文件失败：{e}")))?;
-    #[cfg(target_os = "windows")]
-    let _ = fs::remove_file(path);
-    fs::rename(&tmp, path).map_err(|e| {
-        let _ = fs::remove_file(&tmp);
-        KairosError::io(format!("工程文件替换失败：{e}"))
-    })
+    crate::utils::fs::write_atomic(path, content, "工程文件")
 }
 
 /// 解析最近项目 JSON；损坏或缺失按空列表处理（非关键数据，不做硬失败）。
@@ -170,6 +160,7 @@ mod recents_tests {
 mod tests {
     use super::*;
     use crate::models::process::ProcessSettings;
+    use std::fs;
 
     fn sample() -> Project {
         let mut project = create("演示项目", 1000).unwrap();

@@ -12,6 +12,7 @@ use kairos_core::error::{KairosError, Result};
 use kairos_core::models::vm::{VmProviderKind, VmState, VmStatus};
 use kairos_core::services::vm as vm_logic;
 use kairos_core::services::vm_run;
+use kairos_core::utils::fs::write_atomic;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 use tauri::ipc::Channel;
@@ -431,9 +432,7 @@ fn write_deployed_record(dir: &Path, tag: Option<&str>) -> Result<()> {
         return Ok(());
     };
     std::fs::create_dir_all(dir).map_err(|e| KairosError::io(format!("创建数据目录失败：{e}")))?;
-    let tmp = path.with_extension("tmp");
-    std::fs::write(&tmp, tag).map_err(|e| KairosError::io(format!("写入部署记录失败：{e}")))?;
-    std::fs::rename(&tmp, &path).map_err(|e| KairosError::io(format!("替换部署记录失败：{e}")))?;
+    write_atomic(&path, tag, "部署记录")?;
     Ok(())
 }
 

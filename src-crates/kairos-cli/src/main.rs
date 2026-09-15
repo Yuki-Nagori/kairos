@@ -9,6 +9,8 @@ use kairos_core::error::KairosError;
 use kairos_core::models::process::ProcessSettings;
 use kairos_core::models::solver::AnalysisStage;
 use kairos_core::services::{self, doe, geometry, meshing, moldingfoam, project, results};
+use kairos_core::utils::shell;
+use kairos_core::utils::time::now_ms;
 use serde::Serialize;
 
 #[derive(Parser)]
@@ -302,11 +304,7 @@ fn run(command: Commands, json: bool) -> kairos_core::error::Result<()> {
 fn run_project(action: ProjectAction, json: bool) -> kairos_core::error::Result<()> {
     match action {
         ProjectAction::New { name, dir } => {
-            let now = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis() as u64;
-            let doc = project::create(&name, now)?;
+            let doc = project::create(&name, now_ms())?;
             let path = Path::new(&dir).join("project.kairos");
             project::write_atomic(&path, &project::serialize(&doc)?)?;
             if json {
@@ -600,7 +598,7 @@ fn run_solver(case_dir: &str, cores: u32) -> kairos_core::error::Result<()> {
             "case 目录缺少 system/controlDict，请先生成 case。",
         ));
     }
-    let safe_dir = case_dir.replace('\'', "'\\''");
+    let safe_dir = shell::bash_single_quote(case_dir);
     let solve = kairos_core::services::moldingfoam::solve_command(cores);
     // 重定向必须**分组**：`A && B; C > log` 里 `>` 只绑定 C，前面命令的报错根本进不了
     // 日志（曾因此把 decomposePar 的错报成 reconstructPar 的错）。

@@ -9,6 +9,8 @@ use std::process::Command;
 
 use kairos_core::error::{KairosError, Result};
 use kairos_core::services::digest;
+use kairos_core::utils::fs::write_atomic;
+use kairos_core::utils::time::now_ms;
 use serde::Serialize;
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager};
@@ -313,9 +315,7 @@ fn register_in_manifest(
     );
     let json = serde_json::to_string_pretty(&manifest)
         .map_err(|e| KairosError::internal(format!("清单序列化失败：{e}")))?;
-    let tmp = manifest_path(dir).with_extension("json.tmp");
-    fs::write(&tmp, json)?;
-    fs::rename(&tmp, manifest_path(dir))?;
+    write_atomic(&manifest_path(dir), &json, "下载清单")?;
     Ok(())
 }
 
@@ -482,13 +482,6 @@ fn collect_bin_dirs(dir: &Path, depth: u8, max_depth: u8, out: &mut Vec<PathBuf>
         }
         collect_bin_dirs(&path, depth + 1, max_depth, out);
     }
-}
-
-fn now_ms() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis() as u64
 }
 
 /// 返回下载目录路径（前端展示「文件存放在哪里」）。
