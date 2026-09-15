@@ -20,9 +20,9 @@ pub struct ResultSlots {
     primary_request: u64,
     compare_request: u64,
     /// 主场：普通加载 / 展示 / 单场派生的数据源。
-    pub primary: Option<ScalarField>,
+    pub primary: Option<Arc<ScalarField>>,
     /// 对比场：两场差值派生的减数。
-    pub compare: Option<ScalarField>,
+    pub compare: Option<Arc<ScalarField>>,
     /// 有界场缓存（LRU 淘汰）：命中时跳过磁盘读取。
     pub cache: FieldCache,
     /// 最近加载的矢量场三分量（变形显示用；与标量槽位分开，避免形状混淆）。
@@ -147,7 +147,7 @@ fn load_into_slot(
     let key = cache_key(case_dir, time_dir, field)?;
     let cached = session.lock().cache.get(&key).cloned();
     let loaded = match cached {
-        Some(field) => field,
+        Some(field) => field.clone(),
         None => results::read_field(std::path::Path::new(case_dir), time_dir, field)?,
     };
     let mut slots = session.lock();
@@ -163,9 +163,9 @@ fn load_into_slot(
         slots.cache.put(key, loaded.clone());
     }
     if compare {
-        slots.compare = Some(loaded.clone());
+        slots.compare = Some(Arc::new(loaded.clone()));
     } else {
-        slots.primary = Some(loaded.clone());
+        slots.primary = Some(Arc::new(loaded.clone()));
     }
     Ok(loaded)
 }
@@ -463,7 +463,7 @@ mod tests {
             complete: true,
         };
         session.lock().cache.put(first.clone(), old.clone());
-        session.lock().primary = Some(old);
+        session.lock().primary = Some(Arc::new(old));
         std::fs::write(&path, "new").unwrap();
         let file = std::fs::File::options().write(true).open(&path).unwrap();
         file.set_times(
@@ -497,17 +497,17 @@ mod tests {
         session.begin_case(first.to_str().unwrap());
         {
             let mut slots = session.lock();
-            slots.primary = Some(field);
-            slots.compare = Some(ScalarField {
+            slots.primary = Some(Arc::new(field));
+            slots.compare = Some(Arc::new(ScalarField {
                 field: "p".into(),
                 time_dir: "2".into(),
                 time_s: 2.0,
                 values: vec![2.0],
                 is_magnitude: false,
                 complete: true,
-            });
+            }));
             let cached = slots.primary.clone().unwrap();
-            slots.cache.put("first".into(), cached);
+            slots.cache.put("first".into(), (*cached).clone());
             slots.vectors = Some(Arc::new(VectorField {
                 field: "U".into(),
                 time_dir: "1".into(),
