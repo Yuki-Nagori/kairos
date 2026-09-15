@@ -177,6 +177,9 @@ enum PipelineAction {
         /// 实际调用求解器（缺环境时以结构化错误退出）
         #[arg(long)]
         solve: bool,
+        /// 自定义材料文件（JSON 或 CSV）；缺省使用内置参考材料
+        #[arg(long)]
+        material: Option<String>,
     },
 }
 
@@ -325,6 +328,7 @@ fn run(command: Commands, json: bool) -> kairos_core::error::Result<()> {
                 gates,
                 injection_time_s,
                 solve,
+                material,
             } => run_pipeline(
                 sample_box,
                 stl,
@@ -334,6 +338,7 @@ fn run(command: Commands, json: bool) -> kairos_core::error::Result<()> {
                 gates,
                 injection_time_s,
                 solve,
+                material,
                 json,
             ),
         },
@@ -933,6 +938,7 @@ fn run_pipeline(
     gate_specs: Vec<String>,
     injection_time_s: f64,
     solve: bool,
+    material_path: Option<String>,
     json: bool,
 ) -> kairos_core::error::Result<()> {
     // 工作区布局：case 写在 <工作区>/cases/<方案>/ 下，与桌面端同一套规则。
@@ -959,7 +965,7 @@ fn run_pipeline(
         },
     )?;
     // 3. case（首个内置材料 + 默认工艺 + 填充阶段）
-    let material = services::material::builtin_materials()[0].clone();
+    let material = load_material(material_path.as_deref())?;
     let gates = gate_specs
         .iter()
         .map(|spec| parse_gate(spec))
