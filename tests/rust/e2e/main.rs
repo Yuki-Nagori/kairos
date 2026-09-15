@@ -442,10 +442,12 @@ fn l2_solve_and_collect(case_dir: &Path, cancel_case_dir: &Path, workspace: &Pat
         "取消不应留下求解器错误标记（作业会因此被判失败而不是已取消）：{abort_line:?}"
     );
 
-    // 8. 清理 VM 内的 case 暂存（宿主 case 目录保留，便于人工查看）
+    // 8. 清理 VM 内的 case 暂存（宿主 case 目录保留，便于人工查看）。
+    // 注意 `vm_case` 在取消段被覆盖过：这里按两个 case 路径各自算 VM 内目录，
+    // 否则正常路径那份会一直留在虚拟机里（残留正是把虚拟机堆脏的来源）。
     let cleanup = format!(
         "rm -rf '{}' '{}'",
-        vm_logic::bash_single_quote(&vm_case),
+        vm_logic::bash_single_quote(&vm_logic::vm_case_dir(&case_dir_text)),
         vm_logic::bash_single_quote(&vm_logic::vm_case_dir(&cancel_case_text))
     );
     runner
