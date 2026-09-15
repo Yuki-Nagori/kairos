@@ -431,7 +431,11 @@ export function useViewportPanel() {
     // 渲染网格经 geometry store（错误进全局错误通道）；无数据（失败）时这里也要说清楚。
     emptyText.value = "正在读取网格…";
     emptyError.value = false;
+    const epoch = project.autoSaveEpoch;
     const data = await geometry.fetchRenderMesh(first.geometryId);
+    if (epoch !== project.autoSaveEpoch) {
+      return;
+    }
     if (data === undefined) {
       emptyText.value =
         "读取渲染网格失败：请先在几何面板生成体积网格，并确认工程已保存到工作区（散装工程没有网格落盘路径）。";
@@ -518,6 +522,20 @@ export function useViewportPanel() {
       slot.renderer.setFieldRange(min, max);
     }
   }
+
+  watch(
+    () => project.project?.id,
+    () => {
+      stopPlay();
+      sharedMesh = null;
+      for (const slot of slots) {
+        releaseSlot(slot);
+      }
+      viewport.setMeshLoaded(false);
+      emptyText.value = "请载入当前工程的网格。";
+      emptyError.value = false;
+    },
+  );
 
   watch(
     () => results.loadedField,

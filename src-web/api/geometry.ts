@@ -1,3 +1,4 @@
+import { decodeRenderMesh } from "../utils/render-mesh-binary";
 /** 几何 IPC：STL 导入、体积网格生成（内置与 Gmsh 引擎）、双域网格与渲染网格导出。 */
 import { invokeCommand } from "../utils/ipc";
 import type {
@@ -68,8 +69,8 @@ export function repairGeometry(geometryId: string): Promise<RepairOutcome> {
 }
 
 /** 导出视口渲染网格（体积边界面或 STL 表面）。 */
-export function getRenderMesh(geometryId: string): Promise<RenderMeshData> {
-  return invokeCommand("get_render_mesh", { geometryId });
+export async function getRenderMesh(geometryId: string): Promise<RenderMeshData> {
+  return decodeRenderMesh(await invokeCommand<ArrayBuffer>("get_render_mesh", { geometryId }));
 }
 
 /** 生成 Gmsh 引擎体积网格（需已下载 Gmsh 并定位到可执行文件）。 */

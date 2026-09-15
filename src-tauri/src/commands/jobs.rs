@@ -6,7 +6,11 @@ use std::io::{BufRead, BufReader};
 #[cfg(target_os = "macos")]
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
-use std::sync::{Arc, Mutex};
+use std::sync::{
+    Arc, Mutex,
+    atomic::{AtomicBool, Ordering},
+    mpsc,
+};
 use std::thread;
 
 use kairos_core::error::{KairosError, Result};
@@ -33,7 +37,7 @@ const VM_READY_INTERVAL_S: u64 = 2;
 
 struct Inner {
     jobs: Vec<Job>,
-    children: HashMap<String, Child>,
+    cancellations: HashMap<String, Arc<AtomicBool>>,
     channels: HashMap<String, Channel<String>>,
     limits: SchedulerLimits,
     /// 原生（Linux）求解环境根目录：Some 时作业先 source 其 bashrc。
@@ -56,9 +60,9 @@ impl Default for JobScheduler {
             managed_path: None,
             inner: Arc::new(Mutex::new(Inner {
                 jobs: Vec::new(),
-                children: HashMap::new(),
+                cancellations: HashMap::new(),
                 channels: HashMap::new(),
-                limits: SchedulerLimits::new(2, 8),
+                limits: SchedulerLimits::new(2, job_logic::MAX_JOB_CORES),
                 native_env: None,
             })),
             vm_shell: None,
@@ -158,6 +162,7 @@ fn job_vm_provider(vm_shell: Option<&str>) -> Option<VmProviderKind> {
 /// 用户自己启动的实例不动。WSL 的实例随首次执行自启（无独立启动命令），
 /// 轮询本身就会把它拉起来。
 fn ensure_vm_ready(inner: &Arc<Mutex<Inner>>, job_id: &str, vm_shell: Option<&str>) -> Result<()> {
+    check_cancelled(inner, job_id)?;
     let Some(provider) = job_vm_provider(vm_shell) else {
         return Ok(());
     };
@@ -194,6 +199,7 @@ fn ensure_vm_ready(inner: &Arc<Mutex<Inner>>, job_id: &str, vm_shell: Option<&st
     }
     // 启动命令返回时 guest 可能还没起完 sshd：轮询到可执行，最多约 2 分钟。
     for _ in 0..VM_READY_ATTEMPTS {
+        check_cancelled(inner, job_id)?;
         if probe_ready(&probe) {
             return Ok(());
         }
@@ -206,14 +212,11 @@ fn ensure_vm_ready(inner: &Arc<Mutex<Inner>>, job_id: &str, vm_shell: Option<&st
 
 /// 跑一次就绪探测（命令能成功返回即就绪）。
 fn probe_ready(args: &[String]) -> bool {
-    super::vm::platform_command(&args[0])
-        .args(&args[1..])
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .map(|status| status.success())
-        .unwrap_or(false)
+    let mut runner = host_runner();
+    runner.timeout = std::time::Duration::from_secs(10);
+    runner
+        .run(&vm_run::HostCommand::new(args.to_vec()), "虚拟机就绪探测")
+        .is_ok()
 }
 
 /// 收尾：队列空闲且实例是作业自动拉起、又没有 Shell 占用时关闭虚拟机（省内存）。
@@ -349,11 +352,13 @@ fn spawn_run_script(run: NativeRun<'_>) -> Result<Child> {
     // VM 执行通道只在 macOS（multipass）与 Windows（WSL）存在；原生平台直接本机执行。
     #[cfg(any(target_os = "macos", target_os = "windows"))]
     if let Some(vm_provider) = job_vm_provider(vm_shell) {
-        let inner = vm_logic::solve_script(
-            &vm_logic::script_case_dir(std::env::consts::OS, case_dir, vm_case),
-            cores,
+        let guest_dir = guest_case_dir(case_dir, vm_case);
+        let inner = vm_logic::solve_script(&guest_dir, cores);
+        let script = format!(
+            "setsid bash -lc {}",
+            kairos_core::utils::shell::bash_quote(&inner)
         );
-        return host_command(&vm_logic::bash_script_args(vm_provider, &inner))
+        return host_command(&vm_logic::bash_script_args(vm_provider, &script))
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
@@ -399,13 +404,18 @@ impl JobScheduler {
     }
 
     /// 提升排队作业并为其生成运行线程。作业线程内先做 VM tar 复制（可能耗时
-    /// 数分钟）再拉起求解进程——同步命令 submit_job 在主线程调用本函数，
-    /// 因此任何重活都不允许留在 promote 路径上。
+    /// 数分钟）再拉起求解进程。提升过程只登记状态与线程，准备和求解不占用调度锁。
     fn promote_and_spawn(&self, now: u64) {
         let started = {
             let mut inner = self.lock();
             let limits = inner.limits;
-            job_logic::promote_ready(&mut inner.jobs, &limits, now)
+            let started = job_logic::promote_ready(&mut inner.jobs, &limits, now);
+            for id in &started {
+                inner
+                    .cancellations
+                    .insert(id.clone(), Arc::new(AtomicBool::new(false)));
+            }
+            started
         };
         for job_id in started {
             let (case_dir, cores, context) = {
@@ -446,6 +456,7 @@ impl JobScheduler {
                 let staged = ensure_vm_ready(&inner, &job_id, context.vm_shell.as_deref())
                     .and_then(|()| copy_case_into_vm(&case_dir, context.vm_shell.as_deref()))
                     .and_then(|vm_case| {
+                        check_cancelled(&inner, &job_id)?;
                         spawn_run_script(NativeRun {
                             case_dir: &case_dir,
                             vm_case: vm_case.as_deref(),
@@ -473,7 +484,13 @@ fn fail_and_promote(inner: Arc<Mutex<Inner>>, job_id: String, message: &str, con
         let mut guard = inner
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        let _ = job_logic::mark_failed(&mut guard.jobs, &job_id, message, now);
+        if cancelled(&guard, &job_id) {
+            let _ = job_logic::cancel(&mut guard.jobs, &job_id, now);
+        } else {
+            let _ = job_logic::mark_failed(&mut guard.jobs, &job_id, message, now);
+        }
+        guard.cancellations.remove(&job_id);
+        guard.channels.remove(&job_id);
     }
     let scheduler = JobScheduler {
         inner: Arc::clone(&inner),
@@ -485,6 +502,155 @@ fn fail_and_promote(inner: Arc<Mutex<Inner>>, job_id: String, message: &str, con
     stop_vm_when_idle(&inner);
 }
 
+fn cancelled(inner: &Inner, job_id: &str) -> bool {
+    inner
+        .cancellations
+        .get(job_id)
+        .is_some_and(|token| token.load(Ordering::SeqCst))
+}
+
+fn check_cancelled(inner: &Arc<Mutex<Inner>>, job_id: &str) -> Result<()> {
+    if cancelled(&inner.lock().unwrap_or_else(|e| e.into_inner()), job_id) {
+        Err(KairosError::validation("用户取消"))
+    } else {
+        Ok(())
+    }
+}
+
+fn forward_job_line(inner: &Arc<Mutex<Inner>>, job_id: &str, line: &str) {
+    if let Some(time) = moldingfoam::parse_time_line(line) {
+        let mut guard = inner.lock().unwrap_or_else(|e| e.into_inner());
+        let _ = job_logic::update_progress(&mut guard.jobs, job_id, time);
+    }
+    send_job_line(inner, job_id, line);
+}
+
+fn drain_job_stream(pipe: impl std::io::Read + Send + 'static, tx: mpsc::SyncSender<String>) {
+    thread::spawn(move || {
+        for line in BufReader::new(pipe)
+            .split(b'\n')
+            .map_while(std::result::Result::ok)
+        {
+            let line = String::from_utf8_lossy(&line)
+                .trim_end_matches('\r')
+                .to_string();
+            if tx.send(line).is_err() {
+                break;
+            }
+        }
+    });
+}
+
+fn consume_child(
+    child: &mut Child,
+    token: &AtomicBool,
+    on_line: &mut dyn FnMut(&str),
+    stop: &mut dyn FnMut(&mut Child) -> Result<()>,
+) -> Result<(bool, bool)> {
+    let (tx, rx) = mpsc::sync_channel(256);
+    if let Some(stdout) = child.stdout.take() {
+        drain_job_stream(stdout, tx.clone());
+    }
+    if let Some(stderr) = child.stderr.take() {
+        drain_job_stream(stderr, tx.clone());
+    }
+    drop(tx);
+    let mut aborted = false;
+    let mut stopping = false;
+    let mut exit = None;
+    let mut drained = false;
+    while exit.is_none() || !drained {
+        if token.load(Ordering::SeqCst) && !stopping {
+            stop(child)?;
+            stopping = true;
+        }
+        match rx.recv_timeout(std::time::Duration::from_millis(50)) {
+            Ok(line) => {
+                aborted |= moldingfoam::is_abort_line(&line);
+                on_line(&line);
+            }
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                drained = true;
+                thread::sleep(std::time::Duration::from_millis(10));
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => {}
+        }
+        exit = child
+            .try_wait()
+            .map_err(|e| KairosError::io(format!("等待求解退出失败：{e}")))?;
+    }
+    Ok((aborted, exit.is_some_and(|status| status.success())))
+}
+
+fn stop_remote_solver(provider: VmProviderKind, case_dir: &str) -> Result<()> {
+    let mut runner = host_runner();
+    runner.timeout = std::time::Duration::from_secs(10);
+    // 启动命令返回和 SID 落盘之间有短窗口，重试直到可终止或给出明确失败。
+    let command = vm_run::HostCommand::new(vm_logic::bash_script_args(
+        provider,
+        &vm_logic::solver_stop_command(case_dir),
+    ));
+    for _ in 0..3 {
+        if runner.run(&command, "取消远端求解").is_ok() {
+            return Ok(());
+        }
+        thread::sleep(std::time::Duration::from_millis(100));
+    }
+    Err(KairosError::io(
+        "无法确认远端求解已停止，请检查虚拟机中的运行进程。",
+    ))
+}
+
+fn guest_case_dir(case_dir: &str, vm_case: Option<&str>) -> String {
+    vm_case.map(str::to_owned).unwrap_or_else(|| {
+        kairos_core::services::paths::wsl_path(case_dir).unwrap_or_else(|| case_dir.to_string())
+    })
+}
+
+fn terminate_solver(
+    child: &mut Child,
+    case_dir: &str,
+    vm_case: Option<&str>,
+    context: &RunContext,
+) -> Result<()> {
+    if let Some(provider) = job_vm_provider(context.vm_shell.as_deref()) {
+        let path = match provider {
+            VmProviderKind::Wsl => guest_case_dir(case_dir, None),
+            _ => vm_case.unwrap_or(case_dir).to_string(),
+        };
+        stop_remote_solver(provider, &path)?;
+    }
+    terminate_local(child)
+}
+
+fn terminate_local(child: &mut Child) -> Result<()> {
+    if child
+        .try_wait()
+        .map_err(|e| KairosError::io(e.to_string()))?
+        .is_some()
+    {
+        return Ok(());
+    }
+    #[cfg(unix)]
+    let status = Command::new("kill")
+        .args(["-KILL", "--", &format!("-{}", child.id())])
+        .status();
+    #[cfg(windows)]
+    let status = Command::new("taskkill")
+        .args(["/PID", &child.id().to_string(), "/T", "/F"])
+        .status();
+    let status = status.map_err(|e| KairosError::io(format!("终止求解失败：{e}")))?;
+    if !status.success() {
+        child
+            .kill()
+            .map_err(|e| KairosError::io(format!("终止求解失败：{e}")))?;
+    }
+    child
+        .wait()
+        .map_err(|e| KairosError::io(format!("回收求解失败：{e}")))?;
+    Ok(())
+}
+
 /// 单作业运行主体：流式回传日志与进度，收尾后写回状态并提升下一个排队作业。
 fn run_job_body(
     inner: Arc<Mutex<Inner>>,
@@ -494,30 +660,26 @@ fn run_job_body(
     vm_case: Option<String>,
     context: RunContext,
 ) {
-    let mut stdout = child.stdout.take();
-    let mut solver_aborted = false;
-    if let Some(pipe) = stdout.take() {
-        let reader = BufReader::new(pipe);
-        for line in reader.lines().map_while(std::result::Result::ok) {
-            if moldingfoam::is_abort_line(&line) {
-                solver_aborted = true;
-            }
-            let time_s = moldingfoam::parse_time_line(&line);
-            let forward = {
-                let mut guard = inner
-                    .lock()
-                    .unwrap_or_else(|poisoned| poisoned.into_inner());
-                if let Some(time_s) = time_s {
-                    let _ = job_logic::update_progress(&mut guard.jobs, &job_id, time_s);
-                }
-                guard.channels.get(&job_id).cloned()
-            };
-            if let Some(channel) = forward {
-                let _ = channel.send(line.clone());
-            }
+    let token = {
+        let guard = inner.lock().unwrap_or_else(|e| e.into_inner());
+        Arc::clone(&guard.cancellations[&job_id])
+    };
+    let outcome = consume_child(
+        &mut child,
+        &token,
+        &mut |line| {
+            forward_job_line(&inner, &job_id, line);
+        },
+        &mut |child| terminate_solver(child, &case_dir, vm_case.as_deref(), &context),
+    );
+    let (solver_aborted, exit_ok) = match outcome {
+        Ok(outcome) => outcome,
+        Err(error) => {
+            token.store(false, Ordering::SeqCst);
+            fail_and_promote(inner, job_id, error.message(), context);
+            return;
         }
-    }
-    let exit_ok = child.wait().map(|status| status.success()).unwrap_or(false);
+    };
     finish_job(
         inner,
         job_id,
@@ -544,6 +706,10 @@ fn run_job_detached(
     case_dir: String,
     context: RunContext,
 ) {
+    if let Err(error) = check_cancelled(&inner, &job_id) {
+        fail_and_promote(inner, job_id, error.message(), context);
+        return;
+    }
     let script = vm_logic::solve_script(vm_case, cores);
     let launch = vm_logic::detached_launch_command(vm_case, &script);
     // 启动命令自身立即返回（求解在 setsid 会话里跑）：走 core 的 runner 拿统一判定与超时。
@@ -561,24 +727,41 @@ fn run_job_detached(
     let mut solver_aborted = false;
     let mut offset = 0u64;
     let mut exit_code: Option<i32> = None;
-    let mut read_failed = false;
+    let mut failures = 0;
     while exit_code.is_none() {
+        if check_cancelled(&inner, &job_id).is_err() {
+            if let Err(error) = stop_remote_solver(VmProviderKind::Multipass, vm_case) {
+                let guard = inner.lock().unwrap_or_else(|e| e.into_inner());
+                guard.cancellations[&job_id].store(false, Ordering::SeqCst);
+                drop(guard);
+                fail_and_promote(inner, job_id, error.message(), context);
+                return;
+            }
+            break;
+        }
         match stream_vm_log(&inner, &job_id, vm_case, offset) {
             Ok((aborted, new_offset, code)) => {
+                failures = 0;
                 solver_aborted |= aborted;
                 offset = new_offset;
                 exit_code = code;
             }
-            // 回读失败不是求解失败：多数是瞬时的通道抖动，重试即可；求解是否结束
-            // 由后续轮次读到的退出码收口。首次失败提示一行，避免刷屏。
+            // 短暂通道错误允许重试；连续失败则明确报告状态未知，不再无限轮询。
             Err(e) => {
-                if !read_failed {
-                    read_failed = true;
-                    send_job_line(
-                        &inner,
-                        &job_id,
-                        &format!("── 日志回读失败（重试中）：{}", e.message()),
+                failures += 1;
+                send_job_line(
+                    &inner,
+                    &job_id,
+                    &format!("── 日志回读失败（{failures}/3）：{}", e.message()),
+                );
+                if failures >= 3 {
+                    fail_and_promote(
+                        inner,
+                        job_id,
+                        "无法读取远端求解状态，请检查虚拟机中的运行进程。",
+                        context,
                     );
+                    return;
                 }
             }
         }
@@ -608,7 +791,9 @@ fn stream_vm_log(
     vm_case: &str,
     offset: u64,
 ) -> Result<(bool, u64, Option<i32>)> {
-    let poll = vm_run::poll_log_once(&host_runner(), vm_case, offset)?;
+    let mut runner = host_runner();
+    runner.timeout = std::time::Duration::from_secs(10);
+    let poll = vm_run::poll_log_once(&runner, vm_case, offset)?;
     for line in &poll.lines {
         let forward = {
             let mut guard = inner
@@ -653,15 +838,19 @@ fn finish_job(
         let mut guard = inner
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        match &failure {
-            None => {
-                let _ = job_logic::mark_done(&mut guard.jobs, &job_id, now);
-            }
-            Some(message) => {
-                let _ = job_logic::mark_failed(&mut guard.jobs, &job_id, message, now);
+        if cancelled(&guard, &job_id) {
+            let _ = job_logic::cancel(&mut guard.jobs, &job_id, now);
+        } else {
+            match &failure {
+                None => {
+                    let _ = job_logic::mark_done(&mut guard.jobs, &job_id, now);
+                }
+                Some(message) => {
+                    let _ = job_logic::mark_failed(&mut guard.jobs, &job_id, message, now);
+                }
             }
         }
-        guard.children.remove(&job_id);
+        guard.cancellations.remove(&job_id);
         guard.channels.remove(&job_id);
     }
     // 一个作业结束 → 立即尝试提升队列中的下一个（自动续跑）
@@ -677,7 +866,7 @@ fn finish_job(
 }
 
 /// 提交求解作业：入队并按预算立即尝试启动。progress 通道回传日志行与 __TIME__ 进度标记。
-#[tauri::command]
+#[tauri::command(async)]
 pub fn submit_job(
     app: tauri::AppHandle,
     scheduler: State<'_, JobScheduler>,
@@ -688,10 +877,24 @@ pub fn submit_job(
 ) -> Result<Job> {
     // 提交前刷新原生求解环境：刚下载 / 解压 bundle 的会话也能直接跑（Linux 通道）。
     refresh_native_env(&app);
+    let case_dir = std::fs::canonicalize(&case_dir)
+        .map_err(|e| KairosError::io(format!("求解目录不可用：{e}")))?
+        .to_string_lossy()
+        .to_string();
     let id = new_id("job");
     let now = now_ms();
     let job = {
         let mut inner = scheduler.lock();
+        if inner.jobs.iter().any(|job| {
+            job.case_dir == case_dir
+                && matches!(
+                    job.status,
+                    kairos_core::models::jobs::JobStatus::Queued
+                        | kairos_core::models::jobs::JobStatus::Running
+                )
+        }) {
+            return Err(KairosError::validation("该目录已有排队或运行中的作业。"));
+        }
         job_logic::submit(&mut inner.jobs, id.clone(), study_id, case_dir, cores, now)?;
         inner.channels.insert(id.clone(), progress);
         // 提升只发生在 promote_and_spawn 里（提升与起线程必须同一处）：
@@ -711,52 +914,20 @@ pub fn submit_job(
 /// 取消作业：先终止求解进程，再迁移状态；排队中的直接取消。
 #[tauri::command]
 pub fn cancel_job(scheduler: State<'_, JobScheduler>, job_id: String) -> Result<()> {
-    let child = scheduler.lock().children.remove(&job_id);
-    if let Some(mut child) = child {
-        let pid = child.id();
-        // unix：进程组整杀；windows：taskkill 树杀（含 decomposePar/solver 子进程）。
-        #[cfg(unix)]
-        {
-            let _ = Command::new("kill")
-                .args(["-9", &format!("-{pid}")])
-                .status();
-        }
-        #[cfg(windows)]
-        {
-            let _ = Command::new("taskkill")
-                .args(["/PID", &pid.to_string(), "/T", "/F"])
-                .status();
-        }
-        let _ = child.kill();
-        let _ = child.wait();
-    }
-    // VM 通道：求解脱离会话跑在虚拟机里（宿主侧的启动命令早已返回，`children` 里没有它），
-    // 杀宿主进程没有意义——按求解自己记下的会话 id 在 VM 内整组终止。
-    #[cfg(target_os = "macos")]
-    if job_vm_provider(scheduler.vm_shell.as_deref()).is_some() {
-        let case_dir = {
-            let inner = scheduler.lock();
-            inner
-                .jobs
-                .iter()
-                .find(|job| job.id == job_id)
-                .map(|job| job.case_dir.clone())
-        };
-        if let Some(case_dir) = case_dir {
-            let vm_case = vm_logic::vm_case_dir(&case_dir);
-            let args = vm_logic::bash_script_args(
-                VmProviderKind::Multipass,
-                &vm_logic::solver_stop_command(&vm_case),
-            );
-            // 远端 kill 是阻塞调用：detached 派发（取消要立刻返回给界面），
-            // 线程里 wait 一下把子进程回收掉，别留僵尸。
-            thread::spawn(move || {
-                let _ = host_command(&args).status();
-            });
-        }
-    }
     let mut inner = scheduler.lock();
-    job_logic::cancel(&mut inner.jobs, &job_id, now_ms())
+    let status = inner
+        .jobs
+        .iter()
+        .find(|job| job.id == job_id)
+        .ok_or_else(|| KairosError::not_found("作业不存在。"))?
+        .status;
+    if status == kairos_core::models::jobs::JobStatus::Running {
+        inner.cancellations[&job_id].store(true, Ordering::SeqCst);
+        return Ok(());
+    }
+    job_logic::cancel(&mut inner.jobs, &job_id, now_ms())?;
+    inner.channels.remove(&job_id);
+    Ok(())
 }
 
 #[tauri::command]
@@ -766,6 +937,77 @@ pub fn list_jobs(scheduler: State<'_, JobScheduler>) -> Result<Vec<Job>> {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(unix)]
+    fn test_child(script: &str) -> std::process::Child {
+        use std::os::unix::process::CommandExt;
+        std::process::Command::new("bash")
+            .args(["-c", script])
+            .process_group(0)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .unwrap()
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cancellation_reaps_a_real_process_even_after_it_closes_output() {
+        let mut child = test_child("exec 1>&- 2>&-; sleep 20");
+        let token = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let request = token.clone();
+        let sender = std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            request.store(true, std::sync::atomic::Ordering::SeqCst);
+        });
+        let started = std::time::Instant::now();
+        let (_, success) =
+            super::consume_child(&mut child, &token, &mut |_| {}, &mut super::terminate_local)
+                .unwrap();
+        sender.join().unwrap();
+        assert!(!success);
+        assert!(child.try_wait().unwrap().is_some());
+        assert!(started.elapsed() < std::time::Duration::from_secs(5));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn drains_large_stderr_and_detects_fatal_errors() {
+        let mut child = test_child(
+            "for ((i=0;i<20000;i++)); do echo diagnostic-diagnostic-diagnostic >&2; done; echo 'FOAM FATAL ERROR' >&2; echo 'Time = 1' ",
+        );
+        let token = std::sync::atomic::AtomicBool::new(false);
+        let mut count = 0;
+        let (aborted, success) = super::consume_child(
+            &mut child,
+            &token,
+            &mut |_| {
+                count += 1;
+            },
+            &mut super::terminate_local,
+        )
+        .unwrap();
+        assert!(aborted);
+        assert!(success);
+        assert_eq!(count, 20002);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn non_utf8_diagnostics_do_not_truncate_the_stream() {
+        let mut child =
+            test_child("printf '\\377diagnostic\\r\\n'; echo 'FOAM FATAL ERROR'; echo 'Time = 2'");
+        let mut lines = Vec::new();
+        let (aborted, success) = super::consume_child(
+            &mut child,
+            &std::sync::atomic::AtomicBool::new(false),
+            &mut |line| lines.push(line.to_string()),
+            &mut super::terminate_local,
+        )
+        .unwrap();
+        assert!(aborted && success);
+        assert_eq!(lines, ["�diagnostic", "FOAM FATAL ERROR", "Time = 2"]);
+    }
+
     use super::*;
 
     /// 作业必须由 promote_and_spawn 提升并起线程：先提升（Running）再让

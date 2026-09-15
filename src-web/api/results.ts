@@ -1,8 +1,11 @@
+import { decodeRenderMesh } from "../utils/render-mesh-binary";
 /** 求解结果 IPC：结果目录扫描、场数据加载与派生算子。 */
 import { invokeCommand } from "../utils/ipc";
 import { decodeFieldBinary, decodeVectorFieldBinary } from "../utils/field-binary";
 import type {
   DeriveRequest,
+  Probe,
+  ProbeTimeSeries,
   FieldSlot,
   RenderMeshData,
   ResultCatalog,
@@ -57,8 +60,10 @@ export function loadTensorField(
 }
 
 /** 变形显示：按会话里已加载的矢量场（位移）偏移渲染网格，返回变形后的网格。 */
-export function deformRenderMesh(geometryId: string, scale: number): Promise<RenderMeshData> {
-  return invokeCommand("deform_render_mesh", { geometryId, scale });
+export async function deformRenderMesh(geometryId: string, scale: number): Promise<RenderMeshData> {
+  return decodeRenderMesh(
+    await invokeCommand<ArrayBuffer>("deform_render_mesh", { geometryId, scale }),
+  );
 }
 
 /** 对会话主场执行单场派生（归一化 / 阈值掩码 / 线性映射），返回派生后的场。 */
@@ -69,4 +74,13 @@ export function deriveField(request: DeriveRequest): Promise<ScalarField> {
 /** 两场差值：会话主场 − 对比场，返回派生后的场。 */
 export function deriveDifference(): Promise<ScalarField> {
   return invokeCommand("derive_difference");
+}
+
+/** 只返回探针时间曲线，不修改后端主场与对比场。 */
+export function sampleProbeSeries(
+  caseDir: string,
+  field: string,
+  probes: Probe[],
+): Promise<ProbeTimeSeries[]> {
+  return invokeCommand("sample_probe_series", { caseDir, field, probes });
 }

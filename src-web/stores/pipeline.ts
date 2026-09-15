@@ -61,7 +61,7 @@ export const usePipelineStore = defineStore("pipeline", {
         });
         // 入口口径回显落到工艺 store：工艺面板的工况量级校验改用有效面积。
         useProcessStore().recordCaseInlet(activeStudy.id, outcome);
-        await useJobsStore().submitJob(caseDir, cores);
+        await useJobsStore().submitJob(caseDir, cores, activeStudy.id);
       });
     },
   },

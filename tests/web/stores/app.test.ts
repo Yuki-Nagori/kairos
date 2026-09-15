@@ -99,6 +99,45 @@ describe("app store", () => {
   });
 
   describe("withBusy", () => {
+    it("keeps the remaining operation busy when concurrent actions finish out of order", async () => {
+      const app = useAppStore();
+      let finishFirst!: () => void;
+      let finishSecond!: () => void;
+      const first = app.withBusy(
+        "first",
+        () =>
+          new Promise<void>((resolve) => {
+            finishFirst = resolve;
+          }),
+      );
+      const second = app.withBusy(
+        "second",
+        () =>
+          new Promise<void>((resolve) => {
+            finishSecond = resolve;
+          }),
+      );
+      finishFirst();
+      await first;
+      expect(app.working).toBe(true);
+      expect(app.busy).toBe("second");
+      finishSecond();
+      await second;
+      expect(app.working).toBe(false);
+      app.endBusy();
+      expect(app.busy).toBeNull();
+    });
+
+    it("restores the outer label after a nested action completes", async () => {
+      const app = useAppStore();
+      await app.withBusy("outer", async () => {
+        await app.withBusy("inner", async () => 1);
+        expect(app.busy).toBe("outer");
+        expect(app.working).toBe(true);
+      });
+      expect(app.working).toBe(false);
+    });
+
     it("wraps a successful run: busy lifecycle plus transparent return value", async () => {
       const app = useAppStore();
       const result = await app.withBusy("正在计算…", async () => 42);

@@ -744,7 +744,7 @@ describe("工作区：几何归档与恢复", () => {
       { id: "geo-2", fileName: "b.stl", relativePath: "geometry/b.stl" },
     ];
     vi.mocked(loadWorkspaceGeometry).mockImplementation(async (_path, id) => makeSummary(id));
-    vi.mocked(restoreStudyMesh).mockResolvedValue(makeReport());
+    vi.mocked(restoreStudyMesh).mockResolvedValue({ geometryId: "geo-2", report: makeReport() });
 
     await geometry.restoreWorkspaceContent();
     expect(loadWorkspaceGeometry).toHaveBeenCalledWith(
@@ -753,7 +753,7 @@ describe("工作区：几何归档与恢复", () => {
       "geometry/a.stl",
     );
     expect(geometry.geometries.map((entry) => entry.geometryId)).toEqual(["geo-1", "geo-2"]);
-    expect(geometry.meshReports["geo-1"]).toBeDefined();
+    expect(geometry.meshReports["geo-2"]).toBeDefined();
 
     // 网格文件缺失（None）与无几何引用时不写报告，也不报错
     vi.mocked(restoreStudyMesh).mockResolvedValue(null);

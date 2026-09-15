@@ -83,10 +83,11 @@ pub async fn generate_moldingfoam_case(
     cooling_channels: Vec<CoolingChannel>,
 ) -> Result<CaseOutcome> {
     // 核数夹取在 core（面板没有上界，这里是唯一把关处的调用点）。
-    let cores = moldingfoam::clamp_cores(cores);
+    kairos_core::services::jobs::validate_cores(cores)?;
+    let cores = cores as usize;
     let gates = moldingfoam::gate_portals(&runner_elements);
     // 锁只用于取网格快照；polyMesh 与场文件的写入在锁外、阻塞线程池中进行。
-    let volume_mesh: VolumeMesh = {
+    let volume_mesh: std::sync::Arc<VolumeMesh> = {
         let sessions = store.lock();
         let session = sessions.get(&geometry_id).ok_or_else(|| {
             kairos_core::error::KairosError::not_found(format!("几何不存在：{geometry_id}"))

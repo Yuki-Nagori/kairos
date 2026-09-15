@@ -44,6 +44,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::system::system_info,
             commands::project::create_project,
+            commands::project::reset_project_session,
             commands::project::save_project_file,
             commands::project::load_project_file,
             commands::project::list_recent_projects,
@@ -91,6 +92,7 @@ pub fn run() {
             commands::downloads::open_downloads_dir,
             commands::downloads::list_downloads,
             commands::results::list_result_times,
+            commands::results::sample_probe_series,
             commands::results::load_result_field,
             commands::results::load_result_field_binary,
             commands::results::load_vector_field_binary,

@@ -7,6 +7,7 @@ import { useResultsStore } from "../../../src-web/stores/results";
 import {
   deformRenderMesh,
   loadTensorField,
+  sampleProbeSeries,
   deriveDifference as deriveDifferenceApi,
   deriveField as deriveFieldApi,
   listResultTimes,
@@ -26,6 +27,7 @@ vi.mock("../../../src-web/api/results", () => ({
   loadResultField: vi.fn(),
   loadVectorField: vi.fn(),
   loadTensorField: vi.fn(),
+  sampleProbeSeries: vi.fn(),
   deformRenderMesh: vi.fn(),
   deriveField: vi.fn(),
   deriveDifference: vi.fn(),
@@ -310,59 +312,23 @@ describe("results store", () => {
       return { id: nodeIndex, nodeIndex };
     }
 
-    it("遍历目录时间步收集探针采样，并恢复原时间步展示", async () => {
-      vi.mocked(listResultTimes).mockResolvedValue({
-        caseDir: "/case/run",
-        times: [
-          { dirName: "0", timeS: 0, fields: ["T"] },
-          { dirName: "1", timeS: 1, fields: ["T"] },
-        ],
-      });
-      vi.mocked(loadResultField).mockImplementation((_c, timeDir: string) => {
-        const values = timeDir === "0" ? [10, 20] : [30, 40];
-        return Promise.resolve(makeField({ field: "T", timeDir, values }));
-      });
-
-      const app = useAppStore();
+    it("采样只请求曲线，主场保持原时间步且不发送逐场加载", async () => {
       const results = useResultsStore();
-      await results.loadResultsCatalog("/case/run");
-      // 探针 2 的序号越界（直接注入以绕过入列校验）：采样回退为 0。
-      results.probes = [makeProbe(0), makeProbe(1), makeProbe(5)];
+      results.resultCatalog = {
+        caseDir: "/case/run",
+        times: [{ dirName: "1", timeS: 1, fields: ["T"] }],
+      };
+      results.probes = [makeProbe(0)];
       results.loadedField = makeField({ field: "T", timeDir: "0" });
-
+      const original = results.loadedField;
+      const series = [{ probeId: 0, nodeIndex: 0, samples: [{ timeS: 1, value: 42 }] }];
+      vi.mocked(sampleProbeSeries).mockResolvedValue(series);
       await results.loadProbeTimeSeries();
-
-      // 目录 2 个时间步 → 逐个加载（外加恢复原时间步不在循环内重放）
-      expect(loadResultField).toHaveBeenCalledTimes(2);
-      expect(results.probeTimeSeries).toEqual([
-        {
-          probeId: 0,
-          nodeIndex: 0,
-          samples: [
-            { timeS: 0, value: 10 },
-            { timeS: 1, value: 30 },
-          ],
-        },
-        {
-          probeId: 1,
-          nodeIndex: 1,
-          samples: [
-            { timeS: 0, value: 20 },
-            { timeS: 1, value: 40 },
-          ],
-        },
-        {
-          probeId: 5,
-          nodeIndex: 5,
-          samples: [
-            { timeS: 0, value: 0 },
-            { timeS: 1, value: 0 },
-          ],
-        },
-      ]);
+      expect(sampleProbeSeries).toHaveBeenCalledWith("/case/run", "T", results.probes);
+      expect(loadResultField).not.toHaveBeenCalled();
+      expect(results.loadedField).toBe(original);
+      expect(results.probeTimeSeries).toEqual(series);
       expect(results.probeSeriesField).toBe("T");
-      expect(results.loadedField?.timeDir).toBe("0");
-      expect(app.busy).toBeNull();
     });
 
     it("目录 / 探针 / 已加载场缺失时静默返回", async () => {
@@ -376,7 +342,7 @@ describe("results store", () => {
         caseDir: "/case/run",
         times: [{ dirName: "0", timeS: 0, fields: ["T"] }],
       });
-      vi.mocked(loadResultField).mockRejectedValue(new Error("时间步缺失"));
+      vi.mocked(sampleProbeSeries).mockRejectedValue(new Error("时间步缺失"));
 
       const app = useAppStore();
       const results = useResultsStore();

@@ -3,6 +3,7 @@ import { defineStore } from "pinia";
 import { getSystemInfo } from "../api/system";
 import {
   createProject,
+  resetProjectSession,
   defaultWorkspacePath,
   listRecentProjects,
   loadProjectFile,
@@ -19,6 +20,10 @@ import type { Project, RunnerKind, Study, GeometryRef } from "../types";
 import { useDebounceFn } from "@vueuse/core";
 import { useAppStore } from "./app";
 import { useMaterialsStore } from "./materials";
+import { useGeometryStore } from "./geometry";
+import { useResultsStore } from "./results";
+import { useProcessStore } from "./process";
+import { useViewportStore } from "./viewport";
 
 let studySeq = 0;
 let elementSeq = 0;
@@ -30,17 +35,14 @@ const AUTO_SAVE_DELAY_MS = 800;
 export const DEFAULT_COOLANT_MASS_FLOW_KG_S = 0.05;
 export const WATER_SPECIFIC_HEAT = 4180;
 
-/** 自动保存的防抖包装：定时器交给 `useDebounceFn`，不再自己维护 clearTimeout。
- *  `this` 透传存储实例（不同 store 实例共享同一份防抖状态没有意义，因此延迟
- *  绑定调用者）。 */
-const autoSaveDebounced = useDebounceFn(function (this: { autoSaveNow: () => Promise<void> }) {
-  return this.autoSaveNow();
-}, AUTO_SAVE_DELAY_MS);
+/** 每个 store 独立管理定时资源，工程代数使切换前的回调失效。 */
+const saveTimers = new WeakMap<object, (epoch: number) => Promise<void>>();
 
 export const useProjectStore = defineStore("project", {
   state: () => ({
     /** 当前打开的工程文档；null 表示尚未打开（新建/打开后才有）。 */
     project: null as Project | null,
+    autoSaveEpoch: 0,
     /** 当前工程的保存路径；null 表示尚未保存过（保存时弹出另存为）。 */
     projectPath: null as string | null,
     /** 最近打开的工程（跨会话，来自应用数据目录）。 */
@@ -79,15 +81,21 @@ export const useProjectStore = defineStore("project", {
      *  workspace 为用户选定的工作区根（留空用默认 `<文档目录>/kairos`）。 */
     async newProject(name: string, workspace = ""): Promise<boolean> {
       const app = useAppStore();
+      if (app.working) {
+        app.setError("请等待当前操作完成后再切换工程。");
+        return false;
+      }
       const created = await app.withBusy("正在创建项目…", async () => {
+        await this.flushCurrentProject();
         const project = await createProject(name);
         // 工程目录：<工作区根>/<工程名>/<工程名>.kairos（文件名与项目名一致）。
         const path = await projectPath(workspace, name);
+        await saveProjectFile(path, project);
+        await this.clearProjectSession();
         this.project = project;
         this.projectPath = path;
         this.workspaceRoot = await workspaceRootOf(path);
         this.syncActiveStudy();
-        await saveProjectFile(path, project);
         await this.refreshRecents();
         return true;
       });
@@ -104,12 +112,37 @@ export const useProjectStore = defineStore("project", {
      *  打开后调用 geometry store 的 restoreWorkspaceContent）。 */
     async openProjectAtPath(path: string): Promise<void> {
       const app = useAppStore();
+      if (app.working) {
+        app.setError("请等待当前操作完成后再切换工程。");
+        return;
+      }
       await app.withBusy("正在打开项目…", async () => {
-        this.project = await loadProjectFile(path);
+        await this.flushCurrentProject();
+        const project = await loadProjectFile(path);
+        await this.clearProjectSession();
+        this.project = project;
         this.projectPath = path;
         this.syncActiveStudy();
         await this.refreshWorkspaceRoot();
+        await useGeometryStore().restoreWorkspaceContent();
       });
+    },
+    /** 切换前保存旧工程；保存失败抛给切换动作，保留旧工程供重试。 */
+    async flushCurrentProject(): Promise<void> {
+      this.autoSaveEpoch += 1;
+      if (this.project !== null && this.projectPath !== null) {
+        await saveProjectFile(this.projectPath, this.project);
+      }
+    },
+    /** 后端清理成功后再清前端，防止继续使用另一工程的几何与结果。 */
+    async clearProjectSession(): Promise<void> {
+      await resetProjectSession();
+      useGeometryStore().$reset();
+      useResultsStore().$reset();
+      useProcessStore().$reset();
+      useViewportStore().setMeshLoaded(false);
+      this.moldIssues = [];
+      this.activeStudyId = null;
     },
     /** 刷新工作区根（打开 / 保存后调用）：散装工程为 null。 */
     async refreshWorkspaceRoot(): Promise<void> {
@@ -220,6 +253,7 @@ export const useProjectStore = defineStore("project", {
         updatedMs: Date.now(),
       };
       this.activeStudyId = study.id;
+      this.scheduleAutoSave();
     },
     /** 切换活跃方案（工程树方案层 / 命令面板的入口）。 */
     selectStudy(id: string): void {
@@ -250,7 +284,16 @@ export const useProjectStore = defineStore("project", {
     /** 防抖后的自动保存入口（`useDebounceFn` 管定时器，语义与手写一致：
      *  连续编辑只落盘一次；显式保存仍走 writeProject 立即落盘）。 */
     debouncedAutoSave(): Promise<void> {
-      return autoSaveDebounced.call(this);
+      let save = saveTimers.get(this);
+      if (save === undefined) {
+        save = useDebounceFn(async (epoch: number) => {
+          if (this.autoSaveEpoch === epoch) {
+            await this.autoSaveNow();
+          }
+        }, AUTO_SAVE_DELAY_MS);
+        saveTimers.set(this, save);
+      }
+      return save(this.autoSaveEpoch);
     },
     /** 立即落盘当前工程（自动保存尾部）；失败进全局错误，不打断编辑。 */
     async autoSaveNow(): Promise<void> {

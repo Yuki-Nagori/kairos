@@ -243,8 +243,7 @@ mod tests {
 
     #[test]
     fn job_failure_prefers_solver_abort_over_exit_code() {
-        // 求解器报错：即便 `;` 串接的 reconstructPar 让退出码为 0（且已回传出
-        // 部分结果），也必须是失败。
+        // 求解器错误标记独立于退出状态；即便外部进程返回 0，也不能忽略 FATAL。
         let aborted = job_failure(true, true, None).unwrap();
         assert!(aborted.contains("求解器报错退出"), "{aborted}");
         assert!(job_failure(true, false, None).is_some());

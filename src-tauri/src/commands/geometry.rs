@@ -2,14 +2,14 @@
 
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use kairos_core::error::{KairosError, Result};
 use kairos_core::models::analysis::{FillPreviewReport, GateLocationReport};
 use kairos_core::models::geometry::{GeometrySummary, ImportOutcome, TriangleMesh};
 use kairos_core::models::mesh::{
     DualDomainMesh, DualDomainReport, MeshRefinement, MeshingReport, MidplaneMesh, MidplaneReport,
-    VolumeMesh,
+    RestoredStudyMesh, VolumeMesh,
 };
 use kairos_core::models::render::RenderMeshData;
 use kairos_core::models::repair::RepairOutcome;
@@ -30,10 +30,12 @@ use tauri::State;
 
 /// 单个导入几何的会话缓存。表面网格是唯一入口数据；体积 / 双域 / 中面
 /// 网格是各生成命令的产物，供后续渲染与求解消费（暂未被下游读取）。
+#[derive(Clone)]
 pub struct MeshSession {
-    pub mesh: TriangleMesh,
+    pub mesh: Arc<TriangleMesh>,
     pub file_name: String,
-    pub volume: Option<VolumeMesh>,
+    pub volume: Option<Arc<VolumeMesh>>,
+    pub render: Arc<OnceLock<Arc<RenderMeshData>>>,
     pub dual: Option<DualDomainMesh>,
     pub midplane: Option<MidplaneMesh>,
 }
@@ -71,7 +73,8 @@ fn store_import(
     store.lock().insert(
         geometry_id,
         MeshSession {
-            mesh,
+            mesh: Arc::new(mesh),
+            render: Arc::default(),
             file_name,
             volume: None,
             dual: None,
@@ -132,7 +135,8 @@ pub async fn repair_geometry(
         };
         let summary = geometry_service::summarize(geometry_id.clone(), file_name, &repaired);
         if let Some(session) = store.lock().get_mut(&geometry_id) {
-            session.mesh = repaired;
+            session.mesh = Arc::new(repaired);
+            session.render = Arc::default();
             session.volume = None;
         }
         Ok(RepairOutcome { summary, report })
@@ -227,7 +231,8 @@ pub async fn generate_volume_mesh(
         report.thin_feature_hints =
             kairos_core::services::thickness::hints_for(&mesh, params.target_size);
         if let Some(session) = store.lock().get_mut(&geometry_id) {
-            session.volume = Some(volume);
+            session.volume = Some(Arc::new(volume));
+            session.render = Arc::default();
         }
         Ok(report)
     })
@@ -320,7 +325,8 @@ pub async fn generate_gmsh_mesh(
         report.thin_feature_hints = kairos_core::services::thickness::hints_for(&mesh, target_size);
 
         if let Some(session) = store_clone.lock().get_mut(&geometry_id) {
-            session.volume = Some(volume);
+            session.volume = Some(Arc::new(volume));
+            session.render = Arc::default();
         }
         let _ = std::fs::remove_file(&temp);
         let _ = std::fs::remove_file(&out_msh);
@@ -416,7 +422,8 @@ pub async fn load_workspace_geometry(
         store.lock().insert(
             geometry_id,
             MeshSession {
-                mesh,
+                mesh: Arc::new(mesh),
+                render: Arc::default(),
                 file_name,
                 volume: None,
                 dual: None,
@@ -439,6 +446,7 @@ pub async fn save_study_mesh(
     target_size: f64,
     refinement: Option<MeshRefinement>,
 ) -> Result<()> {
+    kairos_core::services::paths::validate_id(&study_id)?;
     let store = store.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         let root = workspace::workspace_root(Path::new(&project_path))
@@ -478,7 +486,8 @@ pub async fn restore_study_mesh(
     store: State<'_, GeometryStore>,
     project_path: String,
     study_id: String,
-) -> Result<Option<MeshingReport>> {
+) -> Result<Option<RestoredStudyMesh>> {
+    kairos_core::services::paths::validate_id(&study_id)?;
     let store = store.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         let root = workspace::workspace_root(Path::new(&project_path))
@@ -489,9 +498,13 @@ pub async fn restore_study_mesh(
         };
         let geometry_id = stored.manifest.geometry_id.clone();
         if let Some(session) = store.lock().get_mut(&geometry_id) {
-            session.volume = Some(stored.mesh);
+            session.volume = Some(Arc::new(stored.mesh));
+            session.render = Arc::default();
         }
-        Ok(Some(stored.manifest.report))
+        Ok(Some(RestoredStudyMesh {
+            geometry_id,
+            report: stored.manifest.report,
+        }))
     })
     .await
     .map_err(|e| KairosError::internal(format!("网格读回任务失败：{e}")))?
@@ -504,20 +517,42 @@ pub fn remove_geometry(store: State<'_, GeometryStore>, geometry_id: String) -> 
 }
 
 /// 导出渲染网格：优先体积网格边界面，否则回退 STL 表面。
+/// 网格快照共享不可变数组，边界提取按网格修订缓存且不持有会话锁。
+pub(crate) fn render_snapshot(
+    store: &GeometryStore,
+    geometry_id: &str,
+) -> Result<Arc<RenderMeshData>> {
+    let (mesh, volume, render) = {
+        let sessions = store.lock();
+        let snapshot = sessions
+            .get(geometry_id)
+            .ok_or_else(|| KairosError::not_found(format!("几何不存在：{geometry_id}")))?;
+        (
+            Arc::clone(&snapshot.mesh),
+            snapshot.volume.clone(),
+            Arc::clone(&snapshot.render),
+        )
+    };
+    Ok(Arc::clone(render.get_or_init(|| {
+        Arc::new(match &volume {
+            Some(volume) => render_mesh::from_volume_mesh(volume),
+            None => render_mesh::from_surface_mesh(&mesh),
+        })
+    })))
+}
+
 #[tauri::command]
-pub fn get_render_mesh(
+pub async fn get_render_mesh(
     store: State<'_, GeometryStore>,
     geometry_id: String,
-) -> Result<RenderMeshData> {
-    let sessions = store.lock();
-    let session = sessions.get(&geometry_id).ok_or_else(|| {
-        kairos_core::error::KairosError::not_found(format!("几何不存在：{geometry_id}"))
-    })?;
-    if let Some(volume) = &session.volume {
-        Ok(render_mesh::from_volume_mesh(volume))
-    } else {
-        Ok(render_mesh::from_surface_mesh(&session.mesh))
-    }
+) -> Result<tauri::ipc::Response> {
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let render = render_snapshot(&store, &geometry_id)?;
+        Ok(tauri::ipc::Response::new(render_mesh::encode(&render)))
+    })
+    .await
+    .map_err(|e| KairosError::internal(format!("渲染网格任务失败：{e}")))?
 }
 
 /// 导入内置样例立方体（首次使用引导 / 端到端冒烟），无需外部 STL 文件。
@@ -530,7 +565,8 @@ pub fn import_sample_box(store: State<'_, GeometryStore>, size: f64) -> Result<I
     store.lock().insert(
         geometry_id,
         MeshSession {
-            mesh,
+            mesh: Arc::new(mesh),
+            render: Arc::default(),
             file_name: "样例立方体.stl".into(),
             volume: None,
             dual: None,
@@ -538,4 +574,38 @@ pub fn import_sample_box(store: State<'_, GeometryStore>, size: f64) -> Result<I
         },
     );
     Ok(ImportOutcome { summary, log })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn render_snapshot_is_shared_until_the_mesh_revision_changes() {
+        let store = GeometryStore::default();
+        store.lock().insert(
+            "g".into(),
+            MeshSession {
+                mesh: Arc::new(TriangleMesh::sample_box(1.0)),
+                file_name: "box.stl".into(),
+                volume: None,
+                render: Arc::default(),
+                dual: None,
+                midplane: None,
+            },
+        );
+        let first = render_snapshot(&store, "g").unwrap();
+        let cached = render_snapshot(&store, "g").unwrap();
+        assert!(Arc::ptr_eq(&first, &cached));
+        {
+            let mut sessions = store.lock();
+            let session = sessions.get_mut("g").unwrap();
+            session.mesh = Arc::new(TriangleMesh::sample_box(2.0));
+            session.render = Arc::default();
+        }
+        let changed = render_snapshot(&store, "g").unwrap();
+        assert!(!Arc::ptr_eq(&first, &changed));
+        assert_ne!(first.positions, changed.positions);
+        assert!(render_snapshot(&store, "missing").is_err());
+    }
 }

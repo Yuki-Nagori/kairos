@@ -17,6 +17,8 @@ export const useAppStore = defineStore("app", {
     info: null as SystemInfo | null,
     stage: "home" as Stage,
     busy: null as string | null,
+    busyTasks: [] as { id: number; label: string }[],
+    busySequence: 0,
     error: null as { message: string; info: boolean; code: string | null } | null,
   }),
   getters: {
@@ -41,25 +43,31 @@ export const useAppStore = defineStore("app", {
       }
     },
     /** 领域动作统一的前置清理：进入忙碌态并清掉上次错误。 */
-    beginBusy(label: string): void {
+    beginBusy(label: string): number {
+      const id = ++this.busySequence;
+      this.busyTasks.push({ id, label });
       this.busy = label;
       this.error = null;
+      return id;
     },
-    endBusy(): void {
-      this.busy = null;
+    /** 按操作身份移除忙碌状态，允许嵌套与并发操作以任意顺序结束。 */
+    endBusy(id?: number): void {
+      const completed = id ?? this.busyTasks.at(-1)?.id;
+      this.busyTasks = this.busyTasks.filter((task) => task.id !== completed);
+      this.busy = this.busyTasks.at(-1)?.label ?? null;
     },
     /** 领域动作统一包装：busy 提示 → 执行 → 失败进全局错误 → 复位 busy。
      *  各 store 的异步动作都经此编排，避免逐处重复 try/catch/finally 样板；
      *  返回值透传，失败返回 undefined（错误已入全局状态）。 */
     async withBusy<T>(label: string, run: () => Promise<T>): Promise<T | undefined> {
-      this.beginBusy(label);
+      const id = this.beginBusy(label);
       try {
         return await run();
       } catch (error) {
         this.setError(error);
         return undefined;
       } finally {
-        this.endBusy();
+        this.endBusy(id);
       }
     },
   },

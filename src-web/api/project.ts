@@ -4,10 +4,15 @@ import type {
   GeometryRef,
   GeometrySummary,
   MeshRefinement,
-  MeshingReport,
+  RestoredStudyMesh,
   Project,
   RecentProject,
 } from "../types";
+
+/** 清理工程所属的后端几何与结果会话。 */
+export function resetProjectSession(): Promise<void> {
+  return invokeCommand("reset_project_session");
+}
 
 /** 创建空项目（仅内存，保存时才落盘）。 */
 export function createProject(name: string): Promise<Project> {
@@ -82,11 +87,11 @@ export function saveStudyMesh(
 export function restoreStudyMesh(
   projectPath: string,
   studyId: string,
-): Promise<MeshingReport | null> {
+): Promise<RestoredStudyMesh | null> {
   return invokeCommand("restore_study_mesh", { projectPath, studyId });
 }
 
-/** 新方案的默认 case 目录：工作区内 `<工作区>/cases/<方案 id>`，散装工程回退应用数据目录。 */
+/** 新方案的默认 case 目录：工作区内 `<工作区>/cases/<方案 id>/<运行 id>`，散装工程回退应用数据目录。 */
 export function defaultCaseDir(studyId: string, projectPath?: string | null): Promise<string> {
   return invokeCommand("default_case_dir", { studyId, projectPath: projectPath ?? null });
 }

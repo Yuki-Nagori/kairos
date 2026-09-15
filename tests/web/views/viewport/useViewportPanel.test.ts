@@ -990,3 +990,36 @@ describe("渲染器主动上报失败", () => {
     expect(panel.emptyError).toBe(true);
   });
 });
+
+describe("工程切换隔离", () => {
+  it("切换工程释放旧视口并清空网格标记", async () => {
+    primeStudy();
+    const { panel } = await mountLoaded();
+    const backend = backends[0]!;
+    useProjectStore().project!.id = "p-2";
+    await nextTick();
+    expect(backend.dispose).toHaveBeenCalled();
+    expect(useViewportStore().meshLoaded).toBe(false);
+    expect(panel.emptyText).toBe("请载入当前工程的网格。");
+    panel.unmount();
+  });
+
+  it("丢弃切换前未完成的网格读取", async () => {
+    const { panel } = await mountLoaded();
+    const { getRenderMesh } = await import("../../../../src-web/api/geometry");
+    let resolve!: (value: { positions: number[]; indices: number[]; faceCells: number[] }) => void;
+    vi.mocked(getRenderMesh).mockReturnValueOnce(
+      new Promise((done) => {
+        resolve = done;
+      }),
+    );
+    const backend = backends[0]!;
+    backend.uploadMesh.mockClear();
+    const pending = panel.loadMesh();
+    useProjectStore().autoSaveEpoch += 1;
+    resolve({ positions: [], indices: [], faceCells: [] });
+    await pending;
+    expect(backend.uploadMesh).not.toHaveBeenCalled();
+    panel.unmount();
+  });
+});

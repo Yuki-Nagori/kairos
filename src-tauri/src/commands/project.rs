@@ -13,6 +13,16 @@ use kairos_core::services::workspace;
 use tauri::{AppHandle, Manager};
 
 #[tauri::command]
+pub fn reset_project_session(
+    geometry: tauri::State<'_, super::geometry::GeometryStore>,
+    results: tauri::State<'_, super::results::ResultSession>,
+) -> Result<()> {
+    geometry.lock().clear();
+    results.reset();
+    Ok(())
+}
+
+#[tauri::command]
 pub fn create_project(name: String) -> Result<Project> {
     project_service::create(&name, project_service::now_ms())
 }
@@ -152,7 +162,7 @@ pub fn archive_workspace_geometry(
     })
 }
 
-/// 新方案的默认 case 目录：工作区内 `<工作区>/cases/<方案 id>`，
+/// 新方案的默认 case 目录：工作区内 `<工作区>/cases/<方案 id>/<运行 id>`，
 /// 散装工程回退应用数据目录（旧行为）。
 #[tauri::command]
 pub fn default_case_dir(
@@ -160,11 +170,12 @@ pub fn default_case_dir(
     project_path: Option<String>,
     study_id: String,
 ) -> Result<String> {
+    kairos_core::services::paths::validate_id(&study_id)?;
     let root = project_path
         .as_deref()
         .and_then(|path| workspace::workspace_root(std::path::Path::new(path)));
     match root {
-        Some(root) => Ok(workspace::cases_dir(&root, &study_id)
+        Some(root) => Ok(workspace::create_run_dir(&root, &study_id)?
             .to_string_lossy()
             .to_string()),
         None => {
@@ -172,9 +183,7 @@ pub fn default_case_dir(
                 .path()
                 .app_data_dir()
                 .map_err(|e| KairosError::io(format!("无法定位应用数据目录：{e}")))?;
-            Ok(dir
-                .join("cases")
-                .join(study_id)
+            Ok(workspace::create_run_dir(&dir, &study_id)?
                 .to_string_lossy()
                 .to_string())
         }

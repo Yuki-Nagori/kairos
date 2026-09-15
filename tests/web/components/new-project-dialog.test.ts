@@ -11,6 +11,7 @@ import { pickWorkspaceDir } from "../../../src-web/api/dialog";
 
 vi.mock("../../../src-web/api/project", () => ({
   createProject: vi.fn(),
+  resetProjectSession: vi.fn(),
   defaultWorkspacePath: vi.fn(async () => "/home/u/Documents/kairos"),
   projectPath: vi.fn(
     async (workspace: string, name: string) => `${workspace}/${name}/${name}.kairos`,

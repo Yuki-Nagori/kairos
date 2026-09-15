@@ -3,6 +3,8 @@ import { createPinia, setActivePinia } from "pinia";
 import { IpcUnavailableError } from "../../../src-web/utils/ipc";
 import { useAppStore } from "../../../src-web/stores/app";
 import { useMaterialsStore } from "../../../src-web/stores/materials";
+import { useGeometryStore } from "../../../src-web/stores/geometry";
+import { useResultsStore } from "../../../src-web/stores/results";
 import { useProjectStore } from "../../../src-web/stores/project";
 import { getSystemInfo } from "../../../src-web/api/system";
 import {
@@ -25,6 +27,7 @@ import type { CoolingChannel, Project, RunnerElement, Study } from "../../../src
 vi.mock("../../../src-web/api/system", () => ({ getSystemInfo: vi.fn() }));
 vi.mock("../../../src-web/api/project", () => ({
   createProject: vi.fn(),
+  resetProjectSession: vi.fn(),
   defaultWorkspacePath: vi.fn(async () => "/home/u/Documents/kairos"),
   saveReportToWorkspace: vi.fn(),
   saveReportPptxToWorkspace: vi.fn(),
@@ -811,5 +814,54 @@ describe("报告落盘", () => {
     vi.mocked(defaultWorkspacePath).mockRejectedValueOnce(new Error("IPC 不可用"));
     await expect(project.defaultWorkspace()).resolves.toBeNull();
     expect(useAppStore().error).toBeNull();
+  });
+});
+
+describe("工程切换事务", () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    vi.resetAllMocks();
+  });
+  it("先保存旧工程并恢复新工程，清理旧几何和结果", async () => {
+    vi.useFakeTimers();
+    try {
+      const p = useProjectStore();
+      const g = useGeometryStore();
+      const results = useResultsStore();
+      p.project = makeProject({ id: "A" });
+      p.projectPath = "/A/A.kairos";
+      g.geometries = [{ geometryId: "old" } as never];
+      results.probes = [{ id: 1, nodeIndex: 0 }];
+      p.scheduleAutoSave();
+      const restore = vi.spyOn(g, "restoreWorkspaceContent").mockResolvedValue();
+      vi.mocked(loadProjectFile).mockResolvedValue(makeProject({ id: "B" }));
+      await p.openProjectAtPath("/B/B.kairos");
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(vi.mocked(saveProjectFile).mock.calls.map((call) => call[0])).toEqual(["/A/A.kairos"]);
+      expect(restore).toHaveBeenCalledOnce();
+      expect(g.geometries).toEqual([]);
+      expect(results.probes).toEqual([]);
+      expect(p.project?.id).toBe("B");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it("保存失败阻止切换，保留旧工程供重试", async () => {
+    const p = useProjectStore();
+    p.project = makeProject({ id: "A" });
+    p.projectPath = "/A/A.kairos";
+    vi.mocked(saveProjectFile).mockRejectedValue(new Error("磁盘满"));
+    await p.openProjectAtPath("/B/B.kairos");
+    expect(loadProjectFile).not.toHaveBeenCalled();
+    expect(p.project?.id).toBe("A");
+    expect(useAppStore().error?.message).toBe("磁盘满");
+  });
+  it("在途操作期间拒绝打开和新建", async () => {
+    useAppStore().beginBusy("mesh");
+    const p = useProjectStore();
+    await p.openProjectAtPath("/B/B.kairos");
+    expect(await p.newProject("B")).toBe(false);
+    expect(loadProjectFile).not.toHaveBeenCalled();
+    expect(createProject).not.toHaveBeenCalled();
   });
 });

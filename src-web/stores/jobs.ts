@@ -54,7 +54,11 @@ export const useJobsStore = defineStore("jobs", {
     },
     /** 提交求解作业（case 目录 + 核数）。Rust 侧解析时间标记写入作业进度并经
      * Channel 转发原始日志行；日志按作业缓存进 store 供作业面板展示。 */
-    async submitJob(caseDir: string, cores: number): Promise<void> {
+    async submitJob(
+      caseDir: string,
+      cores: number,
+      studyId = useProjectStore().activeStudyId,
+    ): Promise<void> {
       const app = useAppStore();
       await app.withBusy("正在提交作业…", async () => {
         const channel = new Channel<string>();
@@ -71,7 +75,7 @@ export const useJobsStore = defineStore("jobs", {
           }
           this.appendJobLog(jobId, line);
         };
-        const job = await apiSubmitJob(caseDir, cores, useProjectStore().activeStudyId, channel);
+        const job = await apiSubmitJob(caseDir, cores, studyId, channel);
         jobId = job.id;
         const buffered = pending.splice(0);
         if (buffered.length > 0) {

@@ -218,7 +218,7 @@ export const useGeometryStore = defineStore("geometry", {
         this.recordImport(outcome);
       });
     },
-    /** 工作区恢复：按工程里的相对路径读回几何，并把各方案的体积网格读回会话。
+    /** 工作区恢复：按工程里的相对路径读回几何，并把当前方案的体积网格读回会话。
      *  打开工作区工程后调用；散装工程（无工作区）直接返回。 */
     async restoreWorkspaceContent(): Promise<void> {
       const app = useAppStore();
@@ -235,11 +235,12 @@ export const useGeometryStore = defineStore("geometry", {
             summary,
           ];
         }
-        for (const study of project.project!.studies) {
-          const report = await restoreStudyMesh(path, study.id);
-          const geometryId = project.project!.geometries[0]?.id;
-          if (report !== null && geometryId !== undefined) {
-            this.meshReports = { ...this.meshReports, [geometryId]: report };
+        for (const study of project.project!.studies.filter(
+          (entry) => entry.id === project.activeStudyId,
+        )) {
+          const restored = await restoreStudyMesh(path, study.id);
+          if (restored !== null) {
+            this.meshReports = { ...this.meshReports, [restored.geometryId]: restored.report };
           }
         }
       });

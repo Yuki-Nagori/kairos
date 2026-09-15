@@ -38,7 +38,7 @@ const {
         placeholder="case 目录路径"
         class="flex-1 min-w-48"
       />
-      <TextInput v-model="cores" type="number" placeholder="2" class="w-20" min="1" />
+      <TextInput v-model="cores" type="number" placeholder="2" class="w-20" min="1" max="8" />
       <UiButton variant="primary" :disabled="app.working" @click="submitJob"> 提交作业 </UiButton>
       <UiButton :disabled="app.working" @click="jobsStore.refreshJobs()">刷新</UiButton>
     </div>

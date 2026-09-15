@@ -67,7 +67,6 @@ pub(crate) fn platform_command(bin: &str) -> Command {
 
 /// VM 通道的宿主命令 runner：宿主差异（PATH 前缀）在这里注入，
 /// 起进程 / 抽干管道 / 超时 / 成败判定全部复用 core（services::vm_run）。
-#[cfg(target_os = "macos")]
 pub(crate) fn host_runner() -> vm_run::ProcessRunner {
     vm_run::ProcessRunner::new(mac_path_prefix(), vm_run::ProcessRunner::DEFAULT_TIMEOUT_S)
 }

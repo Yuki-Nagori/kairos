@@ -8,12 +8,13 @@ import { useXyChartPanel } from "../../../../src-web/views/xy-chart/useXyChartPa
 import { useAppStore } from "../../../../src-web/stores/app";
 import { useResultsStore } from "../../../../src-web/stores/results";
 import { THEME_CHANGED_EVENT } from "../../../../src-web/utils/theme";
-import { loadResultField } from "../../../../src-web/api/results";
+import { loadResultField, sampleProbeSeries } from "../../../../src-web/api/results";
 import type { ScalarField } from "../../../../src-web/types";
 
 vi.mock("../../../../src-web/api/results", () => ({
   listResultTimes: vi.fn(),
   loadResultField: vi.fn(),
+  sampleProbeSeries: vi.fn(),
   deriveField: vi.fn(),
   deriveDifference: vi.fn(),
 }));
@@ -223,10 +224,16 @@ describe("XyChartPanel", () => {
     results.loadedField = makeField({ field: "T" });
     results.addProbe(0);
     results.addProbe(1);
-    vi.mocked(loadResultField).mockImplementation((_caseDir: string, timeDir: string) => {
-      const values = timeDir === "0" ? [10, 20] : [30, 40];
-      return Promise.resolve(makeField({ timeDir, values }));
-    });
+    vi.mocked(sampleProbeSeries).mockResolvedValue(
+      results.probes.map((probe, i) => ({
+        probeId: probe.id,
+        nodeIndex: probe.nodeIndex,
+        samples: [
+          { timeS: 0, value: 10 + i * 10 },
+          { timeS: 1, value: 30 + i * 10 },
+        ],
+      })),
+    );
     const wrapper = mountPanel();
 
     await wrapper.findAll("select")[0]!.setValue("time");

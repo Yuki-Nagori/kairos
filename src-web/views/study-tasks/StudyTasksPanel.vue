@@ -111,6 +111,7 @@ const {
         placeholder="2"
         class="w-20"
         min="1"
+        max="8"
         title="并行核数"
       />
       <UiButton variant="primary" :disabled="submitDisabled" @click="submit">

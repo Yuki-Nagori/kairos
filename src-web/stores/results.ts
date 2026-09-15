@@ -6,6 +6,7 @@ import {
   deriveField as deriveFieldApi,
   deformRenderMesh,
   listResultTimes,
+  sampleProbeSeries,
   loadResultField,
   loadTensorField,
   loadVectorField,
@@ -74,7 +75,7 @@ export const useResultsStore = defineStore("results", {
     /** 加载对称张量场（残余应力 / 取向张量）：模量作为当前场进云图，主轴供面板读数。 */
     async loadTensorComponents(caseDir: string, timeDir: string, field: string): Promise<void> {
       const app = useAppStore();
-      try {
+      await app.withBusy("正在加载张量场…", async () => {
         const tensor = await loadTensorField(caseDir, timeDir, field);
         this.tensorField = tensor;
         this.loadedField = {
@@ -85,28 +86,21 @@ export const useResultsStore = defineStore("results", {
           isMagnitude: true,
           complete: tensor.complete,
         };
-      } catch (error) {
-        app.setError(error);
-      }
+      });
     },
     /** 变形显示：按已加载的矢量场（位移）偏移渲染网格；失败进全局错误并返回 null。 */
     async deformMesh(geometryId: string, scale: number): Promise<RenderMeshData | null> {
       const app = useAppStore();
-      try {
-        return await deformRenderMesh(geometryId, scale);
-      } catch (error) {
-        app.setError(error);
-        return null;
-      }
+      return (
+        (await app.withBusy("正在计算变形网格…", () => deformRenderMesh(geometryId, scale))) ?? null
+      );
     },
     /** 加载矢量场三分量（如位移 D）：供矢量展示与派生消费；失败进全局错误。 */
     async loadVectorComponents(caseDir: string, timeDir: string, field: string): Promise<void> {
       const app = useAppStore();
-      try {
+      await app.withBusy("正在加载矢量场…", async () => {
         this.vectorField = await loadVectorField(caseDir, timeDir, field);
-      } catch (error) {
-        app.setError(error);
-      }
+      });
     },
     /** 填充预览：以当前方案的浇口为源做覆盖估计，覆盖场作为当前场载入视口；
      *  未覆盖 / 落点异常等提示进预览报告（面板展示）。 */
@@ -180,7 +174,7 @@ export const useResultsStore = defineStore("results", {
       this.probes = this.probes.filter((probe) => probe.id !== id);
       this.probeTimeSeries = this.probeTimeSeries.filter((series) => series.probeId !== id);
     },
-    /** 加载探针时间序列：遍历目录时间步取各探针值；结束后恢复原时间步显示。 */
+    /** 加载探针时间序列：Rust 只读采样，保持主场与当前显示不变。 */
     async loadProbeTimeSeries(): Promise<void> {
       const app = useAppStore();
       const catalog = this.resultCatalog;
@@ -191,23 +185,7 @@ export const useResultsStore = defineStore("results", {
         return;
       }
       await app.withBusy("正在加载探针时间曲线…", async () => {
-        const originalTimeDir = source.timeDir;
-        const series: ProbeTimeSeries[] = probes.map((probe) => ({
-          probeId: probe.id,
-          nodeIndex: probe.nodeIndex,
-          samples: [],
-        }));
-        for (const time of catalog.times) {
-          const field = await loadResultField(catalog.caseDir, time.dirName, rawField);
-          for (const entry of series) {
-            entry.samples.push({ timeS: time.timeS, value: field.values[entry.nodeIndex] ?? 0 });
-          }
-          // 恢复原时间步：遍历中遇到即缓存，结束后回填展示态。
-          if (time.dirName === originalTimeDir) {
-            this.loadedField = field;
-          }
-        }
-        this.probeTimeSeries = series;
+        this.probeTimeSeries = await sampleProbeSeries(catalog.caseDir, rawField, probes);
         this.probeSeriesField = rawField;
       });
     },
@@ -218,11 +196,9 @@ export const useResultsStore = defineStore("results", {
       if (current === null || current.values.length === 0) {
         return;
       }
-      try {
+      await app.withBusy("正在派生场…", async () => {
         this.loadedField = await deriveFieldApi(request);
-      } catch (error) {
-        app.setError(error);
-      }
+      });
     },
     /** 两场差值：主场 − 对比场，结果写回 loadedField。 */
     async deriveDifference(): Promise<void> {
@@ -230,11 +206,9 @@ export const useResultsStore = defineStore("results", {
       if (this.loadedField === null || this.compareField === null) {
         return;
       }
-      try {
+      await app.withBusy("正在计算差值…", async () => {
         this.loadedField = await deriveDifferenceApi();
-      } catch (error) {
-        app.setError(error);
-      }
+      });
     },
     /** 导出已加载场为 CSV（节点序号 + 值）。 */
     exportFieldCsv(): void {
