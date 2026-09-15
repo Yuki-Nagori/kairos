@@ -1,6 +1,8 @@
 //! GPU 加速后处理算子：wgpu compute，接入派生命令生产路径（derive_field /
-//! derive_difference）。CPU 参考实现住 core（services::operators / results::derive*），
-//! 仅作正确性基准——后处理以硬件加速 GPU 为运行前提，无 CPU 运行时回退。
+//! derive_difference）。数值核按精度各归其位——GPU 走本模块的 f32 着色器，
+//! core 侧 `results::derive*` 是 f64 的**正确性基准**（仅测试与对拍使用；
+//! 后处理以硬件加速 GPU 为运行前提，无 CPU 运行时回退）。命名、结果信封与
+//! 错误文案由 core 的 `services::derive` 单点给出，两条路径不会漂。
 //! 算子清单（v1）：矢量模量、线性映射（含归一化）、阈值掩码、两场差值；
 //! LOD / 切片按同一模式扩展。
 
@@ -8,6 +10,7 @@ use std::sync::OnceLock;
 
 use kairos_core::error::KairosError;
 use kairos_core::models::results::{DeriveRequest, ScalarField};
+use kairos_core::services::derive as derive_rules;
 use serde::Serialize;
 use wgpu::util::DeviceExt;
 
@@ -398,40 +401,36 @@ pub fn derive_scalar_field_gpu(
         DeriveRequest::Normalize => {
             let range = max - min;
             if range <= 0.0 {
-                ("归一化".into(), vec![0.0; values.len()])
+                (
+                    derive_rules::NAME_NORMALIZE.to_string(),
+                    vec![0.0; values.len()],
+                )
             } else {
                 // (v - min)/range ≡ v·(1/range) + (-min·(1/range))：复用线性映射管线
                 let scale = 1.0 / range;
                 (
-                    "归一化".into(),
+                    derive_rules::NAME_NORMALIZE.to_string(),
                     scalar_linear_gpu(&values, scale, -min * scale)?,
                 )
             }
         }
         DeriveRequest::Threshold => (
-            "阈值掩码".into(),
+            derive_rules::NAME_THRESHOLD.to_string(),
             scalar_threshold_gpu(&values, (min + max) / 2.0)?,
         ),
         DeriveRequest::Linear { scale, offset } => (
-            format!("线性映射 ×{scale} {offset:+}"),
+            derive_rules::linear_name(*scale, *offset),
             scalar_linear_gpu(&values, *scale as f32, *offset as f32)?,
         ),
         // 差值需要主场与对比场两份数据，单场入口不受理（与 CPU 参考一致）。
-        DeriveRequest::Difference => {
-            return Err(KairosError::validation(
-                "两场差值请使用 derive_difference 命令（需要主场与对比场）。",
-            ));
-        }
+        DeriveRequest::Difference => return Err(derive_rules::difference_request_error()),
     };
 
-    Ok(ScalarField {
-        field: format!("{} · {suffix}", field.field),
-        time_dir: field.time_dir.clone(),
-        time_s: field.time_s,
-        values: derived.into_iter().map(f64::from).collect(),
-        is_magnitude: false,
-        complete: field.complete,
-    })
+    Ok(derive_rules::derived_field(
+        field,
+        &suffix,
+        derived.into_iter().map(f64::from).collect(),
+    ))
 }
 
 /// GPU 主路径：两场差值（主场 − 对比场）。长度校验、命名与标志位与
@@ -440,26 +439,15 @@ pub fn derive_difference_gpu(
     primary: &ScalarField,
     compare: &ScalarField,
 ) -> Result<ScalarField, KairosError> {
-    if primary.values.len() != compare.values.len() {
-        return Err(KairosError::validation(format!(
-            "两场长度不一致：{} 有 {} 个值，{} 有 {} 个值。",
-            primary.field,
-            primary.values.len(),
-            compare.field,
-            compare.values.len()
-        )));
-    }
+    derive_rules::validate_difference_lengths(primary, compare)?;
     let a: Vec<f32> = primary.values.iter().map(|&v| v as f32).collect();
     let b: Vec<f32> = compare.values.iter().map(|&v| v as f32).collect();
     let derived = scalar_difference_gpu(&a, &b)?;
-    Ok(ScalarField {
-        field: format!("{} - {}", primary.field, compare.field),
-        time_dir: primary.time_dir.clone(),
-        time_s: primary.time_s,
-        values: derived.into_iter().map(f64::from).collect(),
-        is_magnitude: false,
-        complete: primary.complete && compare.complete,
-    })
+    Ok(derive_rules::difference_field(
+        primary,
+        compare,
+        derived.into_iter().map(f64::from).collect(),
+    ))
 }
 
 /// CPU 参考实现转交（测试与一致性基准使用；生产路径不经过）。

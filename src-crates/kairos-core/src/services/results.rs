@@ -995,8 +995,8 @@ pub fn derive_scalar_field(
     field: &crate::models::results::ScalarField,
     request: &crate::models::results::DeriveRequest,
 ) -> Result<crate::models::results::ScalarField> {
-    use crate::error::KairosError;
-    use crate::models::results::{DeriveRequest, ScalarField};
+    use crate::models::results::DeriveRequest;
+    use crate::services::derive;
 
     if field.values.is_empty() {
         // 空场原样返回：上层保持名称与状态不变
@@ -1017,7 +1017,7 @@ pub fn derive_scalar_field(
             } else {
                 vec![0.0; field.values.len()]
             };
-            ("归一化".into(), values)
+            (derive::NAME_NORMALIZE.to_string(), values)
         }
         DeriveRequest::Threshold => {
             let threshold = (min + max) / 2.0;
@@ -1026,28 +1026,17 @@ pub fn derive_scalar_field(
                 .iter()
                 .map(|v| if *v >= threshold { 1.0 } else { 0.0 })
                 .collect();
-            ("阈值掩码".into(), values)
+            (derive::NAME_THRESHOLD.to_string(), values)
         }
         DeriveRequest::Linear { scale, offset } => (
-            format!("线性映射 ×{scale} {offset:+}"),
+            derive::linear_name(*scale, *offset),
             field.values.iter().map(|v| v * scale + offset).collect(),
         ),
         // 差值需要主场与对比场两份数据，单场入口不受理。
-        DeriveRequest::Difference => {
-            return Err(KairosError::validation(
-                "两场差值请使用 derive_difference 命令（需要主场与对比场）。",
-            ));
-        }
+        DeriveRequest::Difference => return Err(derive::difference_request_error()),
     };
 
-    Ok(ScalarField {
-        field: format!("{} · {suffix}", field.field),
-        time_dir: field.time_dir.clone(),
-        time_s: field.time_s,
-        values: derived,
-        is_magnitude: false,
-        complete: field.complete,
-    })
+    Ok(derive::derived_field(field, &suffix, derived))
 }
 
 /// 两场差值：主场 − 对比场，逐值相减。长度不一致时报验证错误（不静默截断）；
@@ -1056,32 +1045,16 @@ pub fn derive_difference(
     primary: &crate::models::results::ScalarField,
     compare: &crate::models::results::ScalarField,
 ) -> Result<crate::models::results::ScalarField> {
-    use crate::error::KairosError;
-    use crate::models::results::ScalarField;
+    use crate::services::derive;
 
-    if primary.values.len() != compare.values.len() {
-        return Err(KairosError::validation(format!(
-            "两场长度不一致：{} 有 {} 个值，{} 有 {} 个值。",
-            primary.field,
-            primary.values.len(),
-            compare.field,
-            compare.values.len()
-        )));
-    }
+    derive::validate_difference_lengths(primary, compare)?;
     let values = primary
         .values
         .iter()
         .zip(compare.values.iter())
         .map(|(a, b)| a - b)
         .collect();
-    Ok(ScalarField {
-        field: format!("{} - {}", primary.field, compare.field),
-        time_dir: primary.time_dir.clone(),
-        time_s: primary.time_s,
-        values,
-        is_magnitude: false,
-        complete: primary.complete && compare.complete,
-    })
+    Ok(derive::difference_field(primary, compare, values))
 }
 
 #[cfg(test)]

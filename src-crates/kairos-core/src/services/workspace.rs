@@ -64,7 +64,7 @@ pub fn workspace_root(project_file: &Path) -> Option<PathBuf> {
 }
 
 /// 工程目录：`<工作区根>/<工程名>`。
-/// 名称清洗走 [`paths::sanitize_file_name`]：保留字符替换为下划线，名称里的目录成分
+/// 名称清洗走 [`paths::path_segment`]：保留字符替换为下划线，名称里的目录成分
 /// 一律丢弃（只取最后一段），空名回退 `kairos`。
 pub fn project_dir(root: &Path, project_name: &str) -> PathBuf {
     root.join(sanitize_component(project_name))
