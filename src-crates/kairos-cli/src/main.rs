@@ -684,8 +684,13 @@ fn run_optimize_batch(
             let mut failure = None;
             while attempts < optimize::MAX_ATTEMPTS && metrics.is_none() {
                 attempts += 1;
+                let attempt_dir = if attempts == 1 {
+                    case_dir.clone()
+                } else {
+                    case_dir.join(format!("attempt-{attempts}"))
+                };
                 match run_doe_case(
-                    &case_dir,
+                    &attempt_dir,
                     &volume,
                     &material,
                     &settings,
