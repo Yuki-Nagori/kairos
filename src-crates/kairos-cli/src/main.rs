@@ -403,31 +403,11 @@ fn run_doe(action: DoeAction, json: bool) -> kairos_core::error::Result<()> {
             batch,
         } => {
             let parsed = parse_doe_factors(&factors)?;
-            let plan = match plan.as_str() {
-                "orthogonal" => doe::DoePlan::OrthogonalL9,
-                "full" => doe::DoePlan::FullFactorial,
-                other => {
-                    return Err(KairosError::validation(format!(
-                        "未知的编排方式「{other}」，可用：orthogonal / full。"
-                    )));
-                }
-            };
-            let runs = doe::build_matrix(plan, &parsed)?;
-            let batch_name = batch.unwrap_or_else(|| {
-                parsed
-                    .iter()
-                    .map(|factor| factor.name.clone())
-                    .collect::<Vec<_>>()
-                    .join("-")
-            });
+            let runs = doe::build_matrix(parse_doe_plan(&plan)?, &parsed)?;
+            let batch_name = doe_batch_name(batch, &parsed);
             if let Some(dir) = out_dir {
                 let target = doe::batch_dir(Path::new(&dir), &batch_name);
-                std::fs::create_dir_all(&target)
-                    .map_err(|e| KairosError::io(format!("创建批次目录失败：{e}")))?;
-                std::fs::write(target.join("summary.csv"), doe::summary_csv(&runs))
-                    .map_err(|e| KairosError::io(format!("写入汇总表失败：{e}")))?;
-                std::fs::write(target.join("summary.json"), doe::summary_json(&runs))
-                    .map_err(|e| KairosError::io(format!("写入汇总表失败：{e}")))?;
+                write_doe_summary(&target, &runs)?;
                 println!(
                     "批次「{batch_name}」已写入 {}（{} 次运行）",
                     target.display(),
@@ -461,28 +441,12 @@ fn run_doe_batch(
     json: bool,
 ) -> kairos_core::error::Result<()> {
     let parsed = parse_doe_factors(factor_specs)?;
-    let plan = match plan {
-        "orthogonal" => doe::DoePlan::OrthogonalL9,
-        "full" => doe::DoePlan::FullFactorial,
-        other => {
-            return Err(KairosError::validation(format!(
-                "未知的编排方式「{other}」，可用：orthogonal / full。"
-            )));
-        }
-    };
-    let mut runs = doe::build_matrix(plan, &parsed)?;
+    let mut runs = doe::build_matrix(parse_doe_plan(plan)?, &parsed)?;
     let spacing = |run: usize| -> String { format!("[{}]", run) };
-    let batch_name = batch.unwrap_or_else(|| {
-        parsed
-            .iter()
-            .map(|factor| factor.name.clone())
-            .collect::<Vec<_>>()
-            .join("-")
-    });
+    let batch_name = doe_batch_name(batch, &parsed);
     let workspace = Path::new(out_dir);
     let batch_root = doe::batch_dir(workspace, &batch_name);
-    std::fs::create_dir_all(&batch_root)
-        .map_err(|e| KairosError::io(format!("创建批次目录失败：{e}")))?;
+    write_doe_summary(&batch_root, &runs)?;
 
     // 几何与网格准备一次：矩阵只改工艺参数，重复划分网格纯属浪费。
     let mesh_tri = match (sample_box, stl) {
@@ -568,10 +532,7 @@ fn run_doe_batch(
             );
         }
         // 每次运行后立刻重写汇总表：中断时已完成的行不丢
-        std::fs::write(batch_root.join("summary.csv"), doe::summary_csv(&runs))
-            .map_err(|e| KairosError::io(format!("写入汇总表失败：{e}")))?;
-        std::fs::write(batch_root.join("summary.json"), doe::summary_json(&runs))
-            .map_err(|e| KairosError::io(format!("写入汇总表失败：{e}")))?;
+        write_doe_summary(&batch_root, &runs)?;
     }
 
     if json {
@@ -624,6 +585,41 @@ fn run_solver(case_dir: &str, cores: u32) -> kairos_core::error::Result<()> {
 }
 
 /// 解析 DOE 因子参数：`名称=值1,值2,…`（空列表或坏数字明确报错）。
+/// 编排方式名 → 计划。可选取值与错误文案只此一处（`matrix` 与 `batch` 共用）。
+fn parse_doe_plan(plan: &str) -> kairos_core::error::Result<doe::DoePlan> {
+    match plan {
+        "orthogonal" => Ok(doe::DoePlan::OrthogonalL9),
+        "full" => Ok(doe::DoePlan::FullFactorial),
+        other => Err(KairosError::validation(format!(
+            "未知的编排方式「{other}」，可用：orthogonal / full。"
+        ))),
+    }
+}
+
+/// 批次名：显式给出优先，否则由因子名连接（两条子命令同口径）。
+fn doe_batch_name(batch: Option<String>, factors: &[doe::DoeFactor]) -> String {
+    batch.unwrap_or_else(|| {
+        factors
+            .iter()
+            .map(|factor| factor.name.clone())
+            .collect::<Vec<_>>()
+            .join("-")
+    })
+}
+
+/// 把汇总表（csv + json）落到批次目录，缺目录就建。
+///
+/// 逐次运行后也调它（目录已存在时 `create_dir_all` 是幂等的），以便中断时已完成
+/// 的行不丢。
+fn write_doe_summary(dir: &Path, runs: &[doe::DoeRun]) -> kairos_core::error::Result<()> {
+    std::fs::create_dir_all(dir).map_err(|e| KairosError::io(format!("创建批次目录失败：{e}")))?;
+    std::fs::write(dir.join("summary.csv"), doe::summary_csv(runs))
+        .map_err(|e| KairosError::io(format!("写入汇总表失败：{e}")))?;
+    std::fs::write(dir.join("summary.json"), doe::summary_json(runs))
+        .map_err(|e| KairosError::io(format!("写入汇总表失败：{e}")))?;
+    Ok(())
+}
+
 fn parse_doe_factors(specs: &[String]) -> kairos_core::error::Result<Vec<doe::DoeFactor>> {
     let mut factors = Vec::with_capacity(specs.len());
     for spec in specs {
