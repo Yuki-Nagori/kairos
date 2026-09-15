@@ -213,6 +213,37 @@ pub fn report(mesh: &DualDomainMesh) -> DualDomainReport {
     }
 }
 
+/// 验证双域网格是否具备进入降维 solver 适配层的必要拓扑条件。
+///
+/// moldingFoam 当前仍消费三维体网格；该检查只负责阻止未配对、索引越界或
+/// 厚度非法的双域数据被静默当作体网格提交，不声称已经实现双域求解。
+pub fn validate_solver_topology(mesh: &DualDomainMesh) -> Result<()> {
+    if mesh.triangles.is_empty() || mesh.thickness.len() != mesh.triangles.len() {
+        return Err(KairosError::validation(
+            "双域网格三角形与厚度数组不匹配，不能进入 solver 适配层。",
+        ));
+    }
+    if mesh
+        .triangles
+        .iter()
+        .any(|triangle| triangle.iter().any(|index| *index >= mesh.nodes.len()))
+    {
+        return Err(KairosError::validation(
+            "双域网格包含越界三角形索引，不能进入 solver 适配层。",
+        ));
+    }
+    if mesh
+        .thickness
+        .iter()
+        .any(|value| !value.is_finite() || *value <= 0.0)
+    {
+        return Err(KairosError::validation(
+            "双域网格包含未配对或非法厚度，不能进入 solver 适配层。",
+        ));
+    }
+    Ok(())
+}
+
 /// 单位化三角形法向；退化（零长度叉积）返回 None。
 pub(crate) fn normalized_normal(a: &Point, b: &Point, c: &Point) -> Option<Point> {
     let e1 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
@@ -874,5 +905,22 @@ mod tests {
         assert_eq!(index, 1);
         assert!((distance - 0.2).abs() < 1e-12);
         assert!(nearest_node(&[], [0., 0., 0.]).is_none());
+    }
+
+    #[test]
+    fn solver_topology_rejects_unpaired_or_out_of_range_surface_data() {
+        let valid = DualDomainMesh {
+            nodes: vec![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+            triangles: vec![[0, 1, 2]],
+            thickness: vec![0.1],
+            ..Default::default()
+        };
+        assert!(validate_solver_topology(&valid).is_ok());
+        let mut bad = valid.clone();
+        bad.thickness[0] = 0.0;
+        assert!(validate_solver_topology(&bad).is_err());
+        bad = valid;
+        bad.triangles[0][2] = 9;
+        assert!(validate_solver_topology(&bad).is_err());
     }
 }
