@@ -71,6 +71,11 @@ pub fn validate(material: &Material) -> Result<()> {
             "Tait 转变温度 b5 必须为正数（K）。",
         ));
     }
+    if t.b3s.is_some_and(|value| value <= 0.0) || t.c <= 0.0 || t.smooth_band <= 0.0 {
+        return Err(KairosError::validation(
+            "Tait 固态 B(T)、C 和平滑半带宽必须为正数。",
+        ));
+    }
     if let Some(blowing) = &material.blowing {
         if blowing.kind.trim().is_empty() {
             return Err(KairosError::validation("发泡剂类型不能为空。"));
@@ -273,6 +278,10 @@ fn parse_csv_row(row: &csv::StringRecord, row_no: usize) -> Result<Material> {
             b4m: number(15, "b4m")?,
             b4s: number(16, "b4s")?,
             b5: number(17, "b5")?,
+            b3s: None,
+            b6: 0.0,
+            c: 0.0894,
+            smooth_band: 0.5,
         },
         specific_heat: table(18, "specificHeat")?,
         conductivity: table(19, "conductivity")?,
@@ -666,6 +675,10 @@ mod blowing_tests {
                 b4m: 3e-3,
                 b4s: 1.5e-3,
                 b5: 418.0,
+                b3s: None,
+                b6: 0.0,
+                c: 0.0894,
+                smooth_band: 0.5,
             },
             specific_heat: vec![(300.0, 1900.0)],
             conductivity: vec![(300.0, 0.2)],

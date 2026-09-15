@@ -36,6 +36,26 @@ pub struct Tait {
     pub b4s: f64,
     /// 温度转变参数 b5（K）。
     pub b5: f64,
+    /// 固态 B(T) 前置系数（Pa）；缺省沿用熔态 b3。
+    #[serde(default)]
+    pub b3s: Option<f64>,
+    /// 压力对转变温度的影响（K/Pa）。
+    #[serde(default)]
+    pub b6: f64,
+    /// Tait 对数常数。
+    #[serde(default = "default_tait_c")]
+    pub c: f64,
+    /// 固/熔态平滑过渡半带宽（K）。
+    #[serde(default = "default_tait_smooth_band")]
+    pub smooth_band: f64,
+}
+
+fn default_tait_c() -> f64 {
+    0.0894
+}
+
+fn default_tait_smooth_band() -> f64 {
+    0.5
 }
 
 /// 温度相关的标量性质表（温度 K，值；温度须严格递增）。
