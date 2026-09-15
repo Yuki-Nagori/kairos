@@ -48,6 +48,17 @@
    - 报告逐项给出参考值、Kairos 值、绝对差、相对差和误差来源分类。
 
 ## 当前实现进度
+## 路线确认（2026-09-16）
+
+moldingFoam v1.1.0 当前求解器通过 `foamRun` 消费三维 OpenFOAM 体网格（`polyMesh`、体心场和体单元离散），源码没有壳单元、Dual Domain 双面节点或中面厚度场的输入契约。现有 `DualDomainMesh` 是 Kairos 前处理产物，不能直接写成现有 `physicalProperties`/`polyMesh` 并声称等价。
+
+T102 后续采用两步路线：
+
+1. 先定义稳定的 `DualDomainSolverInput`（中面节点、三角形、厚度、双面匹配、边界和积分规则）及契约/golden 测试。
+2. 在 moldingFoam 增加显式降维求解模块后，再由 Kairos 写出该模块的 case；在此之前只允许拓扑前置校验和报告导出，禁止静默回退到 3D 体网格。
+
+因此，当前 Mug 命令已经做到工艺参数一致，但 Dual Domain 网格与 solver 消费仍未完成；报告中的数值结果不得标记为完全一致。
+
 
 - CLI 已支持 `fill-pack-cool` 完整工艺阶段。
 - `dualdomain::validate_solver_topology` 已阻止未配对厚度、越界三角形和非法拓扑进入未来 solver 适配层。
