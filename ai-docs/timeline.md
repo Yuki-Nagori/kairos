@@ -515,3 +515,4 @@
 - 2026-09-15 17:18 | T99 第五批 | EnvironmentCheck / CaseOutcome（含 GateInlet）迁入 core models，Tauri 仅做命令适配；补充 Rust DTO camelCase 契约测试。
 - 2026-09-15 17:31 | T99 第六批 | 结果加载加入算例代际与槽位请求序号；切换算例或同槽位发起新请求后，旧异步返回不会回写当前会话。
 - 2026-09-15 17:45 | T99 第七批 | 新增 core `FieldStats` 与 `summarize_result_field` IPC/API，结果场统计可在 Rust 单次扫描完成，保留前端面板接线待办。
+- 2026-09-15 18:02 | T99 第八批 | 矢量模量统计下沉 core，新增 `summarize_vector_field`，store 与结果面板改用 Rust 统计并保留首单元分量展示。

@@ -86,10 +86,11 @@ export function useResultsPanel() {
       return null;
     }
     const first = field.components[0] as [number, number, number];
-    const norms = field.components.map((group) => Math.hypot(group[0], group[1], group[2]));
-    const { min, max } = minMax(norms);
+    const remote = results.vectorFieldStats;
+    const { min, max } =
+      remote ?? minMax(field.components.map((group) => Math.hypot(group[0], group[1], group[2])));
     return {
-      line: `矢量 ${field.field} @ ${field.timeDir}：${field.components.length} 个单元 · 首单元 (${first.map((value) => significant(value)).join(", ")}) · |v| ${significant(min)} ~ ${significant(max)}`,
+      line: `矢量 ${field.field} @ ${field.timeDir}：${remote?.count ?? field.components.length} 个单元 · 首单元 (${first.map((value) => significant(value)).join(", ")}) · |v| ${significant(min)} ~ ${significant(max)}`,
       complete: field.complete,
     };
   });

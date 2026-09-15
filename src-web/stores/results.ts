@@ -12,6 +12,7 @@ import {
   loadVectorField,
   exportResultFieldCsv,
   summarizeResultField,
+  summarizeVectorField,
 } from "../api/results";
 import type {
   DeriveRequest,
@@ -55,6 +56,7 @@ export const useResultsStore = defineStore("results", {
     fillPreview: null as FillPreviewReport | null,
     /** 最近一次加载的矢量场三分量（null = 未加载）。 */
     vectorField: null as VectorField | null,
+    vectorFieldStats: null as FieldStats | null,
     /** 最近一次加载的对称张量场（null = 未加载）。 */
     tensorField: null as TensorField | null,
   }),
@@ -104,6 +106,7 @@ export const useResultsStore = defineStore("results", {
       const app = useAppStore();
       await app.withBusy("正在加载矢量场…", async () => {
         this.vectorField = await loadVectorField(caseDir, timeDir, field);
+        this.vectorFieldStats = await summarizeVectorField(caseDir, timeDir, field);
       });
     },
     /** 填充预览：以当前方案的浇口为源做覆盖估计，覆盖场作为当前场载入视口；

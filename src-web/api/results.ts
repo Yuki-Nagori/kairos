@@ -54,6 +54,14 @@ export function summarizeResultField(
   return invokeCommand("summarize_result_field", { caseDir, timeDir, field });
 }
 
+export function summarizeVectorField(
+  caseDir: string,
+  timeDir: string,
+  field: string,
+): Promise<FieldStats> {
+  return invokeCommand("summarize_vector_field", { caseDir, timeDir, field });
+}
+
 /** 加载指定时间步的矢量场三分量（变形显示 / 矢量派生用）。 */
 export async function loadVectorField(
   caseDir: string,

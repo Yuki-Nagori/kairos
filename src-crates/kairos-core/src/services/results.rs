@@ -265,6 +265,22 @@ pub fn field_stats(values: &[f64]) -> FieldStats {
     }
 }
 
+/// 直接统计矢量模量，避免为大场分配临时模量数组。
+pub fn vector_field_stats(values: &[[f64; 3]]) -> FieldStats {
+    let mut min = f64::INFINITY;
+    let mut max = f64::NEG_INFINITY;
+    for value in values {
+        let magnitude = value[0].hypot(value[1]).hypot(value[2]);
+        min = min.min(magnitude);
+        max = max.max(magnitude);
+    }
+    FieldStats {
+        count: values.len(),
+        min,
+        max,
+    }
+}
+
 /// 解析 internalField 为对称张量分量（每 6 个标量一组，(xx, xy, xz, yy, yz, zz)）。
 /// 分量数不是 6 的倍数时按可用分量截断并把 complete 置 false。
 pub fn parse_internal_tensors(content: &str) -> (Vec<[f64; 6]>, bool) {
@@ -557,6 +573,18 @@ boundaryField
                 count: 0,
                 min: f64::INFINITY,
                 max: f64::NEG_INFINITY
+            }
+        );
+    }
+
+    #[test]
+    fn vector_field_stats_avoids_materializing_magnitudes() {
+        assert_eq!(
+            vector_field_stats(&[[3.0, 4.0, 0.0], [0.0, 0.0, 1.0]]),
+            FieldStats {
+                count: 2,
+                min: 1.0,
+                max: 5.0
             }
         );
     }
