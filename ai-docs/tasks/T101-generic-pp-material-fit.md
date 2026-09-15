@@ -37,6 +37,14 @@
 - 当前 core 已固定 Cross-WLF/Tait golden 点；moldingFoam 运行时对照和 Mug 实际回归仍待完成。
 - 本地受控曲线插入测试已验证解析和输出链路；原始内置 Tait 模板不兼容时会明确失败，避免静默生成伪拟合结果。
 
+### Tait solver parity audit
+
+2026-09-15 对 moldingFoam v1.1.0 源码复核后确认：运行时使用
+`B(T)=b3·exp(-b4T)`、`Tt=b5+b6p` 和
+`v=v0(T)·(1-C·ln(1+p/B(T)))`，并对固态/熔态分支做平滑过渡。当前 Kairos
+临时 Tait 评估器仍是简化模型，不能用于宣称与 solver 等价；必须先扩展 `Tait`
+DTO（`b3s/b6/C/smoothBand`）并重写拟合、golden 点和材料导出，再进行 Mug baseline。
+
 ## 工作范围
 
 ### PVT / Tait
