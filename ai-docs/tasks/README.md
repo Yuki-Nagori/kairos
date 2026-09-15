@@ -126,8 +126,8 @@
 | T82  | [T82-dualdomain-midplane-solve-consumption.md](T82-dualdomain-midplane-solve-consumption.md) | 双域 / 中面网格的求解消费                       | 延后：当前实验统一使用三维体网格；保留契约，等待上游降维能力                                            |
 | T83  | [T83-multi-cavity-runner-fill.md](T83-multi-cavity-runner-fill.md)                           | 多型腔与流道系统参与填充                        | 流道体进网格 + 多腔分配，依赖 T29 闭环                                                                  |
 | T89  | [T89-gaim-integration.md](T89-gaim-integration.md)                                           | 气体辅助注塑（GAIM）集成                        | 进行中：第一步气体介质数据位与 DTO 契约已完成；第二步等上游三相 / 气芯场                                |
-| T93  | [T93-process-optimization.md](T93-process-optimization.md)                                   | 工艺参数自动寻优                                | 进行中：core 优化器与 `optimize run` 回填循环已接入；真实 VM 指标和约束验收待补                         |
-| T99  | [T99-runtime-and-result-hardening.md](T99-runtime-and-result-hardening.md)                   | 运行生命周期与大结果处理优化                    | 进行中：生命周期、缓存、统计、并发与基准已完成；T93 回填闭环仍为阻塞项                                  |
+| T93  | [T93-process-optimization.md](T93-process-optimization.md)                                   | 工艺参数自动寻优                                | 已实现：自适应回填、重试、约束过滤、失败中止与汇总完成；真实 VM 复测按 T100 记录                        |
+| T99  | [T99-runtime-and-result-hardening.md](T99-runtime-and-result-hardening.md)                   | 运行生命周期与大结果处理优化                    | 已实现：生命周期、缓存、统计、并发、基准与 T93 回填闭环完成                                             |
 | T100 | [T100-solver-runtime-v110-validation.md](T100-solver-runtime-v110-validation.md)             | 求解器运行时 v1.1.0 真实 CLI 验证与原始留档     | 进行中：VM 真实 DOE 与 moldingFoam v1.1.0 已验证；完整 Mug 对照与单点入口待补                           |
 | T101 | [T101-generic-pp-material-fit.md](T101-generic-pp-material-fit.md)                           | Generic PP 自定义材料拟合与 Mug baseline        | 核心闭环完成：曲线拟合、残差、默认 PP 模板与 moldingFoam VM 验证已完成；GUI 材料面板后续补齐            |
 | T102 | [T102-dualdomain-mug-exact-baseline.md](T102-dualdomain-mug-exact-baseline.md)               | Dual Domain Mug 完全一致基线                    | 延后：Mug 基线统一走三维体网格；Dual Domain 契约与样例保留，后续再做 solver 消费                        |
@@ -154,7 +154,7 @@ T98 的本机测试不替代 T94/T96 的 Windows/WSL、Linux 与真实 VM 验收
 1. **T95 补漏**（P2）：repair 向量消重、色标统一、摘要展示与准入证据补齐；P2-a 已完成，不重复开工。
 2. **T95 对照评估**（P2/P3）：XY 图表与 gl-matrix 分别做视觉/性能/包体取舍；解压保持系统工具，按重审条件触发。
 3. **T97**（P1）：求解环境库重复守卫与部署前清理；优先于新求解功能。
-4. **T93 CLI 寻优循环**（P3）：先接 `optimize plan` 候选规划，再接真实求解回填与失败策略。
+4. **T93 CLI 寻优循环**（P3）：已完成；真实 VM 结果按 T100 运行记录补充。
 5. **T83 多型腔与流道参与填充**（P1）：文件依赖 T07/T61 均已满足（README 原先写的「依赖 T29 闭环」
    与文件不符，已改正）；验收在 VM 跑两腔填充，v0.2.5 通道已验证可用。
 6. **T33 可做部分**（P3）：updater 插件接入 + `style-src 'unsafe-inline'` 改造（nonce / 文件化）；
