@@ -637,8 +637,10 @@ pub fn native_solver_lib_guard_command(env_root: &Path) -> String {
         "source '{bashrc}' && \
          dirs=\"$FOAM_LIBBIN $FOAM_SITE_LIBBIN $FOAM_USER_LIBBIN\"; \
          for name in libmoldingFoam.so libmoldingFoamSolver.so; do \
-           count=0; for dir in $dirs; do [ -e \"$dir/$name\" ] && count=$((count+1)); done; \
-           [ \"$count\" -le 1 ] || {{ printf 'KAIROS_LIB_GUARD=duplicate:%s\\n' \"$name\"; exit 1; }}; \
+           keys=\"$(for dir in $dirs; do path=\"$dir/$name\"; [ -e \"$path\" ] || continue; \
+             target=\"$path\"; [ -L \"$path\" ] && target=\"$(readlink -f \"$path\")\"; \
+             stat -c '%d:%i' \"$target\" 2>/dev/null; done | sort -u)\"; \
+           [ \"$(printf '%s\\n' \"$keys\" | sed '/^$/d' | wc -l)\" -le 1 ] || {{ printf 'KAIROS_LIB_GUARD=duplicate:%s\\n' \"$name\"; exit 1; }}; \
          done; \
          solver=\"$FOAM_LIBBIN/libmoldingFoamSolver.so\"; \
          [ -L \"$solver\" ] && [ \"$(readlink \"$solver\")\" = 'libmoldingFoam.so' ] || {{ printf 'KAIROS_LIB_GUARD=invalid-link\\n'; exit 1; }}; \
@@ -1542,6 +1544,7 @@ mod tests {
             env_deploy_command(),
             apt_mirror_command(),
             openmpi_install_command(),
+            native_solver_lib_guard_command(Path::new("/opt/kairos env")),
         ];
         for command in commands {
             let parsed = std::process::Command::new("bash")
@@ -1633,6 +1636,7 @@ mod tests {
     fn solver_library_guard_has_single_structured_contract() {
         let command = native_solver_lib_guard_command(Path::new("/opt/kairos env"));
         assert!(command.contains("FOAM_LIBBIN"));
+        assert!(command.contains("stat -c '%d:%i'"));
         assert!(command.contains("libmoldingFoamSolver.so"));
         assert!(command.contains("KAIROS_LIB_GUARD=ok"));
         assert!(native_solver_lib_guard_ok("noise\nKAIROS_LIB_GUARD=ok\n"));

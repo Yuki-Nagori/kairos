@@ -86,4 +86,6 @@
   `<环境根>/openfoam14`，再创建根目录、解压并复核 bashrc；core 用例锁定命令顺序。
 - **库布局守卫（core + 原生状态已接入）**：core 生成加载 bashrc 后的结构化守卫命令，
   检查三个库目录中的重复名字及 solver 相对软链接；原生状态通过 `libraryReady` 与独立提示暴露。
-  仍待真实 VM 坏状态 / 恢复回归，以及按 inode 去重和路径摘要提示的增强。
+  当前按 `stat` 设备号 + inode 去重，硬链接不会误报；仍待真实 VM 坏状态 / 恢复回归，以及路径摘要提示增强。
+
+- **本地验收边界**：本机 `multipass list` 因 socket 权限返回 `socket access denied`，未伪造真实 VM 通过记录。

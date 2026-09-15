@@ -483,3 +483,4 @@
 - **13:18** refactor(web): 完成 T95 P2-a 可复用收编：方案任务菜单改用 VueUse `onClickOutside` / `onKeyStroke`，工程自动保存继续使用 `useDebounceFn`；核实标题栏菜单和 storage 索引协议保留自定义实现，避免破坏产品语义。
 - **13:22** fix(vm): 开始 T97：部署 moldingFoam bundle 前清理受管 `openfoam14` 环境树，避免新旧库叠加；保留解压后 bashrc 复核，core 用例锁定清理 → 建目录 → 解压 → 复核顺序。库布局守卫和真实 VM 坏状态验收列入下一批。
 - **13:26** fix(vm): 完成 T97 库布局守卫基础接入：core 生成 source bashrc 后的结构化检查命令，校验三个 OpenFOAM 库目录的重复名字与 solver 相对软链接；原生环境状态新增 `libraryReady` 与独立修复提示。真实 VM 坏状态 / 恢复验收、inode 去重与路径摘要列入下一批。
+- **13:31** fix(vm): 完成 T97 库守卫 inode 去重：按设备号 + inode 归并硬链接与同目标软链接，新增 bash 语法回归；本机 Multipass socket 权限不足，真实 VM 坏状态 / 恢复验收保留待可访问环境执行。
