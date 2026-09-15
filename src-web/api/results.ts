@@ -12,6 +12,7 @@ import type {
   ScalarField,
   TensorField,
   VectorField,
+  FieldStats,
 } from "../types";
 
 /** 扫描 case 目录的时间步与场文件清单。 */
@@ -43,6 +44,14 @@ export function exportResultFieldCsv(
   field: string,
 ): Promise<string> {
   return invokeCommand("export_result_field_csv", { caseDir, timeDir, field });
+}
+
+export function summarizeResultField(
+  caseDir: string,
+  timeDir: string,
+  field: string,
+): Promise<FieldStats> {
+  return invokeCommand("summarize_result_field", { caseDir, timeDir, field });
 }
 
 /** 加载指定时间步的矢量场三分量（变形显示 / 矢量派生用）。 */

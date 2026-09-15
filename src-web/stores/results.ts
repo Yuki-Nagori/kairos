@@ -11,6 +11,7 @@ import {
   loadTensorField,
   loadVectorField,
   exportResultFieldCsv,
+  summarizeResultField,
 } from "../api/results";
 import type {
   DeriveRequest,
@@ -24,6 +25,7 @@ import type {
   ProbeTimeSeries,
   ResultCatalog,
   ScalarField,
+  FieldStats,
 } from "../types";
 import { toCsv } from "../utils/chart";
 import { downloadTextFile } from "../utils/download";
@@ -38,6 +40,7 @@ export const useResultsStore = defineStore("results", {
     resultCatalog: null as ResultCatalog | null,
     /** 最近加载的主场（视口/图表展示用）。 */
     loadedField: null as ScalarField | null,
+    loadedFieldStats: null as FieldStats | null,
     /** 对比场（两场差值的减数）。 */
     compareField: null as ScalarField | null,
     /** 探针时间序列：每探针一份「时间步序 → 值」采样。 */
@@ -151,6 +154,7 @@ export const useResultsStore = defineStore("results", {
           this.compareField = loaded;
         } else {
           this.loadedField = loaded;
+          this.loadedFieldStats = await summarizeResultField(caseDir, timeDir, field);
         }
       });
     },

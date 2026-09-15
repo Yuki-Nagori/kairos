@@ -14,6 +14,7 @@ import {
   loadResultField,
   loadVectorField,
   exportResultFieldCsv,
+  summarizeResultField,
 } from "../../../src-web/api/results";
 import { analyzeGateLocation, previewFill } from "../../../src-web/api/geometry";
 import type {
@@ -33,6 +34,7 @@ vi.mock("../../../src-web/api/results", () => ({
   deriveField: vi.fn(),
   deriveDifference: vi.fn(),
   exportResultFieldCsv: vi.fn(),
+  summarizeResultField: vi.fn(),
 }));
 vi.mock("../../../src-web/api/geometry", () => ({
   analyzeGateLocation: vi.fn(),
@@ -61,6 +63,7 @@ describe("results store", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
     vi.resetAllMocks();
+    vi.mocked(summarizeResultField).mockResolvedValue({ count: 3, min: 1, max: 3 });
   });
 
   afterEach(() => {

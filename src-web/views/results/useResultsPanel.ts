@@ -32,9 +32,14 @@ export function useResultsPanel() {
       return null;
     }
     const values = field.values;
-    const { min, max } = values.length > 0 ? minMax(values) : { min: Number.NaN, max: Number.NaN };
+    const remote = results.loadedFieldStats;
+    const { min, max, count } =
+      remote ??
+      (values.length > 0
+        ? { min: minMax(values).min, max: minMax(values).max, count: values.length }
+        : { min: Number.NaN, max: Number.NaN, count: 0 });
     return {
-      line: `已加载 ${field.field} @ ${field.timeDir}${field.isMagnitude ? "（模量）" : ""}：${values.length} 个值，min ${significant(min)} / max ${significant(max)}`,
+      line: `已加载 ${field.field} @ ${field.timeDir}${field.isMagnitude ? "（模量）" : ""}：${count} 个值，min ${significant(min)} / max ${significant(max)}`,
       complete: field.complete,
     };
   });

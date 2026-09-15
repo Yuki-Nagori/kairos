@@ -416,6 +416,12 @@ export interface ScalarField {
   complete: boolean;
 }
 
+export interface FieldStats {
+  count: number;
+  min: number;
+  max: number;
+}
+
 /** 探针：节点序号的命名标记（results store 维护）。 */
 export interface Probe {
   id: number;
