@@ -412,7 +412,13 @@ fn pressure_pa(value: f64, unit: &str, row_no: usize) -> Result<f64> {
             )));
         }
     };
-    positive(value * factor, row_no, "压力")
+    let pressure = value * factor;
+    if !pressure.is_finite() || pressure < 0.0 {
+        return Err(KairosError::validation(format!(
+            "第 {row_no} 行压力必须为非负有限数值。"
+        )));
+    }
+    Ok(pressure)
 }
 
 fn specific_volume(value: f64, unit: &str, row_no: usize) -> Result<f64> {
@@ -595,6 +601,7 @@ mod tests {
         assert!(temperature_kelvin(1.0, "rankine", 1).is_err());
         assert!(temperature_kelvin(-300.0, "K", 1).is_err());
         assert_eq!(pressure_pa(1.0, "Pa", 1).unwrap(), 1.0);
+        assert_eq!(pressure_pa(0.0, "MPa", 1).unwrap(), 0.0);
         assert_eq!(pressure_pa(1.0, "kPa", 1).unwrap(), 1_000.0);
         assert!(pressure_pa(1.0, "bar", 1).is_err());
         assert_eq!(specific_volume(1.0, "m^3/kg", 1).unwrap(), 1.0);
